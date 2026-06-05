@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  /* Strict Brand Palette mapping */
+  --color-brandBlack: #000000;
+  --color-brandRed: #ff4e3e;
+  --color-brandYellow: #ffe65c;
+
+  /* Typographic baselines */
+  --font-helvetica: "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  --font-killigrew: "Killigrew", serif;
+}
+
+body {
+  background-color: #000000;
+  color: #ffffff;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
