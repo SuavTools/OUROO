@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrandText } from '@/components/BrandText';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 
@@ -28,6 +28,32 @@ export default function Home() {
     window.addEventListener('orientationchange', onOrient);
     return () => { window.removeEventListener('resize', compute); window.removeEventListener('orientationchange', onOrient); };
   }, []);
+
+  // ---- PWA INSTALL ----
+  // canInstall → Android / desktop Chrome (we can trigger the native install dialog).
+  // iosInstall → iPhone Safari (Apple blocks programmatic install; we show instructions).
+  const deferredPrompt = useRef<any>(null);
+  const [canInstall, setCanInstall] = useState(false);
+  const [iosInstall, setIosInstall] = useState(false);
+  const [showIosSheet, setShowIosSheet] = useState(false);
+  useEffect(() => {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    const onBIP = (e: Event) => { e.preventDefault(); deferredPrompt.current = e; setCanInstall(true); };
+    const onInstalled = () => { setCanInstall(false); deferredPrompt.current = null; };
+    window.addEventListener('beforeinstallprompt', onBIP);
+    window.addEventListener('appinstalled', onInstalled);
+    const ua = navigator.userAgent || '';
+    const isIOS = /iphone|ipad|ipod/i.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
+    if (isIOS && !standalone) setIosInstall(true);
+    return () => { window.removeEventListener('beforeinstallprompt', onBIP); window.removeEventListener('appinstalled', onInstalled); };
+  }, []);
+
+  const handleInstall = async () => {
+    const dp = deferredPrompt.current;
+    if (dp) { dp.prompt(); await dp.userChoice.catch(() => {}); deferredPrompt.current = null; setCanInstall(false); }
+    else if (iosInstall) setShowIosSheet(true);
+  };
 
   const handleNextStage = () => {
     if (isZooming) return;
@@ -124,12 +150,22 @@ export default function Home() {
           style={{ transitionDuration: '550ms', transitionTimingFunction: 'cubic-bezier(0.7, 0, 0.84, 0)' }}
         >
           
-          <div className="mb-12 border-l-4 border-brandRed pl-6">
+          <div className="mb-8 border-l-4 border-brandRed pl-6">
             <span className="text-xs text-brandRed font-mono tracking-[0.4em] block uppercase animate-pulse mb-2">
               // CHEF_MODE_ENGAGED
             </span>
             <BrandText text="MAIN TERMINAL" className="text-5xl md:text-7xl font-black text-white tracking-tighter" />
           </div>
+
+          {/* Install affordance — Android/desktop Chrome fire the native dialog; iOS shows instructions */}
+          {(canInstall || iosInstall) && (
+            <button
+              onClick={handleInstall}
+              className="mb-8 inline-flex items-center gap-3 bg-brandYellow text-black font-mono font-black text-sm uppercase tracking-widest px-6 py-3 border-2 border-brandYellow hover:bg-black hover:text-brandYellow transition-all active:scale-95 shadow-[4px_4px_0px_#ff4e3e]"
+            >
+              📲 Install App {iosInstall && !canInstall ? '— Add to Home Screen' : ''}
+            </button>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-mono">
 
@@ -170,6 +206,23 @@ export default function Home() {
 
           </div>
         </div>
+
+        {/* iOS install instructions (Apple blocks programmatic install) */}
+        {showIosSheet && (
+          <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-6 pointer-events-auto" onClick={() => setShowIosSheet(false)}>
+            <div className="max-w-sm w-full border-2 border-brandYellow bg-black p-6 font-mono text-center space-y-4" onClick={(e) => e.stopPropagation()}>
+              <p className="text-brandYellow font-black uppercase tracking-widest text-lg">Install on iPhone</p>
+              <p className="text-gray-300 text-sm uppercase leading-relaxed">
+                1. Tap the <span className="text-brandYellow font-bold">Share</span> button <span className="text-brandYellow">⬆️</span> at the bottom of Safari
+              </p>
+              <p className="text-gray-300 text-sm uppercase leading-relaxed">
+                2. Scroll down and tap <span className="text-brandYellow font-bold">&quot;Add to Home Screen&quot;</span>
+              </p>
+              <p className="text-gray-500 text-xs uppercase">Then launch it from the icon — fullscreen, no browser.</p>
+              <button onClick={() => setShowIosSheet(false)} className="mt-2 text-xs font-bold uppercase tracking-widest text-black bg-brandYellow px-5 py-2 active:scale-95">Got it</button>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
