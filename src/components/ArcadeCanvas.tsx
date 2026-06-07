@@ -3,8 +3,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrandText } from './BrandText';
 
-// Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U).
+// Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U/C/J).
 const DEBUG = true;
+// Late-game combo multiplier saturates here so mindless mashing can't scale forever.
+const COMBO_CAP = 12;
+// Hard ceiling on stored blaster charges so you can't hoard a stockpile and mash-fire
+// aimlessly through the late game. Temporary egg modes may stack a little higher.
+const MAX_BLASTER_CHARGES = 9;
 
 // ---- INTERFACES ----
 interface Player {
@@ -21,6 +26,7 @@ interface Crystal {
   isGolden?: boolean; isHazard?: boolean;
   isTime?: boolean; isGhost?: boolean; isDoubleTap?: boolean;
   isOvercharge?: boolean; isMirror?: boolean; isFloat?: boolean;
+  isPurpleUnicorn?: boolean;
 }
 interface Boss {
   x: number; y: number; width: number; height: number;
@@ -35,7 +41,7 @@ interface BossProjectile {
   x: number; y: number; vx: number; vy: number; alive: boolean;
 }
 interface Alien {
-  type: 'normal' | 'super' | 'speedy' | 'sniper' | 'tank' | 'bomber' | 'prism' | 'unicorn';
+  type: 'normal' | 'super' | 'speedy' | 'sniper' | 'tank' | 'bomber' | 'prism' | 'unicorn' | 'chariot';
   health: number; zigzagPhase: number;
   id: number; x: number; y: number;
   width: number; height: number; vx: number;
@@ -273,6 +279,7 @@ export const ArcadeCanvas: React.FC = () => {
     jumpBufferCounter: 0,
     // reward mechanics
     killCombo:         0,
+    comboTimer:        0,   // ticks since last kill — drives combo decay
     shieldActive:      false,
     speedBoostTicks:   0,
     crystalsSinceShield: 0,
@@ -305,6 +312,7 @@ export const ArcadeCanvas: React.FC = () => {
     goldenCooldown:     0,
     prismCooldown:      0,   // PRISM alien spawn spacing
     unicornCooldown:    0,   // UNICORN spawn spacing
+    chariotCooldown:    0,   // GOLD CHARIOT spawn spacing
     // weather
     weatherTicks:       0,
     weatherType:        '' as string,
@@ -614,6 +622,28 @@ export const ArcadeCanvas: React.FC = () => {
         toast('🦄 [DEV] UNICORN INCOMING — CATCH OR SHOOT IT');
         return;
       }
+      if (DEBUG && e.code === 'KeyC') {
+        // Spawn a GOLD CHARIOT just ahead — shoot it for crazy points
+        state.alienIdInc++;
+        state.aliens.push({
+          id: state.alienIdInc,
+          x: canvas.width * 0.7,
+          y: Math.max(60, state.player.y - 30),
+          width: 54, height: 54,
+          vx: -3.6, animFrame: 0, alive: true, type: 'chariot',
+          health: 1, zigzagPhase: Math.random() * Math.PI * 2, bomberDropped: false,
+        });
+        synthRef.current?.playGoldenKill();
+        toast('🏆 [DEV] GOLD CHARIOT INCOMING — SHOOT IT');
+        return;
+      }
+      if (DEBUG && e.code === 'KeyJ') {
+        // Drop a PURPLE UNICORN pickup at the top edge — fetch it
+        state.crystals.push({ x: canvas.width * 0.75, y: 24, size: 46, collected: false, pulseOffset: Math.random() * Math.PI * 2, isPurpleUnicorn: true });
+        synthRef.current?.playFloatCrystal();
+        toast('🦄 [DEV] PURPLE UNICORN AT TOP — FETCH IT');
+        return;
+      }
 
       // Perk draft 1/2/3
       if (state.perkDraftPending && ['Digit1','Digit2','Digit3'].includes(e.code)) {
@@ -676,13 +706,17 @@ export const ArcadeCanvas: React.FC = () => {
       let type: Alien['type'] = 'normal';
       const roll = Math.random();
 
-      // ~1% PRISM alien — rare crystal piñata. Needs a little progression first.
-      if (Math.random() < 0.01 && state.prismCooldown === 0 && state.crystalsTotal >= 10) {
+      // ~0.5% PRISM alien — rare crystal piñata. Needs real progression first.
+      if (Math.random() < 0.005 && state.prismCooldown === 0 && state.crystalsTotal >= 15) {
         type = 'prism';
       }
-      // ~10% UNICORN — magical, catch it OR shoot it for a blessing.
-      else if (Math.random() < 0.10 && state.unicornCooldown === 0 && state.crystalsTotal >= 5) {
+      // ~3% UNICORN — magical, catch it OR shoot it for a blessing. Kept rare.
+      else if (Math.random() < 0.03 && state.unicornCooldown === 0 && state.crystalsTotal >= 12) {
         type = 'unicorn';
+      }
+      // ~1.5% GOLD CHARIOT — fancy bonus racer worth crazy points. Wants progression + spacing.
+      else if (Math.random() < 0.015 && state.chariotCooldown === 0 && state.crystalsTotal >= 20) {
+        type = 'chariot';
       }
       // Rare late-game alien types (crystal 30+)
       else if (state.crystalsTotal >= 30) {
@@ -703,8 +737,9 @@ export const ArcadeCanvas: React.FC = () => {
       const isBomber = type === 'bomber';
       const isPrism  = type === 'prism';
       const isUnicorn = type === 'unicorn';
+      const isChariot = type === 'chariot';
 
-      const size  = isSuper ? 60 : isTank ? 64 : isSpeedy || isSniper ? 20 : isPrism ? 44 : isUnicorn ? 48 : 36;
+      const size  = isSuper ? 60 : isTank ? 64 : isSpeedy || isSniper ? 20 : isPrism ? 44 : isUnicorn ? 48 : isChariot ? 54 : 36;
       const speed = isSuper  ? 2   + tier * 0.15
                   : isSpeedy ? 5   + tier * 0.4  + Math.random() * 2
                   : isSniper ? 7   + tier * 0.5  // fast, straight
@@ -712,10 +747,12 @@ export const ArcadeCanvas: React.FC = () => {
                   : isBomber ? 4   + tier * 0.2  // medium, flies past
                   : isPrism  ? 2.2 + tier * 0.05 // slow & floaty — catchable
                   : isUnicorn ? 3.4 + tier * 0.08 // graceful canter
+                  : isChariot ? 3.6 + tier * 0.07 // a swift, flashy racer
                   :            3   + tier * 0.28 + Math.random() * 1.5;
 
-      if (isPrism) state.prismCooldown = 900;  // ~15s gap between prisms
-      if (isUnicorn) state.unicornCooldown = 1200;  // ~20s gap between unicorns
+      if (isPrism) state.prismCooldown = 1800;  // ~30s gap between prisms
+      if (isUnicorn) state.unicornCooldown = 2700;  // ~45s gap between unicorns
+      if (isChariot) state.chariotCooldown = 2400;  // ~40s gap between chariots
 
       if (isSuper) state.superAlienSpawned = true;
       state.aliens.push({
@@ -745,8 +782,12 @@ export const ArcadeCanvas: React.FC = () => {
 
       // Stability drain — now climbs with run time so the late game can't be coasted
       const drainMult = hasPerk('drain halved') ? 0.5 : 1;
-      const endurance = state.gameTicks / 3600;  // +1 per minute, UNCAPPED (breaks the flow-state runaway)
-      const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001 + endurance * 0.025) * drainMult;
+      const endurance = state.gameTicks / 3600;  // +1 per minute (spawn cadence + heal falloff self-plateau via their own floors)
+      // Difficulty plateaus into a hard-but-sustainable flow state: the stability drain
+      // stops climbing after ~6 min, so heal-vs-drain settles into an equilibrium you hold
+      // with skill rather than a death spiral. Past the plateau, only bosses escalate.
+      const drainEndurance = Math.min(endurance, 6);
+      const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001 + drainEndurance * 0.025) * drainMult;
       state.coreStability = Math.max(0, state.coreStability - drain);
       setStability(Math.floor(state.coreStability));
       if (state.coreStability <= 0) {
@@ -767,6 +808,17 @@ export const ArcadeCanvas: React.FC = () => {
       if (state.goldenCooldown  > 0) state.goldenCooldown--;
       if (state.prismCooldown   > 0) state.prismCooldown--;
       if (state.unicornCooldown > 0) state.unicornCooldown--;
+      if (state.chariotCooldown > 0) state.chariotCooldown--;
+      // Kill-combo decay — combos bleed away if you stop landing kills, so
+      // late-game mash-and-hold can't keep an unbounded multiplier alive.
+      if (state.killCombo > 0) {
+        state.comboTimer++;
+        if (state.comboTimer >= 90) {            // ~1.5s without a kill
+          state.killCombo = Math.max(0, state.killCombo - 1);
+          setComboCount(state.killCombo);
+          state.comboTimer = 30;                 // then bleed one every ~0.5s
+        }
+      }
       if (state.bossSpeedReliefTicks > 0) state.bossSpeedReliefTicks--;
       if (state.hazardSpeedTicks     > 0) state.hazardSpeedTicks--;
       // New crystal power-up countdowns
@@ -774,6 +826,7 @@ export const ArcadeCanvas: React.FC = () => {
       if (state.ghostTicks    > 0) { state.ghostTicks--;    if (state.ghostTicks    === 0) setGhostMode(false); }
       if (state.mirrorTicks   > 0) {
         state.mirrorTicks--;
+        
         if (state.mirrorTicks === 0) {
           setMirrorMode(false);
           // Reverse aliens back
@@ -809,7 +862,7 @@ export const ArcadeCanvas: React.FC = () => {
       // ---- GHOST RUN tracking ----
       if (state.ghostRunShotsFired === 0) {
         state.ghostRunTimer++;
-        if (state.ghostRunTimer >= 1800 && state.easterEggMode !== 'ghost_run') {
+        if (state.ghostRunTimer >= 2700 && state.easterEggMode !== 'ghost_run') {
           state.easterEggMode = 'ghost_run';
           state.easterEggTicks = 60 * 20;
           setEasterEggMode('ghost_run');
@@ -980,6 +1033,15 @@ export const ArcadeCanvas: React.FC = () => {
             const ci = Math.floor(state.gameTicks / 4) % rainbow.length;
             state.particles.push({ x: al.x + al.width / 2, y: al.y + al.height / 2 + (Math.random() - 0.5) * al.height, vx: 1.5 + Math.random(), vy: (Math.random() - 0.5) * 1.5, color: rainbow[ci], alpha: 1, life: 24, size: Math.random() * 3 + 2 });
           }
+        } else if (al.type === 'chariot') {
+          // Swift gold chariot — galloping bob + a trailing dust of gold sparks
+          al.zigzagPhase += 0.09;
+          al.y += Math.sin(al.zigzagPhase) * 2.6;
+          al.y = Math.max(40, Math.min(canvas.height - al.height - 40, al.y));
+          if (state.gameTicks % 2 === 0) {
+            const gold = ['#ffd700','#ffe65c','#ffaa00','#ffffff'];
+            state.particles.push({ x: al.x + al.width / 2, y: al.y + al.height * 0.7, vx: 1.5 + Math.random() * 1.5, vy: (Math.random() - 0.2) * 1.5, color: gold[Math.floor(state.gameTicks / 3) % gold.length], alpha: 1, life: 22, size: Math.random() * 3 + 2 });
+          }
         } else {
           const targetY = p.y + p.height / 2 - al.height / 2;
           al.y += (targetY - al.y) * (al.type === 'super' ? 0.012 : 0.02);
@@ -1080,6 +1142,17 @@ export const ArcadeCanvas: React.FC = () => {
               floatFeedback(al.x, al.y - 20, `✦ PRISM +${pts.toLocaleString()}`);
             } else if (al.type === 'unicorn') {
               blessUnicorn(al.x + al.width / 2, al.y + al.height / 2);
+            } else if (al.type === 'chariot') {
+              // ---- GOLD CHARIOT — fancy bonus racer: crazy points + score mult + charges ----
+              synthRef.current?.playGoldenKill();
+              state.screenFlash = 0.7; state.screenShake = 5;
+              for (let ring = 0; ring < 7; ring++) setTimeout(() => burst(al.x + al.width / 2, al.y + al.height / 2, ['#ffd700','#ffe65c','#ffffff','#ffaa00'][ring % 4], 45, 9 + ring * 2), ring * 55);
+              state.blasterCharges += 2; setBlasterCharges(state.blasterCharges);
+              state.scoreMultTicks = 60 * 12; setScoreMultActive(true);
+              const pts = (4000 + tier * 400) * Math.max(1, state.killCombo) * (isPerfect ? 3 : 1) * ouroMult;
+              setScore(prev => prev + pts);
+              toast(`🏆 GOLD CHARIOT — +${pts.toLocaleString()} + ×2 SCORE + 2 CHARGES`);
+              floatFeedback(al.x, al.y - 20, `🏆 CHARIOT +${pts.toLocaleString()}`);
             } else {
               burst(al.x + al.width / 2, al.y + al.height / 2, '#ffe65c', 22, 5);
               burst(al.x + al.width / 2, al.y + al.height / 2, '#ff4e3e', 14, 4);
@@ -1091,7 +1164,9 @@ export const ArcadeCanvas: React.FC = () => {
             }
 
             // Combo milestones
-            state.killCombo++; setComboCount(state.killCombo);
+            state.killCombo = Math.min(COMBO_CAP, state.killCombo + 1);
+            state.comboTimer = 0;
+            setComboCount(state.killCombo);
             synthRef.current?.playCombo(state.killCombo);
             if (hasPerk('aliens drop charges') && Math.random() > 0.4) { state.blasterCharges++; setBlasterCharges(state.blasterCharges); floatFeedback(al.x, al.y - 25, 'CHARGE DROP!'); }
 
@@ -1102,7 +1177,7 @@ export const ArcadeCanvas: React.FC = () => {
 
             // BERSERKER tracking
             state.berserkerKills++;
-            if (state.berserkerKills >= 5 && state.easterEggMode !== 'berserker') {
+            if (state.berserkerKills >= 7 && state.easterEggMode !== 'berserker') {
               state.easterEggMode = 'berserker';
               state.easterEggTicks = 60 * 8; // 5s → 8s
               setEasterEggMode('berserker');
@@ -1291,6 +1366,24 @@ export const ArcadeCanvas: React.FC = () => {
             return;
           }
 
+          // ---- PURPLE UNICORN — top/bottom fetch windfall ----
+          if (c.isPurpleUnicorn) {
+            synthRef.current?.playGoldenKill();
+            synthRef.current?.playFloatCrystal();
+            state.screenFlash = 0.5; state.screenShake = 3;
+            for (let ring = 0; ring < 6; ring++) setTimeout(() => burst(c.x + c.size / 2, c.y + c.size / 2, ['#cc44ff','#ff44ff','#ffffff','#ffd700'][ring % 4], 42, 8 + ring * 2), ring * 60);
+            const upts = 6000 + diffTier * 600;
+            setScore(prev => prev + upts);
+            state.scoreMultTicks = 60 * 15; setScoreMultActive(true);
+            state.coreStability = Math.min(100, state.coreStability + 25);
+            setStability(Math.floor(state.coreStability));
+            state.blasterCharges += 2; setBlasterCharges(state.blasterCharges);
+            state.calmTicks = Math.max(state.calmTicks, 60 * 6);
+            toast(`🦄 PURPLE UNICORN — +${upts.toLocaleString()} + ×2 SCORE 15 SEC + HEAL`);
+            floatFeedback(c.x, c.y - 18, `🦄 +${upts.toLocaleString()}`);
+            return;
+          }
+
           if (c.isGolden) {
             // GOLDEN ALIEN DROP — big points + random bonus
             synthRef.current?.playGoldenKill();
@@ -1358,7 +1451,7 @@ export const ArcadeCanvas: React.FC = () => {
             // OURO MODE tracking — count airborne crystals during float
             if (state.floatTicks > 0 && !p.isGrounded) {
               state.ouroModeAirCrystals++;
-              if (state.ouroModeAirCrystals >= 7 && state.easterEggMode !== 'ouro') {
+              if (state.ouroModeAirCrystals >= 11 && state.easterEggMode !== 'ouro') {
                 state.easterEggMode = 'ouro';
                 state.easterEggTicks = 60 * 20;
                 setEasterEggMode('ouro');
@@ -1580,7 +1673,15 @@ export const ArcadeCanvas: React.FC = () => {
           else if (rarePerkRoll < 0.6)  state.crystals.push({ x: nx + w / 2 + 60, y: midY, size: 26, collected: false, pulseOffset: Math.random()*Math.PI*2, isDoubleTap: true });
           else if (rarePerkRoll < 0.78) state.crystals.push({ x: nx + w / 2 + 60, y: midY, size: 26, collected: false, pulseOffset: Math.random()*Math.PI*2, isOvercharge: true });
           else if (rarePerkRoll < 0.87) state.crystals.push({ x: nx + w / 2 + 60, y: midY, size: 26, collected: false, pulseOffset: Math.random()*Math.PI*2, isMirror: true });
-          else                          state.crystals.push({ x: nx + w / 2 + 60, y: midY, size: 30, collected: false, pulseOffset: Math.random()*Math.PI*2, isFloat: true }); // ~13% of rare slots
+          else {
+            state.crystals.push({ x: nx + w / 2 + 60, y: midY, size: 30, collected: false, pulseOffset: Math.random()*Math.PI*2, isFloat: true }); // ~13% of rare slots
+            // 30% of the time a float crystal also summons a PURPLE UNICORN at the very top
+            // or bottom of the arena — ride the float's infinite jumps to fetch it for a windfall.
+            if (Math.random() < 0.30) {
+              const edgeY = Math.random() < 0.5 ? 24 : canvas.height - 96;
+              state.crystals.push({ x: nx + w / 2 + 120, y: edgeY, size: 46, collected: false, pulseOffset: Math.random()*Math.PI*2, isPurpleUnicorn: true });
+            }
+          }
         }
       }
 
@@ -1589,6 +1690,11 @@ export const ArcadeCanvas: React.FC = () => {
       state.floatTexts.forEach(t => { t.y += t.vy; t.life--; t.alpha = Math.max(0, t.life / 45); });
       state.floatTexts = state.floatTexts.filter(t => t.life > 0);
       if (state.gameTicks % 3 === 0) setFloatTexts([...state.floatTexts]);
+
+      // Hard cap on stored blaster charges — clamped once per tick after every source has
+      // added, so no hoarding a stockpile to mash-fire through the late game. Egg modes (temporary) stack higher.
+      const chargeCap = state.easterEggMode ? 12 : MAX_BLASTER_CHARGES;
+      if (state.blasterCharges > chargeCap) { state.blasterCharges = chargeCap; setBlasterCharges(chargeCap); }
     };
 
     // ---- DRAW ----
@@ -1778,10 +1884,23 @@ export const ArcadeCanvas: React.FC = () => {
             ctx.beginPath(); ctx.arc(0,0,c.size*(0.5+ri*0.07),0,Math.PI*2); ctx.stroke();
           }
           ctx.globalAlpha=1; ctx.fillStyle='#ffffff'; ctx.shadowColor='#ffffff'; ctx.shadowBlur=15;
+        } else if (c.isPurpleUnicorn) {
+          // Purple unicorn — drawn upright (cancel the diamond spin), golden horn, flowing mane
+          ctx.rotate(-sd.gameTicks*0.035);
+          const gl=0.6+Math.sin(sd.gameTicks*0.12+c.pulseOffset)*0.4;
+          const mane=['#cc44ff','#ff44aa','#8844ff','#ff88ff'];
+          for (let i=0;i<mane.length;i++){ ctx.strokeStyle=mane[i]; ctx.lineWidth=3; ctx.shadowColor=mane[i]; ctx.shadowBlur=12; const off=(i-mane.length/2)*4; const wob=Math.sin(sd.gameTicks*0.15+i)*5; ctx.beginPath(); ctx.moveTo(c.size*0.1,off); ctx.quadraticCurveTo(c.size*0.5,off+wob,c.size*0.8,off+wob*1.5); ctx.stroke(); }
+          ctx.shadowColor='#cc44ff'; ctx.shadowBlur=24*gl; ctx.fillStyle='#e6b3ff';
+          ctx.beginPath(); ctx.ellipse(0,0,c.size*0.42,c.size*0.34,0,0,Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(-c.size*0.32,-c.size*0.12,c.size*0.2,c.size*0.16,0.4,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=16;
+          ctx.beginPath(); ctx.moveTo(-c.size*0.42,-c.size*0.3); ctx.lineTo(-c.size*0.6,-c.size*0.62); ctx.lineTo(-c.size*0.5,-c.size*0.28); ctx.closePath(); ctx.fill();
+          ctx.fillStyle='#000'; ctx.shadowBlur=0; ctx.beginPath(); ctx.arc(-c.size*0.36,-c.size*0.14,2.2,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle=`rgba(255,255,255,${gl})`; ctx.beginPath(); ctx.arc(-c.size*0.6,-c.size*0.5,2.6,0,Math.PI*2); ctx.fill();
         } else {
           ctx.fillStyle=sc; ctx.shadowColor=sc; ctx.shadowBlur=8;
         }
-        ctx.beginPath(); ctx.moveTo(0,-c.size/2); ctx.lineTo(c.size/2,0); ctx.lineTo(0,c.size/2); ctx.lineTo(-c.size/2,0); ctx.closePath(); ctx.fill();
+        if (!c.isPurpleUnicorn) { ctx.beginPath(); ctx.moveTo(0,-c.size/2); ctx.lineTo(c.size/2,0); ctx.lineTo(0,c.size/2); ctx.lineTo(-c.size/2,0); ctx.closePath(); ctx.fill(); }
         ctx.restore();
       });
 
@@ -1914,6 +2033,36 @@ export const ArcadeCanvas: React.FC = () => {
           ctx.fillStyle='#000'; ctx.shadowBlur=0; ctx.beginPath(); ctx.arc(al.width*0.36,-al.height*0.14,2.2,0,Math.PI*2); ctx.fill();
           // Sparkle
           ctx.fillStyle=`rgba(255,255,255,${0.5+Math.sin(al.animFrame*0.2)*0.5})`; ctx.beginPath(); ctx.arc(al.width*0.6,-al.height*0.5,2.5,0,Math.PI*2); ctx.fill();
+        } else if (al.type==='chariot') {
+          // Fancy gold chariot — gold cart, waving banner, spinning spoked wheels
+          const gl=0.7+Math.sin(al.animFrame*0.12)*0.3;
+          ctx.shadowColor='#ffd700'; ctx.shadowBlur=26*gl;
+          // Cart body — gold trapezoid
+          ctx.fillStyle='#ffd700';
+          ctx.beginPath();
+          ctx.moveTo(-al.width*0.45, al.height*0.05); ctx.lineTo(al.width*0.4, al.height*0.05);
+          ctx.lineTo(al.width*0.28, al.height*0.32); ctx.lineTo(-al.width*0.4, al.height*0.32);
+          ctx.closePath(); ctx.fill();
+          // Bright rim
+          ctx.fillStyle='#fff6c0'; ctx.fillRect(-al.width*0.45, al.height*0.0, al.width*0.85, al.height*0.07);
+          // Waving banner
+          ctx.fillStyle='#ff44aa'; ctx.shadowColor='#ff44aa'; ctx.shadowBlur=12;
+          const wav=Math.sin(al.animFrame*0.2)*4;
+          ctx.beginPath();
+          ctx.moveTo(-al.width*0.1, al.height*0.02); ctx.lineTo(-al.width*0.1, -al.height*0.5);
+          ctx.lineTo(al.width*0.25+wav, -al.height*0.38); ctx.lineTo(-al.width*0.1, -al.height*0.26);
+          ctx.closePath(); ctx.fill();
+          // Spinning spoked wheels
+          ctx.shadowColor='#ffd700'; ctx.shadowBlur=14;
+          for (const wx of [-al.width*0.28, al.width*0.22]) {
+            ctx.save(); ctx.translate(wx, al.height*0.34); ctx.rotate(al.animFrame*0.3);
+            ctx.strokeStyle='#ffe65c'; ctx.lineWidth=3;
+            ctx.beginPath(); ctx.arc(0,0,al.height*0.2,0,Math.PI*2); ctx.stroke();
+            for (let s=0;s<6;s++){ const sa=(s/6)*Math.PI*2; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(sa)*al.height*0.2, Math.sin(sa)*al.height*0.2); ctx.stroke(); }
+            ctx.restore();
+          }
+          // Sparkle
+          ctx.fillStyle=`rgba(255,255,255,${0.5+Math.sin(al.animFrame*0.25)*0.5})`; ctx.beginPath(); ctx.arc(-al.width*0.4,-al.height*0.18,3,0,Math.PI*2); ctx.fill();
         } else {
           ctx.shadowColor='#ff4e3e'; ctx.shadowBlur=16; ctx.fillStyle='#ff4e3e';
           ctx.beginPath(); ctx.moveTo(0,-al.height/2); ctx.lineTo(al.width/2,0); ctx.lineTo(0,al.height/2); ctx.lineTo(-al.width/2,0); ctx.closePath(); ctx.fill();
@@ -2033,14 +2182,14 @@ export const ArcadeCanvas: React.FC = () => {
     e.player.x=140; e.player.y=300; e.player.vy=0; e.player.jumpCount=0; e.player.stretch=1;
     e.gameTicks=0; e.milesTraveled=0; e.coyoteCounter=0; e.jumpBufferCounter=0;
     e.coreStability=100; e.crystalsTotal=0; e.crystalsSinceCharge=0; e.blasterCharges=0;
-    e.comboCount=0; e.killCombo=0; e.shieldActive=false; e.speedBoostTicks=0;
+    e.comboCount=0; e.killCombo=0; e.comboTimer=0; e.shieldActive=false; e.speedBoostTicks=0;
     e.crystalsSinceShield=0; e.tripleJumpTicks=0; e.scoreMultTicks=0;
     e.crystalsSinceTriple=0; e.superAlienSpawned=false; e.calmTicks=0;
     e.boss=null; e.bossProjectiles=[]; e.magnetTicks=0;
     e.perks=[]; e.crystalsSincePerks=0; e.crystalsSinceBoss=0; e.bossSpeedReliefTicks=0;
     e.streakTicks=0; e.perkDraftPending=false; e.crystalsSinceMagnet=0;
     e.weaponTier=0; e.chargeHeld=0; e.novaUnlocked=false; e.lastChargeRatio=0;
-    e.crystalChain=0; e.crystalChainTimer=0; e.goldenCooldown=0; e.prismCooldown=0; e.unicornCooldown=0;
+    e.crystalChain=0; e.crystalChainTimer=0; e.goldenCooldown=0; e.prismCooldown=0; e.unicornCooldown=0; e.chariotCooldown=0;
     e.weatherTicks=0; e.weatherType=''; e.weatherWarnTicks=0; e.nextWeatherAt=2700; e.nextHazardWaveAt=1800;
     e.bossCount=0; e.hazardSpeedTicks=0; e.crystalsSinceHazard=0;
     e.timeSlowTicks=0; e.ghostTicks=0; e.mirrorTicks=0; e.floatTicks=0;
@@ -2145,7 +2294,7 @@ export const ArcadeCanvas: React.FC = () => {
           {timeSlow && <div className="font-mono bg-black/70 border-2 border-[#4488ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(68,136,255,0.6)]"><span className="text-[9px] text-[#4488ff]/70 uppercase tracking-widest">TIME CRYSTAL</span><span className="text-sm text-[#4488ff] font-black animate-pulse">⏱ SLOW WORLD</span></div>}
           {ghostMode && <div className="font-mono bg-black/70 border-2 border-white px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.4)]"><span className="text-[9px] text-white/60 uppercase tracking-widest">GHOST CRYSTAL</span><span className="text-sm text-white font-black animate-pulse">👻 UNTOUCHABLE</span></div>}
           {mirrorMode && <div className="font-mono bg-black/70 border-2 border-[#aaaacc] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(170,170,204,0.5)]"><span className="text-[9px] text-[#aaaacc]/70 uppercase tracking-widest">MIRROR ACTIVE</span><span className="text-sm text-[#aaaacc] font-black animate-pulse">🪞 REVERSED</span></div>}
-          {floatMode && <div className="font-mono bg-black/70 border-2 border-[#ff44ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,68,255,0.6)]"><span className="text-[9px] text-[#ff44ff]/70 uppercase tracking-widest">FLOAT — {stateRef.current.ouroModeAirCrystals}/7 AIR</span><span className="text-sm text-[#ff44ff] font-black animate-pulse">✨ INFINITE JUMP</span></div>}
+          {floatMode && <div className="font-mono bg-black/70 border-2 border-[#ff44ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,68,255,0.6)]"><span className="text-[9px] text-[#ff44ff]/70 uppercase tracking-widest">FLOAT — {stateRef.current.ouroModeAirCrystals}/11 AIR</span><span className="text-sm text-[#ff44ff] font-black animate-pulse">✨ INFINITE JUMP</span></div>}
           {easterEggMode === 'ouro' && <div className="font-mono bg-black/70 border-2 border-[#ffd700] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_30px_rgba(255,215,0,0.8)]"><span className="text-[9px] text-[#ffd700]/70 uppercase tracking-widest">OURO MODE ×5</span><span className="text-sm text-[#ffd700] font-black animate-pulse">✨ AUTO-SCORE + RECHARGE</span></div>}
           {easterEggMode === 'ghost_run' && <div className="font-mono bg-black/70 border-2 border-white px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.4)]"><span className="text-[9px] text-white/60 uppercase tracking-widest">GHOST RUN ×3</span><span className="text-sm text-white font-black animate-pulse">👻 UNTOUCHABLE</span></div>}
           {easterEggMode === 'berserker' && <div className="font-mono bg-black/70 border-2 border-red-500 px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_30px_rgba(255,0,0,0.8)]"><span className="text-[9px] text-red-400/70 uppercase tracking-widest">BERSERKER ×4</span><span className="text-sm text-red-400 font-black animate-pulse">🔥 GODMODE + RECHARGE</span></div>}
