@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BrandText } from './BrandText';
 
 // Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U/C/J).
-const DEBUG = true;
+const DEBUG = false;
 // Late-game combo multiplier saturates here so mindless mashing can't scale forever.
 const COMBO_CAP = 12;
 // Hard ceiling on stored blaster charges so you can't hoard a stockpile and mash-fire
@@ -26,7 +26,7 @@ interface Crystal {
   isGolden?: boolean; isHazard?: boolean;
   isTime?: boolean; isGhost?: boolean; isDoubleTap?: boolean;
   isOvercharge?: boolean; isMirror?: boolean; isFloat?: boolean;
-  isPurpleUnicorn?: boolean;
+  isPurpleUnicorn?: boolean; isApex?: boolean;
 }
 interface Boss {
   x: number; y: number; width: number; height: number;
@@ -47,6 +47,7 @@ interface Alien {
   width: number; height: number; vx: number;
   animFrame: number; alive: boolean;
   bomberDropped?: boolean;   // bomber only fires once
+  straightRunner?: boolean;  // normal aliens: true = flies dead straight, false = weaves up/down (set at spawn)
 }
 interface Projectile {
   x: number; y: number; width: number; height: number; vx: number; alive: boolean;
@@ -211,13 +212,23 @@ export const ArcadeCanvas: React.FC = () => {
   const frameRef    = useRef<number>(0);
   const textIdRef   = useRef(0);
   const spaceHeldRef = useRef(false);
+  // ---- MOBILE TOUCH CONTROLS ----
+  const jumpRef     = useRef<(() => void) | null>(null);  // bridges effect-scoped doJump to touch handlers
+  const leftDownRef = useRef(0);                          // timestamp of left-pad press (quick-tap vs hold)
+  const pausedRef   = useRef(false);                      // freezes the sim while held in portrait on mobile
 
   const [score,            setScore]            = useState(0);
   const [crystalCount,     setCrystalCount]     = useState(0);
   const [blasterCharges,   setBlasterCharges]   = useState(0);
   const [stability,        setStability]        = useState(100);
-  const [isPlaying,        setIsPlaying]        = useState(true);
+  const [isPlaying,        setIsPlaying]        = useState(false);  // gated behind the intro/mode-select screen
   const [isMuted,          setIsMuted]          = useState(false);
+  // Auto-pick Mobile on touch devices; the intro screen lets the player override either way.
+  const [controlMode,      setControlMode]      = useState<'desktop' | 'mobile'>(
+    () => (typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0)) ? 'mobile' : 'desktop'
+  );
+  const [showIntro,        setShowIntro]        = useState(true);   // mode-select / start screen
+  const [isPortrait,       setIsPortrait]       = useState(false);
   const [floatTexts,       setFloatTexts]       = useState<FloatText[]>([]);
   const [comboCount,       setComboCount]       = useState(0);
   const [hasShield,        setHasShield]        = useState(false);
@@ -337,9 +348,11 @@ export const ArcadeCanvas: React.FC = () => {
     ouroModeAirCrystals: 0,  // crystals collected airborne during FLOAT for OURO trigger
     ghostRunShotsFired: 0,   // tracks if player fired (for GHOST RUN)
     ghostRunTimer:      0,   // ticks survived without firing
-    berserkerKills:     0,   // kills in current 10-sec window
-    berserkerTimer:     0,   // resets every 600 ticks
+    berserkerKills:     0,   // kills in current window (only counts when NOT already raging)
+    berserkerTimer:     0,   // resets the kill window every 720 ticks
+    berserkerCooldown:  0,   // lockout after berserker ends so rapid-fire can't instantly re-arm it
     crystalsSinceRarePerk: 0, // spacing for new rare crystals
+    platformsSinceStair: 0,  // spacing so crystal staircases only appear every so often
     warpToast: { active: false, text: '', life: 0, maxLife: 90, y: 0 },
   });
 
@@ -435,6 +448,7 @@ export const ArcadeCanvas: React.FC = () => {
     e.stopPropagation();
     if (synthRef.current?.ctx.state === 'suspended') synthRef.current.ctx.resume();
     const state = stateRef.current;
+    if (controlMode === 'mobile') return;  // mobile uses the on-screen pads, not click-to-shoot
     if (!isPlaying || state.blasterCharges < 1) return;
     state.blasterCharges--; setBlasterCharges(state.blasterCharges);
     state.lastChargeRatio = 0;
@@ -443,6 +457,55 @@ export const ArcadeCanvas: React.FC = () => {
     const h = Math.round(window.innerHeight * 0.07);
     state.projectiles.push({ x: state.player.x + PW + 4, y: state.player.y + PH / 2 - h / 2, width: 80, height: h, vx: 20, alive: true });
   };
+
+  // ---- MOBILE TOUCH HANDLERS ----
+  const resumeAudio = () => { if (synthRef.current?.ctx.state === 'suspended') synthRef.current.ctx.resume(); };
+
+  // Right pad — tap to jump (same as W/↑).
+  const onJumpTouch = (e: React.PointerEvent) => { e.preventDefault(); e.stopPropagation(); resumeAudio(); jumpRef.current?.(); };
+
+  // Left pad — press starts a charge; a quick tap (released fast) fires an instant shot instead.
+  const onFireDown = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation(); resumeAudio();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}  // keep pointerup on this pad even if the finger slides off
+    leftDownRef.current = (typeof performance !== 'undefined' ? performance.now() : 0);
+    const s = stateRef.current;
+    if (isPlaying && s.blasterCharges > 0 && !spaceHeldRef.current) { spaceHeldRef.current = true; s.chargeHeld = 1; }
+  };
+  const onFireUp = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const s = stateRef.current;
+    const held = (typeof performance !== 'undefined' ? performance.now() : 0) - leftDownRef.current;
+    spaceHeldRef.current = false;
+    if (held < 180) {
+      // Quick tap = instant standard shot (mirrors F / canvas click).
+      s.chargeHeld = 0; setChargeLevel(0);
+      if (isPlaying && s.blasterCharges >= 1) {
+        s.blasterCharges--; setBlasterCharges(s.blasterCharges);
+        s.lastChargeRatio = 0; s.ghostRunShotsFired++;
+        synthRef.current?.playBlaster();
+        const h = Math.round(window.innerHeight * 0.07);
+        s.projectiles.push({ x: s.player.x + PW + 4, y: s.player.y + PH / 2 - h / 2, width: 80, height: h, vx: 20, alive: true });
+      }
+    } else {
+      // Held = release a charged shot.
+      if (s.chargeHeld > 0) releaseBlaster();
+      s.chargeHeld = 0; setChargeLevel(0);
+    }
+  };
+
+  const startGame = () => { resumeAudio(); setShowIntro(false); reboot(); };
+
+  // ---- ORIENTATION TRACKING (mobile) ----
+  useEffect(() => {
+    const check = () => setIsPortrait(window.innerHeight > window.innerWidth);
+    check();
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', check);
+    return () => { window.removeEventListener('resize', check); window.removeEventListener('orientationchange', check); };
+  }, []);
+  // Freeze the sim (no drain, no scroll) while a mobile player is holding the phone in portrait.
+  useEffect(() => { pausedRef.current = controlMode === 'mobile' && isPortrait && !showIntro; }, [controlMode, isPortrait, showIntro]);
 
   // ---- MATRIX RAIN INIT ----
   useEffect(() => {
@@ -528,6 +591,21 @@ export const ArcadeCanvas: React.FC = () => {
       for (let ring = 0; ring < 8; ring++) setTimeout(() => burst(x, y, rainbow[ring % rainbow.length], 45, 9 + ring * 2), ring * 60);
       toast(`🦄 UNICORN BLESSING — FULL HEAL + SHIELD + EVERYTHING 8 SEC — +${blessPts.toLocaleString()}`);
       floatFeedback(x, y - 25, `🦄 BLESSED +${blessPts.toLocaleString()}`);
+    };
+
+    // ---- GOLD CHARIOT REWARD — shared whether you shoot it or catch it ----
+    // Now also tops up the stability bar, so the chariot is a genuine "help" pickup.
+    const rewardChariot = (x: number, y: number, scoreMult: number, caught: boolean) => {
+      synthRef.current?.playGoldenKill();
+      state.screenFlash = 0.7; state.screenShake = 5;
+      for (let ring = 0; ring < 7; ring++) setTimeout(() => burst(x, y, ['#ffd700','#ffe65c','#ffffff','#ffaa00'][ring % 4], 45, 9 + ring * 2), ring * 55);
+      state.blasterCharges += 2; setBlasterCharges(state.blasterCharges);
+      state.scoreMultTicks = 60 * 12; setScoreMultActive(true);
+      state.coreStability = Math.min(100, state.coreStability + 45); setStability(Math.floor(state.coreStability));
+      const pts = Math.floor((4000 + Math.min(14, Math.floor(state.crystalsTotal / 5)) * 400) * scoreMult);
+      setScore(prev => prev + pts);
+      toast(`🏆 GOLD CHARIOT${caught ? ' CAUGHT' : ''} — +${pts.toLocaleString()} + ×2 SCORE + 2 CHARGES + HEAL`);
+      floatFeedback(x, y - 20, `🏆 CHARIOT +${pts.toLocaleString()}`);
     };
 
     // ---- JUMP ----
@@ -698,11 +776,22 @@ export const ArcadeCanvas: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
+    // Bridge the effect-scoped jump (needs doJump/burst/etc.) out to the touch handlers.
+    jumpRef.current = () => { state.jumpBufferCounter = 6; doJump(); };
+
     // ---- SPAWN ALIEN ----
     const spawnAlien = (tier: number) => {
       state.alienIdInc++;
       const p = state.player;
-      const spawnY = p.y + p.height / 2 - 18 + (Math.random() - 0.5) * 180;
+      // Spread aliens across the whole vertical playfield instead of hugging the player's
+      // height — this rewards actually aiming and pushes vertical (jump-to-line-up) play.
+      // Bias the band slightly toward the player so the top/bottom edges stay less crowded.
+      const spawnBandTop = 60;
+      const spawnBandBottom = canvas.height - 140;
+      const playerAnchor = p.y + p.height / 2 - 18;
+      const fullSpread = spawnBandTop + Math.random() * (spawnBandBottom - spawnBandTop);
+      // 70% fully-random height, 30% near the player so they're not always chasing crosshairs
+      const spawnY = Math.random() < 0.3 ? playerAnchor + (Math.random() - 0.5) * 160 : fullSpread;
       let type: Alien['type'] = 'normal';
       const roll = Math.random();
 
@@ -764,6 +853,7 @@ export const ArcadeCanvas: React.FC = () => {
         health: isSuper ? 2 : isTank ? 3 : 1,
         zigzagPhase: Math.random() * Math.PI * 2,
         bomberDropped: false,
+        straightRunner: type === 'normal' && Math.random() < 0.5,  // half of normals run straight, half weave
       });
     };
 
@@ -775,6 +865,7 @@ export const ArcadeCanvas: React.FC = () => {
     // ---- UPDATE ----
     const update = () => {
       if (!isPlaying) return;
+      if (pausedRef.current) return;       // frozen: mobile held in portrait
       if (state.perkDraftPending) return;  // freeze while picking perk
       state.gameTicks++;
 
@@ -834,7 +925,12 @@ export const ArcadeCanvas: React.FC = () => {
         }
       }
       if (state.floatTicks > 0) { state.floatTicks--; if (state.floatTicks === 0) { setFloatMode(false); state.ouroModeAirCrystals = 0; } }
-      if (state.easterEggTicks > 0) { state.easterEggTicks--; if (state.easterEggTicks === 0) { state.easterEggMode = ''; setEasterEggMode(null); } }
+      if (state.easterEggTicks > 0) { state.easterEggTicks--; if (state.easterEggTicks === 0) {
+        // Berserker ending: arm a cooldown and wipe the kill window so the rapid-fire
+        // spree you just had can't immediately bounce you straight back into it.
+        if (state.easterEggMode === 'berserker') { state.berserkerCooldown = 600; state.berserkerKills = 0; state.berserkerTimer = 0; }
+        state.easterEggMode = ''; setEasterEggMode(null);
+      } }
 
       // ---- EASTER EGG MODE — CONTINUOUS PERKS WHILE ACTIVE ----
       if (state.easterEggMode && state.easterEggTicks > 0) {
@@ -883,7 +979,8 @@ export const ArcadeCanvas: React.FC = () => {
         state.ghostRunShotsFired = 0; // reset flag so timer can run again next attempt
       }
 
-      // ---- BERSERKER tracking — 8 kills in 600 ticks ----
+      // ---- BERSERKER tracking — 7 kills in 720 ticks, then a cooldown before it can re-arm ----
+      if (state.berserkerCooldown > 0) state.berserkerCooldown--;
       state.berserkerTimer++;
       if (state.berserkerTimer >= 720) { state.berserkerTimer = 0; state.berserkerKills = 0; }
 
@@ -1000,17 +1097,17 @@ export const ArcadeCanvas: React.FC = () => {
           // Straight line — no Y tracking, tiny, fast
           // y is fixed at spawn
         } else if (al.type === 'tank') {
-          // Very slow, gently tracks player
-          const targetY = p.y + p.height / 2 - al.height / 2;
-          al.y += (targetY - al.y) * 0.005;
+          // Slow lumbering wall — gentle bob, no longer homes onto the player. Aim for it.
+          al.zigzagPhase += 0.02;
+          al.y += Math.sin(al.zigzagPhase) * 1.2;
           al.y = Math.max(30, Math.min(canvas.height - al.height - 30, al.y));
         } else if (al.type === 'bomber') {
-          // Flies past player Y then drops a meteor at last grounded pos
-          const targetY = p.y + p.height / 2 - al.height / 2;
-          al.y += (targetY - al.y) * 0.03;
+          // Cruises at its spawn height (no Y-homing) and lobs a bomb straight down when it
+          // crosses the player's column — a vertical hazard you dodge or shoot, not a tracker.
+          al.zigzagPhase += 0.05;
+          al.y += Math.sin(al.zigzagPhase) * 1.5;
           al.y = Math.max(30, Math.min(canvas.height - al.height - 30, al.y));
-          // Drop a meteor when it passes the player
-          if (!al.bomberDropped && al.x < p.x - 40) {
+          if (!al.bomberDropped && al.x + al.width / 2 <= p.x + p.width / 2) {
             al.bomberDropped = true;
             synthRef.current?.playBomberDrop();
             state.meteorIdInc++;
@@ -1018,10 +1115,9 @@ export const ArcadeCanvas: React.FC = () => {
             floatFeedback(al.x, al.y - 20, 'BOMB DROPPED!');
           }
         } else if (al.type === 'prism') {
-          // Slow, hypnotic float — gentle wide sine bob, drifts toward player slowly
+          // Slow, hypnotic float — gentle wide sine bob, no tracking (it's a catchable bonus)
           al.zigzagPhase += 0.05;
-          const targetY = p.y + p.height / 2 - al.height / 2;
-          al.y += (targetY - al.y) * 0.008 + Math.sin(al.zigzagPhase) * 1.6;
+          al.y += Math.sin(al.zigzagPhase) * 1.6;
           al.y = Math.max(30, Math.min(canvas.height - al.height - 30, al.y));
         } else if (al.type === 'unicorn') {
           // Graceful cantering arc, leaves a rainbow trail
@@ -1042,10 +1138,19 @@ export const ArcadeCanvas: React.FC = () => {
             const gold = ['#ffd700','#ffe65c','#ffaa00','#ffffff'];
             state.particles.push({ x: al.x + al.width / 2, y: al.y + al.height * 0.7, vx: 1.5 + Math.random() * 1.5, vy: (Math.random() - 0.2) * 1.5, color: gold[Math.floor(state.gameTicks / 3) % gold.length], alpha: 1, life: 22, size: Math.random() * 3 + 2 });
           }
-        } else {
-          const targetY = p.y + p.height / 2 - al.height / 2;
-          al.y += (targetY - al.y) * (al.type === 'super' ? 0.012 : 0.02);
+        } else if (al.type === 'super') {
+          // Big and tanky but no longer homes — a slow, wide vertical sweep you have to aim at.
+          al.zigzagPhase += 0.03;
+          al.y += Math.sin(al.zigzagPhase) * 3.5;
           al.y = Math.max(30, Math.min(canvas.height - al.height - 30, al.y));
+        } else {
+          // Normal aliens: no player tracking. Half run dead straight (set at spawn),
+          // half weave up and down — so you have to lead and aim, not just spam-fire forward.
+          if (!al.straightRunner) {
+            al.zigzagPhase += 0.06;
+            al.y += Math.sin(al.zigzagPhase) * 2.4;
+            al.y = Math.max(30, Math.min(canvas.height - al.height - 30, al.y));
+          }
         }
 
         // Projectile hits alien
@@ -1143,16 +1248,8 @@ export const ArcadeCanvas: React.FC = () => {
             } else if (al.type === 'unicorn') {
               blessUnicorn(al.x + al.width / 2, al.y + al.height / 2);
             } else if (al.type === 'chariot') {
-              // ---- GOLD CHARIOT — fancy bonus racer: crazy points + score mult + charges ----
-              synthRef.current?.playGoldenKill();
-              state.screenFlash = 0.7; state.screenShake = 5;
-              for (let ring = 0; ring < 7; ring++) setTimeout(() => burst(al.x + al.width / 2, al.y + al.height / 2, ['#ffd700','#ffe65c','#ffffff','#ffaa00'][ring % 4], 45, 9 + ring * 2), ring * 55);
-              state.blasterCharges += 2; setBlasterCharges(state.blasterCharges);
-              state.scoreMultTicks = 60 * 12; setScoreMultActive(true);
-              const pts = (4000 + tier * 400) * Math.max(1, state.killCombo) * (isPerfect ? 3 : 1) * ouroMult;
-              setScore(prev => prev + pts);
-              toast(`🏆 GOLD CHARIOT — +${pts.toLocaleString()} + ×2 SCORE + 2 CHARGES`);
-              floatFeedback(al.x, al.y - 20, `🏆 CHARIOT +${pts.toLocaleString()}`);
+              // Fancy bonus racer: crazy points + score mult + charges + a stability top-up
+              rewardChariot(al.x + al.width / 2, al.y + al.height / 2, Math.max(1, state.killCombo) * (isPerfect ? 3 : 1) * ouroMult, false);
             } else {
               burst(al.x + al.width / 2, al.y + al.height / 2, '#ffe65c', 22, 5);
               burst(al.x + al.width / 2, al.y + al.height / 2, '#ff4e3e', 14, 4);
@@ -1175,9 +1272,11 @@ export const ArcadeCanvas: React.FC = () => {
               stateRef.current.crystals.push({ x: al.x, y: al.y, size: 24, collected: false, pulseOffset: 0 });
             }
 
-            // BERSERKER tracking
-            state.berserkerKills++;
-            if (state.berserkerKills >= 7 && state.easterEggMode !== 'berserker') {
+            // BERSERKER tracking — kills only count toward the next berserker when you're
+            // NOT already raging and the post-berserker cooldown has elapsed. This is what
+            // stops a rapid-fire mash from chaining one berserker straight into the next.
+            if (state.easterEggMode !== 'berserker' && state.berserkerCooldown === 0) state.berserkerKills++;
+            if (state.berserkerKills >= 7 && state.easterEggMode !== 'berserker' && state.berserkerCooldown === 0) {
               state.easterEggMode = 'berserker';
               state.easterEggTicks = 60 * 8; // 5s → 8s
               setEasterEggMode('berserker');
@@ -1222,8 +1321,9 @@ export const ArcadeCanvas: React.FC = () => {
 
         // Alien hits player
         if (al.alive && p.x < al.x + al.width && p.x + p.width > al.x && p.y < al.y + al.height && p.y + p.height > al.y) {
-          // Unicorn — touching it is a CATCH, not a hit
+          // Unicorn & chariot — touching them is a CATCH (heal + reward), not a hit
           if (al.type === 'unicorn') { al.alive = false; blessUnicorn(al.x + al.width / 2, al.y + al.height / 2); return; }
+          if (al.type === 'chariot') { al.alive = false; rewardChariot(al.x + al.width / 2, al.y + al.height / 2, Math.max(1, state.killCombo), true); return; }
           // Ghost mode — pass through, no damage
           if (state.ghostTicks > 0) { floatFeedback(al.x, al.y - 10, 'GHOST!'); return; }
           al.alive = false;
@@ -1284,6 +1384,28 @@ export const ArcadeCanvas: React.FC = () => {
         if (c.collected) return;
         if (p.x < c.x + c.size && p.x + p.width > c.x && p.y < c.y + c.size && p.y + p.height > c.y) {
           c.collected = true;
+
+          // ---- AIR-CHAIN — grabbing a crystal mid-air gives your jump back ----
+          // This is the staircase trick: snag a crystal and you can leap again instead of
+          // hitting the gravity stamp on the 3rd press, so you climb step-by-step as long
+          // as you keep nailing crystals. Pure timing skill, no permanent buff.
+          if (!p.isGrounded) { p.jumpCount = Math.min(p.jumpCount, 1); p.stretch = 1.3; }
+
+          // ---- APEX SUPER CRYSTAL — the reward for nailing the hardest staircase ----
+          if (c.isApex) {
+            synthRef.current?.playGoldenKill();
+            synthRef.current?.playFloatCrystal();
+            state.screenFlash = 0.6; state.screenShake = 4;
+            for (let ring = 0; ring < 7; ring++) setTimeout(() => burst(c.x + c.size / 2, c.y + c.size / 2, ['#00ffd0','#44ddff','#ffffff','#ffd700'][ring % 4], 46, 9 + ring * 2), ring * 55);
+            const apts = 10000 + diffTier * 1200;
+            setScore(prev => prev + apts);
+            state.scoreMultTicks = 60 * 12; setScoreMultActive(true);
+            state.coreStability = Math.min(100, state.coreStability + 20); setStability(Math.floor(state.coreStability));
+            state.blasterCharges += 2; setBlasterCharges(state.blasterCharges);
+            toast(`🏆 APEX CRYSTAL — TRICK SHOT MASTER +${apts.toLocaleString()} + ×2 SCORE`);
+            floatFeedback(c.x, c.y - 22, `🏆 +${apts.toLocaleString()}`);
+            return;
+          }
 
           if (c.isHazard) {
             state.hazardSpeedTicks = 60 * 20;
@@ -1651,7 +1773,38 @@ export const ArcadeCanvas: React.FC = () => {
         const vs  = Math.min(80, 25 + diffTier * 6);
         const ny  = Math.max(canvas.height - 420, Math.min(canvas.height - 180, last.baseY + Math.random() * vs * dir));
         state.platforms.push({ x: nx, y: ny, baseY: ny, width: w, height: 600, styleType: style, waveOffset: 0 });
-        if (Math.random() > 0.18) state.crystals.push({ x: nx + w / 2 - 12, y: ny - 50 - Math.random() * 35, size: 24, collected: false, pulseOffset: Math.random() * Math.PI * 2 });
+        // Crystals are sparse. Most platforms get nothing; ~22% get a single low crystal.
+        // Every so often a CRYSTAL STAIRCASE appears instead — a diagonal run climbing up
+        // and to the right. Grab the first and you can chain jumps step-by-step to the top:
+        // a pure timing trick that rewards skill with a string of crystals (no permanent buff).
+        // Crystals are deliberately sparse so a MAGNET pickup never vacuums the whole
+        // screen. Most platforms get nothing; only ~10% drop a single low crystal. The real
+        // crystal source is the STAIRCASE set-piece, spaced well apart.
+        state.platformsSinceStair++;
+        if (state.platformsSinceStair >= 8 && Math.random() < 0.45) {
+          state.platformsSinceStair = 0;
+          // ---- CRYSTAL STAIRCASE — the trick-shot set piece, harder the deeper you get ----
+          // Air-chaining (each grab refunds a jump) is what climbs it. Higher diffTier =>
+          // more steps, taller vertical gaps, and wider/more-varied horizontal spacing.
+          const steps = 3 + Math.floor(diffTier / 3) + Math.floor(Math.random() * 2);  // 3 → ~7
+          const vStep = 50 + diffTier * 4;          // 50 → 90px climbs (near the air-chain limit)
+          const baseY = ny - 120 - diffTier * 6;    // whole staircase starts higher over time
+          let sx = nx + 40, topY = baseY;
+          for (let i = 0; i < steps; i++) {
+            const sy = Math.max(46, baseY - i * vStep - Math.random() * 24);
+            state.crystals.push({ x: sx, y: sy, size: 24, collected: false, pulseOffset: Math.random() * Math.PI * 2 });
+            topY = Math.min(topY, sy);
+            sx += 95 + diffTier * 6 + Math.random() * 55;   // wider, more varied gaps as you go
+          }
+          // ---- APEX SUPER CRYSTAL — only on the hardest staircases, a brutal trick shot ----
+          // Sits a near-max jump above the final step: you must grab the last rung (for the
+          // jump refund) then immediately nail a perfect leap. Huge payoff if you land it.
+          if (diffTier >= 6 && Math.random() < 0.3) {
+            state.crystals.push({ x: sx - 20, y: Math.max(30, topY - 92), size: 34, collected: false, pulseOffset: Math.random() * Math.PI * 2, isApex: true });
+          }
+        } else if (Math.random() < 0.10) {
+          state.crystals.push({ x: nx + w / 2 - 12, y: ny - 50 - Math.random() * 35, size: 24, collected: false, pulseOffset: Math.random() * Math.PI * 2 });
+        }
         if (state.crystalsSinceShield >= 12 && Math.random() > 0.5) { state.crystalsSinceShield = 0; state.crystals.push({ x: nx + w / 2 + 40, y: ny - 80 - Math.random() * 30, size: 28, collected: false, pulseOffset: Math.random() * Math.PI * 2, isShield: true }); }
         if (state.crystalsSinceTriple >= 18 && Math.random() > 0.6) { state.crystalsSinceTriple = 0; state.crystals.push({ x: nx + w / 2 - 50, y: ny - 90 - Math.random() * 30, size: 28, collected: false, pulseOffset: Math.random() * Math.PI * 2, isTripleJump: true }); }
         state.crystalsSinceMagnet++;
@@ -1897,6 +2050,15 @@ export const ArcadeCanvas: React.FC = () => {
           ctx.beginPath(); ctx.moveTo(-c.size*0.42,-c.size*0.3); ctx.lineTo(-c.size*0.6,-c.size*0.62); ctx.lineTo(-c.size*0.5,-c.size*0.28); ctx.closePath(); ctx.fill();
           ctx.fillStyle='#000'; ctx.shadowBlur=0; ctx.beginPath(); ctx.arc(-c.size*0.36,-c.size*0.14,2.2,0,Math.PI*2); ctx.fill();
           ctx.fillStyle=`rgba(255,255,255,${gl})`; ctx.beginPath(); ctx.arc(-c.size*0.6,-c.size*0.5,2.6,0,Math.PI*2); ctx.fill();
+        } else if (c.isApex) {
+          // APEX super crystal — pulsing cyan/gold beacon, unmistakably a big-deal target
+          const ap = 0.6 + Math.sin(sd.gameTicks*0.18+c.pulseOffset)*0.4;
+          ctx.shadowColor='#00ffd0'; ctx.shadowBlur=34*ap;
+          ctx.strokeStyle=`rgba(0,255,208,${ap})`; ctx.lineWidth=2.5;
+          ctx.beginPath(); ctx.arc(0,0,c.size*0.95,0,Math.PI*2); ctx.stroke();
+          ctx.strokeStyle=`rgba(255,215,0,${ap})`; ctx.lineWidth=2;
+          ctx.beginPath(); ctx.arc(0,0,c.size*1.25,0,Math.PI*2); ctx.stroke();
+          ctx.fillStyle='#00ffd0';
         } else {
           ctx.fillStyle=sc; ctx.shadowColor=sc; ctx.shadowBlur=8;
         }
@@ -2195,8 +2357,9 @@ export const ArcadeCanvas: React.FC = () => {
     e.timeSlowTicks=0; e.ghostTicks=0; e.mirrorTicks=0; e.floatTicks=0;
     e.doubleTapReady=false; e.overchargeReady=false;
     e.easterEggMode=''; e.easterEggTicks=0; e.ouroModeAirCrystals=0;
-    e.ghostRunShotsFired=0; e.ghostRunTimer=0; e.berserkerKills=0; e.berserkerTimer=0;
+    e.ghostRunShotsFired=0; e.ghostRunTimer=0; e.berserkerKills=0; e.berserkerTimer=0; e.berserkerCooldown=0;
     e.crystalsSinceRarePerk=0;
+    e.platformsSinceStair=0;
     e.aliens=[]; e.projectiles=[]; e.meteors=[]; e.warpToast.active=false;
     spaceHeldRef.current = false;
     setScore(0); setCrystalCount(0); setBlasterCharges(0); setStability(100);
@@ -2211,8 +2374,31 @@ export const ArcadeCanvas: React.FC = () => {
 
   // ---- RENDER ----
   return (
-    <div className="relative w-full h-full select-none overflow-hidden" onClick={handleCanvasClick}>
+    <div className="relative w-full h-full select-none overflow-hidden" onClick={handleCanvasClick} style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" />
+
+      {/* ---- MOBILE TOUCH PADS — left half = fire/charge, right half = jump ---- */}
+      {isPlaying && controlMode === 'mobile' && (
+        <div className="absolute inset-0 z-20 flex" style={{ touchAction: 'none' }}>
+          <div
+            className="w-1/2 h-full relative pointer-events-auto"
+            onPointerDown={onFireDown} onPointerUp={onFireUp} onPointerCancel={onFireUp} onContextMenu={e => e.preventDefault()}>
+            <div className="absolute bottom-8 left-8 w-24 h-24 rounded-full border-2 border-[#ff4e3e]/50 bg-[#ff4e3e]/10 backdrop-blur-sm flex flex-col items-center justify-center text-[#ff4e3e]/80 font-mono pointer-events-none active:bg-[#ff4e3e]/25">
+              <span className="text-2xl leading-none">✦</span>
+              <span className="text-[9px] tracking-widest mt-1">TAP FIRE</span>
+              <span className="text-[8px] tracking-widest opacity-70">HOLD CHARGE</span>
+            </div>
+          </div>
+          <div
+            className="w-1/2 h-full relative pointer-events-auto"
+            onPointerDown={onJumpTouch} onContextMenu={e => e.preventDefault()}>
+            <div className="absolute bottom-8 right-8 w-24 h-24 rounded-full border-2 border-brandYellow/50 bg-brandYellow/10 backdrop-blur-sm flex flex-col items-center justify-center text-brandYellow/80 font-mono pointer-events-none active:bg-brandYellow/25">
+              <span className="text-2xl leading-none">⤒</span>
+              <span className="text-[9px] tracking-widest mt-1">JUMP</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isPlaying && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
@@ -2332,14 +2518,15 @@ export const ArcadeCanvas: React.FC = () => {
       {isPlaying && (
         <div className="absolute bottom-6 left-6 right-6 flex justify-between font-mono text-[10px] tracking-wider text-brandYellow/40 pointer-events-none select-none z-10 uppercase">
           <div className="flex flex-col gap-1 text-left">
-            <span>[W] / [↑] — JUMP  //  [HOLD SPACE] CHARGE + [RELEASE] FIRE  //  [F] INSTANT SHOT</span>
+            <span>{controlMode === 'mobile' ? 'LEFT — TAP FIRE / HOLD CHARGE  //  RIGHT — TAP JUMP' : '[W] / [↑] — JUMP  //  [HOLD SPACE] CHARGE + [RELEASE] FIRE  //  [F] INSTANT SHOT'}</span>
             <span>COMBO ×3 = WIDE SHOT  //  ×5 = RAPID FIRE  //  BOSS KILL = NOVA</span>
+            <span className="text-[#44ddff]/60">CHAIN JUMPS UP A CRYSTAL STAIRCASE TO SWEEP THE WHOLE RUN</span>
           </div>
           <div className="text-right text-brandYellow/50 font-bold"><span>CRYSTALS RESTORE STABILITY // AIRBORNE CHAIN = SCORE MULT</span></div>
         </div>
       )}
 
-      {!isPlaying && (
+      {!isPlaying && !showIntro && (
         <div className="absolute inset-0 bg-brandBlack flex items-center justify-center z-50">
           <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
           <div className="w-full max-w-2xl px-12 text-left space-y-8 relative z-10">
@@ -2379,7 +2566,56 @@ export const ArcadeCanvas: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ---- INTRO / MODE SELECT ---- */}
+      {showIntro && (
+        <div className="absolute inset-0 bg-brandBlack flex items-center justify-center z-50 pointer-events-auto">
+          <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,230,92,0.25)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
+          <div className="w-full max-w-xl px-10 text-left space-y-7 relative z-10">
+            <div className="space-y-2 border-l-4 border-brandYellow pl-6">
+              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// ARCADE_HARDCORE_CORE</span>
+              <h2><BrandText text="ENDLESS SIMULATION" className="text-4xl md:text-5xl text-brandYellow block font-black tracking-tighter leading-none" /></h2>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[10px] text-brandYellow/60 font-mono uppercase tracking-widest">// SELECT CONTROLS</p>
+              <div className="flex gap-3">
+                <button onClick={() => setControlMode('desktop')}
+                  className={`flex-1 font-mono uppercase tracking-widest py-3 px-4 border-2 transition-all ${controlMode === 'desktop' ? 'border-brandYellow bg-brandYellow/15 text-brandYellow' : 'border-brandYellow/30 text-brandYellow/50 hover:border-brandYellow/60'}`}>
+                  <span className="block text-sm font-black">⌨ DESKTOP</span>
+                  <span className="block text-[9px] opacity-70 mt-1">KEYBOARD + MOUSE</span>
+                </button>
+                <button onClick={() => setControlMode('mobile')}
+                  className={`flex-1 font-mono uppercase tracking-widest py-3 px-4 border-2 transition-all ${controlMode === 'mobile' ? 'border-brandYellow bg-brandYellow/15 text-brandYellow' : 'border-brandYellow/30 text-brandYellow/50 hover:border-brandYellow/60'}`}>
+                  <span className="block text-sm font-black">📱 MOBILE</span>
+                  <span className="block text-[9px] opacity-70 mt-1">TURN PHONE SIDEWAYS</span>
+                </button>
+              </div>
+              <div className="font-mono text-[10px] text-gray-400 uppercase leading-relaxed border border-brandYellow/20 p-4 bg-black/60">
+                {controlMode === 'mobile'
+                  ? <><p><span className="text-[#ff4e3e] font-bold">LEFT SIDE</span> — TAP TO FIRE, HOLD TO CHARGE + RELEASE</p><p><span className="text-brandYellow font-bold">RIGHT SIDE</span> — TAP TO JUMP (TAP AGAIN MID-AIR TO DOUBLE-JUMP)</p><p className="text-[#44ddff]/70 pt-1">HOLD THE PHONE IN LANDSCAPE FOR THE FULL VIEW</p></>
+                  : <><p><span className="text-brandYellow font-bold">[W] / [↑]</span> — JUMP   <span className="text-brandYellow font-bold">[HOLD SPACE]</span> — CHARGE + RELEASE TO FIRE</p><p><span className="text-brandYellow font-bold">[F] / CLICK</span> — INSTANT SHOT</p><p className="text-[#44ddff]/70 pt-1">CHAIN JUMPS UP CRYSTAL STAIRCASES — EVERY CRYSTAL REFUNDS A JUMP</p></>}
+              </div>
+            </div>
+
+            <button onClick={startGame}
+              className="bg-brandYellow hover:bg-brandRed text-black font-helvetica font-black py-4 px-10 text-base uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto border-none active:scale-95 shadow-[4px_4px_0px_#ff4e3e]">
+              ▶ INITIALIZE CORE
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ---- ROTATE-TO-LANDSCAPE NUDGE (mobile, portrait) ---- */}
+      {controlMode === 'mobile' && isPortrait && (
+        <div className="absolute inset-0 bg-brandBlack/95 flex flex-col items-center justify-center z-[60] pointer-events-auto text-center px-8">
+          <span className="text-6xl animate-pulse mb-6">↻</span>
+          <BrandText text="ROTATE YOUR DEVICE" className="text-2xl text-brandYellow font-black uppercase tracking-tight" />
+          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest mt-3">Turn the phone sideways (landscape) to play</p>
+          {!showIntro && <p className="font-mono text-[10px] text-[#1ED760]/70 uppercase tracking-widest mt-2">— run paused —</p>}
+        </div>
+      )}
     </div>
-    
+
   );
 };

@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import { BrandText } from '@/components/BrandText';
-import { GameCanvas } from '@/components/GameCanvas';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 
-type SystemState = 'intro' | 'hub' | 'campaign' | 'arcade';
+type SystemState = 'intro' | 'hub' | 'arcade';
 
 export default function Home() {
   const [gameState, setGameState] = useState<SystemState>('intro');
@@ -115,18 +114,6 @@ export default function Home() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-mono">
-            
-            {/* MODULE 1: THE CAMPAIGN */}
-            <div 
-              onClick={() => launchModule('campaign')}
-              className="group relative border-2 border-brandRed p-8 bg-black/40 hover:bg-brandRed transition-all cursor-pointer shadow-[6px_6px_0px_rgba(255,78,62,0.15)] hover:shadow-[6px_6px_0px_rgba(255,78,62,1)]"
-            >
-              <span className="text-xs text-brandRed group-hover:text-black block tracking-widest font-bold mb-2">// OPS_01</span>
-              <h3 className="text-3xl font-black text-white group-hover:text-black mb-4 uppercase">Campaign</h3>
-              <p className="text-xs text-gray-500 group-hover:text-black/80 leading-relaxed uppercase">
-                The 17-track mastered arc. Traverse the definitive aesthetic matrix. Establish sovereignty.
-              </p>
-            </div>
 
             {/* MODULE 2: THE ARCADE */}
             <div 
@@ -172,27 +159,14 @@ export default function Home() {
   // --------------------------------------------------------
   // STAGE 3: EXECUTE SELECTED GAME MODULE
   // --------------------------------------------------------
-  if (gameState === 'campaign') {
-    return (
-      <main className="relative w-screen h-screen bg-brandBlack overflow-hidden">
-        <GameCanvas />
-        <button 
-          onClick={() => setGameState('hub')}
-          className="absolute bottom-6 left-6 z-50 text-xs font-mono text-brandRed border border-brandRed bg-black/50 px-4 py-2 hover:bg-brandRed hover:text-black transition-all"
-        >
-          [ ABORT TO TERMINAL ]
-        </button>
-      </main>
-    );
-  }
-
   if (gameState === 'arcade') {
     return (
       <main className="relative w-screen h-screen bg-brandBlack overflow-hidden">
         <ArcadeCanvas />
-        <button 
+        {/* Bottom-center so it clears both mobile touch pads (fire = bottom-left, jump = bottom-right) */}
+        <button
           onClick={() => setGameState('hub')}
-          className="absolute bottom-6 left-6 z-50 text-xs font-mono text-brandYellow border border-brandYellow bg-black/50 px-4 py-2 hover:bg-brandYellow hover:text-black transition-all"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
         >
           [ ABORT TO TERMINAL ]
         </button>
