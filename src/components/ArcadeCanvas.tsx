@@ -3,6 +3,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BrandText } from './BrandText';
 
+// Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U).
+const DEBUG = true;
+
 // ---- INTERFACES ----
 interface Player {
   x: number; y: number; width: number; height: number;
@@ -32,7 +35,7 @@ interface BossProjectile {
   x: number; y: number; vx: number; vy: number; alive: boolean;
 }
 interface Alien {
-  type: 'normal' | 'super' | 'speedy' | 'sniper' | 'tank' | 'bomber' | 'prism';
+  type: 'normal' | 'super' | 'speedy' | 'sniper' | 'tank' | 'bomber' | 'prism' | 'unicorn';
   health: number; zigzagPhase: number;
   id: number; x: number; y: number;
   width: number; height: number; vx: number;
@@ -301,11 +304,13 @@ export const ArcadeCanvas: React.FC = () => {
     // golden alien cooldown
     goldenCooldown:     0,
     prismCooldown:      0,   // PRISM alien spawn spacing
+    unicornCooldown:    0,   // UNICORN spawn spacing
     // weather
     weatherTicks:       0,
     weatherType:        '' as string,
     weatherWarnTicks:   0,
     nextWeatherAt:      2700,
+    nextHazardWaveAt:   1800,   // first debris storm ~30s in, then escalates
     // boss escalation
     bossCount:          0,
     // hazard crystal — rare speed surge
@@ -496,6 +501,27 @@ export const ArcadeCanvas: React.FC = () => {
 
     const hasPerk = (name: string) => state.perks.includes(name);
 
+    // ---- UNICORN BLESSING — shared whether you shoot it or catch it ----
+    const blessUnicorn = (x: number, y: number) => {
+      synthRef.current?.playOuroMode();
+      synthRef.current?.playFloatCrystal();
+      // Full restore + a stack of everything good, for 8 seconds
+      state.coreStability = 100; setStability(100);
+      state.shieldActive = true; setHasShield(true);
+      state.blasterCharges += 3; setBlasterCharges(state.blasterCharges);
+      state.speedBoostTicks = Math.max(state.speedBoostTicks, 60 * 8); setSpeedBoosted(true);
+      state.magnetTicks     = Math.max(state.magnetTicks, 60 * 8);     setMagnetActive(true);
+      state.scoreMultTicks  = Math.max(state.scoreMultTicks, 60 * 8);  setScoreMultActive(true);
+      state.calmTicks       = Math.max(state.calmTicks, 60 * 8);
+      state.screenFlash = 0.9;
+      const blessPts = 3000 + Math.min(14, Math.floor(state.crystalsTotal / 5)) * 300;
+      setScore(prev => prev + blessPts);
+      const rainbow = ['#ff0000','#ff8800','#ffff00','#00ff88','#4488ff','#cc44ff','#ffffff'];
+      for (let ring = 0; ring < 8; ring++) setTimeout(() => burst(x, y, rainbow[ring % rainbow.length], 45, 9 + ring * 2), ring * 60);
+      toast(`🦄 UNICORN BLESSING — FULL HEAL + SHIELD + EVERYTHING 8 SEC — +${blessPts.toLocaleString()}`);
+      floatFeedback(x, y - 25, `🦄 BLESSED +${blessPts.toLocaleString()}`);
+    };
+
     // ---- JUMP ----
     const doJump = () => {
       const p = state.player;
@@ -531,7 +557,7 @@ export const ArcadeCanvas: React.FC = () => {
       if (!isPlaying) return;
 
       // ---- DEV SHORTCUTS — test easter eggs ----
-      if (e.code === 'KeyO') {
+      if (DEBUG && e.code === 'KeyO') {
         state.easterEggMode = 'ouro'; state.easterEggTicks = 60 * 20;
         state.floatTicks = 60 * 20;
         state.magnetTicks = 60 * 20; setMagnetActive(true);
@@ -543,13 +569,13 @@ export const ArcadeCanvas: React.FC = () => {
         toast('✨ [DEV] OURO MODE — INFINITE JUMPS + MAGNET + ×10 SCORE 20 SEC ✨');
         return;
       }
-      if (e.code === 'KeyG') {
+      if (DEBUG && e.code === 'KeyG') {
         state.easterEggMode = 'ghost_run'; state.easterEggTicks = 60 * 20;
         setEasterEggMode('ghost_run'); synthRef.current?.playGhostRun();
         toast('👻 [DEV] GHOST RUN MODE — 20 SEC');
         return;
       }
-      if (e.code === 'KeyB') {
+      if (DEBUG && e.code === 'KeyB') {
         state.easterEggMode = 'berserker'; state.easterEggTicks = 60 * 8;
         setEasterEggMode('berserker'); synthRef.current?.playBerserker();
         state.speedBoostTicks = 60 * 8; setSpeedBoosted(true);
@@ -558,7 +584,7 @@ export const ArcadeCanvas: React.FC = () => {
         toast('🔥 [DEV] BERSERKER — 8 SEC');
         return;
       }
-      if (e.code === 'KeyP') {
+      if (DEBUG && e.code === 'KeyP') {
         // Spawn a PRISM alien just ahead of the player, at a reachable height
         state.alienIdInc++;
         state.aliens.push({
@@ -571,6 +597,21 @@ export const ArcadeCanvas: React.FC = () => {
         });
         synthRef.current?.playFloatCrystal();
         toast('🌈 [DEV] PRISM INCOMING — SHOOT IT');
+        return;
+      }
+      if (DEBUG && e.code === 'KeyU') {
+        // Spawn a UNICORN just ahead — catch it or shoot it
+        state.alienIdInc++;
+        state.aliens.push({
+          id: state.alienIdInc,
+          x: canvas.width * 0.7,
+          y: Math.max(60, state.player.y - 30),
+          width: 48, height: 48,
+          vx: -3.4, animFrame: 0, alive: true, type: 'unicorn',
+          health: 1, zigzagPhase: Math.random() * Math.PI * 2, bomberDropped: false,
+        });
+        synthRef.current?.playOuroMode();
+        toast('🦄 [DEV] UNICORN INCOMING — CATCH OR SHOOT IT');
         return;
       }
 
@@ -639,6 +680,10 @@ export const ArcadeCanvas: React.FC = () => {
       if (Math.random() < 0.01 && state.prismCooldown === 0 && state.crystalsTotal >= 10) {
         type = 'prism';
       }
+      // ~10% UNICORN — magical, catch it OR shoot it for a blessing.
+      else if (Math.random() < 0.10 && state.unicornCooldown === 0 && state.crystalsTotal >= 5) {
+        type = 'unicorn';
+      }
       // Rare late-game alien types (crystal 30+)
       else if (state.crystalsTotal >= 30) {
         if      (roll < 0.06 && tier >= 4) type = 'sniper';
@@ -657,17 +702,20 @@ export const ArcadeCanvas: React.FC = () => {
       const isTank   = type === 'tank';
       const isBomber = type === 'bomber';
       const isPrism  = type === 'prism';
+      const isUnicorn = type === 'unicorn';
 
-      const size  = isSuper ? 60 : isTank ? 64 : isSpeedy || isSniper ? 20 : isPrism ? 44 : 36;
+      const size  = isSuper ? 60 : isTank ? 64 : isSpeedy || isSniper ? 20 : isPrism ? 44 : isUnicorn ? 48 : 36;
       const speed = isSuper  ? 2   + tier * 0.15
                   : isSpeedy ? 5   + tier * 0.4  + Math.random() * 2
                   : isSniper ? 7   + tier * 0.5  // fast, straight
                   : isTank   ? 1.2 + tier * 0.1  // slow
                   : isBomber ? 4   + tier * 0.2  // medium, flies past
                   : isPrism  ? 2.2 + tier * 0.05 // slow & floaty — catchable
+                  : isUnicorn ? 3.4 + tier * 0.08 // graceful canter
                   :            3   + tier * 0.28 + Math.random() * 1.5;
 
       if (isPrism) state.prismCooldown = 900;  // ~15s gap between prisms
+      if (isUnicorn) state.unicornCooldown = 1200;  // ~20s gap between unicorns
 
       if (isSuper) state.superAlienSpawned = true;
       state.aliens.push({
@@ -695,9 +743,10 @@ export const ArcadeCanvas: React.FC = () => {
 
       if (state.warpToast.active) { state.warpToast.life--; if (state.warpToast.life <= 0) state.warpToast.active = false; }
 
-      // Stability drain
+      // Stability drain — now climbs with run time so the late game can't be coasted
       const drainMult = hasPerk('drain halved') ? 0.5 : 1;
-      const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001) * drainMult;
+      const endurance = state.gameTicks / 3600;  // +1 per minute, UNCAPPED (breaks the flow-state runaway)
+      const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001 + endurance * 0.025) * drainMult;
       state.coreStability = Math.max(0, state.coreStability - drain);
       setStability(Math.floor(state.coreStability));
       if (state.coreStability <= 0) {
@@ -717,6 +766,7 @@ export const ArcadeCanvas: React.FC = () => {
       if (hasPerk('crystal magnet always') && state.magnetTicks === 0) { state.magnetTicks = 10; setMagnetActive(true); }
       if (state.goldenCooldown  > 0) state.goldenCooldown--;
       if (state.prismCooldown   > 0) state.prismCooldown--;
+      if (state.unicornCooldown > 0) state.unicornCooldown--;
       if (state.bossSpeedReliefTicks > 0) state.bossSpeedReliefTicks--;
       if (state.hazardSpeedTicks     > 0) state.hazardSpeedTicks--;
       // New crystal power-up countdowns
@@ -736,7 +786,7 @@ export const ArcadeCanvas: React.FC = () => {
       // ---- EASTER EGG MODE — CONTINUOUS PERKS WHILE ACTIVE ----
       if (state.easterEggMode && state.easterEggTicks > 0) {
         // Core is protected during any egg mode (gentle regen beats the drain)
-        state.coreStability = Math.min(100, state.coreStability + 0.18);
+        state.coreStability = Math.min(100, state.coreStability + 0.12);
 
         if (state.easterEggMode === 'ouro') {
           state.calmTicks = Math.max(state.calmTicks, 3);
@@ -759,7 +809,7 @@ export const ArcadeCanvas: React.FC = () => {
       // ---- GHOST RUN tracking ----
       if (state.ghostRunShotsFired === 0) {
         state.ghostRunTimer++;
-        if (state.ghostRunTimer >= 2100 && state.easterEggMode !== 'ghost_run') {
+        if (state.ghostRunTimer >= 1800 && state.easterEggMode !== 'ghost_run') {
           state.easterEggMode = 'ghost_run';
           state.easterEggTicks = 60 * 20;
           setEasterEggMode('ghost_run');
@@ -782,7 +832,7 @@ export const ArcadeCanvas: React.FC = () => {
 
       // ---- BERSERKER tracking — 8 kills in 600 ticks ----
       state.berserkerTimer++;
-      if (state.berserkerTimer >= 690) { state.berserkerTimer = 0; state.berserkerKills = 0; }
+      if (state.berserkerTimer >= 720) { state.berserkerTimer = 0; state.berserkerKills = 0; }
 
       // Weapon charge
       if (state.chargeHeld > 0 && state.blasterCharges > 0) {
@@ -920,6 +970,16 @@ export const ArcadeCanvas: React.FC = () => {
           const targetY = p.y + p.height / 2 - al.height / 2;
           al.y += (targetY - al.y) * 0.008 + Math.sin(al.zigzagPhase) * 1.6;
           al.y = Math.max(30, Math.min(canvas.height - al.height - 30, al.y));
+        } else if (al.type === 'unicorn') {
+          // Graceful cantering arc, leaves a rainbow trail
+          al.zigzagPhase += 0.07;
+          al.y += Math.sin(al.zigzagPhase) * 3.2;
+          al.y = Math.max(40, Math.min(canvas.height - al.height - 40, al.y));
+          const rainbow = ['#ff0000','#ff8800','#ffff00','#00ff88','#4488ff','#cc44ff'];
+          if (state.gameTicks % 2 === 0) {
+            const ci = Math.floor(state.gameTicks / 4) % rainbow.length;
+            state.particles.push({ x: al.x + al.width / 2, y: al.y + al.height / 2 + (Math.random() - 0.5) * al.height, vx: 1.5 + Math.random(), vy: (Math.random() - 0.5) * 1.5, color: rainbow[ci], alpha: 1, life: 24, size: Math.random() * 3 + 2 });
+          }
         } else {
           const targetY = p.y + p.height / 2 - al.height / 2;
           al.y += (targetY - al.y) * (al.type === 'super' ? 0.012 : 0.02);
@@ -1002,35 +1062,24 @@ export const ArcadeCanvas: React.FC = () => {
 
               const cx = al.x + al.width / 2, cy = al.y + al.height / 2;
               const drop = (props: Partial<Crystal>) => {
-                state.crystals.push({ x: cx + (Math.random() - 0.5) * 220, y: Math.max(40, cy - 40 - Math.random() * 90), size: 26, collected: false, pulseOffset: Math.random() * Math.PI * 2, ...props });
+                state.crystals.push({ x: cx + (Math.random() - 0.5) * 340, y: Math.max(40, cy - 30 - Math.random() * 130), size: 26, collected: false, pulseOffset: Math.random() * Math.PI * 2, ...props });
               };
 
               // Always: a handful of regular crystals
               const regulars = 4 + Math.floor(diffTier / 2);
               for (let i = 0; i < regulars; i++) drop({ size: 24 });
 
-              // ~7% JACKPOT — one of EVERY rare type at once + a golden
-              const jackpot = Math.random() < 0.07;
-              if (jackpot) {
-                drop({ isTime: true }); drop({ isGhost: true }); drop({ isDoubleTap: true });
-                drop({ isOvercharge: true }); drop({ isMirror: true }); drop({ isFloat: true });
-                drop({ isGolden: true, size: 30 });
-                toast('🌈 PRISM JACKPOT — EVERY RARE CRYSTAL DROPPED!');
-              } else {
-                // Otherwise each rare type rolls independently
-                if (Math.random() < 0.50) drop({ isTime: true });
-                if (Math.random() < 0.50) drop({ isGhost: true });
-                if (Math.random() < 0.50) drop({ isDoubleTap: true });
-                if (Math.random() < 0.45) drop({ isOvercharge: true });
-                if (Math.random() < 0.45) drop({ isMirror: true });
-                if (Math.random() < 0.18) drop({ isFloat: true });  // the OURO key — rarer
-                if (Math.random() < 0.12) drop({ isGolden: true, size: 30 });
-                toast('🌈 PRISM SHATTERED — CRYSTAL SHOWER!');
-              }
+              // 1% spawn is rare enough — it ALWAYS drops one of every rare type + a golden
+              drop({ isTime: true }); drop({ isGhost: true }); drop({ isDoubleTap: true });
+              drop({ isOvercharge: true }); drop({ isMirror: true }); drop({ isFloat: true });
+              drop({ isGolden: true, size: 30 });
+              toast('🌈 PRISM SHATTERED — EVERY CRYSTAL TYPE DROPPED!');
 
               const pts = (1000 + tier * 100) * Math.max(1, state.killCombo) * (isPerfect ? 3 : 1) * ouroMult;
               setScore(prev => prev + pts);
               floatFeedback(al.x, al.y - 20, `✦ PRISM +${pts.toLocaleString()}`);
+            } else if (al.type === 'unicorn') {
+              blessUnicorn(al.x + al.width / 2, al.y + al.height / 2);
             } else {
               burst(al.x + al.width / 2, al.y + al.height / 2, '#ffe65c', 22, 5);
               burst(al.x + al.width / 2, al.y + al.height / 2, '#ff4e3e', 14, 4);
@@ -1053,7 +1102,7 @@ export const ArcadeCanvas: React.FC = () => {
 
             // BERSERKER tracking
             state.berserkerKills++;
-            if (state.berserkerKills >= 6 && state.easterEggMode !== 'berserker') {
+            if (state.berserkerKills >= 5 && state.easterEggMode !== 'berserker') {
               state.easterEggMode = 'berserker';
               state.easterEggTicks = 60 * 8; // 5s → 8s
               setEasterEggMode('berserker');
@@ -1098,6 +1147,8 @@ export const ArcadeCanvas: React.FC = () => {
 
         // Alien hits player
         if (al.alive && p.x < al.x + al.width && p.x + p.width > al.x && p.y < al.y + al.height && p.y + p.height > al.y) {
+          // Unicorn — touching it is a CATCH, not a hit
+          if (al.type === 'unicorn') { al.alive = false; blessUnicorn(al.x + al.width / 2, al.y + al.height / 2); return; }
           // Ghost mode — pass through, no damage
           if (state.ghostTicks > 0) { floatFeedback(al.x, al.y - 10, 'GHOST!'); return; }
           al.alive = false;
@@ -1279,7 +1330,7 @@ export const ArcadeCanvas: React.FC = () => {
             state.crystalsSincePerks++;
             state.crystalsSinceBoss++;
             setCrystalCount(state.crystalsTotal);
-            state.coreStability = Math.min(100, state.coreStability + 14);
+            state.coreStability = Math.min(100, state.coreStability + Math.max(6, 14 - endurance * 1.5));
 
             // Crystal chain
             state.crystalChain++;
@@ -1347,10 +1398,26 @@ export const ArcadeCanvas: React.FC = () => {
       });
 
       // Enemy spawning
-      const alienInterval = Math.max(75, 180 - diffTier * 9);
+      const alienInterval = Math.max(45, 180 - diffTier * 9 - Math.floor(endurance) * 7);
       if (state.gameTicks % alienInterval === 0 && !state.boss) spawnAlien(diffTier);
-      const meteorInterval = Math.max(120, 250 - diffTier * 12);
+      const meteorInterval = Math.max(70, 250 - diffTier * 12 - Math.floor(endurance) * 9);
       if (state.gameTicks % meteorInterval === 0) spawnMeteor(diffTier);
+
+      // ---- HAZARD WAVES — escalating debris storms re-introduce late-game pressure ----
+      if (state.crystalsTotal >= 15 && state.gameTicks >= state.nextHazardWaveAt && !state.boss) {
+        const gap = Math.max(540, 1500 - Math.floor(endurance) * 110);  // storms get more frequent over time
+        state.nextHazardWaveAt = state.gameTicks + gap;
+        const debris = 3 + Math.floor(endurance);
+        for (let i = 0; i < debris; i++) setTimeout(() => { if (isPlaying) spawnMeteor(diffTier); }, i * 160);
+        // Sniper escort — pierces shields, so it bites even when you're cozy
+        const snipers = 1 + Math.floor(endurance / 3);
+        for (let s = 0; s < snipers; s++) {
+          state.alienIdInc++;
+          state.aliens.push({ id: state.alienIdInc, x: canvas.width + 60 + s * 90, y: Math.max(40, Math.min(canvas.height - 80, p.y + (Math.random() - 0.5) * 140)), width: 20, height: 20, vx: -(7 + diffTier * 0.5), animFrame: 0, alive: true, type: 'sniper', health: 1, zigzagPhase: 0, bomberDropped: false });
+        }
+        synthRef.current?.playWeather();
+        toast(`☄ DEBRIS STORM — ${debris} METEORS + ${snipers} SNIPER${snipers > 1 ? 'S' : ''} INBOUND`);
+      }
 
       // Boss wave every 40 crystals
       if (state.crystalsSinceBoss >= 40 && !state.boss && state.crystalsTotal >= 40) {
@@ -1825,6 +1892,28 @@ export const ArcadeCanvas: React.FC = () => {
           ctx.beginPath(); ctx.arc(0,0,al.width*0.22,0,Math.PI*2); ctx.fill();
           // Orbiting sparkles
           for (let i=0;i<3;i++) { const sa=al.animFrame*0.1+i*(Math.PI*2/3); ctx.fillStyle='rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(Math.cos(sa)*al.width*0.75,Math.sin(sa)*al.height*0.75,3,0,Math.PI*2); ctx.fill(); }
+        } else if (al.type==='unicorn') {
+          ctx.scale(-1, 1);  // face direction of travel (leftward)
+          // Flowing rainbow mane/tail
+          const rainbow=['#ff0000','#ff8800','#ffff00','#00ff88','#4488ff','#cc44ff'];
+          for (let i=0;i<rainbow.length;i++) {
+            ctx.strokeStyle=rainbow[i]; ctx.lineWidth=3; ctx.shadowColor=rainbow[i]; ctx.shadowBlur=10;
+            const off=(i-rainbow.length/2)*4; const wob=Math.sin(al.animFrame*0.15+i)*5;
+            ctx.beginPath(); ctx.moveTo(-al.width*0.2,off);
+            ctx.quadraticCurveTo(-al.width*0.6,off+wob,-al.width*0.9,off+wob*1.5); ctx.stroke();
+          }
+          // Body — soft white glow
+          ctx.shadowColor='#ffffff'; ctx.shadowBlur=22; ctx.fillStyle='#fffefb';
+          ctx.beginPath(); ctx.ellipse(0,0,al.width*0.42,al.height*0.34,0,0,Math.PI*2); ctx.fill();
+          // Head
+          ctx.beginPath(); ctx.ellipse(al.width*0.32,-al.height*0.12,al.width*0.2,al.height*0.16,-0.4,0,Math.PI*2); ctx.fill();
+          // Golden horn
+          ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=16;
+          ctx.beginPath(); ctx.moveTo(al.width*0.42,-al.height*0.3); ctx.lineTo(al.width*0.6,-al.height*0.62); ctx.lineTo(al.width*0.5,-al.height*0.28); ctx.closePath(); ctx.fill();
+          // Eye
+          ctx.fillStyle='#000'; ctx.shadowBlur=0; ctx.beginPath(); ctx.arc(al.width*0.36,-al.height*0.14,2.2,0,Math.PI*2); ctx.fill();
+          // Sparkle
+          ctx.fillStyle=`rgba(255,255,255,${0.5+Math.sin(al.animFrame*0.2)*0.5})`; ctx.beginPath(); ctx.arc(al.width*0.6,-al.height*0.5,2.5,0,Math.PI*2); ctx.fill();
         } else {
           ctx.shadowColor='#ff4e3e'; ctx.shadowBlur=16; ctx.fillStyle='#ff4e3e';
           ctx.beginPath(); ctx.moveTo(0,-al.height/2); ctx.lineTo(al.width/2,0); ctx.lineTo(0,al.height/2); ctx.lineTo(-al.width/2,0); ctx.closePath(); ctx.fill();
@@ -1951,8 +2040,8 @@ export const ArcadeCanvas: React.FC = () => {
     e.perks=[]; e.crystalsSincePerks=0; e.crystalsSinceBoss=0; e.bossSpeedReliefTicks=0;
     e.streakTicks=0; e.perkDraftPending=false; e.crystalsSinceMagnet=0;
     e.weaponTier=0; e.chargeHeld=0; e.novaUnlocked=false; e.lastChargeRatio=0;
-    e.crystalChain=0; e.crystalChainTimer=0; e.goldenCooldown=0; e.prismCooldown=0;
-    e.weatherTicks=0; e.weatherType=''; e.weatherWarnTicks=0; e.nextWeatherAt=2700;
+    e.crystalChain=0; e.crystalChainTimer=0; e.goldenCooldown=0; e.prismCooldown=0; e.unicornCooldown=0;
+    e.weatherTicks=0; e.weatherType=''; e.weatherWarnTicks=0; e.nextWeatherAt=2700; e.nextHazardWaveAt=1800;
     e.bossCount=0; e.hazardSpeedTicks=0; e.crystalsSinceHazard=0;
     e.timeSlowTicks=0; e.ghostTicks=0; e.mirrorTicks=0; e.floatTicks=0;
     e.doubleTapReady=false; e.overchargeReady=false;
