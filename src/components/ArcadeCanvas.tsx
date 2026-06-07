@@ -5,6 +5,9 @@ import { BrandText } from './BrandText';
 
 // Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U/C/J).
 const DEBUG = false;
+// On mobile the game renders at a fixed 16:9 reference resolution (1280x720, set on the
+// page-level stage wrapper) and is uniformly scaled to fit — so the phone shows the exact
+// desktop layout, counters and all, just smaller. Desktop still uses the live window size.
 // Late-game combo multiplier saturates here so mindless mashing can't scale forever.
 const COMBO_CAP = 12;
 // Hard ceiling on stored blaster charges so you can't hoard a stockpile and mash-fire
@@ -213,6 +216,7 @@ export const ArcadeCanvas: React.FC = () => {
   const textIdRef   = useRef(0);
   const spaceHeldRef = useRef(false);
   // ---- MOBILE TOUCH CONTROLS ----
+  const lastStabRef = useRef(100);                        // throttles the stability HUD re-render to once per integer change
   const jumpRef     = useRef<(() => void) | null>(null);  // bridges effect-scoped doJump to touch handlers
   const leftDownRef = useRef(0);                          // timestamp of left-pad press (quick-tap vs hold)
   const pausedRef   = useRef(false);                      // freezes the sim while held in portrait on mobile
@@ -373,6 +377,10 @@ export const ArcadeCanvas: React.FC = () => {
     setIsMuted(!isMuted);
   };
 
+  // Canvas-space height (the fixed reference size on mobile, live window on desktop).
+  // Shot/nova/toast sizing must key off this, not the live window, or they break when scaled.
+  const viewH = () => canvasRef.current?.height || window.innerHeight;
+
   // ---- WEAPON: release fires based on charge + tier ----
   const releaseBlaster = () => {
     const state = stateRef.current;
@@ -402,11 +410,11 @@ export const ArcadeCanvas: React.FC = () => {
       setNovaReady(false); setBlasterCharges(state.blasterCharges);
       synthRef.current?.playNova();
       for (let i = 0; i < 5; i++) {
-        state.projectiles.push({ x: px, y: i * (window.innerHeight / 5), width: 160, height: Math.round(window.innerHeight / 5) + 10, vx: 22, alive: true });
+        state.projectiles.push({ x: px, y: i * (viewH() / 5), width: 160, height: Math.round(viewH() / 5) + 10, vx: 22, alive: true });
       }
       state.screenFlash = 0.7; state.calmTicks = 60 * 3;
       state.warpToast.active = true; state.warpToast.text = 'NOVA DISCHARGED — FULL CLEAR';
-      state.warpToast.life = state.warpToast.maxLife; state.warpToast.y = window.innerHeight * 0.22;
+      state.warpToast.life = state.warpToast.maxLife; state.warpToast.y = viewH() * 0.22;
       return;
     }
 
@@ -416,21 +424,21 @@ export const ArcadeCanvas: React.FC = () => {
     if (tier === 0 || effectiveCharge < 0.4) {
       // STANDARD
       synthRef.current?.playBlaster();
-      const h = Math.round(window.innerHeight * 0.07);
+      const h = Math.round(viewH() * 0.07);
       state.projectiles.push({ x: px, y: py - h / 2, width: 80, height: h, vx: 20, alive: true });
       if (state.doubleTapReady) { state.doubleTapReady = false; setTimeout(() => stateRef.current.projectiles.push({ x: px, y: py - h / 2, width: 80, height: h, vx: 22, alive: true }), 120); }
     } else if (tier === 1 || effectiveCharge < 0.7) {
       // WIDE
       synthRef.current?.playWideShot();
-      const h = Math.round(window.innerHeight * 0.18);
+      const h = Math.round(viewH() * 0.18);
       state.projectiles.push({ x: px, y: py - h / 2, width: 110, height: h, vx: 18, alive: true });
-      const h2 = Math.round(window.innerHeight * 0.06);
+      const h2 = Math.round(viewH() * 0.06);
       state.projectiles.push({ x: px + 20, y: py - h / 2 - h2 - 4, width: 70, height: h2, vx: 22, alive: true });
       state.projectiles.push({ x: px + 20, y: py + h / 2 + 4,       width: 70, height: h2, vx: 22, alive: true });
     } else if (tier === 2 || effectiveCharge < 0.95) {
       // RAPID — 3 staggered shots
       synthRef.current?.playRapidShot();
-      const h = Math.round(window.innerHeight * 0.1);
+      const h = Math.round(viewH() * 0.1);
       for (let i = 0; i < 3; i++) {
         setTimeout(() => {
           stateRef.current.projectiles.push({ x: px + i * 35, y: py - h / 2, width: 65, height: h, vx: 24 + i * 2, alive: true });
@@ -439,7 +447,7 @@ export const ArcadeCanvas: React.FC = () => {
     } else {
       // FULL CHARGE max power
       synthRef.current?.playWideShot();
-      const h = Math.round(window.innerHeight * (0.07 + tier * 0.06));
+      const h = Math.round(viewH() * (0.07 + tier * 0.06));
       state.projectiles.push({ x: px, y: py - h / 2, width: 120, height: h, vx: 22, alive: true });
       state.screenFlash = 0.2;
     }
@@ -455,7 +463,7 @@ export const ArcadeCanvas: React.FC = () => {
     state.lastChargeRatio = 0;
     state.ghostRunShotsFired++;
     synthRef.current?.playBlaster();
-    const h = Math.round(window.innerHeight * 0.07);
+    const h = Math.round(viewH() * 0.07);
     state.projectiles.push({ x: state.player.x + PW + 4, y: state.player.y + PH / 2 - h / 2, width: 80, height: h, vx: 20, alive: true });
   };
 
@@ -485,7 +493,7 @@ export const ArcadeCanvas: React.FC = () => {
         s.blasterCharges--; setBlasterCharges(s.blasterCharges);
         s.lastChargeRatio = 0; s.ghostRunShotsFired++;
         synthRef.current?.playBlaster();
-        const h = Math.round(window.innerHeight * 0.07);
+        const h = Math.round(viewH() * 0.07);
         s.projectiles.push({ x: s.player.x + PW + 4, y: s.player.y + PH / 2 - h / 2, width: 80, height: h, vx: 20, alive: true });
       }
     } else {
@@ -527,11 +535,13 @@ export const ArcadeCanvas: React.FC = () => {
     const canvas = canvasRef.current; if (!canvas) return;
     const state = stateRef.current;
     state.matrixColumns = [];
-    const cols = Math.floor(window.innerWidth / 24);
+    const mw = canvas.clientWidth  || window.innerWidth;
+    const mh = canvas.clientHeight || window.innerHeight;
+    const cols = Math.floor(mw / 24);
     for (let i = 0; i < cols; i++) {
       const chars: string[] = [];
       for (let j = 0; j < Math.floor(Math.random() * 14) + 6; j++) chars.push(Math.random() > 0.5 ? '1' : '0');
-      state.matrixColumns.push({ x: i * 24, y: Math.random() * -window.innerHeight, speed: Math.random() * 3.5 + 2, chars });
+      state.matrixColumns.push({ x: i * 24, y: Math.random() * -mh, speed: Math.random() * 3.5 + 2, chars });
     }
   }, []);
 
@@ -547,12 +557,11 @@ export const ArcadeCanvas: React.FC = () => {
     };
 
     const resize = () => {
-      // Match the drawing buffer to the canvas's ACTUAL on-screen size (its parent is
-      // 100dvh), so it fits the visible area on mobile instead of overflowing behind the
-      // address bar. Fall back to innerW/H before first layout.
-      const r = canvas.getBoundingClientRect();
-      canvas.width  = Math.round(r.width)  || window.innerWidth;
-      canvas.height = Math.round(r.height) || window.innerHeight;
+      // Match the drawing buffer to the canvas's LAYOUT size (clientWidth/Height ignore CSS
+      // transforms, so on mobile this is the fixed 1280x720 stage; on desktop it's the live
+      // window). The page-level wrapper owns the scale-to-fit; here we just fill the parent.
+      canvas.width  = canvas.clientWidth  || window.innerWidth;
+      canvas.height = canvas.clientHeight || window.innerHeight;
       state.bannerTexts = []; for (let i = 0; i < 3; i++) spawnBanner();
     };
     // orientationchange lands before the new dimensions settle on mobile — re-fit after a beat.
@@ -591,7 +600,7 @@ export const ArcadeCanvas: React.FC = () => {
 
     const toast = (text: string) => {
       state.warpToast.active = true; state.warpToast.text = text;
-      state.warpToast.life = state.warpToast.maxLife; state.warpToast.y = window.innerHeight * 0.22;
+      state.warpToast.life = state.warpToast.maxLife; state.warpToast.y = canvas.height * 0.22;
     };
 
     const hasPerk = (name: string) => state.perks.includes(name);
@@ -769,7 +778,7 @@ export const ArcadeCanvas: React.FC = () => {
         state.lastChargeRatio = 0;
         state.ghostRunShotsFired++; // breaks ghost run streak
         synthRef.current?.playBlaster();
-        const h = Math.round(window.innerHeight * 0.07);
+        const h = Math.round(viewH() * 0.07);
         state.projectiles.push({ x: state.player.x + PW + 4, y: state.player.y + PH / 2 - h / 2, width: 80, height: h, vx: 20, alive: true });
         return;
       }
@@ -904,7 +913,9 @@ export const ArcadeCanvas: React.FC = () => {
       const drainEndurance = Math.min(endurance, 6);
       const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001 + drainEndurance * 0.025) * drainMult;
       state.coreStability = Math.max(0, state.coreStability - drain);
-      setStability(Math.floor(state.coreStability));
+      // Only re-render the HUD when the displayed integer actually changes — calling setState
+      // every frame forced a full re-render of this whole component 60x/sec, which tanked mobile.
+      { const stab = Math.floor(state.coreStability); if (stab !== lastStabRef.current) { lastStabRef.current = stab; setStability(stab); } }
       if (state.coreStability <= 0) {
         setScore(prev => { const f = prev; setPersonalBest(pb => { if (f > pb) { try { localStorage.setItem('arcade_pb', String(f)); } catch {} return f; } return pb; }); return f; });
         setIsPlaying(false); return;
@@ -2093,8 +2104,8 @@ export const ArcadeCanvas: React.FC = () => {
       // Projectiles — visual per tier
       sd.projectiles.forEach(pr => {
         ctx.save();
-        const isNova  = pr.height > window.innerHeight * 0.15;
-        const isWide  = pr.height > window.innerHeight * 0.12;
+        const isNova  = pr.height > canvas.height * 0.15;
+        const isWide  = pr.height > canvas.height * 0.12;
         const isRapid = pr.width < 70;
         if (isNova) {
           ctx.shadowColor='#cc44ff'; ctx.shadowBlur=50;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrandText } from '@/components/BrandText';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 
@@ -10,6 +10,24 @@ export default function Home() {
   const [gameState, setGameState] = useState<SystemState>('intro');
   const [introStage, setIntroStage] = useState<number>(0);
   const [isZooming, setIsZooming] = useState<boolean>(false);
+
+  // On phones, render the arcade at a fixed 1280x720 stage and uniformly scale it to fit —
+  // so the game looks exactly like desktop (HUD, counters and all), just smaller, letterboxed.
+  const [stage, setStage] = useState<{ scale: number; mobile: boolean }>({ scale: 1, mobile: false });
+  useEffect(() => {
+    const compute = () => {
+      const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+      const small = Math.min(window.innerWidth, window.innerHeight) <= 600;
+      const mobile = touch && small;
+      const scale = mobile ? Math.min(window.innerWidth / 1280, window.innerHeight / 720) : 1;
+      setStage({ scale, mobile });
+    };
+    compute();
+    const onOrient = () => { compute(); setTimeout(compute, 350); };
+    window.addEventListener('resize', compute);
+    window.addEventListener('orientationchange', onOrient);
+    return () => { window.removeEventListener('resize', compute); window.removeEventListener('orientationchange', onOrient); };
+  }, []);
 
   const handleNextStage = () => {
     if (isZooming) return;
@@ -161,9 +179,18 @@ export default function Home() {
   // --------------------------------------------------------
   if (gameState === 'arcade') {
     return (
-      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <ArcadeCanvas />
-        {/* Bottom-center so it clears both mobile touch pads (fire = bottom-left, jump = bottom-right) */}
+      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none flex items-center justify-center">
+        {/* On mobile: fixed 1280x720 stage scaled to fit (exact desktop layout, letterboxed).
+            On desktop: fills the window as before. */}
+        <div
+          className="relative origin-center shrink-0"
+          style={stage.mobile
+            ? { width: 1280, height: 720, transform: `scale(${stage.scale})` }
+            : { width: '100%', height: '100%' }}
+        >
+          <ArcadeCanvas />
+        </div>
+        {/* Outside the scaled stage so it stays a real, tappable size. Bottom-center clears both pads. */}
         <button
           onClick={() => setGameState('hub')}
           className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
