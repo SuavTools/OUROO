@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Bundle the Killigrew display font so it renders on every device — previously it only
+   showed up where the font happened to be installed locally (e.g. the dev's desktop),
+   and fell back to serif everywhere else (phones included). */
+@font-face {
+  font-family: "Killigrew";
+  src: url("/fonts/Killigrew.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   /* Strict Brand Palette mapping */
   --color-brandBlack: #000000;

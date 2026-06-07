@@ -549,6 +549,12 @@ export const ArcadeCanvas: React.FC = () => {
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
+    // Mobile perf: the neon glow (canvas shadowBlur) is by far the most expensive op on phone
+    // GPUs — applied to nearly every draw it murders the framerate. Clamp it to 0 on mobile so
+    // the shapes/colours stay but the costly bloom halos are skipped. Desktop keeps the glow.
+    if (controlMode === 'mobile') {
+      try { Object.defineProperty(ctx, 'shadowBlur', { configurable: true, get: () => 0, set: () => {} }); } catch {}
+    }
     const state = stateRef.current;
 
     const spawnBanner = () => {
