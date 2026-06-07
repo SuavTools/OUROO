@@ -229,6 +229,7 @@ export const ArcadeCanvas: React.FC = () => {
   );
   const [showIntro,        setShowIntro]        = useState(true);   // mode-select / start screen
   const [isPortrait,       setIsPortrait]       = useState(false);
+  const [ignoreRotate,     setIgnoreRotate]     = useState(false);  // player chose "play anyway" in portrait
   const [floatTexts,       setFloatTexts]       = useState<FloatText[]>([]);
   const [comboCount,       setComboCount]       = useState(0);
   const [hasShield,        setHasShield]        = useState(false);
@@ -498,14 +499,28 @@ export const ArcadeCanvas: React.FC = () => {
 
   // ---- ORIENTATION TRACKING (mobile) ----
   useEffect(() => {
-    const check = () => setIsPortrait(window.innerHeight > window.innerWidth);
-    check();
-    window.addEventListener('resize', check);
-    window.addEventListener('orientationchange', check);
-    return () => { window.removeEventListener('resize', check); window.removeEventListener('orientationchange', check); };
+    // matchMedia is far more reliable than comparing innerW/innerH — on mobile the
+    // dimensions lag behind orientationchange, which made the rotate prompt get stuck.
+    const compute = () => {
+      const portrait = (typeof window.matchMedia === 'function')
+        ? window.matchMedia('(orientation: portrait)').matches
+        : window.innerHeight > window.innerWidth;
+      setIsPortrait(portrait);
+    };
+    compute();
+    const onChange = () => { compute(); setTimeout(compute, 350); };  // re-check after dimensions settle
+    window.addEventListener('resize', onChange);
+    window.addEventListener('orientationchange', onChange);
+    const mq = (typeof window.matchMedia === 'function') ? window.matchMedia('(orientation: portrait)') : null;
+    mq?.addEventListener?.('change', compute);
+    return () => {
+      window.removeEventListener('resize', onChange);
+      window.removeEventListener('orientationchange', onChange);
+      mq?.removeEventListener?.('change', compute);
+    };
   }, []);
-  // Freeze the sim (no drain, no scroll) while a mobile player is holding the phone in portrait.
-  useEffect(() => { pausedRef.current = controlMode === 'mobile' && isPortrait && !showIntro; }, [controlMode, isPortrait, showIntro]);
+  // Freeze the sim (no drain) while held in portrait — unless the player chose "play anyway".
+  useEffect(() => { pausedRef.current = controlMode === 'mobile' && isPortrait && !ignoreRotate && !showIntro; }, [controlMode, isPortrait, ignoreRotate, showIntro]);
 
   // ---- MATRIX RAIN INIT ----
   useEffect(() => {
@@ -2607,12 +2622,16 @@ export const ArcadeCanvas: React.FC = () => {
       )}
 
       {/* ---- ROTATE-TO-LANDSCAPE NUDGE (mobile, portrait) ---- */}
-      {controlMode === 'mobile' && isPortrait && (
+      {controlMode === 'mobile' && isPortrait && !ignoreRotate && (
         <div className="absolute inset-0 bg-brandBlack/95 flex flex-col items-center justify-center z-[60] pointer-events-auto text-center px-8">
           <span className="text-6xl animate-pulse mb-6">↻</span>
           <BrandText text="ROTATE YOUR DEVICE" className="text-2xl text-brandYellow font-black uppercase tracking-tight" />
-          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest mt-3">Turn the phone sideways (landscape) to play</p>
+          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest mt-3">Turn the phone sideways (landscape) for the full view</p>
           {!showIntro && <p className="font-mono text-[10px] text-[#1ED760]/70 uppercase tracking-widest mt-2">— run paused —</p>}
+          <button onClick={() => setIgnoreRotate(true)}
+            className="mt-8 font-mono text-xs uppercase tracking-widest border-2 border-brandYellow/60 text-brandYellow px-6 py-3 hover:bg-brandYellow hover:text-black transition-all pointer-events-auto active:scale-95">
+            PLAY ANYWAY →
+          </button>
         </div>
       )}
     </div>
