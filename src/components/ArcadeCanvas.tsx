@@ -547,10 +547,19 @@ export const ArcadeCanvas: React.FC = () => {
     };
 
     const resize = () => {
-      canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+      // Match the drawing buffer to the canvas's ACTUAL on-screen size (its parent is
+      // 100dvh), so it fits the visible area on mobile instead of overflowing behind the
+      // address bar. Fall back to innerW/H before first layout.
+      const r = canvas.getBoundingClientRect();
+      canvas.width  = Math.round(r.width)  || window.innerWidth;
+      canvas.height = Math.round(r.height) || window.innerHeight;
       state.bannerTexts = []; for (let i = 0; i < 3; i++) spawnBanner();
     };
-    window.addEventListener('resize', resize); resize();
+    // orientationchange lands before the new dimensions settle on mobile — re-fit after a beat.
+    const onOrient = () => { resize(); setTimeout(resize, 350); };
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', onOrient);
+    resize();
 
     const resetLayout = () => {
       const ty = canvas.height - 180;
@@ -2348,6 +2357,7 @@ export const ArcadeCanvas: React.FC = () => {
     return () => {
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('orientationchange', onOrient);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };

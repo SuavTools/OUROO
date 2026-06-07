@@ -11,12 +11,22 @@
   --font-killigrew: "Killigrew", serif;
 }
 
-body {
+html, body {
   background-color: #000000;
   color: #ffffff;
   margin: 0;
   padding: 0;
+  /* Let menu pages scroll on small screens; the game screens lock scroll themselves.
+     overscroll-behavior stops the mobile pull-to-refresh / rubber-band bounce. */
+  overscroll-behavior: none;
+}
+
+/* Fullscreen game screens opt into a locked, non-scrolling viewport. */
+.lock-viewport {
+  position: fixed;
+  inset: 0;
   overflow: hidden;
+  touch-action: none;
 }
 
 canvas {

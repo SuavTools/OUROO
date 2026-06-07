@@ -39,14 +39,14 @@ export default function Home() {
   // --------------------------------------------------------
   if (gameState === 'intro') {
     return (
-      <main 
+      <main
         onClick={handleNextStage}
-        className={`fixed inset-0 bg-brandBlack flex flex-col items-center justify-center overflow-hidden select-none z-50 p-6 ${
+        className={`relative min-h-[100dvh] w-full bg-brandBlack flex overflow-x-hidden overflow-y-auto select-none z-50 p-6 ${
           introStage < 2 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
-        <div 
-          className={`text-center w-full max-w-4xl mx-auto space-y-12 transition-all transform origin-center will-change-transform ${
+        <div
+          className={`m-auto text-center w-full max-w-4xl space-y-12 transition-all transform origin-center will-change-transform ${
             isZooming 
               ? 'scale-[8] opacity-0 blur-2xl pointer-events-none' 
               : 'scale-100 opacity-100'
@@ -95,12 +95,12 @@ export default function Home() {
   // --------------------------------------------------------
   if (gameState === 'hub') {
     return (
-      <main className="fixed inset-0 bg-brandBlack flex flex-col items-center justify-center overflow-hidden select-none z-50 p-6">
-        
-        {/* Subtle grid background to match the game aesthetic */}
-        <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
+      <main className="relative min-h-[100dvh] w-full bg-brandBlack flex overflow-x-hidden overflow-y-auto select-none z-50 p-6">
 
-        <div className={`w-full max-w-5xl z-10 transition-all transform origin-center will-change-transform ${
+        {/* Subtle grid background to match the game aesthetic */}
+        <div className="fixed inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
+
+        <div className={`m-auto w-full max-w-5xl z-10 transition-all transform origin-center will-change-transform ${
             isZooming ? 'scale-[8] opacity-0 blur-2xl pointer-events-none' : 'scale-100 opacity-100 animate-fade-in'
           }`}
           style={{ transitionDuration: '550ms', transitionTimingFunction: 'cubic-bezier(0.7, 0, 0.84, 0)' }}
@@ -161,7 +161,7 @@ export default function Home() {
   // --------------------------------------------------------
   if (gameState === 'arcade') {
     return (
-      <main className="relative w-screen h-screen bg-brandBlack overflow-hidden">
+      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
         <ArcadeCanvas />
         {/* Bottom-center so it clears both mobile touch pads (fire = bottom-left, jump = bottom-right) */}
         <button
