@@ -282,6 +282,7 @@ export const ArcadeCanvas: React.FC = () => {
     coreStability:     100,
     lastTime:          0,
     fpsInterval:       1000 / 60,
+    accumulator:       0,   // fixed-timestep: leftover ms carried between frames
     screenFlash:       0,
     screenShake:       0,
     milesTraveled:     0,
@@ -537,11 +538,16 @@ export const ArcadeCanvas: React.FC = () => {
     state.matrixColumns = [];
     const mw = canvas.clientWidth  || window.innerWidth;
     const mh = canvas.clientHeight || window.innerHeight;
-    const cols = Math.floor(mw / 24);
+    // The matrix rain is the heaviest cheap-draw: every char is a per-frame fillText. On mobile
+    // we space columns wider (≈half as many) and cap their length, slashing fillText calls.
+    const isMob   = controlMode === 'mobile';
+    const spacing = isMob ? 44 : 24;
+    const maxLen  = isMob ? 9  : 20;
+    const cols = Math.floor(mw / spacing);
     for (let i = 0; i < cols; i++) {
       const chars: string[] = [];
-      for (let j = 0; j < Math.floor(Math.random() * 14) + 6; j++) chars.push(Math.random() > 0.5 ? '1' : '0');
-      state.matrixColumns.push({ x: i * 24, y: Math.random() * -mh, speed: Math.random() * 3.5 + 2, chars });
+      for (let j = 0; j < Math.floor(Math.random() * (maxLen - 6)) + 6; j++) chars.push(Math.random() > 0.5 ? '1' : '0');
+      state.matrixColumns.push({ x: i * spacing, y: Math.random() * -mh, speed: Math.random() * 3.5 + 2, chars });
     }
   }, []);
 
@@ -562,12 +568,18 @@ export const ArcadeCanvas: React.FC = () => {
       state.bannerTexts.push({ text: pool[Math.floor(Math.random() * pool.length)], x: canvas.width + 160, y: Math.random() * canvas.height * 0.45 + 100, speed: Math.random() * 1.5 + 1, size: Math.floor(Math.random() * 40) + 45, alpha: Math.random() * 0.03 + 0.015, driftY: (Math.random() - 0.5) * 0.2 });
     };
 
+    // Mobile renders the drawing buffer at 0.75× and lets the browser upscale it to fill the
+    // (already CSS-scaled) stage. That's ~44% fewer pixels on every full-screen clear/fill/
+    // gradient — the single cheapest perf win — and the neon aesthetic hides the softening.
+    // All game math is relative to canvas.width/height, so the smaller buffer just shrinks the
+    // coordinate space uniformly; nothing else needs to change. Desktop stays pixel-for-pixel.
+    const RES = controlMode === 'mobile' ? 0.75 : 1;
     const resize = () => {
       // Match the drawing buffer to the canvas's LAYOUT size (clientWidth/Height ignore CSS
       // transforms, so on mobile this is the fixed 1280x720 stage; on desktop it's the live
       // window). The page-level wrapper owns the scale-to-fit; here we just fill the parent.
-      canvas.width  = canvas.clientWidth  || window.innerWidth;
-      canvas.height = canvas.clientHeight || window.innerHeight;
+      canvas.width  = Math.round((canvas.clientWidth  || window.innerWidth)  * RES);
+      canvas.height = Math.round((canvas.clientHeight || window.innerHeight) * RES);
       state.bannerTexts = []; for (let i = 0; i < 3; i++) spawnBanner();
     };
     // orientationchange lands before the new dimensions settle on mobile — re-fit after a beat.
@@ -592,6 +604,9 @@ export const ArcadeCanvas: React.FC = () => {
 
     // ---- HELPERS ----
     const burst = (x: number, y: number, color: string, count: number, force: number) => {
+      // Mobile: ~40% fewer particles per burst. Particles are cheap individually but explosions
+      // stack them in the hundreds; trimming the count keeps the juice without the frame hitch.
+      if (controlMode === 'mobile') count = Math.ceil(count * 0.6);
       for (let i = 0; i < count; i++) {
         const a = Math.random() * Math.PI * 2; const sp = Math.random() * force + 1.2;
         state.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, color, alpha: 1, life: Math.random() * 22 + 14, size: Math.random() * 3 + 1 });
@@ -2364,10 +2379,26 @@ export const ArcadeCanvas: React.FC = () => {
       ctx.restore(); // screen shake
     };
 
+    // Fixed-timestep loop. The whole sim is tick-based ("pixels per frame"), so we must advance
+    // it by a FIXED 60Hz step regardless of how fast the device actually renders. We accumulate
+    // real elapsed time and run update() as many whole steps as have built up, then draw once.
+    // A 45fps phone now runs update() ~1.33×/frame to stay on wall-clock — no more slow-motion;
+    // a 120Hz screen runs it ≤1×/frame — no more double-speed. Both just render the same sim.
     const loop = (now: number) => {
       frameRef.current = requestAnimationFrame(loop);
-      const el = now - state.lastTime;
-      if (el > state.fpsInterval) { state.lastTime = now - (el % state.fpsInterval); update(); draw(); }
+      if (state.lastTime === 0) state.lastTime = now;
+      let delta = now - state.lastTime;
+      state.lastTime = now;
+      if (delta > 250) delta = 250;          // clamp after tab-away so we don't fast-forward
+      state.accumulator += delta;
+      let steps = 0;
+      while (state.accumulator >= state.fpsInterval && steps < 5) {
+        update();
+        state.accumulator -= state.fpsInterval;
+        steps++;
+      }
+      if (steps === 5) state.accumulator = 0; // too far behind to catch up — resync, don't spiral
+      draw();
     };
     frameRef.current = requestAnimationFrame(loop);
 
