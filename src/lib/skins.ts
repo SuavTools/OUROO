@@ -1,7 +1,7 @@
 // In-game character skins: shape (diamond / chariot / unicorn) × colour.
 // Unlocked by best score, or by a secret lore-code (redeemed separately).
 
-export type SkinShape = 'diamond' | 'chariot' | 'unicorn';
+export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave';
 export type Skin = {
   id: string;
   name: string;
@@ -24,6 +24,11 @@ export const SKINS: Skin[] = [
   { id: 'unicorn-white',   name: 'Unicórnio',         shape: 'unicorn', color: '#fffefb', unlock: { type: 'score', need: 50000 } },
   { id: 'unicorn-rosa',    name: 'Unicórnio Rosa',    shape: 'unicorn', color: '#ff88cc', unlock: { type: 'score', need: 120000 } },
   { id: 'unicorn-cosmico', name: 'Unicórnio Cósmico', shape: 'unicorn', color: '#cc44ff', unlock: { type: 'code' } },
+  // Naves (SUAV na nave 🛸)
+  { id: 'nave-prata',      name: 'Nave Prata',        shape: 'nave',    color: '#c4c8e0', unlock: { type: 'score', need: 40000 } },
+  { id: 'nave-laranja',    name: 'Nave Laranja',      shape: 'nave',    color: '#ff8800', unlock: { type: 'score', need: 100000 } },
+  { id: 'nave-cosmica',    name: 'Nave Cósmica',      shape: 'nave',    color: '#00cfff', unlock: { type: 'code' } },
+  { id: 'nave-suav',       name: 'Nave SUAV',         shape: 'nave',    color: '#ff4e3e', unlock: { type: 'code' } },
 ];
 
 export const DEFAULT_SKIN_ID = 'diamond-gold';
@@ -80,6 +85,25 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     ctx.fillStyle = '#ffd700'; ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 14;
     ctx.beginPath(); ctx.moveTo(W * 0.42, -H * 0.3); ctx.lineTo(W * 0.6, -H * 0.62); ctx.lineTo(W * 0.5, -H * 0.28); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#000'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(W * 0.36, -H * 0.14, 2.2, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  if (shape === 'nave') {
+    const W = w * 1.35, H = h;
+    // Engine flame (flickers, trails left)
+    const fl = 0.6 + Math.sin(af * 0.5) * 0.4;
+    ctx.fillStyle = `rgba(255,140,0,${fl})`; ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.moveTo(-W * 0.35, -H * 0.12); ctx.lineTo(-W * 0.62 - fl * 10, 0); ctx.lineTo(-W * 0.35, H * 0.12); ctx.closePath(); ctx.fill();
+    // Hull — sleek arrow pointing right
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.58, 0); ctx.lineTo(-W * 0.35, -H * 0.3); ctx.lineTo(-W * 0.22, 0); ctx.lineTo(-W * 0.35, H * 0.3); ctx.closePath(); ctx.fill();
+    // Fins
+    ctx.beginPath(); ctx.moveTo(-W * 0.15, -H * 0.18); ctx.lineTo(-W * 0.42, -H * 0.46); ctx.lineTo(-W * 0.1, -H * 0.02); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-W * 0.15, H * 0.18); ctx.lineTo(-W * 0.42, H * 0.46); ctx.lineTo(-W * 0.1, H * 0.02); ctx.closePath(); ctx.fill();
+    // Cockpit
+    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(W * 0.18, 0, H * 0.13, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,180,255,0.85)'; ctx.beginPath(); ctx.arc(W * 0.18, 0, H * 0.08, 0, Math.PI * 2); ctx.fill();
     return;
   }
   // diamond

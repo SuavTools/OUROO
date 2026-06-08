@@ -6,8 +6,9 @@ import { getPlayerStats, getLocalPlayer, type PlayerStats } from '@/lib/leaderbo
 import { amIModerator } from '@/lib/chat';
 import { Leaderboard } from '@/components/Leaderboard';
 import { shareStatsCard } from '@/lib/sharecard';
-import { SKINS, isSkinUnlocked, getSelectedSkinId, setSelectedSkinId, DEFAULT_SKIN_ID } from '@/lib/skins';
+import { SKINS, isSkinUnlocked, getSelectedSkinId, setSelectedSkinId, DEFAULT_SKIN_ID, skinById } from '@/lib/skins';
 import { SkinPreview } from '@/components/SkinPreview';
+import { fetchUnlocks, redeemCode, createCode } from '@/lib/economy';
 
 export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useUser();
@@ -15,11 +16,22 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
   const [skin, setSkin] = useState(DEFAULT_SKIN_ID);
   const [sharing, setSharing] = useState(false);
   const [allUnlocked, setAllUnlocked] = useState(false);   // moderators (SUAV) get every skin
-  // Lore-code unlocks come next phase (server-side); empty for now so code skins read as locked.
-  const codeUnlocks: string[] = [];
+  const [codeUnlocks, setCodeUnlocks] = useState<string[]>([]);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => { if (typeof window !== 'undefined') setSkin(getSelectedSkinId()); }, [open]);
-  useEffect(() => { if (open) amIModerator().then(setAllUnlocked); }, [open, user]);
+  useEffect(() => { if (open) { amIModerator().then(setAllUnlocked); fetchUnlocks().then(setCodeUnlocks); } }, [open, user]);
+
+  const redeem = async (e: React.FormEvent) => {
+    e.preventDefault(); setCodeMsg(null);
+    const res = await redeemCode(codeInput);
+    if (res.ok) {
+      setCodeUnlocks(u => (u.includes(res.skinId) ? u : [...u, res.skinId]));
+      setCodeMsg({ ok: true, text: `Desbloqueaste: ${skinById(res.skinId).name} 🛸` });
+      setCodeInput('');
+    } else setCodeMsg({ ok: false, text: res.error });
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +119,25 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
           <p className="text-[11px] text-white/40 mt-2">Aplica-se ao teu personagem na próxima corrida. Algumas só com <b className="text-white/60">códigos secretos</b>. 🛸</p>
         </div>
 
+        {/* Redeem a lore-code */}
+        <div className="mb-7">
+          <h3 className="font-helvetica font-black text-lg text-white mb-1">Resgatar código</h3>
+          <p className="text-[11px] text-white/40 mb-3">Apanha códigos nas músicas, vídeos e shows. 🛸</p>
+          {user ? (
+            <form onSubmit={redeem} className="flex gap-2">
+              <input value={codeInput} onChange={e => { setCodeInput(e.target.value); setCodeMsg(null); }} placeholder="CÓDIGO SECRETO"
+                className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2.5 text-sm uppercase tracking-widest outline-none focus:border-brandRed" />
+              <button type="submit" disabled={!codeInput.trim()} className="bg-brandRed text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95 disabled:opacity-50">Resgatar</button>
+            </form>
+          ) : (
+            <p className="text-[11px] text-white/40">Liga o Discord para resgatar e guardar os teus desbloqueios.</p>
+          )}
+          {codeMsg && <p className={`text-[11px] mt-1.5 ${codeMsg.ok ? 'text-[#1ED760]' : 'text-brandRed'}`}>{codeMsg.text}</p>}
+        </div>
+
+        {/* Admin: mint codes (super-admin only) */}
+        {allUnlocked && <AdminCodes />}
+
         {/* Leaderboard with you highlighted */}
         <div className="mb-7">
           <h3 className="font-helvetica font-black text-lg text-white mb-3">Ranking</h3>
@@ -119,6 +150,39 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Super-admin only: mint lore-codes for code-locked skins.
+function AdminCodes() {
+  const codeSkins = SKINS.filter(s => s.unlock.type === 'code');
+  const [code, setCode] = useState('');
+  const [skinId, setSkinId] = useState(codeSkins[0]?.id ?? '');
+  const [uses, setUses] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setMsg(null);
+    const res = await createCode(code, skinId, uses ? parseInt(uses) : undefined);
+    if (res.ok) { setMsg({ ok: true, text: `Código criado para ${skinById(skinId).name}.` }); setCode(''); }
+    else setMsg({ ok: false, text: res.error || 'Erro.' });
+  };
+  return (
+    <div className="mb-7 border border-brandYellow/20 p-4">
+      <h3 className="font-helvetica font-black text-base text-brandYellow mb-2">🛠 Criar código (admin)</h3>
+      <form onSubmit={submit} className="space-y-2">
+        <input value={code} onChange={e => setCode(e.target.value)} placeholder="CÓDIGO"
+          className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm uppercase tracking-widest outline-none focus:border-brandYellow" />
+        <div className="flex gap-2">
+          <select value={skinId} onChange={e => setSkinId(e.target.value)} className="flex-1 min-w-0 bg-black border border-white/15 text-white px-2 py-2 text-sm outline-none">
+            {codeSkins.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <input value={uses} onChange={e => setUses(e.target.value)} placeholder="usos ∞" inputMode="numeric"
+            className="w-20 bg-white/5 border border-white/15 text-white px-2 py-2 text-sm outline-none focus:border-brandYellow" />
+          <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs px-3 tracking-widest active:scale-95">Criar</button>
+        </div>
+      </form>
+      {msg && <p className={`text-[11px] mt-1.5 ${msg.ok ? 'text-[#1ED760]' : 'text-brandRed'}`}>{msg.text}</p>}
     </div>
   );
 }
