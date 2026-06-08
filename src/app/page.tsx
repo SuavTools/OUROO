@@ -83,7 +83,8 @@ export default function Home() {
         <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} />
         <button
           onClick={() => setView('landing')}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
+          style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          className="absolute left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
         >
           [ SAIR PARA SUAV ]
         </button>
@@ -100,8 +101,8 @@ export default function Home() {
         className={`transition-all duration-[550ms] will-change-transform ${isZooming ? 'scale-[6] opacity-0 blur-2xl pointer-events-none' : 'scale-100 opacity-100'}`}
         style={{ transitionTimingFunction: 'cubic-bezier(0.7,0,0.84,0)' }}
       >
-        {/* ---- NAV ---- */}
-        <header className="sticky top-0 z-40 backdrop-blur-md bg-black/70 border-b border-white/10">
+        {/* ---- NAV ---- (safe-area top so it clears the iOS status bar / notch in installed-app mode) */}
+        <header className="sticky top-0 z-40 backdrop-blur-md bg-black/70 border-b border-white/10" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <nav className="mx-auto max-w-5xl px-5 sm:px-8 h-14 flex items-center justify-between">
             <a href="#top" className="font-helvetica font-black text-xl tracking-tight">SUAV</a>
             <div className="flex items-center gap-4 sm:gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">

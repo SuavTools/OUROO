@@ -49,7 +49,8 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
 
   return (
     <div className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-sm flex justify-center overflow-y-auto" onClick={onClose}>
-      <div className="w-full max-w-lg min-h-full px-5 py-8 sm:py-12" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-lg min-h-full px-5" onClick={e => e.stopPropagation()}
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 2rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 2rem)' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3 min-w-0">
