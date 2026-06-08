@@ -39,6 +39,23 @@ const BLOCK = [
 
 export type HandleCheck = { ok: true; value: string } | { ok: false; error: string };
 
+// Re-export the normalizer for message checks below.
+export function normalizeText(s: string): string { return normalize(s); }
+
+export const MSG_MAX = 300;
+
+export type MsgCheck = { ok: true; value: string } | { ok: false; error: string };
+
+// Chat message filter: length + same slur/hate blocklist (normalized to catch obfuscation).
+export function validateMessage(raw: string): MsgCheck {
+  const value = (raw ?? '').replace(/\s+/g, ' ').trim();
+  if (value.length < 1) return { ok: false, error: 'Mensagem vazia.' };
+  if (value.length > MSG_MAX) return { ok: false, error: `Máximo ${MSG_MAX} caracteres.` };
+  const norm = normalize(value);
+  if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Mensagem bloqueada 🙃' };
+  return { ok: true, value };
+}
+
 export function validateHandle(raw: string): HandleCheck {
   const value = (raw ?? '').trim().replace(/\s+/g, ' ');
   if (value.length < HANDLE_MIN) return { ok: false, error: `Mínimo ${HANDLE_MIN} caracteres.` };

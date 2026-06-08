@@ -6,6 +6,7 @@ import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
 import { ProfileModal } from '@/components/ProfileModal';
+import { ChatModal } from '@/components/ChatModal';
 
 type View = 'landing' | 'arcade';
 
@@ -27,6 +28,7 @@ export default function Home() {
   const [isZooming, setIsZooming] = useState(false);
   const { user } = useUser();   // Discord login state (null when logged out)
   const [profileOpen, setProfileOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   // Phones render the arcade at a fixed 1280x720 stage scaled to fit (handled inside ArcadeCanvas).
   const [stage, setStage] = useState<{ scale: number; mobile: boolean }>({ scale: 1, mobile: false });
@@ -108,6 +110,7 @@ export default function Home() {
             <div className="flex items-center gap-4 sm:gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">
               <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Ouvir</a>
               <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
+              <button onClick={() => setChatOpen(true)} className="hover:text-white transition-colors">Chat</button>
               {supabaseReady && (user
                 ? (
                   <button onClick={() => setProfileOpen(true)} title="O meu perfil" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -250,6 +253,7 @@ export default function Home() {
       )}
 
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} />
     </main>
   );
 }
