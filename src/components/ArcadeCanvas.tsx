@@ -217,6 +217,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const spaceHeldRef = useRef(false);
   // ---- MOBILE TOUCH CONTROLS ----
   const lastStabRef = useRef(100);                        // throttles the stability HUD re-render to once per integer change
+  const lastChargeUiRef = useRef(0);                      // throttles the charge-bar HUD re-render (was firing every frame while charging)
   const jumpRef     = useRef<(() => void) | null>(null);  // bridges effect-scoped doJump to touch handlers
   const leftDownRef = useRef(0);                          // timestamp of left-pad press (quick-tap vs hold)
   const pausedRef   = useRef(false);                      // freezes the sim while held in portrait on mobile
@@ -234,7 +235,6 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const [showIntro,        setShowIntro]        = useState(true);   // mode-select / start screen
   const [isPortrait,       setIsPortrait]       = useState(false);
   const [ignoreRotate,     setIgnoreRotate]     = useState(false);  // player chose "play anyway" in portrait
-  const [floatTexts,       setFloatTexts]       = useState<FloatText[]>([]);
   const [comboCount,       setComboCount]       = useState(0);
   const [hasShield,        setHasShield]        = useState(false);
   const [speedBoosted,     setSpeedBoosted]     = useState(false);
@@ -1039,7 +1039,10 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       // Weapon charge
       if (state.chargeHeld > 0 && state.blasterCharges > 0) {
         state.chargeHeld = Math.min(state.chargeMax, state.chargeHeld + 1);
-        setChargeLevel(state.chargeHeld / state.chargeMax);
+        // Only push the charge bar to React when it moves a visible step (was a full re-render
+        // every frame while holding fire — a real per-frame cost on mobile).
+        const cl = state.chargeHeld / state.chargeMax;
+        if (cl >= 1 || Math.abs(cl - lastChargeUiRef.current) >= 0.04) { lastChargeUiRef.current = cl; setChargeLevel(cl); }
         if (state.chargeHeld % 15 === 0) synthRef.current?.playChargeUp();
       }
 
@@ -1894,7 +1897,6 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       state.particles = state.particles.filter(pt => pt.life > 0);
       state.floatTexts.forEach(t => { t.y += t.vy; t.life--; t.alpha = Math.max(0, t.life / 45); });
       state.floatTexts = state.floatTexts.filter(t => t.life > 0);
-      if (state.gameTicks % 3 === 0) setFloatTexts([...state.floatTexts]);
 
       // Hard cap on stored blaster charges — clamped once per tick after every source has
       // added, so no hoarding a stockpile to mash-fire through the late game. Egg modes (temporary) stack higher.
@@ -2365,14 +2367,40 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
         ctx.restore();
       }
 
+      // Floating feedback ("+100", combo words) — drawn on the canvas instead of as React DOM.
+      // Previously these re-rendered the whole component 20×/sec (setFloatTexts) which tanked
+      // mobile; on canvas they cost almost nothing, sit in the correct game-space position, and
+      // are kept smaller + lower-alpha on mobile so they don't crowd the screen.
+      if (sd.floatTexts.length) {
+        const lowFx = controlMode === 'mobile';
+        ctx.save();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = `900 ${lowFx ? 15 : 22}px "Helvetica Neue",sans-serif`;
+        for (const ft of sd.floatTexts) {
+          ctx.globalAlpha = ft.alpha * (lowFx ? 0.7 : 1);
+          ctx.fillStyle = '#000'; ctx.fillText(ft.text, ft.x + 1.5, ft.y + 1.5);
+          ctx.fillStyle = '#ffe65c'; ctx.fillText(ft.text, ft.x, ft.y);
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+
       // Warp toast
       const t=sd.warpToast;
       if (t.active) {
-        ctx.save(); ctx.font='900 32px "Helvetica Neue",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        const lowFx = controlMode === 'mobile';
+        ctx.save(); ctx.font=`900 ${lowFx ? 18 : 32}px "Helvetica Neue",sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
         const tw2=ctx.measureText(t.text).width; const sx=canvas.width/2-tw2/2;
-        ctx.fillStyle='rgba(0,0,0,0.88)'; ctx.fillRect(sx-40,t.y-35,tw2+80,70);
-        ctx.strokeStyle=sc; ctx.lineWidth=2; ctx.strokeRect(sx-40,t.y-35,tw2+80,70);
-        for (let i=0;i<tw2;i+=2) { const yo=Math.sin((sd.gameTicks*0.25)+(i*0.04))*10; ctx.save(); ctx.beginPath(); ctx.rect(sx+i,t.y-40,2,80); ctx.clip(); ctx.fillStyle=(sd.gameTicks%10<5)?sc:pc; ctx.fillText(t.text,canvas.width/2,t.y+yo); ctx.restore(); }
+        const ph = lowFx ? 40 : 70;
+        ctx.fillStyle='rgba(0,0,0,0.88)'; ctx.fillRect(sx-24,t.y-ph/2,tw2+48,ph);
+        ctx.strokeStyle=sc; ctx.lineWidth=2; ctx.strokeRect(sx-24,t.y-ph/2,tw2+48,ph);
+        if (lowFx) {
+          // Mobile: a single flat draw — the per-2px clipped slice loop below is both a frame
+          // hitch and visually noisy on a small screen.
+          ctx.fillStyle=sc; ctx.fillText(t.text,canvas.width/2,t.y);
+        } else {
+          for (let i=0;i<tw2;i+=2) { const yo=Math.sin((sd.gameTicks*0.25)+(i*0.04))*10; ctx.save(); ctx.beginPath(); ctx.rect(sx+i,t.y-40,2,80); ctx.clip(); ctx.fillStyle=(sd.gameTicks%10<5)?sc:pc; ctx.fillText(t.text,canvas.width/2,t.y+yo); ctx.restore(); }
+        }
         ctx.restore();
       }
 
@@ -2486,16 +2514,6 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
         </div>
       )}
 
-      {isPlaying && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-          {floatTexts.map(txt => (
-            <div key={txt.id} className="absolute transform -translate-x-1/2 -translate-y-1/2 font-black text-2xl tracking-tight select-none mix-blend-difference drop-shadow-[0_2px_4px_rgba(0,0,0,1)] animate-pulse"
-              style={{ left: `${txt.x}px`, top: `${txt.y}px`, opacity: txt.alpha }}>
-              <BrandText text={txt.text} className="text-brandYellow font-black" />
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className={`absolute flex justify-between items-start font-mono pointer-events-none z-10 select-none ${mob ? 'top-2 left-2 right-2 gap-2' : 'top-6 left-6 right-6'}`}>
         <div className="flex flex-col">
