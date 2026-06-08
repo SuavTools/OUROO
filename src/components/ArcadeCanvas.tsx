@@ -2771,7 +2771,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                 {lbState === 'done' && lbRank != null && <p className="text-[#1ED760] font-black text-base mb-3">Estás em #{lbRank} 🌍</p>}
                 {lbState === 'error' && <p className="text-brandRed text-xs mb-2">{lbError} <button onClick={() => doSubmit(getLocalPlayer().handle || undefined)} className="underline pointer-events-auto">tentar de novo</button></p>}
 
-                <Leaderboard compact limit={5} highlightId={lbPlayerId} refreshKey={lbRefresh} />
+                <Leaderboard compact limit={5} highlightId={lbPlayerId} refreshKey={lbRefresh} showToggle />
               </div>
             </div>
 

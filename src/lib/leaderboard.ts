@@ -4,13 +4,14 @@ import { getAuthIdentity } from './auth';
 export const GAME_ID = 'ouroo';
 
 export type LbEntry = { handle: string; score: number; player_id: string };
+export type LbPeriod = 'all' | 'today';
 
-// Read the leaderboard straight from the browser (RLS allows select). Returns [] if Supabase
-// isn't configured yet or on any error, so the UI never crashes.
-export async function fetchLeaderboard(gameId = GAME_ID, limit = 10): Promise<LbEntry[]> {
+// Read the leaderboard straight from the browser (RLS allows select). period 'today' reads the
+// daily view (resets each day). Returns [] on any error so the UI never crashes.
+export async function fetchLeaderboard(gameId = GAME_ID, limit = 10, period: LbPeriod = 'all'): Promise<LbEntry[]> {
   if (!supabase) return [];
   const { data, error } = await supabase
-    .from('leaderboard')
+    .from(period === 'today' ? 'leaderboard_today' : 'leaderboard')
     .select('handle, score, player_id')
     .eq('game_id', gameId)
     .order('score', { ascending: false })
