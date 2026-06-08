@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
+import { Leaderboard } from '@/components/Leaderboard';
 
 type View = 'landing' | 'arcade';
 
@@ -191,6 +192,15 @@ export default function Home() {
               ▶ Entrar no Arcade
             </span>
           </button>
+
+          {/* Unified leaderboard — built multi-game; OUROO for now, more games slot in later. */}
+          <div className="mt-8 border border-white/10 p-5 sm:p-8">
+            <div className="flex items-end justify-between mb-4">
+              <h3 className="font-helvetica font-black text-2xl sm:text-3xl tracking-tight">Ranking</h3>
+              <span className="text-[11px] uppercase tracking-[0.2em] text-white/40">OUROO · Global</span>
+            </div>
+            <Leaderboard limit={10} />
+          </div>
         </section>
 
         {/* ---- FOOTER ---- */}

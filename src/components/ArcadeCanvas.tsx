@@ -1,6 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Leaderboard } from '@/components/Leaderboard';
+import { submitScore, getLocalPlayer } from '@/lib/leaderboard';
+import { validateHandle } from '@/lib/names';
+import { supabaseReady } from '@/lib/supabase';
 import { BrandText } from './BrandText';
 
 // Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U/C/J).
@@ -276,11 +280,37 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const [mirrorMode,       setMirrorMode]       = useState(false);
   const [floatMode,        setFloatMode]        = useState(false);
 
-  const [leaderboard] = useState([
-    { name: 'ALMA_CORE', score: 85400 },
-    { name: 'OURO_CHEF', score: 62100 },
-    { name: 'DISSENT_9', score: 39500 },
-  ]);
+  // ---- LEADERBOARD SUBMISSION (game over) ----
+  const [lbHandle, setLbHandle] = useState('');
+  const [lbState, setLbState] = useState<'idle' | 'need-handle' | 'submitting' | 'done' | 'error'>('idle');
+  const [lbRank, setLbRank] = useState<number | null>(null);
+  const [lbError, setLbError] = useState('');
+  const [lbPlayerId, setLbPlayerId] = useState<string | null>(null);
+  const [lbRefresh, setLbRefresh] = useState(0);
+  const submittedRef = useRef(false);  // guard against double-submit per run
+
+  const doSubmit = async (handle?: string) => {
+    setLbState('submitting'); setLbError('');
+    const res = await submitScore(score, handle);
+    if (res.ok) {
+      setLbRank(res.rank); setLbPlayerId(res.playerId); setLbState('done'); setLbRefresh(k => k + 1);
+    } else {
+      setLbError(res.error); setLbState(handle || getLocalPlayer().handle ? 'error' : 'need-handle');
+    }
+  };
+
+  // On game over: returning players (saved handle) auto-submit; new players are asked for a name.
+  // Reset the guard whenever a fresh run starts.
+  useEffect(() => {
+    if (isPlaying) { submittedRef.current = false; setLbState('idle'); setLbRank(null); setLbError(''); return; }
+    if (!showIntro && score > 0 && supabaseReady && !submittedRef.current) {
+      submittedRef.current = true;
+      const p = getLocalPlayer();
+      if (p.handle) { setLbHandle(p.handle); doSubmit(p.handle); }
+      else setLbState('need-handle');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, showIntro]);
 
   const PW = 38, PH = 52;
 
@@ -2703,14 +2733,28 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                 <p>DISTÂNCIA: <span className="text-white font-bold">{Math.floor(stateRef.current.milesTraveled)} UNIDADES</span></p>
                 {stateRef.current.perks.length > 0 && <div className="pt-1"><p className="text-brandYellow/60 text-[10px]">EXTRAS DESTA CORRIDA:</p>{stateRef.current.perks.map((perk, i) => <p key={i} className="text-brandYellow text-[10px]">• {perkLabel(perk)}</p>)}</div>}
               </div>
-              <div className="border-t md:border-t-0 md:border-l border-brandYellow/20 pt-4 md:pt-0 md:pl-6 space-y-2">
-                <p className="text-brandYellow font-bold">// TOP 3 MELHORES PONTUAÇÕES //</p>
-                {leaderboard.map((e, i) => (
-                  <div key={i} className="flex justify-between text-[11px] font-mono tracking-tight uppercase">
-                    <span className="text-gray-500 font-bold">{i+1}. {e.name}</span>
-                    <span className="text-white font-bold">{e.score} PTS</span>
-                  </div>
-                ))}
+              <div className="border-t md:border-t-0 md:border-l border-brandYellow/20 pt-4 md:pt-0 md:pl-6 normal-case">
+                <p className="text-brandYellow font-bold uppercase mb-2">// Ranking Global //</p>
+
+                {!supabaseReady && <p className="text-gray-500 text-[11px]">Ranking em breve.</p>}
+
+                {supabaseReady && lbState === 'need-handle' && (
+                  <form onSubmit={(e) => { e.preventDefault(); const v = validateHandle(lbHandle); if (!v.ok) { setLbError(v.error); return; } doSubmit(v.value); }} className="mb-3">
+                    <p className="text-white/70 text-[11px] mb-1.5">O teu nome para o ranking:</p>
+                    <div className="flex gap-2">
+                      <input value={lbHandle} onChange={e => { setLbHandle(e.target.value); setLbError(''); }} maxLength={16} placeholder="ex: SUAV_FAN" autoFocus
+                        className="flex-1 min-w-0 bg-black border border-brandYellow/40 text-white px-2 py-1.5 text-[12px] focus:border-brandYellow outline-none" />
+                      <button type="submit" className="bg-brandYellow text-black font-bold text-[10px] uppercase px-3 tracking-widest active:scale-95 pointer-events-auto">Entrar</button>
+                    </div>
+                    {lbError && <p className="text-brandRed text-[10px] mt-1">{lbError}</p>}
+                  </form>
+                )}
+
+                {lbState === 'submitting' && <p className="text-brandYellow/70 text-[11px] mb-2">A enviar pontuação…</p>}
+                {lbState === 'done' && lbRank != null && <p className="text-[#1ED760] font-black text-sm mb-2">Estás em #{lbRank} 🌍</p>}
+                {lbState === 'error' && <p className="text-brandRed text-[11px] mb-2">{lbError} <button onClick={() => doSubmit(getLocalPlayer().handle || undefined)} className="underline pointer-events-auto">tentar de novo</button></p>}
+
+                <Leaderboard compact limit={5} highlightId={lbPlayerId} refreshKey={lbRefresh} />
               </div>
             </div>
             <div className="pt-2 flex flex-wrap gap-4 items-center">
