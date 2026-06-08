@@ -84,6 +84,8 @@ export default function Home() {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
         <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} />
+        {/* In-app-browser users hit the no-rotate wall here — float the "open in browser" nudge on top. */}
+        <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
         <button
           onClick={() => setView('landing')}
           style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
