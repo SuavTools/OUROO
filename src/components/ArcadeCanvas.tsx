@@ -1017,21 +1017,22 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001 + drainEndurance * 0.025) * drainMult;
       state.coreStability = Math.max(0, state.coreStability - drain);
 
-      // ---- ENGAGEMENT TIMER: kill an alien at least every 60s, or the core fails ----
-      // A separate clock (not the core drain): you can't just jump-and-flow forever. Resets on
-      // every kill; only counts while there are aliens to shoot (so lulls don't punish you).
-      if (state.aliens.length > 0 && !state.easterEggMode) {
+      // ---- ENGAGEMENT TIMER: after a 60s grace, kill an alien every 30s or the core fails ----
+      // A SEPARATE clock (not the core drain). First 60s are a free grace; then a fresh 30s window
+      // starts and a toast announces the rule. Resets on every kill; pauses with no aliens / in
+      // reward modes. Pure jump-and-flow stops being viable.
+      if (state.gameTicks === 3600) { toast('⚡ MATA UM ALIEN A CADA 30 SEG — OU O NÚCLEO FALHA'); state.screenFlash = 0.4; }
+      if (state.gameTicks >= 3600 && state.aliens.length > 0 && !state.easterEggMode) {
         state.ticksSinceKill++;
-        if (state.ticksSinceKill === 2700) { toast('⚠ MATA UM ALIEN — 15 SEG'); state.screenFlash = 0.3; }   // 45s, 15s warning
-        else if (state.ticksSinceKill === 3300) { toast('⚠ MATA OU MORRES — 5 SEG'); state.screenFlash = 0.5; }  // 55s
-        else if (state.ticksSinceKill >= 3600) {                                                                  // 60s → core fails
+        if (state.ticksSinceKill === 1200) { toast('⚠ MATA UM ALIEN — 10 SEG'); state.screenFlash = 0.4; }   // 10s left
+        else if (state.ticksSinceKill >= 1800) {                                                              // 30s no kill → core fails
           setScore(prev => { const f = prev; setPersonalBest(pb => { if (f > pb) { try { localStorage.setItem('arcade_pb', String(f)); } catch {} return f; } return pb; }); return f; });
           state.coreStability = 0; setStability(0);
           burst(state.player.x + PW / 2, state.player.y + PH / 2, '#ff4e3e', 30, 6);
           setIsPlaying(false); return;
         }
       } else {
-        state.ticksSinceKill = 0;   // no targets (or in a reward mode) → no obligation
+        state.ticksSinceKill = 0;   // grace, no targets, or reward mode → no obligation
       }
       // Only re-render the HUD when the displayed integer actually changes — calling setState
       // every frame forced a full re-render of this whole component 60x/sec, which tanked mobile.
@@ -2494,6 +2495,24 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           ctx.fillStyle = '#ffe65c'; ctx.fillText(ft.text, ft.x, ft.y);
         }
         ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+
+      // ---- ENGAGEMENT METER ---- a clear on-screen counter: after the 60s grace, shows the 30s
+      // "kill window" depleting; pulses red when critical, and vanishes the instant you get a kill.
+      if (sd.gameTicks >= 3600 && sd.aliens.length > 0 && !sd.easterEggMode && sd.ticksSinceKill > 240) {
+        const frac   = Math.min(1, sd.ticksSinceKill / 1800);   // 1 = death (30s)
+        const remain = Math.max(0, 30 - Math.floor(sd.ticksSinceKill / 60));
+        const bw = 300, bh = 14, bx = canvas.width / 2 - bw / 2, by = canvas.height * 0.15;
+        const col = frac > 0.85 ? '#ff2200' : frac > 0.6 ? '#ff8800' : '#ffe65c';
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, (sd.ticksSinceKill - 240) / 180);   // fade in
+        if (frac > 0.85) ctx.globalAlpha *= 0.55 + Math.sin(sd.gameTicks * 0.4) * 0.45;   // pulse when critical
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+        ctx.fillStyle = col; ctx.fillRect(bx, by, bw * (1 - frac), bh);
+        ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, bw, bh);
+        ctx.fillStyle = '#ffffff'; ctx.font = '900 16px "Helvetica Neue",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(`⚡ MATA UM ALIEN — ${remain}s`, canvas.width / 2, by + bh + 16);
         ctx.restore();
       }
 
