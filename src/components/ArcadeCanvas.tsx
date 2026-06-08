@@ -408,6 +408,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     ouroModeAirCrystals: 0,  // crystals collected airborne during FLOAT for OURO trigger
     ghostRunShotsFired: 0,   // tracks if player fired (for GHOST RUN)
     ghostRunTimer:      0,   // ticks survived without firing
+    ghostRunUsed:       false, // GHOST RUN is a one-time start bonus, not a repeatable loop
+    ticksSinceKill:     0,   // kill an alien every 60s or the core fails — forces engagement
     berserkerKills:     0,   // kills in current window (only counts when NOT already raging)
     berserkerTimer:     0,   // resets the kill window every 720 ticks
     berserkerCooldown:  0,   // lockout after berserker ends so rapid-fire can't instantly re-arm it
@@ -1014,6 +1016,23 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       const drainEndurance = Math.min(endurance, 6);
       const drain = (0.04 + Math.min(state.crystalsTotal, 40) * 0.001 + drainEndurance * 0.025) * drainMult;
       state.coreStability = Math.max(0, state.coreStability - drain);
+
+      // ---- ENGAGEMENT TIMER: kill an alien at least every 60s, or the core fails ----
+      // A separate clock (not the core drain): you can't just jump-and-flow forever. Resets on
+      // every kill; only counts while there are aliens to shoot (so lulls don't punish you).
+      if (state.aliens.length > 0 && !state.easterEggMode) {
+        state.ticksSinceKill++;
+        if (state.ticksSinceKill === 2700) { toast('⚠ MATA UM ALIEN — 15 SEG'); state.screenFlash = 0.3; }   // 45s, 15s warning
+        else if (state.ticksSinceKill === 3300) { toast('⚠ MATA OU MORRES — 5 SEG'); state.screenFlash = 0.5; }  // 55s
+        else if (state.ticksSinceKill >= 3600) {                                                                  // 60s → core fails
+          setScore(prev => { const f = prev; setPersonalBest(pb => { if (f > pb) { try { localStorage.setItem('arcade_pb', String(f)); } catch {} return f; } return pb; }); return f; });
+          state.coreStability = 0; setStability(0);
+          burst(state.player.x + PW / 2, state.player.y + PH / 2, '#ff4e3e', 30, 6);
+          setIsPlaying(false); return;
+        }
+      } else {
+        state.ticksSinceKill = 0;   // no targets (or in a reward mode) → no obligation
+      }
       // Only re-render the HUD when the displayed integer actually changes — calling setState
       // every frame forced a full re-render of this whole component 60x/sec, which tanked mobile.
       { const stab = Math.floor(state.coreStability); if (stab !== lastStabRef.current) { lastStabRef.current = stab; setStability(stab); } }
@@ -1094,7 +1113,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       // ---- GHOST RUN tracking ----
       if (state.ghostRunShotsFired === 0) {
         state.ghostRunTimer++;
-        if (state.ghostRunTimer >= 2700 && state.easterEggMode !== 'ghost_run') {
+        if (state.ghostRunTimer >= 2700 && !state.ghostRunUsed && state.easterEggMode !== 'ghost_run') {
+          state.ghostRunUsed = true;   // once per run only — no more free invincibility loops
           state.easterEggMode = 'ghost_run';
           state.easterEggTicks = 60 * 20;
           setEasterEggMode('ghost_run');
@@ -1110,9 +1130,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           toast(`👻 GHOST RUN! UNTOUCHABLE + SHIELD + 5 CHARGES — +${ghostBonus.toLocaleString()}`);
         }
       } else {
-        // Shot fired — reset timer so you have to start the 60 sec over
+        // Shot fired — reset the no-fire timer.
         state.ghostRunTimer = 0;
-        state.ghostRunShotsFired = 0; // reset flag so timer can run again next attempt
+        state.ghostRunShotsFired = 0;
       }
 
       // ---- BERSERKER tracking — 7 kills in 720 ticks, then a cooldown before it can re-arm ----
@@ -1402,6 +1422,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             // Combo milestones
             state.killCombo = Math.min(COMBO_CAP, state.killCombo + 1);
             state.comboTimer = 0;
+            state.ticksSinceKill = 0;   // kill registered — reset the engagement timer
             setComboCount(state.killCombo);
             synthRef.current?.playCombo(state.killCombo);
             if (hasPerk('aliens drop charges') && Math.random() > 0.4) { state.blasterCharges++; setBlasterCharges(state.blasterCharges); floatFeedback(al.x, al.y - 25, 'CARGA EXTRA!'); }
@@ -2550,7 +2571,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     e.timeSlowTicks=0; e.ghostTicks=0; e.mirrorTicks=0; e.floatTicks=0;
     e.doubleTapReady=false; e.overchargeReady=false;
     e.easterEggMode=''; e.easterEggTicks=0; e.ouroModeAirCrystals=0;
-    e.ghostRunShotsFired=0; e.ghostRunTimer=0; e.berserkerKills=0; e.berserkerTimer=0; e.berserkerCooldown=0;
+    e.ghostRunShotsFired=0; e.ghostRunTimer=0; e.ghostRunUsed=false; e.ticksSinceKill=0; e.berserkerKills=0; e.berserkerTimer=0; e.berserkerCooldown=0;
     e.crystalsSinceRarePerk=0;
     e.platformsSinceStair=0;
     e.aliens=[]; e.projectiles=[]; e.meteors=[]; e.warpToast.active=false;
