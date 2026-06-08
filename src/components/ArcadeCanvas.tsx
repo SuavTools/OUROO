@@ -568,18 +568,14 @@ export const ArcadeCanvas: React.FC = () => {
       state.bannerTexts.push({ text: pool[Math.floor(Math.random() * pool.length)], x: canvas.width + 160, y: Math.random() * canvas.height * 0.45 + 100, speed: Math.random() * 1.5 + 1, size: Math.floor(Math.random() * 40) + 45, alpha: Math.random() * 0.03 + 0.015, driftY: (Math.random() - 0.5) * 0.2 });
     };
 
-    // Mobile renders the drawing buffer at 0.75× and lets the browser upscale it to fill the
-    // (already CSS-scaled) stage. That's ~44% fewer pixels on every full-screen clear/fill/
-    // gradient — the single cheapest perf win — and the neon aesthetic hides the softening.
-    // All game math is relative to canvas.width/height, so the smaller buffer just shrinks the
-    // coordinate space uniformly; nothing else needs to change. Desktop stays pixel-for-pixel.
-    const RES = controlMode === 'mobile' ? 0.75 : 1;
     const resize = () => {
       // Match the drawing buffer to the canvas's LAYOUT size (clientWidth/Height ignore CSS
       // transforms, so on mobile this is the fixed 1280x720 stage; on desktop it's the live
       // window). The page-level wrapper owns the scale-to-fit; here we just fill the parent.
-      canvas.width  = Math.round((canvas.clientWidth  || window.innerWidth)  * RES);
-      canvas.height = Math.round((canvas.clientHeight || window.innerHeight) * RES);
+      // NOTE: the game's layout is hardcoded to 1280x720 (many fixed pixel positions), so the
+      // buffer must stay 1:1 with the stage — do NOT downscale it or the layout breaks.
+      canvas.width  = canvas.clientWidth  || window.innerWidth;
+      canvas.height = canvas.clientHeight || window.innerHeight;
       state.bannerTexts = []; for (let i = 0; i < 3; i++) spawnBanner();
     };
     // orientationchange lands before the new dimensions settle on mobile — re-fit after a beat.

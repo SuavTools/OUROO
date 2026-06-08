@@ -85,12 +85,12 @@ export default function Home() {
     return (
       <main
         onClick={handleNextStage}
-        className={`relative min-h-[100dvh] w-full bg-brandBlack flex overflow-x-hidden overflow-y-auto select-none z-50 p-6 ${
+        className={`relative min-h-[100dvh] w-full bg-brandBlack flex overflow-x-hidden overflow-y-auto select-none z-50 px-5 py-8 sm:p-6 ${
           introStage < 2 ? 'cursor-pointer' : 'cursor-default'
         }`}
       >
         <div
-          className={`m-auto text-center w-full max-w-4xl space-y-12 transition-all transform origin-center will-change-transform ${
+          className={`m-auto text-center w-full max-w-4xl space-y-8 sm:space-y-12 transition-all transform origin-center will-change-transform ${
             isZooming 
               ? 'scale-[8] opacity-0 blur-2xl pointer-events-none' 
               : 'scale-100 opacity-100'
@@ -108,22 +108,22 @@ export default function Home() {
 
           {introStage >= 1 && (
             <div className="animate-fade-in duration-300">
-              <BrandText 
-                text="ASSINO E DEVOLVO EM DOBRO." 
-                className="text-4xl sm:text-6xl md:text-7xl font-black text-brandRed tracking-tighter" 
+              <BrandText
+                text="ASSINO E DEVOLVO EM DOBRO."
+                className="text-3xl sm:text-6xl md:text-7xl font-black text-brandRed tracking-tighter"
               />
             </div>
           )}
 
           {introStage >= 2 && (
-            <div className="animate-fade-in duration-500 pt-4 space-y-16">
-              <BrandText 
-                text="TUDO O QUE LEVO DEVOLVO COM ALMA." 
-                className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-brandYellow tracking-tight" 
+            <div className="animate-fade-in duration-500 pt-4 space-y-10 sm:space-y-16">
+              <BrandText
+                text="TUDO O QUE LEVO DEVOLVO COM ALMA."
+                className="text-xl sm:text-4xl md:text-5xl font-extrabold text-brandYellow tracking-tight"
               />
-              
-              <div className="pt-12 block clear-both cursor-pointer" onClick={handleNextStage}>
-                <span className="bg-brandRed text-black font-mono font-black text-xs px-8 py-4 tracking-widest uppercase animate-pulse border border-brandRed shadow-[0_0_20px_rgba(255,78,62,0.2)]">
+
+              <div className="pt-8 sm:pt-12 block clear-both cursor-pointer" onClick={handleNextStage}>
+                <span className="inline-block bg-brandRed text-black font-mono font-black text-xs px-8 py-4 tracking-widest uppercase animate-pulse border border-brandRed shadow-[0_0_20px_rgba(255,78,62,0.2)]">
                   ACCESS TERMINAL
                 </span>
               </div>
@@ -139,7 +139,7 @@ export default function Home() {
   // --------------------------------------------------------
   if (gameState === 'hub') {
     return (
-      <main className="relative min-h-[100dvh] w-full bg-brandBlack flex overflow-x-hidden overflow-y-auto select-none z-50 p-6">
+      <main className="relative min-h-[100dvh] w-full bg-brandBlack flex overflow-x-hidden overflow-y-auto select-none z-50 px-5 py-8 sm:p-6">
 
         {/* Subtle grid background to match the game aesthetic */}
         <div className="fixed inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
@@ -149,33 +149,33 @@ export default function Home() {
           }`}
           style={{ transitionDuration: '550ms', transitionTimingFunction: 'cubic-bezier(0.7, 0, 0.84, 0)' }}
         >
-          
-          <div className="mb-8 border-l-4 border-brandRed pl-6">
-            <span className="text-xs text-brandRed font-mono tracking-[0.4em] block uppercase animate-pulse mb-2">
+
+          <div className="mb-6 sm:mb-8 border-l-4 border-brandRed pl-4 sm:pl-6">
+            <span className="text-[10px] sm:text-xs text-brandRed font-mono tracking-[0.3em] sm:tracking-[0.4em] block uppercase animate-pulse mb-2">
               // CHEF_MODE_ENGAGED
             </span>
-            <BrandText text="MAIN TERMINAL" className="text-5xl md:text-7xl font-black text-white tracking-tighter" />
+            <BrandText text="MAIN TERMINAL" className="text-4xl sm:text-5xl md:text-7xl font-black text-white tracking-tighter" />
           </div>
 
           {/* Install affordance — Android/desktop Chrome fire the native dialog; iOS shows instructions */}
           {(canInstall || iosInstall) && (
             <button
               onClick={handleInstall}
-              className="mb-8 inline-flex items-center gap-3 bg-brandYellow text-black font-mono font-black text-sm uppercase tracking-widest px-6 py-3 border-2 border-brandYellow hover:bg-black hover:text-brandYellow transition-all active:scale-95 shadow-[4px_4px_0px_#ff4e3e]"
+              className="mb-6 sm:mb-8 inline-flex items-center gap-3 bg-brandYellow text-black font-mono font-black text-xs sm:text-sm uppercase tracking-widest px-5 sm:px-6 py-3 border-2 border-brandYellow hover:bg-black hover:text-brandYellow transition-all active:scale-95 shadow-[4px_4px_0px_#ff4e3e]"
             >
               📲 Install App {iosInstall && !canInstall ? '— Add to Home Screen' : ''}
             </button>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-mono">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 font-mono">
 
             {/* MODULE 2: THE ARCADE */}
             <div 
               onClick={() => launchModule('arcade')}
-              className="group relative border-2 border-brandYellow p-8 bg-black/40 hover:bg-brandYellow transition-all cursor-pointer shadow-[6px_6px_0px_rgba(255,230,92,0.15)] hover:shadow-[6px_6px_0px_rgba(255,230,92,1)]"
+              className="group relative border-2 border-brandYellow p-5 sm:p-8 bg-black/40 hover:bg-brandYellow transition-all cursor-pointer shadow-[6px_6px_0px_rgba(255,230,92,0.15)] hover:shadow-[6px_6px_0px_rgba(255,230,92,1)]"
             >
               <span className="text-xs text-brandYellow group-hover:text-black block tracking-widest font-bold mb-2">// OPS_02</span>
-              <h3 className="text-3xl font-black text-white group-hover:text-black mb-4 uppercase">Arcade Core</h3>
+              <h3 className="text-2xl sm:text-3xl font-black text-white group-hover:text-black mb-4 uppercase">Arcade Core</h3>
               <p className="text-xs text-gray-500 group-hover:text-black/80 leading-relaxed uppercase">
                 Endless entropy simulation. Harvest crystals to survive. Eradicate alien vectors. Top 3 global leaderboard.
               </p>
@@ -183,11 +183,11 @@ export default function Home() {
 
             {/* MODULE 3: THE COOKBOOK */}
             <div 
-              className="group relative border-2 border-gray-800 p-8 bg-black/40 hover:border-white transition-all cursor-pointer"
+              className="group relative border-2 border-gray-800 p-5 sm:p-8 bg-black/40 hover:border-white transition-all cursor-pointer"
               onClick={() => window.open('https://open.spotify.com/artist/4JNKjNlt3rtcIl84NiK4Lr', '_blank')}
             >
               <span className="text-xs text-gray-500 group-hover:text-white block tracking-widest font-bold mb-2">// ARCHIVE</span>
-              <h3 className="text-3xl font-black text-gray-600 group-hover:text-white mb-4 uppercase">The Cook Book</h3>
+              <h3 className="text-2xl sm:text-3xl font-black text-gray-600 group-hover:text-white mb-4 uppercase">The Cook Book</h3>
               <p className="text-xs text-gray-600 group-hover:text-gray-300 leading-relaxed uppercase">
                 Audio repository. The manual for dissent. Stream the raw output directly.
               </p>
@@ -195,10 +195,10 @@ export default function Home() {
 
             {/* MODULE 4: DATES / INFO */}
             <div 
-              className="group relative border-2 border-gray-800 p-8 bg-black/40 transition-all opacity-50"
+              className="group relative border-2 border-gray-800 p-5 sm:p-8 bg-black/40 transition-all opacity-50"
             >
               <span className="text-xs text-gray-500 block tracking-widest font-bold mb-2">// DIRECTIVE</span>
-              <h3 className="text-3xl font-black text-gray-600 mb-4 uppercase">PT_2027 OPS</h3>
+              <h3 className="text-2xl sm:text-3xl font-black text-gray-600 mb-4 uppercase">PT_2027 OPS</h3>
               <p className="text-xs text-gray-600 leading-relaxed uppercase">
                 Live deployment coordinates and residency metrics. [ CURRENTLY LOCKED. AWAITING DECLASSIFICATION ]
               </p>
