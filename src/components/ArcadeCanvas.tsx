@@ -2727,38 +2727,35 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
       {/* ---- INTRO / MODE SELECT ---- */}
       {showIntro && (
-        <div className={`absolute inset-0 bg-brandBlack flex justify-center z-50 pointer-events-auto overflow-y-auto ${mob ? 'items-start py-4' : 'items-center'}`}>
-          <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,230,92,0.25)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
-          <div className={`w-full max-w-xl text-left relative z-10 ${mob ? 'px-5 space-y-4 pb-16' : 'px-10 space-y-7'}`}>
-            <div className={`border-l-4 border-brandYellow ${mob ? 'space-y-1 pl-4' : 'space-y-2 pl-6'}`}>
-              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// NÚCLEO_ARCADE_HARDCORE</span>
-              <h2><BrandText text="SIMULAÇÃO INFINITA" className={`text-brandYellow block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-4xl md:text-5xl'}`} /></h2>
-            </div>
+        <div className={`absolute inset-0 bg-black flex justify-center z-50 pointer-events-auto overflow-y-auto ${mob ? 'items-start py-6' : 'items-center'}`}>
+          <div className={`w-full max-w-lg relative z-10 ${mob ? 'px-5 pb-16' : 'px-10'}`}>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-2">OUROO // Arcade</p>
+            <h2 className={`font-helvetica font-black tracking-tighter leading-none text-white ${mob ? 'text-4xl' : 'text-5xl md:text-6xl'}`}>Simulação Infinita</h2>
 
-            <div className="space-y-3">
-              <p className="text-[10px] text-brandYellow/60 font-mono uppercase tracking-widest">// ESCOLHE OS CONTROLOS</p>
+            <div className="mt-7">
+              <p className="text-[11px] uppercase tracking-[0.25em] text-white/40 mb-3">Escolhe os controlos</p>
               <div className="flex gap-3">
                 <button onClick={() => setControlMode('desktop')}
-                  className={`flex-1 font-mono uppercase tracking-widest py-3 px-4 border-2 transition-all ${controlMode === 'desktop' ? 'border-brandYellow bg-brandYellow/15 text-brandYellow' : 'border-brandYellow/30 text-brandYellow/50 hover:border-brandYellow/60'}`}>
-                  <span className="block text-sm font-black">⌨ COMPUTADOR</span>
-                  <span className="block text-[9px] opacity-70 mt-1">TECLADO + RATO</span>
+                  className={`flex-1 text-left p-3 border transition-colors ${controlMode === 'desktop' ? 'border-brandRed bg-brandRed/10' : 'border-white/15 hover:border-white/40'}`}>
+                  <span className="block text-sm font-bold text-white">⌨ Computador</span>
+                  <span className="block text-[10px] text-white/40 mt-0.5">Teclado + rato</span>
                 </button>
                 <button onClick={() => setControlMode('mobile')}
-                  className={`flex-1 font-mono uppercase tracking-widest py-3 px-4 border-2 transition-all ${controlMode === 'mobile' ? 'border-brandYellow bg-brandYellow/15 text-brandYellow' : 'border-brandYellow/30 text-brandYellow/50 hover:border-brandYellow/60'}`}>
-                  <span className="block text-sm font-black">📱 TELEMÓVEL</span>
-                  <span className="block text-[9px] opacity-70 mt-1">VIRA O TELEMÓVEL DE LADO</span>
+                  className={`flex-1 text-left p-3 border transition-colors ${controlMode === 'mobile' ? 'border-brandRed bg-brandRed/10' : 'border-white/15 hover:border-white/40'}`}>
+                  <span className="block text-sm font-bold text-white">📱 Telemóvel</span>
+                  <span className="block text-[10px] text-white/40 mt-0.5">Vira o telemóvel de lado</span>
                 </button>
               </div>
-              <div className="font-mono text-[10px] text-gray-400 uppercase leading-relaxed border border-brandYellow/20 p-4 bg-black/60">
+              <div className="mt-4 border border-white/10 bg-white/[0.03] p-4 text-[12px] text-white/55 leading-relaxed space-y-1">
                 {controlMode === 'mobile'
-                  ? <><p><span className="text-[#ff4e3e] font-bold">LADO ESQUERDO</span> — TOCA PARA DISPARAR, SEGURA PARA CARREGAR + SOLTA</p><p><span className="text-brandYellow font-bold">LADO DIREITO</span> — TOCA PARA SALTAR (TOCA OUTRA VEZ NO AR PARA SALTO DUPLO)</p><p className="text-[#44ddff]/70 pt-1">SEGURA O TELEMÓVEL NA HORIZONTAL PARA A VISTA COMPLETA</p></>
-                  : <><p><span className="text-brandYellow font-bold">[W] / [↑]</span> — SALTAR   <span className="text-brandYellow font-bold">[SEGURA ESPAÇO]</span> — CARREGAR + SOLTA PARA DISPARAR</p><p><span className="text-brandYellow font-bold">[F] / CLIQUE</span> — TIRO INSTANTÂNEO</p><p className="text-[#44ddff]/70 pt-1">ENCADEIA SALTOS PELAS ESCADARIAS DE CRISTAIS — CADA CRISTAL DEVOLVE UM SALTO</p></>}
+                  ? <><p><span className="text-brandRed font-bold">Lado esquerdo</span> — toca para disparar, segura para carregar + solta</p><p><span className="text-white font-bold">Lado direito</span> — toca para saltar (toca outra vez no ar para salto duplo)</p><p className="text-white/40 pt-1">Segura o telemóvel na horizontal para a vista completa</p></>
+                  : <><p><span className="text-white font-bold">[W] / [↑]</span> — saltar &nbsp; <span className="text-white font-bold">[segura espaço]</span> — carregar + solta para disparar</p><p><span className="text-white font-bold">[F] / clique</span> — tiro instantâneo</p><p className="text-white/40 pt-1">Encadeia saltos pelas escadarias de cristais — cada cristal devolve um salto</p></>}
               </div>
             </div>
 
             <button onClick={startGame}
-              className="bg-brandYellow hover:bg-brandRed text-black font-helvetica font-black py-4 px-10 text-base uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto border-none active:scale-95 shadow-[4px_4px_0px_#ff4e3e]">
-              ▶ INICIAR NÚCLEO
+              className="mt-7 inline-flex items-center justify-center gap-2 bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm px-8 py-4 hover:bg-white transition-colors cursor-pointer pointer-events-auto active:scale-95">
+              ▶ Jogar
             </button>
           </div>
         </div>
@@ -2766,14 +2763,14 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
       {/* ---- ROTATE-TO-LANDSCAPE NUDGE (mobile, portrait) ---- */}
       {controlMode === 'mobile' && isPortrait && !ignoreRotate && (
-        <div className="absolute inset-0 bg-brandBlack/95 flex flex-col items-center justify-center z-[60] pointer-events-auto text-center px-8">
-          <span className="text-6xl animate-pulse mb-6">↻</span>
-          <BrandText text="RODA O TELEMÓVEL" className="text-2xl text-brandYellow font-black uppercase tracking-tight" />
-          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest mt-3">Vira o telemóvel de lado (horizontal) para a vista completa</p>
-          {!showIntro && <p className="font-mono text-[10px] text-[#1ED760]/70 uppercase tracking-widest mt-2">— jogo em pausa —</p>}
+        <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-[60] pointer-events-auto text-center px-8">
+          <span className="text-5xl animate-pulse mb-5 text-brandRed">↻</span>
+          <h3 className="font-helvetica font-black text-2xl tracking-tight text-white">Roda o telemóvel</h3>
+          <p className="text-sm text-white/50 mt-2">Vira-o de lado (horizontal) para a vista completa</p>
+          {!showIntro && <p className="text-[11px] uppercase tracking-[0.2em] text-[#1ED760]/70 mt-2">— jogo em pausa —</p>}
           <button onClick={() => setIgnoreRotate(true)}
-            className="mt-8 font-mono text-xs uppercase tracking-widest border-2 border-brandYellow/60 text-brandYellow px-6 py-3 hover:bg-brandYellow hover:text-black transition-all pointer-events-auto active:scale-95">
-            JOGAR ASSIM MESMO →
+            className="mt-7 text-xs font-bold uppercase tracking-[0.2em] border border-white/20 text-white px-6 py-3 hover:bg-white hover:text-black transition-colors pointer-events-auto active:scale-95">
+            Jogar assim mesmo →
           </button>
         </div>
       )}
