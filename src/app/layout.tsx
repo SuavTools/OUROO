@@ -27,7 +27,7 @@ const startupImage = [
 
 export const metadata: Metadata = {
   title: "SUAV",
-  description: "SUAV — official site. Latest music, live dates, and OUROO: the arcade.",
+  description: "SUAV — site oficial. Música nova, datas ao vivo e OUROO: o arcade.",
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -55,7 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="pt-PT"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

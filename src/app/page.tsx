@@ -79,7 +79,7 @@ export default function Home() {
           onClick={() => setView('landing')}
           className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
         >
-          [ EXIT TO SUAV ]
+          [ SAIR PARA SUAV ]
         </button>
       </main>
     );
@@ -99,19 +99,19 @@ export default function Home() {
           <nav className="mx-auto max-w-5xl px-5 sm:px-8 h-14 flex items-center justify-between">
             <a href="#top" className="font-helvetica font-black text-xl tracking-tight">SUAV</a>
             <div className="flex items-center gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">
-              <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Listen</a>
-              <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Live</a>
-              <button onClick={enterArcade} className="font-bold text-black bg-brandRed px-4 py-1.5 tracking-[0.2em] hover:bg-white transition-colors">Play ▸</button>
+              <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Ouvir</a>
+              <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
+              <button onClick={enterArcade} className="font-bold text-black bg-brandRed px-4 py-1.5 tracking-[0.2em] hover:bg-white transition-colors">Jogar ▸</button>
             </div>
           </nav>
         </header>
 
         {/* ---- HERO ---- */}
         <section id="top" className="mx-auto max-w-5xl px-5 sm:px-8 pt-10 sm:pt-16 pb-10">
-          <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Latest Release</p>
+          <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Último Lançamento</p>
           <h1 className="font-helvetica font-black tracking-tighter leading-[0.92] text-6xl sm:text-8xl">SUAV</h1>
           <p className="mt-4 max-w-xl text-white/60 text-sm sm:text-base leading-relaxed">
-            New visuals, sound and the OUROO arcade — all in one place. Press play.
+            Novos visuais, som e o arcade OUROO — tudo num só lugar. Carrega play.
           </p>
 
           {/* Featured clip — autoplays muted */}
@@ -130,8 +130,8 @@ export default function Home() {
         {/* ---- LISTEN ---- */}
         <section id="listen" className="mx-auto max-w-5xl px-5 sm:px-8 py-10 border-t border-white/10">
           <div className="flex items-end justify-between mb-5">
-            <h2 className="font-helvetica font-black text-3xl sm:text-4xl tracking-tight">Listen</h2>
-            <a href={SPOTIFY_URL} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] text-white/60 hover:text-brandRed transition-colors">Open in Spotify →</a>
+            <h2 className="font-helvetica font-black text-3xl sm:text-4xl tracking-tight">Ouvir</h2>
+            <a href={SPOTIFY_URL} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] text-white/60 hover:text-brandRed transition-colors">Abrir no Spotify →</a>
           </div>
           <div className="w-full overflow-hidden border border-white/10 bg-white/5">
             <iframe
@@ -147,7 +147,7 @@ export default function Home() {
 
         {/* ---- LIVE ---- */}
         <section id="live" className="mx-auto max-w-5xl px-5 sm:px-8 py-10 border-t border-white/10">
-          <h2 className="font-helvetica font-black text-3xl sm:text-4xl tracking-tight mb-5">Live</h2>
+          <h2 className="font-helvetica font-black text-3xl sm:text-4xl tracking-tight mb-5">Concertos</h2>
           {SHOWS.length > 0 ? (
             <ul className="divide-y divide-white/10">
               {SHOWS.map((s, i) => (
@@ -157,19 +157,19 @@ export default function Home() {
                     <span className="truncate"><span className="font-bold">{s.city}</span><span className="text-white/50"> · {s.venue}</span></span>
                   </div>
                   {s.ticket
-                    ? <a href={s.ticket} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors shrink-0">Tickets</a>
-                    : <span className="text-[11px] uppercase tracking-[0.2em] text-white/40 shrink-0">Soon</span>}
+                    ? <a href={s.ticket} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors shrink-0">Bilhetes</a>
+                    : <span className="text-[11px] uppercase tracking-[0.2em] text-white/40 shrink-0">Em breve</span>}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-white/50 text-sm leading-relaxed">New dates announced soon. For bookings, get in touch below.</p>
+            <p className="text-white/50 text-sm leading-relaxed">Novas datas em breve. Para contratações, fala connosco abaixo.</p>
           )}
 
           {/* Bookings */}
           <div className="mt-8 border border-white/10 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-brandRed mb-1">Bookings</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-brandRed mb-1">Contratações</p>
               <p className="text-sm"><span className="font-bold">{BOOKING.name}</span><span className="text-white/50"> — {BOOKING.agency}</span></p>
             </div>
             <a href={BOOKING.url} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] font-bold border border-white/20 px-5 py-2.5 hover:bg-white hover:text-black transition-colors text-center">Primeira Linha →</a>
@@ -182,13 +182,13 @@ export default function Home() {
             onClick={enterArcade}
             className="group relative w-full overflow-hidden border border-brandRed/40 bg-gradient-to-br from-brandRed/10 to-transparent p-8 sm:p-12 text-left transition-all hover:border-brandRed"
           >
-            <p className="text-[11px] uppercase tracking-[0.4em] text-brandYellow mb-3">Now Playing</p>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandYellow mb-3">A Jogar Agora</p>
             <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">OUROO<span className="text-brandRed">.</span></h2>
             <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
-              Endless entropy arcade. Harvest crystals, survive the swarm, climb the board. Best on your phone, sideways.
+              Arcade de entropia infinita. Apanha cristais, sobrevive à horda, sobe no ranking. Melhor no telemóvel, na horizontal.
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandRed px-6 py-3 group-hover:bg-white transition-colors">
-              ▶ Enter the Arcade
+              ▶ Entrar no Arcade
             </span>
           </button>
         </section>
@@ -203,7 +203,7 @@ export default function Home() {
           <div className="flex items-center gap-4">
             {(canInstall || iosInstall) && (
               <button onClick={handleInstall} className="text-[11px] uppercase tracking-[0.2em] border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors">
-                📲 Install App
+                📲 Instalar App
               </button>
             )}
             <span className="font-helvetica font-black text-sm tracking-tight">SUAV</span>
@@ -215,10 +215,10 @@ export default function Home() {
       {showIosSheet && (
         <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-6" onClick={() => setShowIosSheet(false)}>
           <div className="max-w-sm w-full border border-white/20 bg-black p-6 text-center space-y-4" onClick={(e) => e.stopPropagation()}>
-            <p className="font-helvetica font-black uppercase tracking-widest text-lg">Install on iPhone</p>
-            <p className="text-white/70 text-sm leading-relaxed">1. Tap the <span className="text-brandRed font-bold">Share</span> button at the bottom of Safari</p>
-            <p className="text-white/70 text-sm leading-relaxed">2. Scroll down and tap <span className="text-brandRed font-bold">&quot;Add to Home Screen&quot;</span></p>
-            <button onClick={() => setShowIosSheet(false)} className="mt-2 text-xs font-bold uppercase tracking-widest text-black bg-brandRed px-5 py-2 active:scale-95">Got it</button>
+            <p className="font-helvetica font-black uppercase tracking-widest text-lg">Instalar no iPhone</p>
+            <p className="text-white/70 text-sm leading-relaxed">1. Toca no botão <span className="text-brandRed font-bold">Partilhar</span> no fundo do Safari</p>
+            <p className="text-white/70 text-sm leading-relaxed">2. Desce e toca em <span className="text-brandRed font-bold">&quot;Adicionar ao Ecrã Principal&quot;</span></p>
+            <button onClick={() => setShowIosSheet(false)} className="mt-2 text-xs font-bold uppercase tracking-widest text-black bg-brandRed px-5 py-2 active:scale-95">Entendido</button>
           </div>
         </div>
       )}

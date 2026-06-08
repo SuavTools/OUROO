@@ -208,6 +208,24 @@ class ArcadeSynth {
   setMuted(m: boolean) { this.masterGain.gain.setTargetAtTime(m ? 0 : 0.14, this.ctx.currentTime, 0.1); }
 }
 
+// Perk display (pt-PT). The keys stay in English because the game logic matches on them
+// (hasPerk('drain halved') etc.) — only the shown label/description is localized.
+const PERK_LABEL: Record<string, string> = {
+  'drain halved': 'DRENO REDUZIDO',
+  'blaster fast': 'CARGA RÁPIDA',
+  'aliens drop charges': 'ALIENS DÃO CARGA',
+  'combo never resets': 'COMBO FIXO',
+  'crystal magnet always': 'ÍMAN PERMANENTE',
+};
+const PERK_DESC: Record<string, string> = {
+  'drain halved': 'perda de estabilidade ÷2',
+  'blaster fast': 'carga a cada 3 cristais',
+  'aliens drop charges': '40% de hipótese por abate',
+  'combo never resets': 'ser atingido não quebra o combo',
+  'crystal magnet always': 'campo de atração permanente',
+};
+const perkLabel = (k: string) => PERK_LABEL[k] ?? k;
+
 // ---- COMPONENT ----
 export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean }> = ({ stageScale = 1, isMobileStage = false }) => {
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
@@ -362,7 +380,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     warpToast: { active: false, text: '', life: 0, maxLife: 90, y: 0 },
   });
 
-  const feedbackWords = ['SOUL', 'ALMA', 'DOBRO', 'OURO', 'RAW', 'WILD', 'ENERGY', 'DISSENT'];
+  const feedbackWords = ['ALMA', 'DOBRO', 'OURO', 'CRU', 'BRUTO', 'ENERGIA', 'REVOLTA', 'SUAV'];
 
   // ---- SYNTH LIFECYCLE ----
   useEffect(() => {
@@ -456,7 +474,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
   const handleCanvasClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (synthRef.current?.ctx.state === 'suspended') synthRef.current.ctx.resume();
+    resumeAudio();
     const state = stateRef.current;
     if (controlMode === 'mobile') return;  // mobile uses the on-screen pads, not click-to-shoot
     if (!isPlaying || state.blasterCharges < 1) return;
@@ -469,7 +487,15 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   };
 
   // ---- MOBILE TOUCH HANDLERS ----
-  const resumeAudio = () => { if (synthRef.current?.ctx.state === 'suspended') synthRef.current.ctx.resume(); };
+  // Mobile audio unlock: iOS only lets a Web Audio context start from inside a user gesture.
+  // The synth was previously created in a React effect (after the tap), so its context was born
+  // outside any gesture and stayed suspended → no sound on phone. Create it lazily HERE (called
+  // from the INITIALIZE tap and every pad press) so the context is born + resumed in-gesture.
+  const resumeAudio = () => {
+    if (!synthRef.current) synthRef.current = new ArcadeSynth();
+    const c = synthRef.current.ctx;
+    if (c.state === 'suspended') c.resume().catch(() => {});
+  };
 
   // Right pad — tap to jump (same as W/↑).
   const onJumpTouch = (e: React.PointerEvent) => { e.preventDefault(); e.stopPropagation(); resumeAudio(); jumpRef.current?.(); };
@@ -554,7 +580,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   // ---- MAIN LOOP ----
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d'); if (!ctx) return;
+    // alpha:false → opaque canvas. The bg is repainted full-screen every frame anyway, so we
+    // gain nothing from a transparent backing store and the browser can composite it faster.
+    const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D; if (!ctx) return;
     // Mobile perf: the neon glow (canvas shadowBlur) is by far the most expensive op on phone
     // GPUs — applied to nearly every draw it murders the framerate. Clamp it to 0 on mobile so
     // the shapes/colours stay but the costly bloom halos are skipped. Desktop keeps the glow.
@@ -564,7 +592,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     const state = stateRef.current;
 
     const spawnBanner = () => {
-      const pool = ['ENTROPY SIMULATION', 'CORE STABILITY LOSS', 'CRITICAL LIFELINE', 'SURVIVAL PARAMETER', 'DISSENT MATRIX'];
+      const pool = ['SIMULAÇÃO DE ENTROPIA', 'PERDA DE ESTABILIDADE', 'LINHA DE VIDA CRÍTICA', 'PARÂMETRO DE SOBREVIVÊNCIA', 'MATRIZ DE REVOLTA'];
       state.bannerTexts.push({ text: pool[Math.floor(Math.random() * pool.length)], x: canvas.width + 160, y: Math.random() * canvas.height * 0.45 + 100, speed: Math.random() * 1.5 + 1, size: Math.floor(Math.random() * 40) + 45, alpha: Math.random() * 0.03 + 0.015, driftY: (Math.random() - 0.5) * 0.2 });
     };
 
@@ -669,13 +697,13 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       } else if (p.jumpCount === 1) {
         p.vy = -12.4; p.jumpCount = 2; p.stretch = 1.45; state.jumpBufferCounter = 0;
         burst(p.x + p.width / 2, p.y + p.height / 2, '#ffe65c', 20, 3.5);
-        floatFeedback(p.x, p.y - 20, 'DOUBLE LEAP');
+        floatFeedback(p.x, p.y - 20, 'SALTO DUPLO');
         synthRef.current?.playJump();
       } else if (p.jumpCount === 2 && !p.isGrounded && state.tripleJumpTicks > 0) {
         p.vy = -11.5; p.jumpCount = 3; p.stretch = 1.55; state.jumpBufferCounter = 0;
         burst(p.x + p.width / 2, p.y + p.height / 2, '#cc44ff', 30, 5);
         burst(p.x + p.width / 2, p.y + p.height / 2, '#ffffff', 15, 4);
-        floatFeedback(p.x, p.y - 20, 'TRIPLE LEAP!');
+        floatFeedback(p.x, p.y - 20, 'SALTO TRIPLO!');
         synthRef.current?.playTripleJump();
       } else if (p.jumpCount >= 2 && !p.isGrounded && state.floatTicks > 0) {
         // FLOAT — infinite jumps while active
@@ -685,7 +713,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       } else if (p.jumpCount === 2 && !p.isGrounded) {
         p.vy = 18.5; p.jumpCount = 3; state.jumpBufferCounter = 0;
         burst(p.x + p.width / 2, p.y, '#ffffff', 15, 4.5);
-        floatFeedback(p.x, p.y - 20, 'GRAVITY STAMP');
+        floatFeedback(p.x, p.y - 20, 'PANCADA GRAVÍTICA');
       }
     };
 
@@ -702,13 +730,13 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
         setEasterEggMode('ouro'); synthRef.current?.playOuroMode();
         state.calmTicks = 60 * 20; state.screenFlash = 1.0;
         for (let ring = 0; ring < 8; ring++) setTimeout(() => burst(state.player.x + PW/2, state.player.y + PH/2, ['#ffd700','#ffe65c','#ffffff','#ff44ff'][ring%4], 50, 10+ring), ring * 80);
-        toast('✨ [DEV] OURO MODE — INFINITE JUMPS + MAGNET + ×10 SCORE 20 SEC ✨');
+        toast('✨ [DEV] MODO OURO — SALTOS INFINITOS + ÍMAN + ×10 PONTOS 20 SEG ✨');
         return;
       }
       if (DEBUG && e.code === 'KeyG') {
         state.easterEggMode = 'ghost_run'; state.easterEggTicks = 60 * 20;
         setEasterEggMode('ghost_run'); synthRef.current?.playGhostRun();
-        toast('👻 [DEV] GHOST RUN MODE — 20 SEC');
+        toast('👻 [DEV] CORRIDA FANTASMA — 20 SEG');
         return;
       }
       if (DEBUG && e.code === 'KeyB') {
@@ -717,7 +745,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
         state.speedBoostTicks = 60 * 8; setSpeedBoosted(true);
         state.screenFlash = 0.8;
         burst(state.player.x + PW/2, state.player.y + PH/2, '#ff0000', 60, 10);
-        toast('🔥 [DEV] BERSERKER — 8 SEC');
+        toast('🔥 [DEV] BERSERKER — 8 SEG');
         return;
       }
       if (DEBUG && e.code === 'KeyP') {
@@ -732,7 +760,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           health: 1, zigzagPhase: Math.random() * Math.PI * 2, bomberDropped: false,
         });
         synthRef.current?.playFloatCrystal();
-        toast('🌈 [DEV] PRISM INCOMING — SHOOT IT');
+        toast('🌈 [DEV] PRISMA A CHEGAR — DISPARA');
         return;
       }
       if (DEBUG && e.code === 'KeyU') {
@@ -747,7 +775,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           health: 1, zigzagPhase: Math.random() * Math.PI * 2, bomberDropped: false,
         });
         synthRef.current?.playOuroMode();
-        toast('🦄 [DEV] UNICORN INCOMING — CATCH OR SHOOT IT');
+        toast('🦄 [DEV] UNICÓRNIO A CHEGAR — APANHA OU DISPARA');
         return;
       }
       if (DEBUG && e.code === 'KeyC') {
@@ -762,14 +790,14 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           health: 1, zigzagPhase: Math.random() * Math.PI * 2, bomberDropped: false,
         });
         synthRef.current?.playGoldenKill();
-        toast('🏆 [DEV] GOLD CHARIOT INCOMING — SHOOT IT');
+        toast('🏆 [DEV] CARRUAGEM DOURADA A CHEGAR — DISPARA');
         return;
       }
       if (DEBUG && e.code === 'KeyJ') {
         // Drop a PURPLE UNICORN pickup at the top edge — fetch it
         state.crystals.push({ x: canvas.width * 0.75, y: 24, size: 46, collected: false, pulseOffset: Math.random() * Math.PI * 2, isPurpleUnicorn: true });
         synthRef.current?.playFloatCrystal();
-        toast('🦄 [DEV] PURPLE UNICORN AT TOP — FETCH IT');
+        toast('🦄 [DEV] UNICÓRNIO ROXO NO TOPO — VAI BUSCAR');
         return;
       }
 
@@ -1167,7 +1195,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             synthRef.current?.playBomberDrop();
             state.meteorIdInc++;
             state.meteors.push({ id: state.meteorIdInc, x: al.x, y: al.y, size: 28, vx: 0, vy: 5 + diffTier * 0.3, rotation: 0, alive: true });
-            floatFeedback(al.x, al.y - 20, 'BOMB DROPPED!');
+            floatFeedback(al.x, al.y - 20, 'BOMBA LARGADA!');
           }
         } else if (al.type === 'prism') {
           // Slow, hypnotic float — gentle wide sine bob, no tracking (it's a catchable bonus)
@@ -1227,7 +1255,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
             // ---- PERFECT SHOT CHECK ----
             const isPerfect = state.lastChargeRatio >= 0.9;
-            if (isPerfect) { synthRef.current?.playPerfectShot(); burst(al.x + al.width / 2, al.y + al.height / 2, '#ffffff', 20, 6); floatFeedback(al.x, al.y - 25, 'PERFECT SHOT!'); state.screenFlash = 0.12; }
+            if (isPerfect) { synthRef.current?.playPerfectShot(); burst(al.x + al.width / 2, al.y + al.height / 2, '#ffffff', 20, 6); floatFeedback(al.x, al.y - 25, 'TIRO PERFEITO!'); state.screenFlash = 0.12; }
             // Egg-mode kill score multiplier — OURO ×5, BERSERKER ×4, GHOST RUN ×3
             const ouroMult =
               state.easterEggMode === 'ouro'      ? 5 :
@@ -1295,7 +1323,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
               drop({ isTime: true }); drop({ isGhost: true }); drop({ isDoubleTap: true });
               drop({ isOvercharge: true }); drop({ isMirror: true }); drop({ isFloat: true });
               drop({ isGolden: true, size: 30 });
-              toast('🌈 PRISM SHATTERED — EVERY CRYSTAL TYPE DROPPED!');
+              toast('🌈 PRISMA DESTRUÍDO — CAÍRAM TODOS OS TIPOS DE CRISTAL!');
 
               const pts = (1000 + tier * 100) * Math.max(1, state.killCombo) * (isPerfect ? 3 : 1) * ouroMult;
               setScore(prev => prev + pts);
@@ -1320,7 +1348,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             state.comboTimer = 0;
             setComboCount(state.killCombo);
             synthRef.current?.playCombo(state.killCombo);
-            if (hasPerk('aliens drop charges') && Math.random() > 0.4) { state.blasterCharges++; setBlasterCharges(state.blasterCharges); floatFeedback(al.x, al.y - 25, 'CHARGE DROP!'); }
+            if (hasPerk('aliens drop charges') && Math.random() > 0.4) { state.blasterCharges++; setBlasterCharges(state.blasterCharges); floatFeedback(al.x, al.y - 25, 'CARGA EXTRA!'); }
 
             // Ghost run — alien drops a crystal when killed during ghost run mode
             if (state.easterEggMode === 'ghost_run') {
@@ -1352,18 +1380,18 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
               if (state.killCombo === 2) {
                 state.blasterCharges++; setBlasterCharges(state.blasterCharges);
                 synthRef.current?.playCharge(); state.calmTicks = 60 * 4;
-                toast('COMBO ×2 — FREE CHARGE + CALM'); burst(p.x + p.width / 2, p.y, '#ffe65c', 25, 6);
+                toast('COMBO ×2 — CARGA GRÁTIS + CALMA'); burst(p.x + p.width / 2, p.y, '#ffe65c', 25, 6);
               } else if (state.killCombo === 3) {
                 state.speedBoostTicks = 60 * 3; setSpeedBoosted(true);
                 synthRef.current?.playSpeedBoost(); state.calmTicks = 60 * 6;
-                if (state.weaponTier < 1) { state.weaponTier = 1; setWeaponTier(1); toast('COMBO ×3 — WIDE SHOT UNLOCKED + UNTOUCHABLE'); }
-                else toast('COMBO ×3 — UNTOUCHABLE + CALM 6 SEC');
+                if (state.weaponTier < 1) { state.weaponTier = 1; setWeaponTier(1); toast('COMBO ×3 — TIRO LARGO + INTOCÁVEL'); }
+                else toast('COMBO ×3 — INTOCÁVEL + CALMA 6 SEG');
                 burst(p.x + p.width / 2, p.y + p.height / 2, '#00cfff', 40, 8);
               } else if (state.killCombo === 5) {
                 state.speedBoostTicks = 60 * 5; setSpeedBoosted(true);
                 synthRef.current?.playSpeedBoost(); state.calmTicks = 60 * 10;
-                if (state.weaponTier < 2) { state.weaponTier = 2; setWeaponTier(2); toast('COMBO ×5 — RAPID FIRE UNLOCKED + GODMODE'); }
-                else toast('COMBO ×5 — GODMODE ×3 SCORE + CALM 10 SEC');
+                if (state.weaponTier < 2) { state.weaponTier = 2; setWeaponTier(2); toast('COMBO ×5 — TIRO RÁPIDO + MODO DEUS'); }
+                else toast('COMBO ×5 — MODO DEUS ×3 PONTOS + CALMA 10 SEG');
                 burst(p.x + p.width / 2, p.y + p.height / 2, '#ffe65c', 50, 9);
                 burst(p.x + p.width / 2, p.y + p.height / 2, '#ffffff', 20, 5);
               } else if (state.killCombo > 5 && state.killCombo % 2 === 0) {
@@ -1380,23 +1408,23 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           if (al.type === 'unicorn') { al.alive = false; blessUnicorn(al.x + al.width / 2, al.y + al.height / 2); return; }
           if (al.type === 'chariot') { al.alive = false; rewardChariot(al.x + al.width / 2, al.y + al.height / 2, Math.max(1, state.killCombo), true); return; }
           // Ghost mode — pass through, no damage
-          if (state.ghostTicks > 0) { floatFeedback(al.x, al.y - 10, 'GHOST!'); return; }
+          if (state.ghostTicks > 0) { floatFeedback(al.x, al.y - 10, 'FANTASMA!'); return; }
           al.alive = false;
           if (al.type === 'super') state.superAlienSpawned = false;
           if (state.speedBoostTicks > 0) {
-            burst(al.x + al.width / 2, al.y + al.height / 2, '#00cfff', 12, 4); floatFeedback(al.x, al.y - 10, 'INVINCIBLE!');
+            burst(al.x + al.width / 2, al.y + al.height / 2, '#00cfff', 12, 4); floatFeedback(al.x, al.y - 10, 'INVENCÍVEL!');
           } else if (state.shieldActive && al.type !== 'sniper') {
             // Shield blocks everything EXCEPT sniper
             state.shieldActive = false; setHasShield(false);
             synthRef.current?.playShieldBreak();
             burst(p.x + p.width / 2, p.y + p.height / 2, '#00cfff', 30, 6);
-            toast('SHIELD ABSORBED THE HIT'); floatFeedback(p.x, p.y - 20, 'SHIELD BLOCK!');
+            toast('O ESCUDO ABSORVEU O GOLPE'); floatFeedback(p.x, p.y - 20, 'BLOQUEIO!');
           } else {
             if (state.shieldActive && al.type === 'sniper') {
               // Sniper one-shots shield AND still damages
               state.shieldActive = false; setHasShield(false);
               synthRef.current?.playShieldBreak();
-              toast('⚠ SNIPER PIERCED YOUR SHIELD!');
+              toast('⚠ O SNIPER FUROU O TEU ESCUDO!');
             }
             const dmg = al.type === 'super' ? 35 : al.type === 'tank' ? 30 : al.type === 'sniper' ? 25 : 20;
             state.coreStability = Math.max(0, state.coreStability - dmg);
@@ -1405,7 +1433,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             state.calmTicks = 0;
             synthRef.current?.playHurt();
             burst(p.x + p.width / 2, p.y + p.height / 2, '#ff4e3e', 18, 4);
-            floatFeedback(p.x, p.y - 20, al.type === 'super' ? 'SUPER IMPACT!' : al.type === 'sniper' ? 'SNIPER HIT!' : al.type === 'tank' ? 'TANK SLAM!' : 'IMPACT!');
+            floatFeedback(p.x, p.y - 20, al.type === 'super' ? 'SUPER IMPACTO!' : al.type === 'sniper' ? 'TIRO DE SNIPER!' : al.type === 'tank' ? 'PANCADA DE TANQUE!' : 'IMPACTO!');
             if (!hasPerk('combo never resets')) { state.killCombo = 0; setComboCount(0); }
           }
         }
@@ -1422,13 +1450,13 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             pr.alive = false; m.alive = false;
             synthRef.current?.playExplosion();
             burst(m.x + m.size / 2, m.y + m.size / 2, '#ffffff', 16, 4);
-            setScore(prev => prev + 200); floatFeedback(m.x, m.y, 'SHOT DOWN +200');
+            setScore(prev => prev + 200); floatFeedback(m.x, m.y, 'ABATIDO +200');
           }
         }
         if (m.alive && p.x < m.x + m.size && p.x + p.width > m.x && p.y < m.y + m.size && p.y + p.height > m.y) {
           m.alive = false;
-          if (state.speedBoostTicks > 0) { burst(m.x + m.size / 2, m.y + m.size / 2, '#00cfff', 16, 5); floatFeedback(m.x, m.y, 'INVINCIBLE!'); }
-          else if (state.shieldActive) { state.shieldActive = false; setHasShield(false); synthRef.current?.playShieldBreak(); burst(p.x + p.width / 2, p.y + p.height / 2, '#00cfff', 30, 6); toast('SHIELD ABSORBED THE HIT'); }
+          if (state.speedBoostTicks > 0) { burst(m.x + m.size / 2, m.y + m.size / 2, '#00cfff', 16, 5); floatFeedback(m.x, m.y, 'INVENCÍVEL!'); }
+          else if (state.shieldActive) { state.shieldActive = false; setHasShield(false); synthRef.current?.playShieldBreak(); burst(p.x + p.width / 2, p.y + p.height / 2, '#00cfff', 30, 6); toast('O ESCUDO ABSORVEU O GOLPE'); }
           else { state.coreStability = Math.max(0, state.coreStability - 25); state.screenShake = 4; state.screenFlash = 0.45; synthRef.current?.playHurt(); burst(p.x + p.width / 2, p.y + p.height / 2, '#ffffff', 22, 5); floatFeedback(p.x, p.y - 20, 'METEOR BREACH'); if (!hasPerk('combo never resets')) { state.killCombo = 0; setComboCount(0); } }
         }
       });
@@ -1480,8 +1508,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             setTimeSlow(true);
             synthRef.current?.playTimeCrystal();
             burst(c.x + c.size / 2, c.y + c.size / 2, '#4488ff', 40, 7);
-            toast('⏱ TIME CRYSTAL — SLOW WORLD 8 SEC');
-            floatFeedback(c.x, c.y - 15, 'TIME WARP!');
+            toast('⏱ CRISTAL DO TEMPO — MUNDO LENTO 8 SEG');
+            floatFeedback(c.x, c.y - 15, 'DOBRA TEMPORAL!');
             return;
           }
 
@@ -1492,8 +1520,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             synthRef.current?.playGhostCrystal();
             burst(c.x + c.size / 2, c.y + c.size / 2, '#ffffff', 40, 7);
             state.calmTicks = Math.max(state.calmTicks, 60 * 5);
-            toast('👻 GHOST CRYSTAL — UNTOUCHABLE + INVISIBLE 5 SEC');
-            floatFeedback(c.x, c.y - 15, 'GHOST MODE!');
+            toast('👻 CRISTAL FANTASMA — INTOCÁVEL + INVISÍVEL 5 SEG');
+            floatFeedback(c.x, c.y - 15, 'MODO FANTASMA!');
             return;
           }
 
@@ -1501,8 +1529,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           if (c.isDoubleTap) {
             state.doubleTapReady = true;
             burst(c.x + c.size / 2, c.y + c.size / 2, '#ff8800', 35, 6);
-            toast('⚡ DOUBLE TAP — NEXT SHOT FIRES TWICE');
-            floatFeedback(c.x, c.y - 15, 'DOUBLE TAP!');
+            toast('⚡ TOQUE DUPLO — O PRÓXIMO TIRO DISPARA DUAS VEZES');
+            floatFeedback(c.x, c.y - 15, 'TOQUE DUPLO!');
             return;
           }
 
@@ -1511,8 +1539,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             state.overchargeReady = true;
             burst(c.x + c.size / 2, c.y + c.size / 2, '#ffff00', 35, 6);
             state.screenFlash = 0.25;
-            toast('⚡ OVERCHARGE — NEXT SHOT AT FULL POWER');
-            floatFeedback(c.x, c.y - 15, 'OVERCHARGE!');
+            toast('⚡ SOBRECARGA — PRÓXIMO TIRO NO MÁXIMO');
+            floatFeedback(c.x, c.y - 15, 'SOBRECARGA!');
             return;
           }
 
@@ -1524,8 +1552,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             // Reverse all alive aliens
             state.aliens.forEach(al => { al.vx = Math.abs(al.vx) * 0.7; });
             burst(c.x + c.size / 2, c.y + c.size / 2, '#aaaaff', 40, 7);
-            toast('🪞 MIRROR CRYSTAL — ALIENS REVERSED 6 SEC');
-            floatFeedback(c.x, c.y - 15, 'MIRROR!');
+            toast('🪞 CRISTAL ESPELHO — ALIENS INVERTIDOS 6 SEG');
+            floatFeedback(c.x, c.y - 15, 'ESPELHO!');
             return;
           }
 
@@ -1538,8 +1566,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             burst(c.x + c.size / 2, c.y + c.size / 2, '#ff44ff', 50, 8);
             burst(c.x + c.size / 2, c.y + c.size / 2, '#ffffff', 25, 5);
             state.screenFlash = 0.3; state.calmTicks = Math.max(state.calmTicks, 60 * 15);
-            toast('✨ FLOAT CRYSTAL — INFINITE JUMPS 17 SEC // COLLECT 7 AIRBORNE FOR OURO MODE');
-            floatFeedback(c.x, c.y - 15, 'FLOAT!');
+            toast('✨ CRISTAL FLUTUAR — SALTOS INFINITOS 17 SEG // APANHA 7 NO AR PARA O MODO OURO');
+            floatFeedback(c.x, c.y - 15, 'FLUTUAR!');
             return;
           }
 
@@ -1580,17 +1608,17 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             state.tripleJumpTicks = 60 * 15; setTripleJumpActive(true);
             synthRef.current?.playTripleJump();
             burst(c.x + c.size / 2, c.y + c.size / 2, '#cc44ff', 40, 7);
-            toast('TRIPLE JUMP — 15 SEC'); floatFeedback(c.x, c.y - 15, 'TRIPLE JUMP!');
+            toast('SALTO TRIPLO — 15 SEG'); floatFeedback(c.x, c.y - 15, 'SALTO TRIPLO!');
           } else if (c.isMagnet) {
             state.magnetTicks = 60 * 8; setMagnetActive(true);
             synthRef.current?.playMagnet();
             burst(c.x + c.size / 2, c.y + c.size / 2, '#ff44aa', 40, 7);
-            toast('CRYSTAL MAGNET — 8 SEC'); floatFeedback(c.x, c.y - 15, 'MAGNET!');
+            toast('ÍMAN DE CRISTAIS — 8 SEG'); floatFeedback(c.x, c.y - 15, 'ÍMAN!');
           } else if (c.isShield) {
             state.shieldActive = true; setHasShield(true);
             synthRef.current?.playShield();
             burst(c.x + c.size / 2, c.y + c.size / 2, '#00cfff', 40, 7);
-            toast('🛡 SHIELD ONLINE — NEXT HIT BLOCKED'); floatFeedback(c.x, c.y - 15, 'SHIELD!');
+            toast('🛡 ESCUDO ATIVO — PRÓXIMO GOLPE BLOQUEADO'); floatFeedback(c.x, c.y - 15, 'ESCUDO!');
           } else {
             // REGULAR CRYSTAL
             state.crystalsTotal++;
@@ -1620,7 +1648,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             else floatFeedback(c.x, c.y - 15, `+${pts}`);
 
             if (state.crystalChain === 5) {
-              toast('CRYSTAL CHAIN ×5 — BONUS CHARGE');
+              toast('CADEIA DE CRISTAIS ×5 — CARGA BÓNUS');
               state.blasterCharges++; setBlasterCharges(state.blasterCharges);
               burst(c.x + c.size / 2, c.y + c.size / 2, '#ffffff', 35, 7);
             }
@@ -1640,7 +1668,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                 state.magnetTicks = 60 * 20; setMagnetActive(true);
                 state.scoreMultTicks = 60 * 20; setScoreMultActive(true);
                 for (let ring = 0; ring < 10; ring++) setTimeout(() => burst(p.x + PW/2, p.y + PH/2, ['#ffd700','#ffe65c','#ffffff','#ff44ff'][ring%4], 50, 10+ring), ring * 80);
-                toast('✨ OURO MODE — INFINITE JUMPS + MAGNET + ×5×2 SCORE 20 SEC ✨');
+                toast('✨ MODO OURO — SALTOS INFINITOS + ÍMAN + ×5×2 PONTOS 20 SEG ✨');
               }
             }
             if (state.crystalsSinceCharge >= (hasPerk('blaster fast') ? 3 : 5)) {
@@ -1660,7 +1688,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                 // Place at a comfortable mid-screen height — always reachable
                 const spawnY = canvas.height * 0.35 + (Math.random() - 0.5) * canvas.height * 0.2;
                 s.crystals.push({ x: spawnX, y: spawnY, size: 30, collected: false, pulseOffset: Math.random() * Math.PI * 2, isGolden: true });
-                toast('✦ GOLDEN CRYSTAL INCOMING — HIGH VALUE');
+                toast('✦ CRISTAL DOURADO A CHEGAR — ALTO VALOR');
               }, 800);
             }
           }
@@ -1692,7 +1720,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       // Boss wave every 40 crystals
       if (state.crystalsSinceBoss >= 40 && !state.boss && state.crystalsTotal >= 40) {
         state.crystalsSinceBoss = 0;
-        const BOSS_NAMES = ['ENTROPY PRIME', 'VOID ARCHITECT', 'CORE BREAKER', 'SIGNAL GHOST', 'ZERO PROTOCOL', 'NULL DAEMON', 'OMEGA RIFT'];
+        const BOSS_NAMES = ['ENTROPIA PRIME', 'ARQUITETO DO VAZIO', 'QUEBRA-NÚCLEO', 'FANTASMA DE SINAL', 'PROTOCOLO ZERO', 'DAEMON NULO', 'FENDA ÓMEGA'];
         const bname = BOSS_NAMES[state.bossCount % BOSS_NAMES.length];
         const bossHp    = 3 + state.bossCount;               // boss 1=3hp, 2=4hp, 3=5hp...
         const bossSpeed = -(2.8 + state.bossCount * 0.3);    // gets faster each time
@@ -1700,8 +1728,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
         state.boss = { x: canvas.width + 80, y: canvas.height / 2 - 50, width: 80, height: 80, health: bossHp, maxHealth: bossHp, vx: bossSpeed, phase: 0, animFrame: 0, alive: true, name: bname, pattern, chargeVy: 0, shootCooldown: 80 };
         state.bossProjectiles = [];
         synthRef.current?.playBossIntro();
-        const patternLabel = pattern === 0 ? 'TRACKING' : pattern === 1 ? 'CHARGING' : pattern === 2 ? 'SHOOTING' : 'ALL PATTERNS';
-        toast(`⚠ BOSS #${state.bossCount + 1} — ${bname} [${patternLabel}] ${bossHp}HP`);
+        const patternLabel = pattern === 0 ? 'PERSEGUIR' : pattern === 1 ? 'INVESTIDA' : pattern === 2 ? 'DISPARO' : 'TUDO';
+        toast(`⚠ CHEFE #${state.bossCount + 1} — ${bname} [${patternLabel}] ${bossHp}HP`);
         state.aliens = [];
       }
 
@@ -1749,9 +1777,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           if (!bp.alive) return;
           if (p.x < bp.x + 10 && p.x + PW > bp.x && p.y < bp.y + 10 && p.y + PH > bp.y) {
             bp.alive = false;
-            if (state.speedBoostTicks > 0) { floatFeedback(bp.x, bp.y, 'INVINCIBLE!'); }
-            else if (state.shieldActive) { state.shieldActive = false; setHasShield(false); synthRef.current?.playShieldBreak(); toast('SHIELD BLOCKED BOSS SHOT'); }
-            else { state.coreStability = Math.max(0, state.coreStability - 14); state.screenFlash = 0.3; state.screenShake = 2; synthRef.current?.playHurt(); if (!hasPerk('combo never resets')) { state.killCombo = 0; setComboCount(0); } floatFeedback(p.x, p.y - 20, 'BOSS SHOT!'); }
+            if (state.speedBoostTicks > 0) { floatFeedback(bp.x, bp.y, 'INVENCÍVEL!'); }
+            else if (state.shieldActive) { state.shieldActive = false; setHasShield(false); synthRef.current?.playShieldBreak(); toast('O ESCUDO BLOQUEOU O TIRO DO CHEFE'); }
+            else { state.coreStability = Math.max(0, state.coreStability - 14); state.screenFlash = 0.3; state.screenShake = 2; synthRef.current?.playHurt(); if (!hasPerk('combo never resets')) { state.killCombo = 0; setComboCount(0); } floatFeedback(p.x, p.y - 20, 'TIRO DO CHEFE!'); }
           }
         });
         state.bossProjectiles = state.bossProjectiles.filter(bp => bp.alive && bp.x > -20 && bp.x < canvas.width + 20 && bp.y > -20 && bp.y < canvas.height + 20);
@@ -1763,7 +1791,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             pr.alive = false; b.health--;
             synthRef.current?.playBossHit();
             burst(b.x + b.width / 2, b.y + b.height / 2, '#ff4e3e', 20, 5);
-            floatFeedback(b.x, b.y - 10, b.health > 0 ? `BOSS HIT! ${b.health} LEFT` : 'FINAL HIT!');
+            floatFeedback(b.x, b.y - 10, b.health > 0 ? `CHEFE ATINGIDO! RESTAM ${b.health}` : 'GOLPE FINAL!');
             if (b.health <= 0) {
               b.alive = false; state.boss = null; state.bossProjectiles = [];
               synthRef.current?.playBossKill();
@@ -1780,16 +1808,16 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
               setScore(prev => prev + bpts);
               state.screenFlash = 0.9;
               for (let ring = 0; ring < 8; ring++) setTimeout(() => burst(b.x + b.width / 2, b.y + b.height / 2, ['#ff4e3e','#ffe65c','#ffffff','#cc44ff','#00cfff'][ring % 5], 35, 8 + ring * 2), ring * 60);
-              toast(`BOSS #${state.bossCount} OBLITERATED — +${bpts.toLocaleString()} // NEXT BOSS: ${state.bossCount + 1}HP, FASTER`);
+              toast(`CHEFE #${state.bossCount} OBLITERADO — +${bpts.toLocaleString()} // PRÓXIMO CHEFE: ${state.bossCount + 1}HP, MAIS RÁPIDO`);
             }
           }
         }
 
         // Boss body collision
         if (b.alive && p.x < b.x + b.width && p.x + PW > b.x && p.y < b.y + b.height && p.y + PH > b.y) {
-          if (state.speedBoostTicks > 0) { floatFeedback(p.x, p.y - 20, 'INVINCIBLE!'); }
-          else if (state.shieldActive) { state.shieldActive = false; setHasShield(false); synthRef.current?.playShieldBreak(); burst(p.x + PW / 2, p.y + PH / 2, '#00cfff', 25, 6); toast('SHIELD BLOCKED BOSS COLLISION'); }
-          else { state.coreStability = Math.max(0, state.coreStability - 28); state.screenShake = 5; state.screenFlash = 0.5; state.calmTicks = 0; synthRef.current?.playHurt(); if (!hasPerk('combo never resets')) { state.killCombo = 0; setComboCount(0); } burst(p.x + PW / 2, p.y + PH / 2, '#ff4e3e', 25, 5); floatFeedback(p.x, p.y - 20, 'BOSS COLLISION!'); }
+          if (state.speedBoostTicks > 0) { floatFeedback(p.x, p.y - 20, 'INVENCÍVEL!'); }
+          else if (state.shieldActive) { state.shieldActive = false; setHasShield(false); synthRef.current?.playShieldBreak(); burst(p.x + PW / 2, p.y + PH / 2, '#00cfff', 25, 6); toast('O ESCUDO BLOQUEOU A COLISÃO COM O CHEFE'); }
+          else { state.coreStability = Math.max(0, state.coreStability - 28); state.screenShake = 5; state.screenFlash = 0.5; state.calmTicks = 0; synthRef.current?.playHurt(); if (!hasPerk('combo never resets')) { state.killCombo = 0; setComboCount(0); } burst(p.x + PW / 2, p.y + PH / 2, '#ff4e3e', 25, 5); floatFeedback(p.x, p.y - 20, 'COLISÃO COM O CHEFE!'); }
         }
         if (b.x + b.width < -100) { state.boss = null; state.bossProjectiles = []; }
       }
@@ -1810,7 +1838,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       if (state.gameTicks % 600 === 0 && state.gameTicks > 0) {
         const streakBonus = state.streakTicks * 50 * Math.max(1, state.killCombo);
         setScore(prev => prev + streakBonus);
-        floatFeedback(p.x, p.y - 30, `SURVIVAL +${streakBonus}`);
+        floatFeedback(p.x, p.y - 30, `SOBREVIVÊNCIA +${streakBonus}`);
       }
 
       // Platform + crystal generation
@@ -1994,7 +2022,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       sd.matrixColumns.forEach(col => { col.chars.forEach((ch, idx) => { const cy=col.y+idx*18; if(cy>0&&cy<canvas.height){ ctx.fillStyle=idx===col.chars.length-1?sc:`rgba(255,78,62,${0.08+(idx/col.chars.length)*0.28})`; ctx.fillText(ch,col.x,cy); } }); }); ctx.restore();
 
       // Banners
-      ctx.save(); sd.bannerTexts.forEach(b => { ctx.font=`900 ${b.size}px "Helvetica Neue",sans-serif`; ctx.fillStyle=`rgba(255,78,62,${glitch?b.alpha*2.5:b.alpha})`; ctx.fillText(b.text,b.x,b.y); }); ctx.restore();
+      // Faint scrolling banner words — atmospheric only (alpha ~0.02). Skipped on mobile: each is
+      // a large fillText + font switch per frame and the effect is barely perceptible on a phone.
+      if (controlMode !== 'mobile') { ctx.save(); sd.bannerTexts.forEach(b => { ctx.font=`900 ${b.size}px "Helvetica Neue",sans-serif`; ctx.fillStyle=`rgba(255,78,62,${glitch?b.alpha*2.5:b.alpha})`; ctx.fillText(b.text,b.x,b.y); }); ctx.restore(); }
 
       // Distance watermark
       ctx.save(); ctx.font='900 13vw "Helvetica Neue",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -2499,8 +2529,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             onPointerDown={onFireDown} onPointerUp={onFireUp} onPointerCancel={onFireUp} onContextMenu={e => e.preventDefault()}>
             <div className="absolute top-1/2 -translate-y-1/2 left-5 w-20 h-20 rounded-full border-2 border-[#ff4e3e]/50 bg-[#ff4e3e]/10 backdrop-blur-sm flex flex-col items-center justify-center text-[#ff4e3e]/80 font-mono pointer-events-none active:bg-[#ff4e3e]/25">
               <span className="text-2xl leading-none">✦</span>
-              <span className="text-[9px] tracking-widest mt-1">FIRE</span>
-              <span className="text-[7px] tracking-widest opacity-70">HOLD</span>
+              <span className="text-[9px] tracking-widest mt-1">FOGO</span>
+              <span className="text-[7px] tracking-widest opacity-70">SEGURA</span>
             </div>
           </div>
           <div
@@ -2508,7 +2538,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             onPointerDown={onJumpTouch} onContextMenu={e => e.preventDefault()}>
             <div className="absolute top-1/2 -translate-y-1/2 right-5 w-20 h-20 rounded-full border-2 border-brandYellow/50 bg-brandYellow/10 backdrop-blur-sm flex flex-col items-center justify-center text-brandYellow/80 font-mono pointer-events-none active:bg-brandYellow/25">
               <span className="text-2xl leading-none">⤒</span>
-              <span className="text-[9px] tracking-widest mt-1">JUMP</span>
+              <span className="text-[9px] tracking-widest mt-1">SALTO</span>
             </div>
           </div>
         </div>
@@ -2517,12 +2547,12 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
       <div className={`absolute flex justify-between items-start font-mono pointer-events-none z-10 select-none ${mob ? 'top-2 left-2 right-2 gap-2' : 'top-6 left-6 right-6'}`}>
         <div className="flex flex-col">
-          <span className={`text-brandRed opacity-60 uppercase tracking-widest ${mob ? 'text-[8px]' : 'text-xs'}`}>ARCADE HARDCORE CORE</span>
-          {!mob && <BrandText text="ENDLESS SIMULATION" className="text-2xl text-brandYellow font-bold uppercase leading-none" />}
+          <span className={`text-brandRed opacity-60 uppercase tracking-widest ${mob ? 'text-[8px]' : 'text-xs'}`}>NÚCLEO ARCADE HARDCORE</span>
+          {!mob && <BrandText text="SIMULAÇÃO INFINITA" className="text-2xl text-brandYellow font-bold uppercase leading-none" />}
         </div>
         <div className={`flex flex-col items-center px-2 pt-1 ${mob ? 'w-32' : 'w-64 md:w-80 px-4'}`}>
           <div className={`w-full flex justify-between text-brandYellow font-bold uppercase tracking-widest pb-1 ${mob ? 'text-[8px]' : 'text-[10px]'}`}>
-            <span>CORE STABILITY</span>
+            <span>ESTABILIDADE</span>
             <span className={stability < 35 ? 'text-brandRed animate-pulse font-black' : 'text-white'}>{stability}%</span>
           </div>
           <div className={`w-full border border-brandYellow/40 bg-black/60 p-[2px] ${mob ? 'h-2' : 'h-3'}`}>
@@ -2530,11 +2560,11 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           </div>
         </div>
         <div className={`flex text-right items-start ${mob ? 'gap-3' : 'gap-6'}`}>
-          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>CRYSTALS</span><span className={`text-brandYellow font-bold ${mob ? 'text-sm' : 'text-xl'}`}>{crystalCount}</span></div>
-          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>SCORE</span><span className={`text-white font-bold tracking-wider ${mob ? 'text-sm' : 'text-xl'}`}>{score.toLocaleString()}</span></div>
-          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>BEST</span><span className={`font-bold ${mob ? 'text-sm' : 'text-xl'} ${score > personalBest && personalBest > 0 ? 'text-[#1ED760] animate-pulse' : 'text-gray-500'}`}>{personalBest > 0 ? personalBest.toLocaleString() : '---'}</span></div>
-          {runStreak > 0 && <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>STREAK</span><span className={`text-[#ff44aa] font-bold ${mob ? 'text-sm' : 'text-xl'}`}>{runStreak}s</span></div>}
-          {stateRef.current.bossSpeedReliefTicks > 0 && <div className="flex flex-col"><span className="text-[9px] text-[#1ED760] opacity-80 uppercase">EASING</span><span className="text-sm text-[#1ED760] font-bold animate-pulse">▼</span></div>}
+          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>CRISTAIS</span><span className={`text-brandYellow font-bold ${mob ? 'text-sm' : 'text-xl'}`}>{crystalCount}</span></div>
+          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>PONTOS</span><span className={`text-white font-bold tracking-wider ${mob ? 'text-sm' : 'text-xl'}`}>{score.toLocaleString()}</span></div>
+          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>RECORDE</span><span className={`font-bold ${mob ? 'text-sm' : 'text-xl'} ${score > personalBest && personalBest > 0 ? 'text-[#1ED760] animate-pulse' : 'text-gray-500'}`}>{personalBest > 0 ? personalBest.toLocaleString() : '---'}</span></div>
+          {runStreak > 0 && <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>TEMPO</span><span className={`text-[#ff44aa] font-bold ${mob ? 'text-sm' : 'text-xl'}`}>{runStreak}s</span></div>}
+          {stateRef.current.bossSpeedReliefTicks > 0 && <div className="flex flex-col"><span className="text-[9px] text-[#1ED760] opacity-80 uppercase">ALÍVIO</span><span className="text-sm text-[#1ED760] font-bold animate-pulse">▼</span></div>}
         </div>
       </div>
 
@@ -2545,11 +2575,11 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
         <div className={`absolute flex flex-col items-end z-30 ${mob ? 'top-12 right-2 gap-1 pointer-events-none scale-[0.78] origin-top-right max-h-[80%] overflow-hidden' : 'top-24 right-6 gap-2 pointer-events-auto'}`}>
           {!mob && <button onClick={e => { e.stopPropagation(); toggleMute(); }}
             className="font-mono text-xs tracking-widest border border-brandYellow/40 px-3 py-1 text-brandYellow/60 hover:text-brandYellow hover:border-brandYellow bg-black/40 transition-all">
-            {isMuted ? '[ UNMUTE ]' : '[ MUTE ]'}
+            {isMuted ? '[ ATIVAR SOM ]' : '[ SILENCIAR ]'}
           </button>}
           <div className="font-mono text-[11px] bg-black/60 border border-brandYellow/30 px-3 py-2 flex flex-col items-end gap-1 pointer-events-none">
             <div className="flex items-center gap-2 w-full justify-between">
-              <span className="text-brandRed opacity-70 tracking-widest uppercase text-[9px]">{weaponTier===0?'STANDARD':weaponTier===1?'WIDE SHOT':weaponTier===2?'RAPID FIRE':'NOVA TIER'}</span>
+              <span className="text-brandRed opacity-70 tracking-widest uppercase text-[9px]">{weaponTier===0?'PADRÃO':weaponTier===1?'TIRO LARGO':weaponTier===2?'TIRO RÁPIDO':'NÍVEL NOVA'}</span>
               <span className={`text-[9px] font-black ${weaponTier===0?'text-gray-500':weaponTier===1?'text-brandYellow':weaponTier===2?'text-[#ff44aa]':'text-[#cc44ff]'}`}>{'▮'.repeat(weaponTier+1)}{'▯'.repeat(3-weaponTier)}</span>
             </div>
             {chargeLevel > 0 && (
@@ -2557,44 +2587,44 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                 <div className="h-full" style={{ width: `${chargeLevel*100}%`, background: chargeLevel>0.9?'#cc44ff':chargeLevel>0.6?'#ff44aa':chargeLevel>0.35?'#ffe65c':'#ff4e3e' }} />
               </div>
             )}
-            {novaReady && <span className="text-[#cc44ff] text-[10px] font-black animate-pulse tracking-widest">NOVA READY — FULL CHARGE</span>}
+            {novaReady && <span className="text-[#cc44ff] text-[10px] font-black animate-pulse tracking-widest">NOVA PRONTA — CARGA MÁXIMA</span>}
             <div className="flex gap-1 items-center">
               {Array.from({ length: Math.max(5, blasterCharges) }).map((_, i) => (
                 <div key={i} className={`w-3 h-3 rotate-45 border ${i < blasterCharges ? 'bg-brandYellow border-brandYellow shadow-[0_0_6px_#ffe65c]' : 'bg-transparent border-brandYellow/20'}`} />
               ))}
-              {blasterCharges === 0 && <span className="text-brandRed/60 text-[9px] ml-1">5 CRYSTALS</span>}
+              {blasterCharges === 0 && <span className="text-brandRed/60 text-[9px] ml-1">5 CRISTAIS</span>}
             </div>
-            <span className={`text-[10px] font-black tracking-widest ${blasterCharges > 0 ? 'text-[#1ED760] animate-pulse' : 'text-gray-600'}`}>{blasterCharges > 0 ? 'HOLD [SPACE] TO CHARGE' : 'NOT CHARGED'}</span>
+            <span className={`text-[10px] font-black tracking-widest ${blasterCharges > 0 ? 'text-[#1ED760] animate-pulse' : 'text-gray-600'}`}>{blasterCharges > 0 ? (mob ? 'SEGURA P/ CARREGAR' : 'SEGURA [ESPAÇO] P/ CARREGAR') : 'SEM CARGA'}</span>
           </div>
           {crystalChain >= 2 && (
             <div className="font-mono bg-black/70 border-2 px-3 py-2 flex flex-col items-end pointer-events-none"
               style={{ borderColor: crystalChain>=5?'#cc44ff':crystalChain>=3?'#ff44aa':'#ffe65c' }}>
-              <span className="text-[9px] opacity-60 uppercase tracking-widest" style={{ color: crystalChain>=5?'#cc44ff':crystalChain>=3?'#ff44aa':'#ffe65c' }}>CRYSTAL CHAIN</span>
+              <span className="text-[9px] opacity-60 uppercase tracking-widest" style={{ color: crystalChain>=5?'#cc44ff':crystalChain>=3?'#ff44aa':'#ffe65c' }}>CADEIA DE CRISTAIS</span>
               <span className="text-2xl font-black leading-none animate-pulse" style={{ color: crystalChain>=5?'#cc44ff':crystalChain>=3?'#ff44aa':'#ffe65c' }}>×{crystalChain}</span>
             </div>
           )}
           {comboCount >= 2 && (
             <div className="font-mono bg-black/70 border-2 border-brandYellow px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,230,92,0.4)]">
-              <span className="text-[9px] text-brandYellow/60 uppercase tracking-widest">KILL COMBO</span>
+              <span className="text-[9px] text-brandYellow/60 uppercase tracking-widest">COMBO DE ABATES</span>
               <span className="text-2xl text-brandYellow font-black leading-none animate-pulse">×{comboCount}</span>
             </div>
           )}
-          {hasShield && <div className="font-mono bg-black/70 border-2 border-[#00cfff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(0,207,255,0.5)]"><span className="text-[9px] text-[#00cfff]/70 uppercase tracking-widest">SHIELD</span><span className="text-sm text-[#00cfff] font-black animate-pulse">ACTIVE</span></div>}
-          {tripleJumpActive && <div className="font-mono bg-black/70 border-2 border-[#cc44ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(204,68,255,0.6)]"><span className="text-[9px] text-[#cc44ff]/70 uppercase tracking-widest">TRIPLE JUMP</span><span className="text-sm text-[#cc44ff] font-black animate-pulse">ACTIVE ↑↑↑</span></div>}
-          {scoreMultActive && <div className="font-mono bg-black/70 border-2 border-brandYellow px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,230,92,0.5)]"><span className="text-[9px] text-brandYellow/70 uppercase tracking-widest">SCORE BOOST</span><span className="text-sm text-brandYellow font-black animate-pulse">×2 ACTIVE</span></div>}
-          {speedBoosted && <div className="font-mono bg-black/70 border-2 border-[#00cfff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(0,207,255,0.6)]"><span className="text-[9px] text-[#00cfff]/70 uppercase tracking-widest">{comboCount>=5?'GODMODE ×3':'UNTOUCHABLE'}</span><span className="text-sm text-[#00cfff] font-black animate-pulse">INVINCIBLE ⚡</span></div>}
-          {magnetActive && <div className="font-mono bg-black/70 border-2 border-[#ff44aa] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,68,170,0.6)]"><span className="text-[9px] text-[#ff44aa]/70 uppercase tracking-widest">CRYSTAL MAGNET</span><span className="text-sm text-[#ff44aa] font-black animate-pulse">PULLING ✦</span></div>}
-          {timeSlow && <div className="font-mono bg-black/70 border-2 border-[#4488ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(68,136,255,0.6)]"><span className="text-[9px] text-[#4488ff]/70 uppercase tracking-widest">TIME CRYSTAL</span><span className="text-sm text-[#4488ff] font-black animate-pulse">⏱ SLOW WORLD</span></div>}
-          {ghostMode && <div className="font-mono bg-black/70 border-2 border-white px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.4)]"><span className="text-[9px] text-white/60 uppercase tracking-widest">GHOST CRYSTAL</span><span className="text-sm text-white font-black animate-pulse">👻 UNTOUCHABLE</span></div>}
-          {mirrorMode && <div className="font-mono bg-black/70 border-2 border-[#aaaacc] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(170,170,204,0.5)]"><span className="text-[9px] text-[#aaaacc]/70 uppercase tracking-widest">MIRROR ACTIVE</span><span className="text-sm text-[#aaaacc] font-black animate-pulse">🪞 REVERSED</span></div>}
-          {floatMode && <div className="font-mono bg-black/70 border-2 border-[#ff44ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,68,255,0.6)]"><span className="text-[9px] text-[#ff44ff]/70 uppercase tracking-widest">FLOAT — {stateRef.current.ouroModeAirCrystals}/11 AIR</span><span className="text-sm text-[#ff44ff] font-black animate-pulse">✨ INFINITE JUMP</span></div>}
-          {easterEggMode === 'ouro' && <div className="font-mono bg-black/70 border-2 border-[#ffd700] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_30px_rgba(255,215,0,0.8)]"><span className="text-[9px] text-[#ffd700]/70 uppercase tracking-widest">OURO MODE ×5</span><span className="text-sm text-[#ffd700] font-black animate-pulse">✨ AUTO-SCORE + RECHARGE</span></div>}
-          {easterEggMode === 'ghost_run' && <div className="font-mono bg-black/70 border-2 border-white px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.4)]"><span className="text-[9px] text-white/60 uppercase tracking-widest">GHOST RUN ×3</span><span className="text-sm text-white font-black animate-pulse">👻 UNTOUCHABLE</span></div>}
-          {easterEggMode === 'berserker' && <div className="font-mono bg-black/70 border-2 border-red-500 px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_30px_rgba(255,0,0,0.8)]"><span className="text-[9px] text-red-400/70 uppercase tracking-widest">BERSERKER ×4</span><span className="text-sm text-red-400 font-black animate-pulse">🔥 GODMODE + RECHARGE</span></div>}
-          {stateRef.current.doubleTapReady && <div className="font-mono bg-black/70 border-2 border-[#ff8800] px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-[#ff8800]/70 uppercase tracking-widest">DOUBLE TAP</span><span className="text-sm text-[#ff8800] font-black animate-pulse">⚡ READY</span></div>}
-          {stateRef.current.overchargeReady && <div className="font-mono bg-black/70 border-2 border-yellow-300 px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-yellow-300/70 uppercase tracking-widest">OVERCHARGE</span><span className="text-sm text-yellow-300 font-black animate-pulse">⚡ READY</span></div>}
-          {weatherEvent && <div className="font-mono bg-black/70 border-2 border-gray-500 px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-gray-400 uppercase tracking-widest">WEATHER</span><span className={`text-sm font-black animate-pulse ${weatherEvent==='blackout'?'text-gray-300':weatherEvent==='storm'?'text-blue-300':'text-orange-400'}`}>{weatherEvent==='blackout'?'🌑 BLACKOUT':weatherEvent==='storm'?'⛈ STORM':'☀ FLARE'}</span></div>}
-          {stateRef.current.perks.length > 0 && <div className="font-mono bg-black/70 border border-brandYellow/30 px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-brandYellow/50 uppercase tracking-widest pb-1">PERKS</span>{stateRef.current.perks.map((perk, i) => <span key={i} className="text-[9px] text-brandYellow font-bold uppercase">{perk}</span>)}</div>}
+          {hasShield && <div className="font-mono bg-black/70 border-2 border-[#00cfff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(0,207,255,0.5)]"><span className="text-[9px] text-[#00cfff]/70 uppercase tracking-widest">ESCUDO</span><span className="text-sm text-[#00cfff] font-black animate-pulse">ATIVO</span></div>}
+          {tripleJumpActive && <div className="font-mono bg-black/70 border-2 border-[#cc44ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(204,68,255,0.6)]"><span className="text-[9px] text-[#cc44ff]/70 uppercase tracking-widest">SALTO TRIPLO</span><span className="text-sm text-[#cc44ff] font-black animate-pulse">ATIVO ↑↑↑</span></div>}
+          {scoreMultActive && <div className="font-mono bg-black/70 border-2 border-brandYellow px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,230,92,0.5)]"><span className="text-[9px] text-brandYellow/70 uppercase tracking-widest">BÓNUS PONTOS</span><span className="text-sm text-brandYellow font-black animate-pulse">×2 ATIVO</span></div>}
+          {speedBoosted && <div className="font-mono bg-black/70 border-2 border-[#00cfff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(0,207,255,0.6)]"><span className="text-[9px] text-[#00cfff]/70 uppercase tracking-widest">{comboCount>=5?'MODO DEUS ×3':'INTOCÁVEL'}</span><span className="text-sm text-[#00cfff] font-black animate-pulse">INVENCÍVEL ⚡</span></div>}
+          {magnetActive && <div className="font-mono bg-black/70 border-2 border-[#ff44aa] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,68,170,0.6)]"><span className="text-[9px] text-[#ff44aa]/70 uppercase tracking-widest">ÍMAN DE CRISTAIS</span><span className="text-sm text-[#ff44aa] font-black animate-pulse">A PUXAR ✦</span></div>}
+          {timeSlow && <div className="font-mono bg-black/70 border-2 border-[#4488ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(68,136,255,0.6)]"><span className="text-[9px] text-[#4488ff]/70 uppercase tracking-widest">CRISTAL DO TEMPO</span><span className="text-sm text-[#4488ff] font-black animate-pulse">⏱ MUNDO LENTO</span></div>}
+          {ghostMode && <div className="font-mono bg-black/70 border-2 border-white px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.4)]"><span className="text-[9px] text-white/60 uppercase tracking-widest">CRISTAL FANTASMA</span><span className="text-sm text-white font-black animate-pulse">👻 INTOCÁVEL</span></div>}
+          {mirrorMode && <div className="font-mono bg-black/70 border-2 border-[#aaaacc] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(170,170,204,0.5)]"><span className="text-[9px] text-[#aaaacc]/70 uppercase tracking-widest">ESPELHO ATIVO</span><span className="text-sm text-[#aaaacc] font-black animate-pulse">🪞 INVERTIDO</span></div>}
+          {floatMode && <div className="font-mono bg-black/70 border-2 border-[#ff44ff] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,68,255,0.6)]"><span className="text-[9px] text-[#ff44ff]/70 uppercase tracking-widest">FLUTUAR — {stateRef.current.ouroModeAirCrystals}/11 AR</span><span className="text-sm text-[#ff44ff] font-black animate-pulse">✨ SALTO INFINITO</span></div>}
+          {easterEggMode === 'ouro' && <div className="font-mono bg-black/70 border-2 border-[#ffd700] px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_30px_rgba(255,215,0,0.8)]"><span className="text-[9px] text-[#ffd700]/70 uppercase tracking-widest">MODO OURO ×5</span><span className="text-sm text-[#ffd700] font-black animate-pulse">✨ PONTOS AUTO + RECARGA</span></div>}
+          {easterEggMode === 'ghost_run' && <div className="font-mono bg-black/70 border-2 border-white px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_20px_rgba(255,255,255,0.4)]"><span className="text-[9px] text-white/60 uppercase tracking-widest">CORRIDA FANTASMA ×3</span><span className="text-sm text-white font-black animate-pulse">👻 INTOCÁVEL</span></div>}
+          {easterEggMode === 'berserker' && <div className="font-mono bg-black/70 border-2 border-red-500 px-3 py-2 flex flex-col items-end pointer-events-none shadow-[0_0_30px_rgba(255,0,0,0.8)]"><span className="text-[9px] text-red-400/70 uppercase tracking-widest">BERSERKER ×4</span><span className="text-sm text-red-400 font-black animate-pulse">🔥 MODO DEUS + RECARGA</span></div>}
+          {stateRef.current.doubleTapReady && <div className="font-mono bg-black/70 border-2 border-[#ff8800] px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-[#ff8800]/70 uppercase tracking-widest">TOQUE DUPLO</span><span className="text-sm text-[#ff8800] font-black animate-pulse">⚡ PRONTO</span></div>}
+          {stateRef.current.overchargeReady && <div className="font-mono bg-black/70 border-2 border-yellow-300 px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-yellow-300/70 uppercase tracking-widest">SOBRECARGA</span><span className="text-sm text-yellow-300 font-black animate-pulse">⚡ PRONTO</span></div>}
+          {weatherEvent && <div className="font-mono bg-black/70 border-2 border-gray-500 px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-gray-400 uppercase tracking-widest">CLIMA</span><span className={`text-sm font-black animate-pulse ${weatherEvent==='blackout'?'text-gray-300':weatherEvent==='storm'?'text-blue-300':'text-orange-400'}`}>{weatherEvent==='blackout'?'🌑 APAGÃO':weatherEvent==='storm'?'⛈ TEMPESTADE':'☀ ERUPÇÃO'}</span></div>}
+          {stateRef.current.perks.length > 0 && <div className="font-mono bg-black/70 border border-brandYellow/30 px-3 py-2 flex flex-col items-end pointer-events-none"><span className="text-[9px] text-brandYellow/50 uppercase tracking-widest pb-1">EXTRAS</span>{stateRef.current.perks.map((perk, i) => <span key={i} className="text-[9px] text-brandYellow font-bold uppercase">{perkLabel(perk)}</span>)}</div>}
         </div>
       )}
 
@@ -2603,17 +2633,17 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           <div className="relative z-10 flex flex-col items-center gap-6 px-8 max-w-2xl w-full">
             <div className="text-center">
-              <span className="text-[10px] text-brandYellow font-mono tracking-[0.4em] uppercase block animate-pulse">// GAME PAUSED — PERK DRAFT //</span>
-              <span className="text-xs text-gray-500 font-mono uppercase">Press 1, 2, or 3 — run resumes instantly</span>
+              <span className="text-[10px] text-brandYellow font-mono tracking-[0.4em] uppercase block animate-pulse">// JOGO EM PAUSA — ESCOLHE UM EXTRA //</span>
+              <span className="text-xs text-gray-500 font-mono uppercase">{mob ? 'Toca numa carta — o jogo continua já' : 'Carrega 1, 2 ou 3 — o jogo continua já'}</span>
             </div>
             <div className="grid grid-cols-3 gap-4 w-full">
               {perkDraft.map((perk, i) => (
                 <div key={i} className="bg-black border-2 border-brandYellow p-4 flex flex-col items-center gap-2 cursor-pointer hover:bg-brandYellow/10 transition-all shadow-[0_0_20px_rgba(255,230,92,0.3)]"
                   onClick={() => { const s=stateRef.current; s.perks.push(perk); s.perkDraftPending=false; setPerkDraft(null); synthRef.current?.playPerkDraft(); }}>
                   <span className="text-brandYellow font-black text-2xl">[{i+1}]</span>
-                  <span className="text-white font-mono text-[10px] uppercase tracking-widest text-center leading-relaxed">{perk}</span>
+                  <span className="text-white font-mono text-[10px] uppercase tracking-widest text-center leading-relaxed">{perkLabel(perk)}</span>
                   <span className="text-brandRed/60 font-mono text-[9px] uppercase text-center">
-                    {perk==='drain halved'&&'stability drain ÷2'}{perk==='blaster fast'&&'charges every 3 crystals'}{perk==='aliens drop charges'&&'40% chance per kill'}{perk==='combo never resets'&&"hits don't break combo"}{perk==='crystal magnet always'&&'permanent pull field'}
+                    {PERK_DESC[perk] ?? ''}
                   </span>
                 </div>
               ))}
@@ -2625,11 +2655,11 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       {isPlaying && !mob && (
         <div className="absolute bottom-6 left-6 right-6 flex justify-between font-mono text-[10px] tracking-wider text-brandYellow/40 pointer-events-none select-none z-10 uppercase">
           <div className="flex flex-col gap-1 text-left">
-            <span>[W] / [↑] — JUMP  //  [HOLD SPACE] CHARGE + [RELEASE] FIRE  //  [F] INSTANT SHOT</span>
-            <span>COMBO ×3 = WIDE SHOT  //  ×5 = RAPID FIRE  //  BOSS KILL = NOVA</span>
-            <span className="text-[#44ddff]/60">CHAIN JUMPS UP A CRYSTAL STAIRCASE TO SWEEP THE WHOLE RUN</span>
+            <span>[W] / [↑] — SALTAR  //  [SEGURA ESPAÇO] CARREGAR + [SOLTA] DISPARAR  //  [F] TIRO INSTANTÂNEO</span>
+            <span>COMBO ×3 = TIRO LARGO  //  ×5 = TIRO RÁPIDO  //  ABATE DE CHEFE = NOVA</span>
+            <span className="text-[#44ddff]/60">ENCADEIA SALTOS PELA ESCADARIA DE CRISTAIS PARA LIMPAR TUDO</span>
           </div>
-          <div className="text-right text-brandYellow/50 font-bold"><span>CRYSTALS RESTORE STABILITY // AIRBORNE CHAIN = SCORE MULT</span></div>
+          <div className="text-right text-brandYellow/50 font-bold"><span>CRISTAIS RESTAURAM ESTABILIDADE // CADEIA NO AR = MULTIPLICADOR</span></div>
         </div>
       )}
 
@@ -2638,22 +2668,22 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
           <div className={`w-full max-w-2xl text-left relative z-10 ${mob ? 'px-5 space-y-4 pb-16' : 'px-12 space-y-8'}`}>
             <div className={`border-l-4 border-brandRed ${mob ? 'space-y-1 pl-4' : 'space-y-2 pl-6'}`}>
-              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// CRITICAL_CORE_LIFELINE_TERMINATED</span>
-              <h2><BrandText text="CORE DEPLETED" className={`text-brandRed block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-5xl md:text-6xl'}`} /></h2>
+              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// LINHA_DE_VIDA_DO_NÚCLEO_TERMINADA</span>
+              <h2><BrandText text="NÚCLEO ESGOTADO" className={`text-brandRed block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-5xl md:text-6xl'}`} /></h2>
             </div>
             <div className="font-mono text-xs text-gray-400 uppercase leading-relaxed grid grid-cols-1 md:grid-cols-2 gap-6 border border-brandRed/20 p-6 bg-black/60 backdrop-blur-md">
               <div className="space-y-2">
-                <p className="text-brandYellow font-bold">TERMINATION SUMMARY:</p>
-                <p>SCORE: <span className="text-white font-bold">{score.toLocaleString()} PTS</span></p>
-                {score >= personalBest && personalBest > 0 && <p className="text-[#1ED760] font-black animate-pulse">🏆 NEW PERSONAL BEST!</p>}
-                <p>BEST: <span className="text-brandYellow font-bold">{personalBest.toLocaleString()} PTS</span></p>
-                <p>CRYSTALS: <span className="text-white font-bold">{crystalCount}</span></p>
-                <p>SURVIVED: <span className="text-[#ff44aa] font-bold">{runStreak}s</span></p>
-                <p>DISTANCE: <span className="text-white font-bold">{Math.floor(stateRef.current.milesTraveled)} UNITS</span></p>
-                {stateRef.current.perks.length > 0 && <div className="pt-1"><p className="text-brandYellow/60 text-[10px]">PERKS THIS RUN:</p>{stateRef.current.perks.map((perk, i) => <p key={i} className="text-brandYellow text-[10px]">• {perk}</p>)}</div>}
+                <p className="text-brandYellow font-bold">RESUMO DA CORRIDA:</p>
+                <p>PONTOS: <span className="text-white font-bold">{score.toLocaleString()} PTS</span></p>
+                {score >= personalBest && personalBest > 0 && <p className="text-[#1ED760] font-black animate-pulse">🏆 NOVO RECORDE PESSOAL!</p>}
+                <p>RECORDE: <span className="text-brandYellow font-bold">{personalBest.toLocaleString()} PTS</span></p>
+                <p>CRISTAIS: <span className="text-white font-bold">{crystalCount}</span></p>
+                <p>SOBREVIVEU: <span className="text-[#ff44aa] font-bold">{runStreak}s</span></p>
+                <p>DISTÂNCIA: <span className="text-white font-bold">{Math.floor(stateRef.current.milesTraveled)} UNIDADES</span></p>
+                {stateRef.current.perks.length > 0 && <div className="pt-1"><p className="text-brandYellow/60 text-[10px]">EXTRAS DESTA CORRIDA:</p>{stateRef.current.perks.map((perk, i) => <p key={i} className="text-brandYellow text-[10px]">• {perkLabel(perk)}</p>)}</div>}
               </div>
               <div className="border-t md:border-t-0 md:border-l border-brandYellow/20 pt-4 md:pt-0 md:pl-6 space-y-2">
-                <p className="text-brandYellow font-bold">// TOP 3 HIGH SCORES //</p>
+                <p className="text-brandYellow font-bold">// TOP 3 MELHORES PONTUAÇÕES //</p>
                 {leaderboard.map((e, i) => (
                   <div key={i} className="flex justify-between text-[11px] font-mono tracking-tight uppercase">
                     <span className="text-gray-500 font-bold">{i+1}. {e.name}</span>
@@ -2663,11 +2693,11 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
               </div>
             </div>
             <div className="pt-2 flex flex-wrap gap-4 items-center">
-              <button onClick={reboot} className="bg-brandYellow hover:bg-brandRed text-black font-helvetica font-black py-4 px-10 text-sm uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto border-none active:scale-95 shadow-[4px_4px_0px_#ff4e3e]">RE-INITIALIZE CORE</button>
+              <button onClick={reboot} className="bg-brandYellow hover:bg-brandRed text-black font-helvetica font-black py-4 px-10 text-sm uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto border-none active:scale-95 shadow-[4px_4px_0px_#ff4e3e]">REINICIAR NÚCLEO</button>
               <a href="https://open.spotify.com/artist/4JNKjNlt3rtcIl84NiK4Lr" target="_blank" rel="noopener noreferrer"
                 className="bg-[#000] border-[3px] border-[#1ED760] hover:bg-[#1ED760] hover:text-black text-[#1ED760] font-helvetica font-black py-4 px-10 text-base uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto shadow-[5px_5px_0px_#1ED760] flex items-center gap-3">
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.84.24 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.26-1.321 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.56.3z"/></svg>
-                FOLLOW ON SPOTIFY
+                SEGUIR NO SPOTIFY
               </a>
             </div>
           </div>
@@ -2680,34 +2710,34 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
           <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,230,92,0.25)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
           <div className={`w-full max-w-xl text-left relative z-10 ${mob ? 'px-5 space-y-4 pb-16' : 'px-10 space-y-7'}`}>
             <div className={`border-l-4 border-brandYellow ${mob ? 'space-y-1 pl-4' : 'space-y-2 pl-6'}`}>
-              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// ARCADE_HARDCORE_CORE</span>
-              <h2><BrandText text="ENDLESS SIMULATION" className={`text-brandYellow block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-4xl md:text-5xl'}`} /></h2>
+              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// NÚCLEO_ARCADE_HARDCORE</span>
+              <h2><BrandText text="SIMULAÇÃO INFINITA" className={`text-brandYellow block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-4xl md:text-5xl'}`} /></h2>
             </div>
 
             <div className="space-y-3">
-              <p className="text-[10px] text-brandYellow/60 font-mono uppercase tracking-widest">// SELECT CONTROLS</p>
+              <p className="text-[10px] text-brandYellow/60 font-mono uppercase tracking-widest">// ESCOLHE OS CONTROLOS</p>
               <div className="flex gap-3">
                 <button onClick={() => setControlMode('desktop')}
                   className={`flex-1 font-mono uppercase tracking-widest py-3 px-4 border-2 transition-all ${controlMode === 'desktop' ? 'border-brandYellow bg-brandYellow/15 text-brandYellow' : 'border-brandYellow/30 text-brandYellow/50 hover:border-brandYellow/60'}`}>
-                  <span className="block text-sm font-black">⌨ DESKTOP</span>
-                  <span className="block text-[9px] opacity-70 mt-1">KEYBOARD + MOUSE</span>
+                  <span className="block text-sm font-black">⌨ COMPUTADOR</span>
+                  <span className="block text-[9px] opacity-70 mt-1">TECLADO + RATO</span>
                 </button>
                 <button onClick={() => setControlMode('mobile')}
                   className={`flex-1 font-mono uppercase tracking-widest py-3 px-4 border-2 transition-all ${controlMode === 'mobile' ? 'border-brandYellow bg-brandYellow/15 text-brandYellow' : 'border-brandYellow/30 text-brandYellow/50 hover:border-brandYellow/60'}`}>
-                  <span className="block text-sm font-black">📱 MOBILE</span>
-                  <span className="block text-[9px] opacity-70 mt-1">TURN PHONE SIDEWAYS</span>
+                  <span className="block text-sm font-black">📱 TELEMÓVEL</span>
+                  <span className="block text-[9px] opacity-70 mt-1">VIRA O TELEMÓVEL DE LADO</span>
                 </button>
               </div>
               <div className="font-mono text-[10px] text-gray-400 uppercase leading-relaxed border border-brandYellow/20 p-4 bg-black/60">
                 {controlMode === 'mobile'
-                  ? <><p><span className="text-[#ff4e3e] font-bold">LEFT SIDE</span> — TAP TO FIRE, HOLD TO CHARGE + RELEASE</p><p><span className="text-brandYellow font-bold">RIGHT SIDE</span> — TAP TO JUMP (TAP AGAIN MID-AIR TO DOUBLE-JUMP)</p><p className="text-[#44ddff]/70 pt-1">HOLD THE PHONE IN LANDSCAPE FOR THE FULL VIEW</p></>
-                  : <><p><span className="text-brandYellow font-bold">[W] / [↑]</span> — JUMP   <span className="text-brandYellow font-bold">[HOLD SPACE]</span> — CHARGE + RELEASE TO FIRE</p><p><span className="text-brandYellow font-bold">[F] / CLICK</span> — INSTANT SHOT</p><p className="text-[#44ddff]/70 pt-1">CHAIN JUMPS UP CRYSTAL STAIRCASES — EVERY CRYSTAL REFUNDS A JUMP</p></>}
+                  ? <><p><span className="text-[#ff4e3e] font-bold">LADO ESQUERDO</span> — TOCA PARA DISPARAR, SEGURA PARA CARREGAR + SOLTA</p><p><span className="text-brandYellow font-bold">LADO DIREITO</span> — TOCA PARA SALTAR (TOCA OUTRA VEZ NO AR PARA SALTO DUPLO)</p><p className="text-[#44ddff]/70 pt-1">SEGURA O TELEMÓVEL NA HORIZONTAL PARA A VISTA COMPLETA</p></>
+                  : <><p><span className="text-brandYellow font-bold">[W] / [↑]</span> — SALTAR   <span className="text-brandYellow font-bold">[SEGURA ESPAÇO]</span> — CARREGAR + SOLTA PARA DISPARAR</p><p><span className="text-brandYellow font-bold">[F] / CLIQUE</span> — TIRO INSTANTÂNEO</p><p className="text-[#44ddff]/70 pt-1">ENCADEIA SALTOS PELAS ESCADARIAS DE CRISTAIS — CADA CRISTAL DEVOLVE UM SALTO</p></>}
               </div>
             </div>
 
             <button onClick={startGame}
               className="bg-brandYellow hover:bg-brandRed text-black font-helvetica font-black py-4 px-10 text-base uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto border-none active:scale-95 shadow-[4px_4px_0px_#ff4e3e]">
-              ▶ INITIALIZE CORE
+              ▶ INICIAR NÚCLEO
             </button>
           </div>
         </div>
@@ -2717,12 +2747,12 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       {controlMode === 'mobile' && isPortrait && !ignoreRotate && (
         <div className="absolute inset-0 bg-brandBlack/95 flex flex-col items-center justify-center z-[60] pointer-events-auto text-center px-8">
           <span className="text-6xl animate-pulse mb-6">↻</span>
-          <BrandText text="ROTATE YOUR DEVICE" className="text-2xl text-brandYellow font-black uppercase tracking-tight" />
-          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest mt-3">Turn the phone sideways (landscape) for the full view</p>
-          {!showIntro && <p className="font-mono text-[10px] text-[#1ED760]/70 uppercase tracking-widest mt-2">— run paused —</p>}
+          <BrandText text="RODA O TELEMÓVEL" className="text-2xl text-brandYellow font-black uppercase tracking-tight" />
+          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest mt-3">Vira o telemóvel de lado (horizontal) para a vista completa</p>
+          {!showIntro && <p className="font-mono text-[10px] text-[#1ED760]/70 uppercase tracking-widest mt-2">— jogo em pausa —</p>}
           <button onClick={() => setIgnoreRotate(true)}
             className="mt-8 font-mono text-xs uppercase tracking-widest border-2 border-brandYellow/60 text-brandYellow px-6 py-3 hover:bg-brandYellow hover:text-black transition-all pointer-events-auto active:scale-95">
-            PLAY ANYWAY →
+            JOGAR ASSIM MESMO →
           </button>
         </div>
       )}
