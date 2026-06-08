@@ -7,6 +7,7 @@ import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
 import { ProfileModal } from '@/components/ProfileModal';
 import { ChatModal } from '@/components/ChatModal';
+import { OpenInBrowser } from '@/components/OpenInBrowser';
 
 type View = 'landing' | 'arcade';
 
@@ -99,6 +100,7 @@ export default function Home() {
   // ==========================================================================
   return (
     <main className="relative min-h-[100dvh] w-full bg-black text-white overflow-x-hidden">
+      <OpenInBrowser />
       <div
         className={`transition-all duration-[550ms] will-change-transform ${isZooming ? 'scale-[6] opacity-0 blur-2xl pointer-events-none' : 'scale-100 opacity-100'}`}
         style={{ transitionTimingFunction: 'cubic-bezier(0.7,0,0.84,0)' }}
