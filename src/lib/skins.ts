@@ -1,7 +1,7 @@
 // In-game character skins: shape (diamond / chariot / unicorn) × colour.
 // Unlocked by best score, or by a secret lore-code (redeemed separately).
 
-export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave';
+export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave' | 'star' | 'heart';
 export type Skin = {
   id: string;
   name: string;
@@ -11,24 +11,39 @@ export type Skin = {
 };
 
 export const SKINS: Skin[] = [
-  // Diamonds
+  // Diamonds 💎
   { id: 'diamond-gold',    name: 'Diamante',          shape: 'diamond', color: '#ffe65c', unlock: { type: 'default' } },
   { id: 'diamond-emerald', name: 'Diamante Esmeralda',shape: 'diamond', color: '#1ED760', unlock: { type: 'score', need: 10000 } },
   { id: 'diamond-magenta', name: 'Diamante Magenta',  shape: 'diamond', color: '#ff44aa', unlock: { type: 'score', need: 30000 } },
+  { id: 'diamond-azul',    name: 'Diamante Azul',     shape: 'diamond', color: '#4488ff', unlock: { type: 'score', need: 45000 } },
   { id: 'diamond-cyan',    name: 'Diamante Ciano',    shape: 'diamond', color: '#00cfff', unlock: { type: 'score', need: 60000 } },
-  // Chariots
+  { id: 'diamond-branco',  name: 'Diamante Branco',   shape: 'diamond', color: '#ffffff', unlock: { type: 'score', need: 90000 } },
+  // Chariots 🛞
   { id: 'chariot-gold',    name: 'Carruagem Dourada', shape: 'chariot', color: '#ffd700', unlock: { type: 'score', need: 25000 } },
+  { id: 'chariot-esmeralda',name:'Carruagem Esmeralda',shape:'chariot', color: '#1ED760', unlock: { type: 'score', need: 55000 } },
   { id: 'chariot-violet',  name: 'Carruagem Violeta', shape: 'chariot', color: '#cc44ff', unlock: { type: 'score', need: 80000 } },
   { id: 'chariot-rubra',   name: 'Carruagem Rubra',   shape: 'chariot', color: '#ff4e3e', unlock: { type: 'code' } },
-  // Unicorns
+  // Unicorns 🦄
   { id: 'unicorn-white',   name: 'Unicórnio',         shape: 'unicorn', color: '#fffefb', unlock: { type: 'score', need: 50000 } },
-  { id: 'unicorn-rosa',    name: 'Unicórnio Rosa',    shape: 'unicorn', color: '#ff88cc', unlock: { type: 'score', need: 120000 } },
+  { id: 'unicorn-dourado', name: 'Unicórnio Dourado', shape: 'unicorn', color: '#ffd700', unlock: { type: 'score', need: 95000 } },
+  { id: 'unicorn-rosa',    name: 'Unicórnio Rosa',    shape: 'unicorn', color: '#ff88cc', unlock: { type: 'score', need: 130000 } },
   { id: 'unicorn-cosmico', name: 'Unicórnio Cósmico', shape: 'unicorn', color: '#cc44ff', unlock: { type: 'code' } },
-  // Naves (SUAV na nave 🛸)
+  // Naves 🛸 (SUAV na nave)
   { id: 'nave-prata',      name: 'Nave Prata',        shape: 'nave',    color: '#c4c8e0', unlock: { type: 'score', need: 40000 } },
-  { id: 'nave-laranja',    name: 'Nave Laranja',      shape: 'nave',    color: '#ff8800', unlock: { type: 'score', need: 100000 } },
+  { id: 'nave-verde',      name: 'Nave Verde',        shape: 'nave',    color: '#1ED760', unlock: { type: 'score', need: 70000 } },
+  { id: 'nave-laranja',    name: 'Nave Laranja',      shape: 'nave',    color: '#ff8800', unlock: { type: 'score', need: 110000 } },
   { id: 'nave-cosmica',    name: 'Nave Cósmica',      shape: 'nave',    color: '#00cfff', unlock: { type: 'code' } },
   { id: 'nave-suav',       name: 'Nave SUAV',         shape: 'nave',    color: '#ff4e3e', unlock: { type: 'code' } },
+  // Stars ⭐
+  { id: 'star-dourada',    name: 'Estrela Dourada',   shape: 'star',    color: '#ffe65c', unlock: { type: 'score', need: 20000 } },
+  { id: 'star-rosa',       name: 'Estrela Rosa',      shape: 'star',    color: '#ff44aa', unlock: { type: 'score', need: 65000 } },
+  { id: 'star-ciano',      name: 'Estrela Ciano',     shape: 'star',    color: '#00cfff', unlock: { type: 'score', need: 115000 } },
+  { id: 'star-cadente',    name: 'Estrela Cadente',   shape: 'star',    color: '#ffffff', unlock: { type: 'code' } },
+  // Hearts ❤️ (devolvo com alma)
+  { id: 'heart-vermelho',  name: 'Coração Vermelho',  shape: 'heart',   color: '#ff4e3e', unlock: { type: 'score', need: 35000 } },
+  { id: 'heart-rosa',      name: 'Coração Rosa',      shape: 'heart',   color: '#ff88cc', unlock: { type: 'score', need: 85000 } },
+  { id: 'heart-dourado',   name: 'Coração Dourado',   shape: 'heart',   color: '#ffd700', unlock: { type: 'score', need: 140000 } },
+  { id: 'heart-alma',      name: 'Coração com Alma',  shape: 'heart',   color: '#cc44ff', unlock: { type: 'code' } },
 ];
 
 export const DEFAULT_SKIN_ID = 'diamond-gold';
@@ -104,6 +119,29 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     // Cockpit
     ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(W * 0.18, 0, H * 0.13, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(0,180,255,0.85)'; ctx.beginPath(); ctx.arc(W * 0.18, 0, H * 0.08, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  if (shape === 'star') {
+    const R = Math.min(w, h) * 0.62;
+    // little trailing sparkles
+    for (let i = 1; i <= 3; i++) { ctx.fillStyle = `rgba(255,255,255,${0.5 / i})`; ctx.shadowColor = color; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(-R - i * 7, R * 0.2, 2.5 / i + 1, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 16;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const ang = -Math.PI / 2 + i * Math.PI / 5; const rr = i % 2 === 0 ? R : R * 0.45; const x = Math.cos(ang) * rr, y = Math.sin(ang) * rr; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(0, 0, R * 0.16, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  if (shape === 'heart') {
+    const u = Math.min(w, h) * 0.5;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.moveTo(0, u * 0.72);
+    ctx.bezierCurveTo(-u * 1.25, -u * 0.25, -u * 0.45, -u * 1.0, 0, -u * 0.3);
+    ctx.bezierCurveTo(u * 0.45, -u * 1.0, u * 1.25, -u * 0.25, 0, u * 0.72);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.ellipse(-u * 0.35, -u * 0.35, u * 0.16, u * 0.24, -0.5, 0, Math.PI * 2); ctx.fill();
     return;
   }
   // diamond
