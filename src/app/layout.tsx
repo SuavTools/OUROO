@@ -26,8 +26,8 @@ const startupImage = [
 ];
 
 export const metadata: Metadata = {
-  title: "OUROO // ARCADE CORE",
-  description: "Endless entropy simulation. Harvest crystals, eradicate alien vectors, survive.",
+  title: "SUAV",
+  description: "SUAV — official site. Latest music, live dates, and OUROO: the arcade.",
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
