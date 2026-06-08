@@ -246,12 +246,12 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const skinRef = useRef<{ shape: SkinShape; color: string }>({ shape: 'diamond', color: '#ffe65c' });
   const refreshSkin = () => { const s = skinById(getSelectedSkinId()); skinRef.current = { shape: s.shape, color: s.color }; };
   const scoreRef    = useRef(0);                          // live mirror of score for the loop (the must-shoot window shrinks with it)
-  useEffect(() => { scoreRef.current = score; }, [score]);
   const jumpRef     = useRef<(() => void) | null>(null);  // bridges effect-scoped doJump to touch handlers
   const leftDownRef = useRef(0);                          // timestamp of left-pad press (quick-tap vs hold)
   const pausedRef   = useRef(false);                      // freezes the sim while held in portrait on mobile
 
   const [score,            setScore]            = useState(0);
+  useEffect(() => { scoreRef.current = score; }, [score]);
   const [crystalCount,     setCrystalCount]     = useState(0);
   const [blasterCharges,   setBlasterCharges]   = useState(0);
   const [stability,        setStability]        = useState(100);
