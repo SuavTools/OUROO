@@ -53,6 +53,8 @@ export default function Home() {
   const [canInstall, setCanInstall] = useState(false);
   const [iosInstall, setIosInstall] = useState(false);
   const [showIosSheet, setShowIosSheet] = useState(false);
+  const [standalone, setStandalone] = useState(false);   // already installed → hide install prompts
+  const [installBanner, setInstallBanner] = useState(false);
   useEffect(() => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
     const onBIP = (e: Event) => { e.preventDefault(); deferredPrompt.current = e as never; setCanInstall(true); };
@@ -61,10 +63,15 @@ export default function Home() {
     window.addEventListener('appinstalled', onInstalled);
     const ua = navigator.userAgent || '';
     const isIOS = /iphone|ipad|ipod/i.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
-    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
-    if (isIOS && !standalone) setIosInstall(true);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true;
+    setStandalone(isStandalone);
+    if (isIOS && !isStandalone) setIosInstall(true);
+    // Show the "save as app" banner once per session (unless already installed or dismissed).
+    if (!isStandalone && sessionStorage.getItem('ouroo_install_x') !== '1') setInstallBanner(true);
     return () => { window.removeEventListener('beforeinstallprompt', onBIP); window.removeEventListener('appinstalled', onInstalled); };
   }, []);
+  const dismissInstallBanner = () => { sessionStorage.setItem('ouroo_install_x', '1'); setInstallBanner(false); };
+  const installable = (canInstall || iosInstall) && !standalone;
   const handleInstall = async () => {
     const dp = deferredPrompt.current;
     if (dp?.prompt) { dp.prompt(); await dp.userChoice?.catch(() => {}); deferredPrompt.current = null; setCanInstall(false); }
@@ -125,10 +132,30 @@ export default function Home() {
                 )
                 : <button onClick={() => signInWithDiscord()} className="text-[#5865F2] hover:text-white transition-colors"><span className="sm:hidden">Discord</span><span className="hidden sm:inline">Ligar Discord</span></button>
               )}
+              {installable && (
+                <button onClick={handleInstall} title="Instalar como app" className="flex items-center gap-1 font-bold text-brandYellow hover:text-white transition-colors animate-pulse">
+                  📲<span className="hidden sm:inline">&nbsp;App</span>
+                </button>
+              )}
               <button onClick={enterArcade} className="font-bold text-black bg-brandRed px-4 py-1.5 tracking-[0.2em] hover:bg-white transition-colors">Jogar ▸</button>
             </div>
           </nav>
         </header>
+
+        {/* ---- "SAVE AS APP" BANNER — explains the install along the journey ---- */}
+        {installable && installBanner && (
+          <div className="mx-auto max-w-5xl px-5 sm:px-8 mt-3">
+            <div className="relative border border-brandYellow/40 bg-brandYellow/[0.06] p-4 flex items-center gap-3">
+              <span className="text-2xl">📲</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-white">Instala a OUROO no telemóvel</p>
+                <p className="text-[12px] text-white/55 leading-snug">Joga em ecrã inteiro, sem barras do navegador — abre direto do ícone como uma app.</p>
+              </div>
+              <button onClick={handleInstall} className="shrink-0 bg-brandYellow text-black font-bold uppercase text-[11px] tracking-widest px-3 py-2 active:scale-95">Instalar</button>
+              <button onClick={dismissInstallBanner} className="shrink-0 text-white/30 hover:text-white text-lg leading-none">✕</button>
+            </div>
+          </div>
+        )}
 
         {/* ---- HERO ---- */}
         <section id="top" className="mx-auto max-w-5xl px-5 sm:px-8 pt-10 sm:pt-16 pb-10">
