@@ -44,15 +44,27 @@ export function normalizeText(s: string): string { return normalize(s); }
 
 export const MSG_MAX = 300;
 
+// Only music links are allowed in chat — every other URL is rejected (anti-spam / anti-phishing).
+const URL_RE = /https?:\/\/[^\s]+/gi;
+const ALLOWED_LINK_DOMAINS = ['youtube.com', 'youtu.be', 'spotify.com', 'soundcloud.com'];
+export function isAllowedLink(u: string): boolean {
+  try {
+    const h = new URL(u).hostname.toLowerCase();
+    return ALLOWED_LINK_DOMAINS.some(b => h === b || h.endsWith('.' + b));
+  } catch { return false; }
+}
+
 export type MsgCheck = { ok: true; value: string } | { ok: false; error: string };
 
-// Chat message filter: length + same slur/hate blocklist (normalized to catch obfuscation).
+// Chat message filter: length + slur/hate blocklist + link allowlist.
 export function validateMessage(raw: string): MsgCheck {
   const value = (raw ?? '').replace(/\s+/g, ' ').trim();
   if (value.length < 1) return { ok: false, error: 'Mensagem vazia.' };
   if (value.length > MSG_MAX) return { ok: false, error: `Máximo ${MSG_MAX} caracteres.` };
   const norm = normalize(value);
   if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Mensagem bloqueada 🙃' };
+  const urls = value.match(URL_RE) || [];
+  if (urls.some(u => !isAllowedLink(u))) return { ok: false, error: 'Só links do YouTube, Spotify ou SoundCloud.' };
   return { ok: true, value };
 }
 
