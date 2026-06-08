@@ -1,12 +1,18 @@
 -- ===== Moderation: roles, bans, delete rules, room caps =====
 
--- Moderators. SUAV is the super-admin (can appoint other mods).
+-- Tables first (the helper functions below reference them, and SQL functions
+-- are validated at creation time).
 create table if not exists moderators (
   user_id uuid primary key,
   is_super boolean not null default false,
   created_at timestamptz default now()
 );
-alter table moderators enable row level security;
+create table if not exists bans (
+  user_id uuid primary key,
+  reason text,
+  by uuid,
+  created_at timestamptz default now()
+);
 
 -- security-definer helpers (read role/ban tables without RLS recursion)
 create or replace function public.is_moderator(uid uuid) returns boolean language sql stable security definer as $$
@@ -19,6 +25,7 @@ create or replace function public.is_banned(uid uuid) returns boolean language s
   select exists(select 1 from public.bans where user_id = uid);
 $$;
 
+alter table moderators enable row level security;
 drop policy if exists "read moderators" on moderators;
 create policy "read moderators" on moderators for select using (true);
 drop policy if exists "super add mods" on moderators;
@@ -30,13 +37,7 @@ create policy "super del mods" on moderators for delete to authenticated using (
 insert into moderators (user_id, is_super) values ('15aaa1b1-7dd6-4e4e-801a-0e4a0fcf0293', true)
 on conflict (user_id) do update set is_super = true;
 
--- Bans.
-create table if not exists bans (
-  user_id uuid primary key,
-  reason text,
-  by uuid,
-  created_at timestamptz default now()
-);
+-- Bans (table created above).
 alter table bans enable row level security;
 drop policy if exists "read bans" on bans;
 create policy "read bans" on bans for select using (true);
