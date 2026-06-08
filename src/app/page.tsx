@@ -5,8 +5,10 @@ import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
+import { amISuperAdmin } from '@/lib/chat';
 import { ProfileModal } from '@/components/ProfileModal';
 import { ChatModal } from '@/components/ChatModal';
+import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
 
 type View = 'landing' | 'arcade';
@@ -30,6 +32,9 @@ export default function Home() {
   const { user } = useUser();   // Discord login state (null when logged out)
   const [profileOpen, setProfileOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [isSuper, setIsSuper] = useState(false);
+  useEffect(() => { if (user) amISuperAdmin().then(setIsSuper); else setIsSuper(false); }, [user]);
 
   // Phones render the arcade at a fixed 1280x720 stage scaled to fit (handled inside ArcadeCanvas).
   const [stage, setStage] = useState<{ scale: number; mobile: boolean }>({ scale: 1, mobile: false });
@@ -122,6 +127,7 @@ export default function Home() {
               <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Ouvir</a>
               <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
               <button onClick={() => setChatOpen(true)} className="hover:text-white transition-colors">Chat</button>
+              {isSuper && <button onClick={() => setAdminOpen(true)} title="Admin" className="text-brandYellow hover:text-white transition-colors">📊</button>}
               {supabaseReady && (user
                 ? (
                   <button onClick={() => setProfileOpen(true)} title="O meu perfil" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -285,6 +291,7 @@ export default function Home() {
 
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} />
+      {isSuper && <AdminModal open={adminOpen} onClose={() => setAdminOpen(false)} />}
     </main>
   );
 }

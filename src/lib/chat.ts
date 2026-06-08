@@ -72,6 +72,15 @@ export async function amIModerator(): Promise<boolean> {
   return !!data;
 }
 
+// Super-admin (SUAV) — gates the private Admin panel.
+export async function amISuperAdmin(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data } = await supabase.from('moderators').select('is_super').eq('user_id', user.id).maybeSingle();
+  return !!data?.is_super;
+}
+
 // Mod action: ban a user AND purge their messages (for hate/spam).
 export async function banUser(userId: string, reason = ''): Promise<boolean> {
   const sb = supabase;
