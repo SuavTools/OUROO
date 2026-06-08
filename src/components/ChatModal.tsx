@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useUser, signInWithDiscord } from '@/lib/auth';
-import { fetchChannels, fetchMessages, subscribeMessages, sendMessage, createChannel, type ChatMessage, type Channel } from '@/lib/chat';
+import { fetchChannels, fetchMessages, subscribeMessages, sendMessage, createChannel, deleteMessage, deleteChannel, amIModerator, banUser, type ChatMessage, type Channel } from '@/lib/chat';
 import { MSG_MAX } from '@/lib/names';
 import { MessageBody } from '@/components/MessageBody';
 
@@ -19,10 +19,13 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [agreed, setAgreed] = useState(true);
+  const [isMod, setIsMod] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastSent = useRef(0);
+  const myId = user?.id;
 
   useEffect(() => { if (typeof window !== 'undefined') setAgreed(localStorage.getItem('ouroo_chat_ok') === '1'); }, []);
+  useEffect(() => { if (open) amIModerator().then(setIsMod); else setIsMod(false); }, [open, user]);
 
   // Load channels when opened.
   useEffect(() => {
@@ -39,8 +42,10 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
     let alive = true;
     setMsgs(null);
     fetchMessages(active.id).then(m => { if (alive) setMsgs(m); });
-    const unsub = subscribeMessages(active.id, m =>
-      setMsgs(prev => (prev ? (prev.some(x => x.id === m.id) ? prev : [...prev, m]) : [m])));
+    const unsub = subscribeMessages(active.id, {
+      onInsert: m => setMsgs(prev => (prev ? (prev.some(x => x.id === m.id) ? prev : [...prev, m]) : [m])),
+      onDelete: id => setMsgs(prev => (prev ? prev.filter(x => x.id !== id) : prev)),
+    });
     return () => { alive = false; unsub(); };
   }, [open, active]);
 
@@ -67,6 +72,24 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
       setActive(res.channel); setCreating(false); setNewName('');
     } else setErr(res.error);
   };
+
+  const removeMessage = async (id: number) => {
+    setMsgs(prev => (prev ? prev.filter(x => x.id !== id) : prev));
+    await deleteMessage(id);
+  };
+  const ban = async (m: ChatMessage) => {
+    if (!confirm(`Banir ${m.handle} e apagar as mensagens dele?`)) return;
+    setMsgs(prev => (prev ? prev.filter(x => x.user_id !== m.user_id) : prev));
+    await banUser(m.user_id);
+  };
+  const removeChannel = async () => {
+    if (!active || active.is_system) return;
+    if (!confirm(`Apagar a sala "${active.name}"?`)) return;
+    await deleteChannel(active.id);
+    setChannels(cs => cs.filter(c => c.id !== active.id));
+    setActive(channels.find(c => c.slug === 'geral') ?? null);
+  };
+  const canDeleteRoom = !!active && !active.is_system && (active.created_by === myId || isMod);
 
   const accept = () => { localStorage.setItem('ouroo_chat_ok', '1'); setAgreed(true); };
 
@@ -111,6 +134,14 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
           </div>
         )}
 
+        {/* Mod / room controls */}
+        {(isMod || canDeleteRoom) && (
+          <div className="flex items-center justify-between px-5 pt-2 text-[10px] uppercase tracking-widest">
+            <span className="text-brandYellow/70">{isMod ? '🛡 Moderador' : ''}</span>
+            {canDeleteRoom && <button onClick={removeChannel} className="text-white/30 hover:text-brandRed">🗑 Apagar sala</button>}
+          </div>
+        )}
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
           {msgs === null && <p className="text-white/40 text-sm">A carregar…</p>}
@@ -121,9 +152,15 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
               {m.avatar
                 ? <img src={m.avatar} alt="" className="w-7 h-7 rounded-full border border-white/15 mt-0.5 shrink-0" />
                 : <div className="w-7 h-7 rounded-full border border-white/15 bg-white/5 mt-0.5 shrink-0 flex items-center justify-center text-[10px] text-white/60">{m.handle.slice(0, 1).toUpperCase()}</div>}
-              <div className="min-w-0">
-                <span className="text-[12px] font-bold text-brandRed">{m.handle}</span>
+              <div className="min-w-0 group">
+                <span className="text-[12px] font-bold text-brandRed">{m.handle}{isMod && m.user_id === myId ? ' ·' : ''}</span>
                 <MessageBody text={m.body} />
+                {(isMod || m.user_id === myId) && (
+                  <div className="flex gap-3 mt-0.5">
+                    <button onClick={() => removeMessage(m.id)} className="text-[10px] uppercase tracking-wider text-white/30 hover:text-white">Apagar</button>
+                    {isMod && m.user_id !== myId && <button onClick={() => ban(m)} className="text-[10px] uppercase tracking-wider text-brandRed/60 hover:text-brandRed">Banir</button>}
+                  </div>
+                )}
               </div>
             </div>
           ))}
