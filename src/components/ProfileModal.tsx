@@ -6,7 +6,7 @@ import { getPlayerStats, getLocalPlayer, type PlayerStats } from '@/lib/leaderbo
 import { amIModerator } from '@/lib/chat';
 import { Leaderboard } from '@/components/Leaderboard';
 import { shareStatsCard } from '@/lib/sharecard';
-import { SKINS, isSkinUnlocked, getSelectedSkinId, setSelectedSkinId, DEFAULT_SKIN_ID, skinById } from '@/lib/skins';
+import { SKINS, isSkinUnlocked, getSelectedSkinId, setSelectedSkinId, DEFAULT_SKIN_ID, skinById, fmtScore } from '@/lib/skins';
 import { SkinPreview } from '@/components/SkinPreview';
 import { fetchUnlocks, redeemCode, createCode } from '@/lib/economy';
 
@@ -103,7 +103,7 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
             {SKINS.map(s => {
               const unlocked = allUnlocked || isSkinUnlocked(s, best, codeUnlocks);
               const selected = skin === s.id;
-              const hint = s.unlock.type === 'score' ? `${s.unlock.need.toLocaleString('pt-PT')} pts`
+              const hint = s.unlock.type === 'score' ? fmtScore(s.unlock.need)
                 : s.unlock.type === 'code' ? '🔒 código' : '';
               return (
                 <button key={s.id} onClick={() => pickSkin(s.id, unlocked)} title={unlocked ? s.name : hint}

@@ -13,41 +13,48 @@ export type Skin = {
 export const SKINS: Skin[] = [
   // Diamonds 💎
   { id: 'diamond-gold',    name: 'Diamante',          shape: 'diamond', color: '#ffe65c', unlock: { type: 'default' } },
-  { id: 'diamond-emerald', name: 'Diamante Esmeralda',shape: 'diamond', color: '#1ED760', unlock: { type: 'score', need: 10000 } },
-  { id: 'diamond-magenta', name: 'Diamante Magenta',  shape: 'diamond', color: '#ff44aa', unlock: { type: 'score', need: 30000 } },
-  { id: 'diamond-azul',    name: 'Diamante Azul',     shape: 'diamond', color: '#4488ff', unlock: { type: 'score', need: 45000 } },
-  { id: 'diamond-cyan',    name: 'Diamante Ciano',    shape: 'diamond', color: '#00cfff', unlock: { type: 'score', need: 60000 } },
-  { id: 'diamond-branco',  name: 'Diamante Branco',   shape: 'diamond', color: '#ffffff', unlock: { type: 'score', need: 90000 } },
+  { id: 'diamond-emerald', name: 'Diamante Esmeralda',shape: 'diamond', color: '#1ED760', unlock: { type: 'score', need: 50000 } },
+  { id: 'diamond-magenta', name: 'Diamante Magenta',  shape: 'diamond', color: '#ff44aa', unlock: { type: 'score', need: 150000 } },
+  { id: 'diamond-azul',    name: 'Diamante Azul',     shape: 'diamond', color: '#4488ff', unlock: { type: 'score', need: 400000 } },
+  { id: 'diamond-cyan',    name: 'Diamante Ciano',    shape: 'diamond', color: '#00cfff', unlock: { type: 'score', need: 800000 } },
+  { id: 'diamond-branco',  name: 'Diamante Branco',   shape: 'diamond', color: '#ffffff', unlock: { type: 'score', need: 1500000 } },
   // Chariots 🛞
-  { id: 'chariot-gold',    name: 'Carruagem Dourada', shape: 'chariot', color: '#ffd700', unlock: { type: 'score', need: 25000 } },
-  { id: 'chariot-esmeralda',name:'Carruagem Esmeralda',shape:'chariot', color: '#1ED760', unlock: { type: 'score', need: 55000 } },
-  { id: 'chariot-violet',  name: 'Carruagem Violeta', shape: 'chariot', color: '#cc44ff', unlock: { type: 'score', need: 80000 } },
+  { id: 'chariot-gold',    name: 'Carruagem Dourada', shape: 'chariot', color: '#ffd700', unlock: { type: 'score', need: 100000 } },
+  { id: 'chariot-esmeralda',name:'Carruagem Esmeralda',shape:'chariot', color: '#1ED760', unlock: { type: 'score', need: 450000 } },
+  { id: 'chariot-violet',  name: 'Carruagem Violeta', shape: 'chariot', color: '#cc44ff', unlock: { type: 'score', need: 1000000 } },
   { id: 'chariot-rubra',   name: 'Carruagem Rubra',   shape: 'chariot', color: '#ff4e3e', unlock: { type: 'code' } },
   // Unicorns 🦄
-  { id: 'unicorn-white',   name: 'Unicórnio',         shape: 'unicorn', color: '#fffefb', unlock: { type: 'score', need: 50000 } },
-  { id: 'unicorn-dourado', name: 'Unicórnio Dourado', shape: 'unicorn', color: '#ffd700', unlock: { type: 'score', need: 95000 } },
-  { id: 'unicorn-rosa',    name: 'Unicórnio Rosa',    shape: 'unicorn', color: '#ff88cc', unlock: { type: 'score', need: 130000 } },
+  { id: 'unicorn-white',   name: 'Unicórnio',         shape: 'unicorn', color: '#fffefb', unlock: { type: 'score', need: 250000 } },
+  { id: 'unicorn-dourado', name: 'Unicórnio Dourado', shape: 'unicorn', color: '#ffd700', unlock: { type: 'score', need: 900000 } },
+  { id: 'unicorn-rosa',    name: 'Unicórnio Rosa',    shape: 'unicorn', color: '#ff88cc', unlock: { type: 'score', need: 1800000 } },
   { id: 'unicorn-cosmico', name: 'Unicórnio Cósmico', shape: 'unicorn', color: '#cc44ff', unlock: { type: 'code' } },
   // Naves 🛸 (SUAV na nave)
-  { id: 'nave-prata',      name: 'Nave Prata',        shape: 'nave',    color: '#c4c8e0', unlock: { type: 'score', need: 40000 } },
-  { id: 'nave-verde',      name: 'Nave Verde',        shape: 'nave',    color: '#1ED760', unlock: { type: 'score', need: 70000 } },
-  { id: 'nave-laranja',    name: 'Nave Laranja',      shape: 'nave',    color: '#ff8800', unlock: { type: 'score', need: 110000 } },
+  { id: 'nave-prata',      name: 'Nave Prata',        shape: 'nave',    color: '#c4c8e0', unlock: { type: 'score', need: 200000 } },
+  { id: 'nave-verde',      name: 'Nave Verde',        shape: 'nave',    color: '#1ED760', unlock: { type: 'score', need: 550000 } },
+  { id: 'nave-laranja',    name: 'Nave Laranja',      shape: 'nave',    color: '#ff8800', unlock: { type: 'score', need: 1200000 } },
   { id: 'nave-cosmica',    name: 'Nave Cósmica',      shape: 'nave',    color: '#00cfff', unlock: { type: 'code' } },
   { id: 'nave-suav',       name: 'Nave SUAV',         shape: 'nave',    color: '#ff4e3e', unlock: { type: 'code' } },
   // Stars ⭐
-  { id: 'star-dourada',    name: 'Estrela Dourada',   shape: 'star',    color: '#ffe65c', unlock: { type: 'score', need: 20000 } },
-  { id: 'star-rosa',       name: 'Estrela Rosa',      shape: 'star',    color: '#ff44aa', unlock: { type: 'score', need: 65000 } },
-  { id: 'star-ciano',      name: 'Estrela Ciano',     shape: 'star',    color: '#00cfff', unlock: { type: 'score', need: 115000 } },
+  { id: 'star-dourada',    name: 'Estrela Dourada',   shape: 'star',    color: '#ffe65c', unlock: { type: 'score', need: 120000 } },
+  { id: 'star-rosa',       name: 'Estrela Rosa',      shape: 'star',    color: '#ff44aa', unlock: { type: 'score', need: 650000 } },
+  { id: 'star-ciano',      name: 'Estrela Ciano',     shape: 'star',    color: '#00cfff', unlock: { type: 'score', need: 1600000 } },
   { id: 'star-cadente',    name: 'Estrela Cadente',   shape: 'star',    color: '#ffffff', unlock: { type: 'code' } },
   // Hearts ❤️ (devolvo com alma)
-  { id: 'heart-vermelho',  name: 'Coração Vermelho',  shape: 'heart',   color: '#ff4e3e', unlock: { type: 'score', need: 35000 } },
-  { id: 'heart-rosa',      name: 'Coração Rosa',      shape: 'heart',   color: '#ff88cc', unlock: { type: 'score', need: 85000 } },
-  { id: 'heart-dourado',   name: 'Coração Dourado',   shape: 'heart',   color: '#ffd700', unlock: { type: 'score', need: 140000 } },
+  { id: 'heart-vermelho',  name: 'Coração Vermelho',  shape: 'heart',   color: '#ff4e3e', unlock: { type: 'score', need: 300000 } },
+  { id: 'heart-rosa',      name: 'Coração Rosa',      shape: 'heart',   color: '#ff88cc', unlock: { type: 'score', need: 1000000 } },
+  { id: 'heart-dourado',   name: 'Coração Dourado',   shape: 'heart',   color: '#ffd700', unlock: { type: 'score', need: 2000000 } },
   { id: 'heart-alma',      name: 'Coração com Alma',  shape: 'heart',   color: '#cc44ff', unlock: { type: 'code' } },
 ];
 
 export const DEFAULT_SKIN_ID = 'diamond-gold';
 export const skinById = (id: string): Skin => SKINS.find(s => s.id === id) ?? SKINS[0];
+
+// Compact score label: 50000 → "50k", 1500000 → "1.5M".
+export function fmtScore(n: number): string {
+  if (n >= 1_000_000) return `${String(n / 1_000_000).replace(/\.0$/, '')}M`;
+  if (n >= 1000) return `${n / 1000}k`;
+  return String(n);
+}
 
 export function isSkinUnlocked(s: Skin, best: number, codeUnlocks: string[]): boolean {
   if (s.unlock.type === 'default') return true;
