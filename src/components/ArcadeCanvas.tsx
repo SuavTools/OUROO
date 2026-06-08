@@ -6,6 +6,7 @@ import { submitScore, getLocalPlayer } from '@/lib/leaderboard';
 import { validateHandle } from '@/lib/names';
 import { supabaseReady } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
+import { drawSkinShape, skinById, getSelectedSkinId, type SkinShape } from '@/lib/skins';
 import { BrandText } from './BrandText';
 
 // Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U/C/J).
@@ -242,6 +243,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   // ---- MOBILE TOUCH CONTROLS ----
   const lastStabRef = useRef(100);                        // throttles the stability HUD re-render to once per integer change
   const lastChargeUiRef = useRef(0);                      // throttles the charge-bar HUD re-render (was firing every frame while charging)
+  const skinRef = useRef<{ shape: SkinShape; color: string }>({ shape: 'diamond', color: '#ffe65c' });
+  const refreshSkin = () => { const s = skinById(getSelectedSkinId()); skinRef.current = { shape: s.shape, color: s.color }; };
   const jumpRef     = useRef<(() => void) | null>(null);  // bridges effect-scoped doJump to touch handlers
   const leftDownRef = useRef(0);                          // timestamp of left-pad press (quick-tap vs hold)
   const pausedRef   = useRef(false);                      // freezes the sim while held in portrait on mobile
@@ -583,7 +586,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     }
   };
 
-  const startGame = () => { resumeAudio(); setShowIntro(false); reboot(); };
+  const startGame = () => { refreshSkin(); resumeAudio(); setShowIntro(false); reboot(); };
 
   // ---- ORIENTATION TRACKING (mobile) ----
   useEffect(() => {
@@ -2421,10 +2424,15 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       if (showP) {
         // Ghost mode — player is semi-transparent
         if (sd.ghostTicks > 0) ctx.globalAlpha = 0.35 + Math.sin(sd.gameTicks*0.2)*0.15;
-        ctx.fillStyle=inv?'#00cfff':sd.ghostTicks>0?'#ffffff':sc;
-        ctx.shadowColor=inv?'#00cfff':sd.ghostTicks>0?'#ffffff':sc;
-        ctx.shadowBlur=inv?24:sd.ghostTicks>0?30:10;
-        ctx.beginPath(); ctx.moveTo(0,-th/2); ctx.lineTo(tw/2,0); ctx.lineTo(0,th/2); ctx.lineTo(-tw/2,0); ctx.closePath(); ctx.fill();
+        if (inv || sd.ghostTicks > 0) {
+          // Power-up states keep the simple diamond in their signature colour.
+          const c = inv ? '#00cfff' : '#ffffff';
+          ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = inv ? 24 : 30;
+          ctx.beginPath(); ctx.moveTo(0,-th/2); ctx.lineTo(tw/2,0); ctx.lineTo(0,th/2); ctx.lineTo(-tw/2,0); ctx.closePath(); ctx.fill();
+        } else {
+          // Normal play: render the player's chosen skin (shape + colour).
+          drawSkinShape(ctx, skinRef.current.shape, skinRef.current.color, tw, th, sd.gameTicks);
+        }
         ctx.globalAlpha=1;
       }
       ctx.restore();
@@ -2524,6 +2532,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
   // ---- REBOOT ----
   const reboot = () => {
+    refreshSkin();   // apply the player's chosen skin at the start of every run
     const e = stateRef.current;
     e.player.x=140; e.player.y=300; e.player.vy=0; e.player.jumpCount=0; e.player.stretch=1;
     e.gameTicks=0; e.milesTraveled=0; e.coyoteCounter=0; e.jumpBufferCounter=0;

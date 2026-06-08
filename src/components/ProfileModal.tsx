@@ -3,28 +3,23 @@
 import { useEffect, useState } from 'react';
 import { useUser, signOut, getAuthIdentity } from '@/lib/auth';
 import { getPlayerStats, getLocalPlayer, type PlayerStats } from '@/lib/leaderboard';
+import { amIModerator } from '@/lib/chat';
 import { Leaderboard } from '@/components/Leaderboard';
 import { shareStatsCard } from '@/lib/sharecard';
-
-// Cosmetics groundwork: skins unlock by best score. Selection is stored locally now; wiring the
-// chosen colour into the in-game character is the next step.
-const SKINS = [
-  { id: 'default', name: 'Padrão', color: '#ffe65c', need: 0 },
-  { id: 'emerald', name: 'Esmeralda', color: '#1ED760', need: 10000 },
-  { id: 'magenta', name: 'Magenta', color: '#ff44aa', need: 30000 },
-  { id: 'violet', name: 'Violeta', color: '#cc44ff', need: 60000 },
-  { id: 'cyan', name: 'Ciano', color: '#00cfff', need: 100000 },
-];
+import { SKINS, isSkinUnlocked, getSelectedSkinId, setSelectedSkinId, DEFAULT_SKIN_ID } from '@/lib/skins';
+import { SkinPreview } from '@/components/SkinPreview';
 
 export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useUser();
   const [stats, setStats] = useState<PlayerStats | null>(null);
-  const [skin, setSkin] = useState('default');
+  const [skin, setSkin] = useState(DEFAULT_SKIN_ID);
   const [sharing, setSharing] = useState(false);
+  const [allUnlocked, setAllUnlocked] = useState(false);   // moderators (SUAV) get every skin
+  // Lore-code unlocks come next phase (server-side); empty for now so code skins read as locked.
+  const codeUnlocks: string[] = [];
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') setSkin(localStorage.getItem('ouroo_skin') || 'default');
-  }, []);
+  useEffect(() => { if (typeof window !== 'undefined') setSkin(getSelectedSkinId()); }, [open]);
+  useEffect(() => { if (open) amIModerator().then(setAllUnlocked); }, [open, user]);
 
   useEffect(() => {
     if (!open) return;
@@ -39,7 +34,7 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
   if (!open) return null;
 
   const best = stats?.best ?? 0;
-  const pickSkin = (id: string, unlocked: boolean) => { if (!unlocked) return; setSkin(id); localStorage.setItem('ouroo_skin', id); };
+  const pickSkin = (id: string, unlocked: boolean) => { if (!unlocked) return; setSkin(id); setSelectedSkinId(id); };
 
   const doShare = async () => {
     setSharing(true);
@@ -86,27 +81,30 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
           {sharing ? 'A gerar…' : '↗ Partilhar o meu cartão'}
         </button>
 
-        {/* Cosmetics groundwork */}
+        {/* Skins */}
         <div className="mb-7">
           <div className="flex items-end justify-between mb-3">
             <h3 className="font-helvetica font-black text-lg text-white">Skins</h3>
             <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">Ganha ao jogar</span>
           </div>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {SKINS.map(s => {
-              const unlocked = best >= s.need;
+              const unlocked = allUnlocked || isSkinUnlocked(s, best, codeUnlocks);
               const selected = skin === s.id;
+              const hint = s.unlock.type === 'score' ? `${s.unlock.need.toLocaleString('pt-PT')} pts`
+                : s.unlock.type === 'code' ? '🔒 código' : '';
               return (
-                <button key={s.id} onClick={() => pickSkin(s.id, unlocked)} title={unlocked ? s.name : `Desbloqueia aos ${s.need.toLocaleString('pt-PT')}`}
-                  className={`relative aspect-square border flex items-center justify-center transition-all ${selected ? 'border-white' : 'border-white/10'} ${unlocked ? 'hover:border-white/50' : 'opacity-40'}`}>
-                  <span className="w-5 h-5 rotate-45" style={{ background: s.color }} />
-                  {!unlocked && <span className="absolute bottom-1 right-1 text-[9px]">🔒</span>}
-                  {selected && <span className="absolute top-1 left-1 text-[9px] text-white">✓</span>}
+                <button key={s.id} onClick={() => pickSkin(s.id, unlocked)} title={unlocked ? s.name : hint}
+                  className={`relative aspect-square border flex flex-col items-center justify-center gap-0.5 transition-all ${selected ? 'border-white' : 'border-white/10'} ${unlocked ? 'hover:border-white/50' : ''}`}>
+                  <SkinPreview skin={s} size={40} locked={!unlocked} />
+                  {!unlocked && <span className="absolute inset-0 flex items-center justify-center text-sm">{s.unlock.type === 'code' ? '🔒' : ''}</span>}
+                  {!unlocked && s.unlock.type === 'score' && <span className="text-[8px] text-white/40">{hint}</span>}
+                  {selected && <span className="absolute top-1 right-1 text-[10px] text-[#1ED760]">✓</span>}
                 </button>
               );
             })}
           </div>
-          <p className="text-[11px] text-white/40 mt-2">A skin selecionada será aplicada ao teu personagem em breve.</p>
+          <p className="text-[11px] text-white/40 mt-2">Aplica-se ao teu personagem na próxima corrida. Algumas só com <b className="text-white/60">códigos secretos</b>. 🛸</p>
         </div>
 
         {/* Leaderboard with you highlighted */}
