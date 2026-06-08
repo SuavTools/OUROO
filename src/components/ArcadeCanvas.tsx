@@ -230,6 +230,7 @@ const perkLabel = (k: string) => PERK_LABEL[k] ?? k;
 export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean }> = ({ stageScale = 1, isMobileStage = false }) => {
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
   const synthRef    = useRef<ArcadeSynth | null>(null);
+  const resumeAudioRef = useRef<(() => void) | null>(null);  // lets the mount-time unlock listener call the latest resumeAudio
   const frameRef    = useRef<number>(0);
   const textIdRef   = useRef(0);
   const spaceHeldRef = useRef(false);
@@ -383,12 +384,24 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const feedbackWords = ['ALMA', 'DOBRO', 'OURO', 'CRU', 'BRUTO', 'ENERGIA', 'REVOLTA', 'SUAV'];
 
   // ---- SYNTH LIFECYCLE ----
+  // NOTE: we deliberately DON'T create the AudioContext here. iOS only lets a context make sound
+  // if it's created/resumed inside a user gesture — creating it in this mount effect left it
+  // permanently suspended on phones. Creation happens in resumeAudio() (wired to the first tap);
+  // here we only drive the music loop once the synth exists.
   useEffect(() => {
-    if (!synthRef.current) synthRef.current = new ArcadeSynth();
-    if (isPlaying) synthRef.current.startLoop();
-    else synthRef.current.stopLoop();
+    if (isPlaying) synthRef.current?.startLoop();
+    else synthRef.current?.stopLoop();
     return () => synthRef.current?.stopLoop();
   }, [isPlaying]);
+
+  // Bulletproof mobile unlock: the very first touch anywhere on the page creates + kickstarts the
+  // audio context, regardless of which control the user happens to hit first.
+  useEffect(() => {
+    const unlock = () => { try { resumeAudioRef.current?.(); } catch {} };
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('touchend', unlock, { once: true });
+    return () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('touchend', unlock); };
+  }, []);
 
   const toggleMute = () => {
     if (!synthRef.current) return;
@@ -494,8 +507,16 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const resumeAudio = () => {
     if (!synthRef.current) synthRef.current = new ArcadeSynth();
     const c = synthRef.current.ctx;
+    // iOS "kickstart": playing a 1-sample silent buffer synchronously inside the gesture is what
+    // actually flips the context to running — resume() alone is often ignored on Safari.
+    try {
+      const b = c.createBuffer(1, 1, 22050);
+      const src = c.createBufferSource(); src.buffer = b; src.connect(c.destination); src.start(0);
+    } catch {}
     if (c.state === 'suspended') c.resume().catch(() => {});
+    if (synthRef.current && isPlaying) synthRef.current.startLoop();
   };
+  resumeAudioRef.current = resumeAudio;
 
   // Right pad — tap to jump (same as W/↑).
   const onJumpTouch = (e: React.PointerEvent) => { e.preventDefault(); e.stopPropagation(); resumeAudio(); jumpRef.current?.(); };
