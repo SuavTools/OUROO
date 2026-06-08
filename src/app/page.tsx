@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
-import { useUser, signInWithDiscord, signOut } from '@/lib/auth';
+import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
+import { ProfileModal } from '@/components/ProfileModal';
 
 type View = 'landing' | 'arcade';
 
@@ -25,6 +26,7 @@ export default function Home() {
   const [view, setView] = useState<View>('landing');
   const [isZooming, setIsZooming] = useState(false);
   const { user } = useUser();   // Discord login state (null when logged out)
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // Phones render the arcade at a fixed 1280x720 stage scaled to fit (handled inside ArcadeCanvas).
   const [stage, setStage] = useState<{ scale: number; mobile: boolean }>({ scale: 1, mobile: false });
@@ -107,12 +109,11 @@ export default function Home() {
               <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
               {supabaseReady && (user
                 ? (
-                  <div className="flex items-center gap-2">
+                  <button onClick={() => setProfileOpen(true)} title="O meu perfil" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {user.avatar && <img src={user.avatar} alt="" className="w-6 h-6 rounded-full border border-white/20" />}
                     <span className="hidden sm:inline normal-case tracking-normal text-white/80 max-w-[120px] truncate">{user.name}</span>
-                    <button onClick={() => signOut()} title="Sair" className="text-white/40 hover:text-white transition-colors">✕</button>
-                  </div>
+                  </button>
                 )
                 : <button onClick={() => signInWithDiscord()} className="text-[#5865F2] hover:text-white transition-colors"><span className="sm:hidden">Discord</span><span className="hidden sm:inline">Ligar Discord</span></button>
               )}
@@ -246,6 +247,8 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
     </main>
   );
 }

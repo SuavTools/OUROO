@@ -19,6 +19,27 @@ export async function fetchLeaderboard(gameId = GAME_ID, limit = 10): Promise<Lb
   return data as LbEntry[];
 }
 
+export type PlayerStats = { handle: string | null; best: number; runs: number; rank: number | null; playerId: string | null };
+
+// Aggregate a player's stats (best score, run count, global rank) from existing score rows.
+export async function getPlayerStats(device: string, gameId = GAME_ID): Promise<PlayerStats> {
+  const empty: PlayerStats = { handle: null, best: 0, runs: 0, rank: null, playerId: null };
+  if (!supabase || !device) return empty;
+  const { data: player } = await supabase.from('players').select('id, handle').eq('device_token', device).maybeSingle();
+  if (!player) return empty;
+  const { data: rows } = await supabase
+    .from('scores').select('score').eq('player_id', player.id).eq('game_id', gameId).order('score', { ascending: false });
+  const best = rows?.[0]?.score ?? 0;
+  const runs = rows?.length ?? 0;
+  let rank: number | null = null;
+  if (best > 0) {
+    const { count } = await supabase
+      .from('leaderboard').select('*', { count: 'exact', head: true }).eq('game_id', gameId).gt('score', best);
+    rank = (count ?? 0) + 1;
+  }
+  return { handle: player.handle, best, runs, rank, playerId: player.id };
+}
+
 // ---- local identity (anonymous device id; Discord can claim it later) ----
 type LocalPlayer = { id: string | null; handle: string | null; device: string };
 
