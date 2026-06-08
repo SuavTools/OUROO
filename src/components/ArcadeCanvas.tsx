@@ -209,7 +209,7 @@ class ArcadeSynth {
 }
 
 // ---- COMPONENT ----
-export const ArcadeCanvas: React.FC = () => {
+export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean }> = ({ stageScale = 1, isMobileStage = false }) => {
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
   const synthRef    = useRef<ArcadeSynth | null>(null);
   const frameRef    = useRef<number>(0);
@@ -2311,7 +2311,11 @@ export const ArcadeCanvas: React.FC = () => {
       });
 
       // Particles
-      sd.particles.forEach(pt => { ctx.save(); ctx.globalAlpha=pt.alpha; ctx.fillStyle=pt.color; ctx.fillRect(pt.x,pt.y,pt.size,pt.size); ctx.restore(); });
+      // Batch the particles under ONE save/restore instead of per-particle — during explosions
+      // there can be hundreds, and a save()/restore() each was a real per-frame cost on mobile.
+      ctx.save(); ctx.shadowBlur = 0;
+      sd.particles.forEach(pt => { ctx.globalAlpha=pt.alpha; ctx.fillStyle=pt.color; ctx.fillRect(pt.x,pt.y,pt.size,pt.size); });
+      ctx.globalAlpha = 1; ctx.restore();
 
       // Player
       const p2=sd.player; const th=p2.height*p2.stretch; const tw=p2.width/(p2.stretch*0.85);
@@ -2442,26 +2446,39 @@ export const ArcadeCanvas: React.FC = () => {
   };
 
   // ---- RENDER ----
+  const mob = controlMode === 'mobile';
   return (
-    <div className="relative w-full h-full select-none overflow-hidden" onClick={handleCanvasClick} style={{ touchAction: 'none' }}>
-      <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" />
+    <div className="relative w-full h-full select-none overflow-hidden" onClick={handleCanvasClick}
+      style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+      {/* GAME VIEW — on mobile this is the fixed 1280x720 stage scaled to fit (letterboxed, exact
+          desktop look). The HUD/controls below live OUTSIDE this box so they render at native
+          device size instead of being shrunk with the canvas. */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="relative shrink-0 origin-center"
+          style={isMobileStage ? { width: 1280, height: 720, transform: `scale(${stageScale})` } : { width: '100%', height: '100%' }}>
+          <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" />
+        </div>
+      </div>
 
-      {/* ---- MOBILE TOUCH PADS — left half = fire/charge, right half = jump ---- */}
-      {isPlaying && controlMode === 'mobile' && (
-        <div className="absolute inset-0 z-20 flex" style={{ touchAction: 'none' }}>
+      {/* ---- MOBILE TOUCH PADS — left half = fire/charge, right half = jump ----
+          z-40 keeps these ABOVE the HUD/power-up stack so a tall stack of perks can never
+          steal the jump/fire taps. Visual pads sit at the vertical middle of each side
+          (natural thumb reach in landscape) and clear of the top HUD + bottom hints. */}
+      {isPlaying && mob && (
+        <div className="absolute inset-0 z-40 flex select-none" style={{ touchAction: 'none' }}>
           <div
             className="w-1/2 h-full relative pointer-events-auto"
             onPointerDown={onFireDown} onPointerUp={onFireUp} onPointerCancel={onFireUp} onContextMenu={e => e.preventDefault()}>
-            <div className="absolute bottom-8 left-8 w-24 h-24 rounded-full border-2 border-[#ff4e3e]/50 bg-[#ff4e3e]/10 backdrop-blur-sm flex flex-col items-center justify-center text-[#ff4e3e]/80 font-mono pointer-events-none active:bg-[#ff4e3e]/25">
+            <div className="absolute top-1/2 -translate-y-1/2 left-5 w-20 h-20 rounded-full border-2 border-[#ff4e3e]/50 bg-[#ff4e3e]/10 backdrop-blur-sm flex flex-col items-center justify-center text-[#ff4e3e]/80 font-mono pointer-events-none active:bg-[#ff4e3e]/25">
               <span className="text-2xl leading-none">✦</span>
-              <span className="text-[9px] tracking-widest mt-1">TAP FIRE</span>
-              <span className="text-[8px] tracking-widest opacity-70">HOLD CHARGE</span>
+              <span className="text-[9px] tracking-widest mt-1">FIRE</span>
+              <span className="text-[7px] tracking-widest opacity-70">HOLD</span>
             </div>
           </div>
           <div
             className="w-1/2 h-full relative pointer-events-auto"
             onPointerDown={onJumpTouch} onContextMenu={e => e.preventDefault()}>
-            <div className="absolute bottom-8 right-8 w-24 h-24 rounded-full border-2 border-brandYellow/50 bg-brandYellow/10 backdrop-blur-sm flex flex-col items-center justify-center text-brandYellow/80 font-mono pointer-events-none active:bg-brandYellow/25">
+            <div className="absolute top-1/2 -translate-y-1/2 right-5 w-20 h-20 rounded-full border-2 border-brandYellow/50 bg-brandYellow/10 backdrop-blur-sm flex flex-col items-center justify-center text-brandYellow/80 font-mono pointer-events-none active:bg-brandYellow/25">
               <span className="text-2xl leading-none">⤒</span>
               <span className="text-[9px] tracking-widest mt-1">JUMP</span>
             </div>
@@ -2480,35 +2497,38 @@ export const ArcadeCanvas: React.FC = () => {
         </div>
       )}
 
-      <div className="absolute top-6 left-6 right-6 flex justify-between items-start font-mono pointer-events-none z-10 select-none">
+      <div className={`absolute flex justify-between items-start font-mono pointer-events-none z-10 select-none ${mob ? 'top-2 left-2 right-2 gap-2' : 'top-6 left-6 right-6'}`}>
         <div className="flex flex-col">
-          <span className="text-xs text-brandRed opacity-60 uppercase tracking-widest">ARCADE HARDCORE CORE</span>
-          <BrandText text="ENDLESS SIMULATION" className="text-2xl text-brandYellow font-bold uppercase leading-none" />
+          <span className={`text-brandRed opacity-60 uppercase tracking-widest ${mob ? 'text-[8px]' : 'text-xs'}`}>ARCADE HARDCORE CORE</span>
+          {!mob && <BrandText text="ENDLESS SIMULATION" className="text-2xl text-brandYellow font-bold uppercase leading-none" />}
         </div>
-        <div className="flex flex-col items-center w-64 md:w-80 px-4 pt-1">
-          <div className="w-full flex justify-between text-[10px] text-brandYellow font-bold uppercase tracking-widest pb-1">
+        <div className={`flex flex-col items-center px-2 pt-1 ${mob ? 'w-32' : 'w-64 md:w-80 px-4'}`}>
+          <div className={`w-full flex justify-between text-brandYellow font-bold uppercase tracking-widest pb-1 ${mob ? 'text-[8px]' : 'text-[10px]'}`}>
             <span>CORE STABILITY</span>
             <span className={stability < 35 ? 'text-brandRed animate-pulse font-black' : 'text-white'}>{stability}%</span>
           </div>
-          <div className="w-full h-3 border border-brandYellow/40 bg-black/60 p-[2px]">
+          <div className={`w-full border border-brandYellow/40 bg-black/60 p-[2px] ${mob ? 'h-2' : 'h-3'}`}>
             <div className={`h-full transition-all duration-500 ${stability < 35 ? 'bg-brandRed animate-pulse' : 'bg-brandYellow'}`} style={{ width: `${stability}%` }} />
           </div>
         </div>
-        <div className="flex gap-6 text-right items-start">
-          <div className="flex flex-col"><span className="text-xs text-brandRed opacity-60">CRYSTALS</span><span className="text-xl text-brandYellow font-bold">{crystalCount}</span></div>
-          <div className="flex flex-col"><span className="text-xs text-brandRed opacity-60">SCORE</span><span className="text-xl text-white font-bold tracking-wider">{score.toLocaleString()}</span></div>
-          <div className="flex flex-col"><span className="text-xs text-brandRed opacity-60">BEST</span><span className={`text-xl font-bold ${score > personalBest && personalBest > 0 ? 'text-[#1ED760] animate-pulse' : 'text-gray-500'}`}>{personalBest > 0 ? personalBest.toLocaleString() : '---'}</span></div>
-          {runStreak > 0 && <div className="flex flex-col"><span className="text-xs text-brandRed opacity-60">STREAK</span><span className="text-xl text-[#ff44aa] font-bold">{runStreak}s</span></div>}
+        <div className={`flex text-right items-start ${mob ? 'gap-3' : 'gap-6'}`}>
+          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>CRYSTALS</span><span className={`text-brandYellow font-bold ${mob ? 'text-sm' : 'text-xl'}`}>{crystalCount}</span></div>
+          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>SCORE</span><span className={`text-white font-bold tracking-wider ${mob ? 'text-sm' : 'text-xl'}`}>{score.toLocaleString()}</span></div>
+          <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>BEST</span><span className={`font-bold ${mob ? 'text-sm' : 'text-xl'} ${score > personalBest && personalBest > 0 ? 'text-[#1ED760] animate-pulse' : 'text-gray-500'}`}>{personalBest > 0 ? personalBest.toLocaleString() : '---'}</span></div>
+          {runStreak > 0 && <div className="flex flex-col"><span className={`text-brandRed opacity-60 ${mob ? 'text-[8px]' : 'text-xs'}`}>STREAK</span><span className={`text-[#ff44aa] font-bold ${mob ? 'text-sm' : 'text-xl'}`}>{runStreak}s</span></div>}
           {stateRef.current.bossSpeedReliefTicks > 0 && <div className="flex flex-col"><span className="text-[9px] text-[#1ED760] opacity-80 uppercase">EASING</span><span className="text-sm text-[#1ED760] font-bold animate-pulse">▼</span></div>}
         </div>
       </div>
 
       {isPlaying && (
-        <div className="absolute top-24 right-6 flex flex-col items-end gap-2 z-30 pointer-events-auto">
-          <button onClick={e => { e.stopPropagation(); toggleMute(); }}
+        // On mobile this whole stack is pointer-events-none and shrunk into the top-right corner
+        // BELOW the touch-pad layer (z-40), so a tall run of perks can never intercept jump/fire
+        // taps, and a capped height keeps it from sprawling across the screen.
+        <div className={`absolute flex flex-col items-end z-30 ${mob ? 'top-12 right-2 gap-1 pointer-events-none scale-[0.78] origin-top-right max-h-[80%] overflow-hidden' : 'top-24 right-6 gap-2 pointer-events-auto'}`}>
+          {!mob && <button onClick={e => { e.stopPropagation(); toggleMute(); }}
             className="font-mono text-xs tracking-widest border border-brandYellow/40 px-3 py-1 text-brandYellow/60 hover:text-brandYellow hover:border-brandYellow bg-black/40 transition-all">
             {isMuted ? '[ UNMUTE ]' : '[ MUTE ]'}
-          </button>
+          </button>}
           <div className="font-mono text-[11px] bg-black/60 border border-brandYellow/30 px-3 py-2 flex flex-col items-end gap-1 pointer-events-none">
             <div className="flex items-center gap-2 w-full justify-between">
               <span className="text-brandRed opacity-70 tracking-widest uppercase text-[9px]">{weaponTier===0?'STANDARD':weaponTier===1?'WIDE SHOT':weaponTier===2?'RAPID FIRE':'NOVA TIER'}</span>
@@ -2584,10 +2604,10 @@ export const ArcadeCanvas: React.FC = () => {
         </div>
       )}
 
-      {isPlaying && (
+      {isPlaying && !mob && (
         <div className="absolute bottom-6 left-6 right-6 flex justify-between font-mono text-[10px] tracking-wider text-brandYellow/40 pointer-events-none select-none z-10 uppercase">
           <div className="flex flex-col gap-1 text-left">
-            <span>{controlMode === 'mobile' ? 'LEFT — TAP FIRE / HOLD CHARGE  //  RIGHT — TAP JUMP' : '[W] / [↑] — JUMP  //  [HOLD SPACE] CHARGE + [RELEASE] FIRE  //  [F] INSTANT SHOT'}</span>
+            <span>[W] / [↑] — JUMP  //  [HOLD SPACE] CHARGE + [RELEASE] FIRE  //  [F] INSTANT SHOT</span>
             <span>COMBO ×3 = WIDE SHOT  //  ×5 = RAPID FIRE  //  BOSS KILL = NOVA</span>
             <span className="text-[#44ddff]/60">CHAIN JUMPS UP A CRYSTAL STAIRCASE TO SWEEP THE WHOLE RUN</span>
           </div>
@@ -2596,12 +2616,12 @@ export const ArcadeCanvas: React.FC = () => {
       )}
 
       {!isPlaying && !showIntro && (
-        <div className="absolute inset-0 bg-brandBlack flex items-center justify-center z-50">
+        <div className={`absolute inset-0 bg-brandBlack flex justify-center z-50 overflow-y-auto ${mob ? 'items-start py-4' : 'items-center'}`}>
           <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
-          <div className="w-full max-w-2xl px-12 text-left space-y-8 relative z-10">
-            <div className="space-y-2 border-l-4 border-brandRed pl-6">
+          <div className={`w-full max-w-2xl text-left relative z-10 ${mob ? 'px-5 space-y-4 pb-16' : 'px-12 space-y-8'}`}>
+            <div className={`border-l-4 border-brandRed ${mob ? 'space-y-1 pl-4' : 'space-y-2 pl-6'}`}>
               <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// CRITICAL_CORE_LIFELINE_TERMINATED</span>
-              <h2><BrandText text="CORE DEPLETED" className="text-5xl md:text-6xl text-brandRed block font-black tracking-tighter leading-none" /></h2>
+              <h2><BrandText text="CORE DEPLETED" className={`text-brandRed block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-5xl md:text-6xl'}`} /></h2>
             </div>
             <div className="font-mono text-xs text-gray-400 uppercase leading-relaxed grid grid-cols-1 md:grid-cols-2 gap-6 border border-brandRed/20 p-6 bg-black/60 backdrop-blur-md">
               <div className="space-y-2">
@@ -2638,12 +2658,12 @@ export const ArcadeCanvas: React.FC = () => {
 
       {/* ---- INTRO / MODE SELECT ---- */}
       {showIntro && (
-        <div className="absolute inset-0 bg-brandBlack flex items-center justify-center z-50 pointer-events-auto">
+        <div className={`absolute inset-0 bg-brandBlack flex justify-center z-50 pointer-events-auto overflow-y-auto ${mob ? 'items-start py-4' : 'items-center'}`}>
           <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,230,92,0.25)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
-          <div className="w-full max-w-xl px-10 text-left space-y-7 relative z-10">
-            <div className="space-y-2 border-l-4 border-brandYellow pl-6">
+          <div className={`w-full max-w-xl text-left relative z-10 ${mob ? 'px-5 space-y-4 pb-16' : 'px-10 space-y-7'}`}>
+            <div className={`border-l-4 border-brandYellow ${mob ? 'space-y-1 pl-4' : 'space-y-2 pl-6'}`}>
               <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// ARCADE_HARDCORE_CORE</span>
-              <h2><BrandText text="ENDLESS SIMULATION" className="text-4xl md:text-5xl text-brandYellow block font-black tracking-tighter leading-none" /></h2>
+              <h2><BrandText text="ENDLESS SIMULATION" className={`text-brandYellow block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-4xl md:text-5xl'}`} /></h2>
             </div>
 
             <div className="space-y-3">

@@ -232,17 +232,11 @@ export default function Home() {
   // --------------------------------------------------------
   if (gameState === 'arcade') {
     return (
-      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none flex items-center justify-center">
-        {/* On mobile: fixed 1280x720 stage scaled to fit (exact desktop layout, letterboxed).
-            On desktop: fills the window as before. */}
-        <div
-          className="relative origin-center shrink-0"
-          style={stage.mobile
-            ? { width: 1280, height: 720, transform: `scale(${stage.scale})` }
-            : { width: '100%', height: '100%' }}
-        >
-          <ArcadeCanvas />
-        </div>
+      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
+        {/* ArcadeCanvas owns its own scaling now: on mobile it scales just the game canvas to
+            fit (exact desktop look, letterboxed) while rendering the HUD/controls at native
+            device size. That keeps counters/buttons readable and tappable on phones. */}
+        <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} />
         {/* Outside the scaled stage so it stays a real, tappable size. Bottom-center clears both pads. */}
         <button
           onClick={() => setGameState('hub')}
