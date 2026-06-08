@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
+import { useUser, signInWithDiscord, signOut } from '@/lib/auth';
+import { supabaseReady } from '@/lib/supabase';
 
 type View = 'landing' | 'arcade';
 
@@ -22,6 +24,7 @@ const SHOWS: { date: string; city: string; venue: string; ticket?: string }[] = 
 export default function Home() {
   const [view, setView] = useState<View>('landing');
   const [isZooming, setIsZooming] = useState(false);
+  const { user } = useUser();   // Discord login state (null when logged out)
 
   // Phones render the arcade at a fixed 1280x720 stage scaled to fit (handled inside ArcadeCanvas).
   const [stage, setStage] = useState<{ scale: number; mobile: boolean }>({ scale: 1, mobile: false });
@@ -99,9 +102,20 @@ export default function Home() {
         <header className="sticky top-0 z-40 backdrop-blur-md bg-black/70 border-b border-white/10">
           <nav className="mx-auto max-w-5xl px-5 sm:px-8 h-14 flex items-center justify-between">
             <a href="#top" className="font-helvetica font-black text-xl tracking-tight">SUAV</a>
-            <div className="flex items-center gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">
+            <div className="flex items-center gap-4 sm:gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">
               <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Ouvir</a>
               <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
+              {supabaseReady && (user
+                ? (
+                  <div className="flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {user.avatar && <img src={user.avatar} alt="" className="w-6 h-6 rounded-full border border-white/20" />}
+                    <span className="hidden sm:inline normal-case tracking-normal text-white/80 max-w-[120px] truncate">{user.name}</span>
+                    <button onClick={() => signOut()} title="Sair" className="text-white/40 hover:text-white transition-colors">✕</button>
+                  </div>
+                )
+                : <button onClick={() => signInWithDiscord()} className="text-[#5865F2] hover:text-white transition-colors"><span className="sm:hidden">Discord</span><span className="hidden sm:inline">Ligar Discord</span></button>
+              )}
               <button onClick={enterArcade} className="font-bold text-black bg-brandRed px-4 py-1.5 tracking-[0.2em] hover:bg-white transition-colors">Jogar ▸</button>
             </div>
           </nav>

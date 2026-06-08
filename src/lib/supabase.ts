@@ -9,7 +9,19 @@ const key =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // `null` when env isn't configured yet — callers degrade gracefully instead of crashing the build.
+// In the browser it's auth-aware (persists the Discord session, exchanges the OAuth code via PKCE);
+// on the server (API routes) it stays stateless.
+const isBrowser = typeof window !== 'undefined';
 export const supabase: SupabaseClient | null =
-  url && key ? createClient(url, key, { auth: { persistSession: false } }) : null;
+  url && key
+    ? createClient(url, key, {
+        auth: {
+          persistSession: isBrowser,
+          autoRefreshToken: isBrowser,
+          detectSessionInUrl: isBrowser,
+          flowType: 'pkce',
+        },
+      })
+    : null;
 
 export const supabaseReady = Boolean(url && key);

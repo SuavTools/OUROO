@@ -305,9 +305,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     if (isPlaying) { submittedRef.current = false; setLbState('idle'); setLbRank(null); setLbError(''); return; }
     if (!showIntro && score > 0 && supabaseReady && !submittedRef.current) {
       submittedRef.current = true;
-      const p = getLocalPlayer();
-      if (p.handle) { setLbHandle(p.handle); doSubmit(p.handle); }
-      else setLbState('need-handle');
+      // doSubmit() uses the Discord identity (if signed in) or a saved handle; with neither it
+      // lands in 'need-handle' and asks for a name.
+      doSubmit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, showIntro]);

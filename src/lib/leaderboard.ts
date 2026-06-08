@@ -1,4 +1,5 @@
 import { supabase, supabaseReady } from './supabase';
+import { getAuthIdentity } from './auth';
 
 export const GAME_ID = 'ouroo';
 
@@ -48,6 +49,11 @@ export type SubmitResult =
 export async function submitScore(score: number, handle?: string): Promise<SubmitResult> {
   if (!supabaseReady) return { ok: false, error: 'Leaderboard offline.' };
   const p = getLocalPlayer();
+  // If signed in with Discord, use that stable identity (same player across devices) and name;
+  // otherwise fall back to the anonymous device id. An explicit handle arg always wins.
+  const auth = await getAuthIdentity();
+  const device = auth?.device ?? p.device;
+  const finalHandle = handle ?? auth?.handle ?? p.handle ?? '';
   try {
     const res = await fetch('/api/score', {
       method: 'POST',
@@ -55,8 +61,8 @@ export async function submitScore(score: number, handle?: string): Promise<Submi
       body: JSON.stringify({
         gameId: GAME_ID,
         score,
-        device: p.device,
-        handle: handle ?? p.handle ?? '',
+        device,
+        handle: finalHandle,
       }),
     });
     const json = await res.json();
