@@ -245,6 +245,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const lastChargeUiRef = useRef(0);                      // throttles the charge-bar HUD re-render (was firing every frame while charging)
   const skinRef = useRef<{ shape: SkinShape; color: string }>({ shape: 'diamond', color: '#ffe65c' });
   const refreshSkin = () => { const s = skinById(getSelectedSkinId()); skinRef.current = { shape: s.shape, color: s.color }; };
+  const scoreRef    = useRef(0);                          // live mirror of score for the loop (the must-shoot window shrinks with it)
+  useEffect(() => { scoreRef.current = score; }, [score]);
   const jumpRef     = useRef<(() => void) | null>(null);  // bridges effect-scoped doJump to touch handlers
   const leftDownRef = useRef(0);                          // timestamp of left-pad press (quick-tap vs hold)
   const pausedRef   = useRef(false);                      // freezes the sim while held in portrait on mobile
@@ -409,7 +411,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     ghostRunShotsFired: 0,   // tracks if player fired (for GHOST RUN)
     ghostRunTimer:      0,   // ticks survived without firing
     ghostRunUsed:       false, // GHOST RUN is a one-time start bonus, not a repeatable loop
-    ticksSinceKill:     0,   // kill an alien every 60s or the core fails — forces engagement
+    ticksSinceKill:     0,   // kill an alien within the (score-shrinking) window or the core fails
+    killWarned:         false, // one-shot guard for the "10s left" warning toast per window
     berserkerKills:     0,   // kills in current window (only counts when NOT already raging)
     berserkerTimer:     0,   // resets the kill window every 720 ticks
     berserkerCooldown:  0,   // lockout after berserker ends so rapid-fire can't instantly re-arm it
@@ -1024,15 +1027,17 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       if (state.gameTicks === 3600) { toast('⚡ MATA UM ALIEN A CADA 30 SEG — OU O NÚCLEO FALHA'); state.screenFlash = 0.4; }
       if (state.gameTicks >= 3600 && state.aliens.length > 0 && !state.easterEggMode) {
         state.ticksSinceKill++;
-        if (state.ticksSinceKill === 1200) { toast('⚠ MATA UM ALIEN — 10 SEG'); state.screenFlash = 0.4; }   // 10s left
-        else if (state.ticksSinceKill >= 1800) {                                                              // 30s no kill → core fails
+        // Window shrinks 1s per 250k score (floored at 10s) — the better you get, the less slack.
+        const winTicks = Math.max(10, 30 - Math.floor(scoreRef.current / 250000)) * 60;
+        if (!state.killWarned && winTicks - state.ticksSinceKill <= 600) { toast('⚠ MATA UM ALIEN — 10 SEG'); state.screenFlash = 0.4; state.killWarned = true; }
+        if (state.ticksSinceKill >= winTicks) {                                                               // no kill in time → core fails
           setScore(prev => { const f = prev; setPersonalBest(pb => { if (f > pb) { try { localStorage.setItem('arcade_pb', String(f)); } catch {} return f; } return pb; }); return f; });
           state.coreStability = 0; setStability(0);
           burst(state.player.x + PW / 2, state.player.y + PH / 2, '#ff4e3e', 30, 6);
           setIsPlaying(false); return;
         }
       } else {
-        state.ticksSinceKill = 0;   // grace, no targets, or reward mode → no obligation
+        state.ticksSinceKill = 0; state.killWarned = false;   // grace, no targets, or reward mode → no obligation
       }
       // Only re-render the HUD when the displayed integer actually changes — calling setState
       // every frame forced a full re-render of this whole component 60x/sec, which tanked mobile.
@@ -1423,7 +1428,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
             // Combo milestones
             state.killCombo = Math.min(COMBO_CAP, state.killCombo + 1);
             state.comboTimer = 0;
-            state.ticksSinceKill = 0;   // kill registered — reset the engagement timer
+            state.ticksSinceKill = 0; state.killWarned = false;   // kill registered — reset the engagement window
             setComboCount(state.killCombo);
             synthRef.current?.playCombo(state.killCombo);
             if (hasPerk('aliens drop charges') && Math.random() > 0.4) { state.blasterCharges++; setBlasterCharges(state.blasterCharges); floatFeedback(al.x, al.y - 25, 'CARGA EXTRA!'); }
@@ -2501,8 +2506,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       // ---- ENGAGEMENT METER ---- a clear on-screen counter: after the 60s grace, shows the 30s
       // "kill window" depleting; pulses red when critical, and vanishes the instant you get a kill.
       if (sd.gameTicks >= 3600 && sd.aliens.length > 0 && !sd.easterEggMode && sd.ticksSinceKill > 240) {
-        const frac   = Math.min(1, sd.ticksSinceKill / 1800);   // 1 = death (30s)
-        const remain = Math.max(0, 30 - Math.floor(sd.ticksSinceKill / 60));
+        const winSec = Math.max(10, 30 - Math.floor(scoreRef.current / 250000));   // shrinks 1s per 250k
+        const frac   = Math.min(1, sd.ticksSinceKill / (winSec * 60));   // 1 = death
+        const remain = Math.max(0, winSec - Math.floor(sd.ticksSinceKill / 60));
         const bw = 300, bh = 14, bx = canvas.width / 2 - bw / 2, by = canvas.height * 0.15;
         const col = frac > 0.85 ? '#ff2200' : frac > 0.6 ? '#ff8800' : '#ffe65c';
         ctx.save();
@@ -2590,7 +2596,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     e.timeSlowTicks=0; e.ghostTicks=0; e.mirrorTicks=0; e.floatTicks=0;
     e.doubleTapReady=false; e.overchargeReady=false;
     e.easterEggMode=''; e.easterEggTicks=0; e.ouroModeAirCrystals=0;
-    e.ghostRunShotsFired=0; e.ghostRunTimer=0; e.ghostRunUsed=false; e.ticksSinceKill=0; e.berserkerKills=0; e.berserkerTimer=0; e.berserkerCooldown=0;
+    e.ghostRunShotsFired=0; e.ghostRunTimer=0; e.ghostRunUsed=false; e.ticksSinceKill=0; e.killWarned=false; e.berserkerKills=0; e.berserkerTimer=0; e.berserkerCooldown=0;
     e.crystalsSinceRarePerk=0;
     e.platformsSinceStair=0;
     e.aliens=[]; e.projectiles=[]; e.meteors=[]; e.warpToast.active=false;
