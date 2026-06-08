@@ -5,6 +5,7 @@ import { Leaderboard } from '@/components/Leaderboard';
 import { submitScore, getLocalPlayer } from '@/lib/leaderboard';
 import { validateHandle } from '@/lib/names';
 import { supabaseReady } from '@/lib/supabase';
+import { useUser } from '@/lib/auth';
 import { BrandText } from './BrandText';
 
 // Flip to false before shipping — gates the keyboard test shortcuts (O/G/B/P/U/C/J).
@@ -288,6 +289,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const [lbPlayerId, setLbPlayerId] = useState<string | null>(null);
   const [lbRefresh, setLbRefresh] = useState(0);
   const submittedRef = useRef(false);  // guard against double-submit per run
+  const { user: discordUser } = useUser();   // logged-in Discord identity (null when anon)
 
   const doSubmit = async (handle?: string) => {
     setLbState('submitting'); setLbError('');
@@ -2715,54 +2717,61 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       )}
 
       {!isPlaying && !showIntro && (
-        <div className={`absolute inset-0 bg-brandBlack flex justify-center z-50 overflow-y-auto ${mob ? 'items-start py-4' : 'items-center'}`}>
-          <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,78,62,0.3)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none" />
-          <div className={`w-full max-w-2xl text-left relative z-10 ${mob ? 'px-5 space-y-4 pb-16' : 'px-12 space-y-8'}`}>
-            <div className={`border-l-4 border-brandRed ${mob ? 'space-y-1 pl-4' : 'space-y-2 pl-6'}`}>
-              <span className="text-xs text-brandRed font-mono tracking-[0.3em] block uppercase opacity-70">// LINHA_DE_VIDA_DO_NÚCLEO_TERMINADA</span>
-              <h2><BrandText text="NÚCLEO ESGOTADO" className={`text-brandRed block font-black tracking-tighter leading-none ${mob ? 'text-3xl' : 'text-5xl md:text-6xl'}`} /></h2>
-            </div>
-            <div className="font-mono text-xs text-gray-400 uppercase leading-relaxed grid grid-cols-1 md:grid-cols-2 gap-6 border border-brandRed/20 p-6 bg-black/60 backdrop-blur-md">
-              <div className="space-y-2">
-                <p className="text-brandYellow font-bold">RESUMO DA CORRIDA:</p>
-                <p>PONTOS: <span className="text-white font-bold">{score.toLocaleString()} PTS</span></p>
-                {score >= personalBest && personalBest > 0 && <p className="text-[#1ED760] font-black animate-pulse">🏆 NOVO RECORDE PESSOAL!</p>}
-                <p>RECORDE: <span className="text-brandYellow font-bold">{personalBest.toLocaleString()} PTS</span></p>
-                <p>CRISTAIS: <span className="text-white font-bold">{crystalCount}</span></p>
-                <p>SOBREVIVEU: <span className="text-[#ff44aa] font-bold">{runStreak}s</span></p>
-                <p>DISTÂNCIA: <span className="text-white font-bold">{Math.floor(stateRef.current.milesTraveled)} UNIDADES</span></p>
-                {stateRef.current.perks.length > 0 && <div className="pt-1"><p className="text-brandYellow/60 text-[10px]">EXTRAS DESTA CORRIDA:</p>{stateRef.current.perks.map((perk, i) => <p key={i} className="text-brandYellow text-[10px]">• {perkLabel(perk)}</p>)}</div>}
-              </div>
-              <div className="border-t md:border-t-0 md:border-l border-brandYellow/20 pt-4 md:pt-0 md:pl-6 normal-case">
-                <p className="text-brandYellow font-bold uppercase mb-2">// Ranking Global //</p>
+        <div className={`absolute inset-0 bg-black flex justify-center z-50 overflow-y-auto ${mob ? 'items-start py-6' : 'items-center'}`}>
+          <div className={`w-full max-w-2xl relative z-10 ${mob ? 'px-5 pb-16' : 'px-10'}`}>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-2">Fim de corrida</p>
+            <h2 className={`font-helvetica font-black tracking-tighter leading-none text-white ${mob ? 'text-4xl' : 'text-5xl md:text-6xl'}`}>Núcleo Esgotado<span className="text-brandRed">.</span></h2>
 
-                {!supabaseReady && <p className="text-gray-500 text-[11px]">Ranking em breve.</p>}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Run summary */}
+              <div className="border border-white/10 p-5">
+                <p className="text-[11px] uppercase tracking-[0.25em] text-white/40 mb-3">Esta corrida</p>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between"><span className="text-white/50">Pontos</span><span className="text-brandYellow font-bold tabular-nums">{score.toLocaleString('pt-PT')}</span></div>
+                  {score >= personalBest && personalBest > 0 && <p className="text-[#1ED760] font-bold text-xs">🏆 Novo recorde pessoal!</p>}
+                  <div className="flex justify-between"><span className="text-white/50">Recorde</span><span className="text-white/80 tabular-nums">{personalBest.toLocaleString('pt-PT')}</span></div>
+                  <div className="flex justify-between"><span className="text-white/50">Cristais</span><span className="text-white/80 tabular-nums">{crystalCount}</span></div>
+                  <div className="flex justify-between"><span className="text-white/50">Tempo</span><span className="text-white/80 tabular-nums">{runStreak}s</span></div>
+                  <div className="flex justify-between"><span className="text-white/50">Distância</span><span className="text-white/80 tabular-nums">{Math.floor(stateRef.current.milesTraveled)}</span></div>
+                  {stateRef.current.perks.length > 0 && <div className="pt-2 border-t border-white/10"><p className="text-white/40 text-[10px] uppercase tracking-widest mb-1">Extras</p>{stateRef.current.perks.map((perk, i) => <span key={i} className="text-white/60 text-[11px] block">• {perkLabel(perk)}</span>)}</div>}
+                </div>
+              </div>
+
+              {/* Ranking */}
+              <div className="border border-white/10 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] uppercase tracking-[0.25em] text-white/40">Ranking Global</p>
+                  {discordUser && <span className="text-[10px] text-white/40 truncate max-w-[110px]">@{discordUser.name}</span>}
+                </div>
+
+                {!supabaseReady && <p className="text-white/40 text-xs">Ranking em breve.</p>}
 
                 {supabaseReady && lbState === 'need-handle' && (
                   <form onSubmit={(e) => { e.preventDefault(); const v = validateHandle(lbHandle); if (!v.ok) { setLbError(v.error); return; } doSubmit(v.value); }} className="mb-3">
-                    <p className="text-white/70 text-[11px] mb-1.5">O teu nome para o ranking:</p>
+                    <p className="text-white/60 text-[11px] mb-1.5">O teu nome para o ranking:</p>
                     <div className="flex gap-2">
                       <input value={lbHandle} onChange={e => { setLbHandle(e.target.value); setLbError(''); }} maxLength={16} placeholder="ex: SUAV_FAN" autoFocus
-                        className="flex-1 min-w-0 bg-black border border-brandYellow/40 text-white px-2 py-1.5 text-[12px] focus:border-brandYellow outline-none" />
-                      <button type="submit" className="bg-brandYellow text-black font-bold text-[10px] uppercase px-3 tracking-widest active:scale-95 pointer-events-auto">Entrar</button>
+                        className="flex-1 min-w-0 bg-white/5 border border-white/20 text-white px-3 py-2 text-sm focus:border-brandRed outline-none" />
+                      <button type="submit" className="bg-brandRed text-black font-bold text-xs uppercase px-4 tracking-widest active:scale-95 pointer-events-auto hover:bg-white transition-colors">Entrar</button>
                     </div>
-                    {lbError && <p className="text-brandRed text-[10px] mt-1">{lbError}</p>}
+                    {lbError && <p className="text-brandRed text-[11px] mt-1.5">{lbError}</p>}
                   </form>
                 )}
 
-                {lbState === 'submitting' && <p className="text-brandYellow/70 text-[11px] mb-2">A enviar pontuação…</p>}
-                {lbState === 'done' && lbRank != null && <p className="text-[#1ED760] font-black text-sm mb-2">Estás em #{lbRank} 🌍</p>}
-                {lbState === 'error' && <p className="text-brandRed text-[11px] mb-2">{lbError} <button onClick={() => doSubmit(getLocalPlayer().handle || undefined)} className="underline pointer-events-auto">tentar de novo</button></p>}
+                {lbState === 'submitting' && <p className="text-white/50 text-xs mb-2">A enviar pontuação…</p>}
+                {lbState === 'done' && lbRank != null && <p className="text-[#1ED760] font-black text-base mb-3">Estás em #{lbRank} 🌍</p>}
+                {lbState === 'error' && <p className="text-brandRed text-xs mb-2">{lbError} <button onClick={() => doSubmit(getLocalPlayer().handle || undefined)} className="underline pointer-events-auto">tentar de novo</button></p>}
 
                 <Leaderboard compact limit={5} highlightId={lbPlayerId} refreshKey={lbRefresh} />
               </div>
             </div>
-            <div className="pt-2 flex flex-wrap gap-4 items-center">
-              <button onClick={reboot} className="bg-brandYellow hover:bg-brandRed text-black font-helvetica font-black py-4 px-10 text-sm uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto border-none active:scale-95 shadow-[4px_4px_0px_#ff4e3e]">REINICIAR NÚCLEO</button>
+
+            <div className="mt-6 flex flex-wrap gap-3 items-center">
+              <button onClick={reboot} className="bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm px-8 py-4 hover:bg-white transition-colors cursor-pointer pointer-events-auto active:scale-95">▶ Jogar de novo</button>
               <a href="https://open.spotify.com/artist/4JNKjNlt3rtcIl84NiK4Lr" target="_blank" rel="noopener noreferrer"
-                className="bg-[#000] border-[3px] border-[#1ED760] hover:bg-[#1ED760] hover:text-black text-[#1ED760] font-helvetica font-black py-4 px-10 text-base uppercase tracking-widest transition-all duration-200 cursor-pointer pointer-events-auto shadow-[5px_5px_0px_#1ED760] flex items-center gap-3">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.84.24 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.26-1.321 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.56.3z"/></svg>
-                SEGUIR NO SPOTIFY
+                className="inline-flex items-center gap-2 border border-[#1ED760] text-[#1ED760] hover:bg-[#1ED760] hover:text-black font-bold uppercase tracking-[0.2em] text-xs px-6 py-4 transition-colors pointer-events-auto">
+                <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.24 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.84.24 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.6.18-1.2.72-1.38 4.26-1.321 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.56.3z"/></svg>
+                Seguir no Spotify
               </a>
             </div>
           </div>
