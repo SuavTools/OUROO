@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { validateMessage, validateHandle, normalizeText } from './names';
 
-export type Channel = { id: string; slug: string; name: string; kind: string; is_system: boolean; created_by: string | null };
+export type Channel = { id: string; slug: string; name: string; kind: string; is_system: boolean; created_by: string | null; pinned: string | null };
 export type ChatMessage = {
   id: number;
   user_id: string;
@@ -16,7 +16,7 @@ export type ChatMessage = {
 export async function fetchChannels(): Promise<Channel[]> {
   if (!supabase) return [];
   const { data } = await supabase
-    .from('channels').select('id,slug,name,kind,is_system,created_by')
+    .from('channels').select('id,slug,name,kind,is_system,created_by,pinned')
     .order('is_system', { ascending: false }).order('created_at', { ascending: true });
   return (data ?? []) as Channel[];
 }
@@ -35,7 +35,7 @@ export async function createChannel(name: string): Promise<{ ok: true; channel: 
   const { data, error } = await sb
     .from('channels')
     .insert({ slug: slugify(v.value), name: v.value, kind: 'chat', is_system: false, created_by: user.id })
-    .select('id,slug,name,kind,is_system,created_by').single();
+    .select('id,slug,name,kind,is_system,created_by,pinned').single();
   if (error) {
     if (error.code === '23505') return { ok: false, error: 'Já existe uma sala com esse nome.' };
     if (error.message?.includes('channel_limit_reached')) return { ok: false, error: 'Atingiste o limite de 3 salas. Apaga uma para criar outra.' };
@@ -47,6 +47,13 @@ export async function createChannel(name: string): Promise<{ ok: true; channel: 
 export async function deleteChannel(id: string): Promise<boolean> {
   if (!supabase) return false;
   const { error } = await supabase.from('channels').delete().eq('id', id);
+  return !error;
+}
+
+// Set/clear a channel's pinned message (moderators only — enforced by RLS).
+export async function setChannelPinned(id: string, pinned: string | null): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from('channels').update({ pinned: pinned?.trim() || null }).eq('id', id);
   return !error;
 }
 

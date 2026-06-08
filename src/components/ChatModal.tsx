@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useUser, signInWithDiscord } from '@/lib/auth';
-import { fetchChannels, fetchMessages, subscribeMessages, sendMessage, createChannel, deleteMessage, deleteChannel, amIModerator, banUser, type ChatMessage, type Channel } from '@/lib/chat';
+import { fetchChannels, fetchMessages, subscribeMessages, sendMessage, createChannel, deleteMessage, deleteChannel, amIModerator, banUser, setChannelPinned, type ChatMessage, type Channel } from '@/lib/chat';
 import { MSG_MAX } from '@/lib/names';
 import { MessageBody } from '@/components/MessageBody';
 
@@ -20,6 +20,8 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [newName, setNewName] = useState('');
   const [agreed, setAgreed] = useState(true);
   const [isMod, setIsMod] = useState(false);
+  const [pinEditing, setPinEditing] = useState(false);
+  const [pinText, setPinText] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastSent = useRef(0);
   const myId = user?.id;
@@ -91,6 +93,17 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
   };
   const canDeleteRoom = !!active && !active.is_system && (active.created_by === myId || isMod);
 
+  const savePin = async () => {
+    if (!active) return;
+    const ok = await setChannelPinned(active.id, pinText);
+    if (ok) {
+      const updated = { ...active, pinned: pinText.trim() || null };
+      setActive(updated);
+      setChannels(cs => cs.map(c => (c.id === active.id ? updated : c)));
+      setPinEditing(false);
+    }
+  };
+
   const accept = () => { localStorage.setItem('ouroo_chat_ok', '1'); setAgreed(true); };
 
   return (
@@ -139,6 +152,32 @@ export function ChatModal({ open, onClose }: { open: boolean; onClose: () => voi
           <div className="flex items-center justify-between px-5 pt-2 text-[10px] uppercase tracking-widest">
             <span className="text-brandYellow/70">{isMod ? '🛡 Moderador' : ''}</span>
             {canDeleteRoom && <button onClick={removeChannel} className="text-white/30 hover:text-brandRed">🗑 Apagar sala</button>}
+          </div>
+        )}
+
+        {/* Pinned message */}
+        {active && (active.pinned || isMod) && (
+          <div className="px-5 pt-2">
+            <div className="border border-brandYellow/30 bg-brandYellow/[0.04] p-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-brandYellow/70">📌 Fixado</span>
+                {isMod && !pinEditing && <button onClick={() => { setPinText(active.pinned || ''); setPinEditing(true); }} className="text-[10px] uppercase tracking-widest text-white/40 hover:text-white">Editar</button>}
+              </div>
+              {pinEditing ? (
+                <div className="mt-1.5">
+                  <textarea value={pinText} onChange={e => setPinText(e.target.value)} rows={5}
+                    className="w-full bg-white/5 border border-white/15 text-white text-sm p-2 outline-none focus:border-brandRed resize-y" />
+                  <div className="flex gap-2 mt-1.5">
+                    <button onClick={savePin} className="bg-brandRed text-black font-bold uppercase text-[10px] tracking-widest px-3 py-1.5 active:scale-95">Guardar</button>
+                    <button onClick={() => setPinEditing(false)} className="text-white/40 text-[10px] uppercase tracking-widest px-2">Cancelar</button>
+                  </div>
+                </div>
+              ) : active.pinned ? (
+                <p className="mt-1 text-[13px] text-white/80 whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto">{active.pinned}</p>
+              ) : (
+                <p className="mt-1 text-[12px] text-white/30">Sem mensagem fixada. Toca em &quot;Editar&quot; para adicionar.</p>
+              )}
+            </div>
           </div>
         )}
 
