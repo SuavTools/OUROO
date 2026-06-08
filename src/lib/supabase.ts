@@ -19,7 +19,9 @@ export const supabase: SupabaseClient | null =
           persistSession: isBrowser,
           autoRefreshToken: isBrowser,
           detectSessionInUrl: isBrowser,
-          flowType: 'pkce',
+          // Implicit flow: tokens come back in the URL fragment, so there's no PKCE code-verifier
+          // to lose across the mobile OAuth redirect (which was leaving sessions un-detected).
+          flowType: 'implicit',
         },
       })
     : null;
