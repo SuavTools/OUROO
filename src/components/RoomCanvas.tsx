@@ -31,6 +31,11 @@ const ROOMS: RoomDef[] = [
   { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#140e1e' },
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
+// hex → rgba string (accents are 6-digit hex).
+const hexA = (hex: string, a: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
 const freshSpawn = () => ({ x: STAGE_W / 2 + (Math.random() - 0.5) * 320, y: 500 + Math.random() * 120 });
 
 // Furniture catalogue — vector items you can drop in a room. Each persists to room_items and
@@ -44,7 +49,8 @@ const FURNI: { kind: string; name: string; emoji: string }[] = [
   { kind: 'stool',   name: 'Banco',      emoji: '🪑' },
   { kind: 'sign',    name: 'Cartaz',     emoji: '🪧' },
 ];
-const MAX_ITEMS = 40;
+const MAX_ITEMS = 80;     // hard cap per room (backstop)
+const PLACE_CAP = 8;      // how many items one (non-moderator) person may have in a room
 type Item = { id: string; kind: string; x: number; y: number; createdBy?: string };
 
 type Avatar = {
@@ -84,6 +90,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placingKind, setPlacingKind] = useState<string | null>(null);
   const [removeMode, setRemoveMode] = useState(false);
   const [decorOpen, setDecorOpen] = useState(false);
+  const [isMod, setIsMod] = useState(false);
+  const [myCount, setMyCount] = useState(0);   // my items in this room (for the per-person cap)
+  const [hint, setHint] = useState('');
+  const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
 
   const [msg, setMsg] = useState('');
   const [population, setPopulation] = useState(1);
@@ -104,19 +114,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const me = selfRef.current;
     me.x = sp.x; me.y = sp.y; me.tx = sp.x; me.ty = sp.y; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear();
-    itemsRef.current = [];
+    itemsRef.current = []; setMyCount(0);
     setRoom(slug);
   };
 
   // ---- furniture: place (persist + broadcast) / remove (own or moderator) ----
   const placeItem = (kind: string, x: number, y: number) => {
-    if (itemsRef.current.length >= MAX_ITEMS) return;
+    if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
+    const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
+    if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} objetos por pessoa`); return; }
     const ty = Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, y));
     const [lo, hi] = floorXRange(ty);
     const tx = Math.max(lo, Math.min(hi, x));
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
     const item: Item = { id, kind, x: tx, y: ty, createdBy: selfRef.current.id };
     itemsRef.current.push(item);
+    setMyCount(c => c + 1);
     channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, x: tx, y: ty, by: item.createdBy } });
     supabase?.from('room_items').insert({ id, room, kind, x: tx, y: ty, created_by: item.createdBy }).then(undefined, () => {});
   };
@@ -126,6 +139,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       Math.abs(i.x - x) < 42 && Math.abs(i.y - y) < 54 && (modRef.current || i.createdBy === selfRef.current.id));
     if (!hit) return;
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
+    if (hit.createdBy === selfRef.current.id) setMyCount(c => Math.max(0, c - 1));
     channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
     supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
   };
@@ -157,7 +171,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     selfRef.current.skinId = getSelectedSkinId();
     // Refine with the signed-in name if there is one.
     getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; });
-    amIModerator().then(m => { modRef.current = m; });
+    amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
     if (!supabase) return;   // offline → still walk around solo
     const me = selfRef.current;
@@ -227,7 +241,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, x: me.x, y: me.y });
           // load this room's saved furniture (no-ops gracefully if the table isn't created yet)
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room);
-          if (data) itemsRef.current = data.map(d => ({ id: String(d.id), kind: String(d.kind), x: Number(d.x), y: Number(d.y), createdBy: String(d.created_by ?? '') }));
+          if (data) {
+            itemsRef.current = data.map(d => ({ id: String(d.id), kind: String(d.kind), x: Number(d.x), y: Number(d.y), createdBy: String(d.created_by ?? '') }));
+            setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length);
+          }
         }
       });
 
@@ -303,6 +320,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.save();
       ctx.translate(it.x, it.y);
       ctx.scale(sc, sc);
+      if (it.kind !== 'rug') {   // grounded furni casts a soft shadow
+        ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.ellipse(0, 0, 24, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
       switch (it.kind) {
         case 'rug': {
           ctx.globalAlpha = 0.5; ctx.fillStyle = theme.accent;
@@ -367,24 +388,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const drawAvatar = (a: Avatar, isSelf: boolean) => {
       const sk = skinById(a.skinId);
       const sc = depthScale(a.y);
-      // shadow
+      // soft contact shadow + accent foot-glow
       ctx.save();
-      ctx.globalAlpha = 0.35; ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.ellipse(a.x, a.y, 22 * sc, 7 * sc, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.ellipse(a.x, a.y, 24 * sc, 8 * sc, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.fillStyle = sk.color; ctx.shadowColor = sk.color; ctx.shadowBlur = 16 * sc;
+      ctx.beginPath(); ctx.ellipse(a.x, a.y, 15 * sc, 4.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       // body (bob while walking)
       const bob = Math.sin(a.af * 0.3) * 3 * sc * (Math.hypot(a.tx - a.x, a.ty - a.y) > 1 ? 1 : 0);
       ctx.save();
       ctx.translate(a.x, a.y - 30 * sc + bob);
       ctx.scale(sc, sc);
-      if (isSelf) { ctx.shadowColor = sk.color; ctx.shadowBlur = 18; }
+      ctx.shadowColor = sk.color; ctx.shadowBlur = isSelf ? 22 : 12;
       drawSkinShape(ctx, sk.shape, sk.color, 40, 54, a.af);
       ctx.restore();
-      // name tag
+      // name plate (rounded pill)
       ctx.save();
-      ctx.font = `700 ${Math.round(12 * sc)}px monospace`; ctx.textAlign = 'center';
-      ctx.fillStyle = isSelf ? '#ffe65c' : 'rgba(255,255,255,0.8)';
-      ctx.fillText(a.handle, a.x, a.y + 16 * sc);
+      ctx.font = `700 ${Math.round(11 * sc)}px Helvetica, Arial, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const nw = ctx.measureText(a.handle).width + 14 * sc, nh = 17 * sc, ny = a.y + 14 * sc;
+      ctx.fillStyle = 'rgba(8,8,14,0.7)';
+      ctx.beginPath(); ctx.roundRect(a.x - nw / 2, ny - nh / 2, nw, nh, nh / 2); ctx.fill();
+      if (isSelf) { ctx.strokeStyle = hexA(sk.color, 0.8); ctx.lineWidth = 1; ctx.stroke(); }
+      ctx.fillStyle = isSelf ? sk.color : 'rgba(255,255,255,0.82)';
+      ctx.fillText(a.handle, a.x, ny);
       ctx.restore();
       // speech bubble
       if (a.bubbleLife > 0 && a.bubble) {
@@ -405,40 +432,72 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     const draw = () => {
       const theme = themeRef.current;
-      // background
-      const g = ctx.createLinearGradient(0, 0, 0, STAGE_H);
-      g.addColorStop(0, '#0a0a12'); g.addColorStop(1, '#14060c');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+      const t = framesRef.current;
+      // ---- deep background ----
+      const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H);
+      bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
 
-      // back wall band + sign (per-room name)
+      // ---- back wall: accent haze near the horizon + slow dust motes + neon sign ----
+      const wall = ctx.createLinearGradient(0, 0, 0, FLOOR_TOP);
+      wall.addColorStop(0, 'rgba(255,255,255,0)'); wall.addColorStop(1, hexA(theme.accent, 0.06));
+      ctx.fillStyle = wall; ctx.fillRect(0, 0, STAGE_W, FLOOR_TOP + 30);
+      ctx.save(); ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 26; i++) {
+        const mx = (i * 197.3) % STAGE_W;
+        const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % (FLOOR_TOP + 60);
+        ctx.globalAlpha = 0.03 + (i % 5) * 0.012;
+        ctx.fillRect(mx, FLOOR_TOP + 50 - my, 2, 2);
+      }
+      ctx.restore();
       ctx.save();
-      ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(0, 0, STAGE_W, FLOOR_TOP);
-      ctx.font = '900 56px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.fillText(`${theme.name.toUpperCase()} · SUAV`, STAGE_W / 2, FLOOR_TOP * 0.5);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '900 64px Helvetica, Arial, sans-serif';
+      ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92);
+      ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, FLOOR_TOP * 0.4);
+      ctx.shadowBlur = 0; ctx.font = '700 13px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillText('· S U A V ·', STAGE_W / 2, FLOOR_TOP * 0.4 + 42);
       ctx.restore();
 
-      // perspective floor (trapezoid) + neon grid in the room's accent
+      // ---- tiled perspective floor ----
       const [tl, tr] = floorXRange(FLOOR_TOP);
       const [bl, br] = floorXRange(FLOOR_BOT);
+      const ROWS = 8, COLS = 12;
       ctx.save();
       ctx.beginPath(); ctx.moveTo(tl, FLOOR_TOP); ctx.lineTo(tr, FLOOR_TOP); ctx.lineTo(br, FLOOR_BOT); ctx.lineTo(bl, FLOOR_BOT); ctx.closePath();
       ctx.fillStyle = theme.floor; ctx.fill();
       ctx.clip();
-      ctx.globalAlpha = 0.16; ctx.strokeStyle = theme.accent; ctx.lineWidth = 1.5;
-      for (let i = 0; i <= 10; i++) {           // depth lines
-        const y = FLOOR_TOP + (FLOOR_BOT - FLOOR_TOP) * (i / 10);
-        const [a, b] = floorXRange(y);
-        ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.stroke();
+      for (let r = 0; r < ROWS; r++) {
+        const yA = FLOOR_TOP + (FLOOR_BOT - FLOOR_TOP) * (r / ROWS);
+        const yB = FLOOR_TOP + (FLOOR_BOT - FLOOR_TOP) * ((r + 1) / ROWS);
+        const [aL, aR] = floorXRange(yA); const [bL2, bR2] = floorXRange(yB);
+        for (let c = 0; c < COLS; c++) {
+          const f0 = c / COLS, f1 = (c + 1) / COLS;
+          ctx.beginPath();
+          ctx.moveTo(aL + (aR - aL) * f0, yA); ctx.lineTo(aL + (aR - aL) * f1, yA);
+          ctx.lineTo(bL2 + (bR2 - bL2) * f1, yB); ctx.lineTo(bL2 + (bR2 - bL2) * f0, yB); ctx.closePath();
+          ctx.fillStyle = (r + c) % 2 ? 'rgba(255,255,255,0.028)' : 'rgba(0,0,0,0.20)';
+          ctx.fill();
+        }
       }
-      for (let i = 0; i <= 12; i++) {           // converging verticals
-        const fx = i / 12;
-        ctx.beginPath(); ctx.moveTo(tl + (tr - tl) * fx, FLOOR_TOP); ctx.lineTo(bl + (br - bl) * fx, FLOOR_BOT); ctx.stroke();
-      }
+      // pool of accent light on the floor
+      const pool = ctx.createRadialGradient(STAGE_W / 2, FLOOR_BOT - 60, 30, STAGE_W / 2, FLOOR_BOT - 60, 540);
+      pool.addColorStop(0, hexA(theme.accent, 0.12)); pool.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = pool; ctx.fillRect(0, FLOOR_TOP, STAGE_W, FLOOR_BOT - FLOOR_TOP + 4);
+      // faint accent grout
+      ctx.globalAlpha = 0.09; ctx.strokeStyle = theme.accent; ctx.lineWidth = 1;
+      for (let r = 0; r <= ROWS; r++) { const y = FLOOR_TOP + (FLOOR_BOT - FLOOR_TOP) * (r / ROWS); const [a, b] = floorXRange(y); ctx.beginPath(); ctx.moveTo(a, y); ctx.lineTo(b, y); ctx.stroke(); }
+      for (let c = 0; c <= COLS; c++) { const f = c / COLS; ctx.beginPath(); ctx.moveTo(tl + (tr - tl) * f, FLOOR_TOP); ctx.lineTo(bl + (br - bl) * f, FLOOR_BOT); ctx.stroke(); }
       ctx.restore();
-      // glowing floor edge in the accent
-      ctx.save(); ctx.globalAlpha = 0.85; ctx.strokeStyle = theme.accent; ctx.lineWidth = 3; ctx.shadowColor = theme.accent; ctx.shadowBlur = 14;
-      ctx.beginPath(); ctx.moveTo(bl, FLOOR_BOT); ctx.lineTo(br, FLOOR_BOT); ctx.stroke(); ctx.restore();
+
+      // ---- floor slab thickness + glowing front edge ----
+      const THICK = 18;
+      ctx.save();
+      ctx.fillStyle = '#06060b';
+      ctx.beginPath(); ctx.moveTo(bl, FLOOR_BOT); ctx.lineTo(br, FLOOR_BOT); ctx.lineTo(br, FLOOR_BOT + THICK); ctx.lineTo(bl, FLOOR_BOT + THICK); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = theme.accent; ctx.lineWidth = 3; ctx.shadowColor = theme.accent; ctx.shadowBlur = 16;
+      ctx.beginPath(); ctx.moveTo(bl, FLOOR_BOT); ctx.lineTo(br, FLOOR_BOT); ctx.stroke();
+      ctx.restore();
 
       // flat items (rugs) lie ON the floor, under everyone
       for (const it of itemsRef.current) if (it.kind === 'rug') drawItem(it, theme);
@@ -450,6 +509,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const it of itemsRef.current) { if (it.kind === 'rug') continue; const ii = it; ents.push({ y: ii.y, draw: () => drawItem(ii, theme) }); }
       ents.sort((p, q) => p.y - q.y);
       for (const e of ents) e.draw();
+
+      // ---- vignette: darken the edges to focus the room ----
+      const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.32, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.82);
+      vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+      ctx.fillStyle = vig; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
     };
 
     // fixed 60Hz accumulator (refresh-rate independent walk speed)
@@ -511,17 +575,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </button>
       </div>
 
-      {/* mode banner */}
-      {(placingKind || removeMode) && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest text-brandYellow bg-black/70 px-3 py-1">
-          {placingKind ? 'toca para colocar' : 'toca para remover'}
+      {/* mode banner / hint */}
+      {(hint || placingKind || removeMode) && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1"
+          style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
+          {hint || (placingKind ? 'toca para colocar' : 'toca para remover')}
         </div>
       )}
 
       {/* furni tray */}
       {decorOpen && (
-        <div className="absolute z-40 left-1/2 -translate-x-1/2 flex flex-wrap justify-center gap-2 px-3 max-w-[94%]"
+        <div className="absolute z-40 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 px-3 max-w-[94%]"
           style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 56px)' }}>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-white/50">
+            {isMod ? 'moderador · sem limite' : `os teus objetos: ${myCount}/${PLACE_CAP}`}
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
           {FURNI.map(f => (
             <button key={f.kind}
               onClick={() => { setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); }}
@@ -535,6 +604,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <span className="text-xl leading-none">🗑️</span>
             <span className="uppercase tracking-wider">Remover</span>
           </button>
+          </div>
         </div>
       )}
       {showRooms && (
