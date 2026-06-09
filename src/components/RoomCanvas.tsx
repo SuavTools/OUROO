@@ -295,8 +295,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       });
 
     const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy }); } };
+    // Tab close / app quit / navigation never runs React cleanup — so untrack + tear down here,
+    // otherwise the server holds our presence until a heartbeat timeout and others see a frozen ghost.
+    const onLeave = () => { const c = channelRef.current; if (!c) return; channelRef.current = null; c.untrack().catch(() => {}); supabase?.removeChannel(c); };
     document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume);
-    return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); supabase?.removeChannel(ch); channelRef.current = null; };
+    window.addEventListener('pagehide', onLeave);
+    return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); if (channelRef.current) { supabase?.removeChannel(ch); channelRef.current = null; } };
   }, [room]);
 
   // ---- main loop ----
