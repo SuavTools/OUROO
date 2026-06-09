@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 import { LeapCanvas } from '@/components/LeapCanvas';
+import { RoomCanvas } from '@/components/RoomCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
@@ -12,7 +13,7 @@ import { ChatModal } from '@/components/ChatModal';
 import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
 
-type View = 'landing' | 'arcade' | 'leap';
+type View = 'landing' | 'arcade' | 'leap' | 'lobby';
 
 // --- Artist content (edit here) ---------------------------------------------
 const VIDEO_ID = 's5dhOrRjs7Q';                       // latest clip (YouTube)
@@ -96,6 +97,12 @@ export default function Home() {
     setTimeout(() => { setView('leap'); setIsZooming(false); }, 550);
   };
 
+  const enterLobby = () => {
+    if (isZooming) return;
+    setIsZooming(true);
+    setTimeout(() => { setView('lobby'); setIsZooming(false); }, 550);
+  };
+
   // ==========================================================================
   // THE ARCADE
   // ==========================================================================
@@ -131,6 +138,18 @@ export default function Home() {
         >
           [ SAIR PARA SUAV ]
         </button>
+      </main>
+    );
+  }
+
+  // ==========================================================================
+  // PRAÇA — SOCIAL ROOM
+  // ==========================================================================
+  if (view === 'lobby') {
+    return (
+      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
+        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('landing')} />
+        <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
       </main>
     );
   }
@@ -287,6 +306,21 @@ export default function Home() {
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandYellow px-6 py-3 group-hover:bg-white transition-colors">
               ▶ Saltar
+            </span>
+          </button>
+
+          {/* Social room — your skin walks around live with others. Canvas + vectors. */}
+          <button
+            onClick={enterLobby}
+            className="group relative w-full overflow-hidden border border-[#00cfff]/40 bg-gradient-to-br from-[#00cfff]/10 to-transparent p-8 sm:p-12 text-left transition-all hover:border-[#00cfff] mt-5"
+          >
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Sala Social · Beta</p>
+            <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">PRAÇA<span className="text-[#00cfff]">.</span></h2>
+            <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
+              Entra com a tua skin e passeia. Vê quem está online ao vivo e fala com balões por cima da cabeça. Tudo em tempo real.
+            </p>
+            <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-[#00cfff] px-6 py-3 group-hover:bg-white transition-colors">
+              ▶ Entrar
             </span>
           </button>
 
