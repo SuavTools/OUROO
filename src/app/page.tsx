@@ -283,7 +283,7 @@ export default function Home() {
             <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Novo Modo</p>
             <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">LEAP<span className="text-brandYellow">.</span></h2>
             <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
-              Salta de moeda em moeda — as moedas são o teu único apoio. Falha o salto e cais. Mesma skin, novo ranking.
+              Salta a escadaria de cristais de plataforma em plataforma — apanha um cristal no ar e o salto volta. Cada plataforma sobe um nível. Mesma skin, novo ranking.
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandYellow px-6 py-3 group-hover:bg-white transition-colors">
               ▶ Saltar

@@ -3,7 +3,7 @@ import { mkdirSync } from 'fs';
 const OUT = '/tmp/shots'; mkdirSync(OUT, { recursive: true });
 const URL = process.env.SHOT_URL || 'http://localhost:3000';
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
 const page = await ctx.newPage();
 const errs = [];
 page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
@@ -12,22 +12,20 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const shot = async n => { await page.screenshot({ path: `${OUT}/leap-${n}.png` }); console.log('shot', n); };
 
 await page.goto(URL, { waitUntil: 'domcontentloaded' });
-await wait(2000); await shot('1-landing');
+await wait(1800);
+// Enter LEAP — the landing card is a <button> whose accessible name contains "LEAP … Saltar".
+await page.getByRole('button', { name: /Novo Modo|LEAP/i }).first().click().catch(()=>{});
+await wait(900); await shot('A-intro');            // LEAP intro screen
+// Start the run from the intro
+await page.getByRole('button', { name: /Saltar/i }).first().click().catch(()=>{});
+await wait(300); await shot('B-start-platform');   // grounded on the start platform
 
-// Click the LEAP card (the "Saltar" entry button on the landing page)
-await page.getByRole('button', { name: /^▶ Saltar$/i }).click().catch(async () => {
-  await page.getByText('LEAP', { exact: false }).first().click().catch(()=>{});
-});
-await wait(1200); await shot('2-leap-intro');
+// Climb: tap roughly on a rhythm to chain crystals
+for (let i = 0; i < 5; i++) { await page.keyboard.press('Space'); await wait(360); }
+await shot('C-climbing');
+for (let i = 0; i < 5; i++) { await page.keyboard.press('Space'); await wait(360); }
+await shot('D-more');
+await wait(900); await shot('E-later');
 
-// Start the game from the intro
-await page.getByRole('button', { name: /Saltar/i }).last().click().catch(()=>{});
-await wait(400); await shot('3-leap-start');
-
-// Play a little: jump a few times
-for (let i = 0; i < 6; i++) { await page.keyboard.press('Space'); await wait(450); }
-await shot('4-leap-play');
-await wait(1500); await shot('5-leap-later');
-
-console.log('CONSOLE ERRORS:', errs.length ? JSON.stringify(errs.slice(0,10), null, 2) : 'none');
+console.log('CONSOLE ERRORS:', errs.length ? JSON.stringify(errs.slice(0,8), null, 2) : 'none');
 await browser.close();
