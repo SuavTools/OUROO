@@ -69,19 +69,19 @@ const FURNI: FurniDef[] = [
   { kind: 'lava',     name: 'Lava',    emoji: '🌋', cat: 'tapetes', color: '#d23a1a', h: 1, walk: true, foot: 1, special: 'water' },
   { kind: 'xadrez',   name: 'Xadrez',  emoji: '♟️', cat: 'tapetes', color: '#2a2a36', h: 1, walk: true, foot: 1, special: 'rug' },
   // assentos
-  { kind: 'cadeira',  name: 'Cadeira',  emoji: '🪑', cat: 'assentos', color: '#5a4a3a', h: 1, walk: false, foot: 0.7 },
-  { kind: 'poltrona', name: 'Poltrona', emoji: '💺', cat: 'assentos', color: '#4a3768', h: 1, walk: false, foot: 0.8 },
-  { kind: 'sofa',     name: 'Sofá',     emoji: '🛋️', cat: 'assentos', color: '#4a3768', h: 1, walk: false, foot: 1 },
-  { kind: 'sofahc',   name: 'Sofá HC',  emoji: '👑', cat: 'assentos', color: '#ffd23a', h: 1, walk: false, foot: 1 },
-  { kind: 'banco',    name: 'Banco',    emoji: '🪑', cat: 'assentos', color: '#50505c', h: 1, walk: false, foot: 0.6 },
-  { kind: 'trono',    name: 'Trono',    emoji: '👑', cat: 'assentos', color: '#6a1aaa', h: 2, walk: false, foot: 0.8 },
-  { kind: 'puff',     name: 'Puff',     emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7 },
+  { kind: 'cadeira',  name: 'Cadeira',  emoji: '🪑', cat: 'assentos', color: '#6a5436', h: 1, walk: false, foot: 0.7, special: 'chair' },
+  { kind: 'poltrona', name: 'Poltrona', emoji: '💺', cat: 'assentos', color: '#5a4080', h: 1, walk: false, foot: 0.8, special: 'sofa' },
+  { kind: 'sofa',     name: 'Sofá',     emoji: '🛋️', cat: 'assentos', color: '#4a3768', h: 1, walk: false, foot: 1,   special: 'sofa' },
+  { kind: 'sofahc',   name: 'Sofá HC',  emoji: '👑', cat: 'assentos', color: '#ffd23a', h: 1, walk: false, foot: 1,   special: 'sofa' },
+  { kind: 'banco',    name: 'Banco',    emoji: '🪑', cat: 'assentos', color: '#6a6a76', h: 1, walk: false, foot: 0.6, special: 'stool' },
+  { kind: 'trono',    name: 'Trono',    emoji: '👑', cat: 'assentos', color: '#7a1aaa', h: 2, walk: false, foot: 0.8, special: 'throne' },
+  { kind: 'puff',     name: 'Puff',     emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7, special: 'puff' },
   // mesas
-  { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#6a4a2a', h: 1, walk: false, foot: 0.9 },
-  { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#5a3a1a', h: 1, walk: false, foot: 1 },
-  { kind: 'mesacafe', name: 'Café',      emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8 },
-  { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#2a2a3a', h: 2, walk: false, foot: 1 },
-  { kind: 'prat',     name: 'Prateleira',emoji: '📚', cat: 'mesas', color: '#3a2a1a', h: 2, walk: false, foot: 0.6 },
+  { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
+  { kind: 'mesacafe', name: 'Café',      emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8, special: 'table' },
+  { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#2a2a3a', h: 2, walk: false, foot: 1,   special: 'counter' },
+  { kind: 'prat',     name: 'Prateleira',emoji: '📚', cat: 'mesas', color: '#4a3420', h: 2, walk: false, foot: 0.6, special: 'shelf' },
   // plantas
   { kind: 'planta',   name: 'Planta',   emoji: '🪴', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
   { kind: 'cato',     name: 'Cato',     emoji: '🌵', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
@@ -99,19 +99,19 @@ const FURNI: FurniDef[] = [
   // eletrónica
   { kind: 'tv',       name: 'TV',       emoji: '📺', cat: 'electro', color: '#15151f', h: 1, walk: false, foot: 1, special: 'tv' },
   { kind: 'coluna',   name: 'Coluna',   emoji: '🔈', cat: 'electro', color: '#23232f', h: 2, walk: false, foot: 0.7, special: 'speaker' },
-  { kind: 'jukebox',  name: 'Jukebox',  emoji: '🎵', cat: 'electro', color: '#aa2266', h: 2, walk: false, foot: 0.7 },
+  { kind: 'jukebox',  name: 'Jukebox',  emoji: '🎵', cat: 'electro', color: '#aa2266', h: 2, walk: false, foot: 0.7, special: 'jukebox' },
   { kind: 'arcade',   name: 'Arcade',   emoji: '🕹️', cat: 'electro', color: '#2a1a4a', h: 2, walk: false, foot: 0.8, special: 'tv' },
-  { kind: 'frigo',    name: 'Frigorífico',emoji: '🧊', cat: 'electro', color: '#cdd6e0', h: 2, walk: false, foot: 0.7 },
-  { kind: 'vending',  name: 'Máquina',  emoji: '🥤', cat: 'electro', color: '#b3242e', h: 2, walk: false, foot: 0.7 },
+  { kind: 'frigo',    name: 'Frigorífico',emoji: '🧊', cat: 'electro', color: '#cdd6e0', h: 2, walk: false, foot: 0.7, special: 'fridge' },
+  { kind: 'vending',  name: 'Máquina',  emoji: '🥤', cat: 'electro', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'vending' },
   { kind: 'pc',       name: 'PC',       emoji: '💻', cat: 'electro', color: '#2a2a3a', h: 1, walk: false, foot: 0.6, special: 'tv' },
   // decoração
   { kind: 'cartaz',   name: 'Cartaz',   emoji: '🪧', cat: 'deco', color: '#16161f', h: 1, walk: false, foot: 0.7, special: 'sign' },
-  { kind: 'quadro',   name: 'Quadro',   emoji: '🖼️', cat: 'deco', color: '#3a2a1a', h: 1, walk: false, foot: 0.6 },
-  { kind: 'trofeu',   name: 'Troféu',   emoji: '🏆', cat: 'deco', color: '#ffd700', h: 1, walk: false, foot: 0.4 },
-  { kind: 'vaso',     name: 'Vaso',     emoji: '🏺', cat: 'deco', color: '#b5552e', h: 1, walk: false, foot: 0.5 },
-  { kind: 'pato',     name: 'Patinho',  emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4 },
-  { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4 },
-  { kind: 'estatua',  name: 'Estátua',  emoji: '🗿', cat: 'deco', color: '#888899', h: 2, walk: false, foot: 0.6 },
+  { kind: 'quadro',   name: 'Quadro',   emoji: '🖼️', cat: 'deco', color: '#caa24a', h: 1, walk: false, foot: 0.6, special: 'frame' },
+  { kind: 'trofeu',   name: 'Troféu',   emoji: '🏆', cat: 'deco', color: '#ffd700', h: 1, walk: false, foot: 0.4, special: 'trophy' },
+  { kind: 'vaso',     name: 'Vaso',     emoji: '🏺', cat: 'deco', color: '#c4632e', h: 1, walk: false, foot: 0.5, special: 'vase' },
+  { kind: 'pato',     name: 'Patinho',  emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4, special: 'duck' },
+  { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4, special: 'cone' },
+  { kind: 'estatua',  name: 'Estátua',  emoji: '🗿', cat: 'deco', color: '#9a9aa6', h: 2, walk: false, foot: 0.6, special: 'statue' },
   { kind: 'fonte',    name: 'Fonte',    emoji: '⛲', cat: 'deco', color: '#2a6fb3', h: 1, walk: false, foot: 1, special: 'water' },
 ];
 const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
@@ -328,6 +328,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (emoji) { ctx.font = `${Math.round(13 * foot + 4)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(emoji, cx, cyTop); }
       return cyTop;
     };
+    // general iso box with independent footprint (fw×fd, fractions of a tile) — the building
+    // block for real furniture (seats, backrests, armrests, legs, cabinets…).
+    const boxAt = (cx: number, cyB: number, fw: number, fd: number, h: number, color: string, accent?: string, top = true) => {
+      const hw = TW * fw, hh = TH * fd, Hh = h * STACK_H, cyT = cyB - Hh;
+      ctx.fillStyle = shade(color, 0.55); ctx.beginPath(); ctx.moveTo(cx - hw, cyB); ctx.lineTo(cx, cyB + hh); ctx.lineTo(cx, cyT + hh); ctx.lineTo(cx - hw, cyT); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = shade(color, 0.82); ctx.beginPath(); ctx.moveTo(cx, cyB + hh); ctx.lineTo(cx + hw, cyB); ctx.lineTo(cx + hw, cyT); ctx.lineTo(cx, cyT + hh); ctx.closePath(); ctx.fill();
+      if (top) { ctx.fillStyle = shade(color, 1.22); diamond(cx, cyT, hw, hh); ctx.fill(); if (accent) { ctx.strokeStyle = hexA(accent, 0.3); ctx.lineWidth = 1; diamond(cx, cyT, hw, hh); ctx.stroke(); } }
+      return cyT;
+    };
 
     const drawFurni = (it: Item, gz: number, theme: RoomDef) => {
       const d = defOf(it.kind); const { sx, sy } = iso(it.gx, it.gy, gz);
@@ -342,7 +351,82 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         case 'tv': { const top = block(sx, sy, d.h, d.color, theme.accent, d.foot); ctx.fillStyle = hexA(theme.accent, 0.7); ctx.fillRect(sx - 14, top - 12, 28, 18); ctx.fillStyle = `hsl(${(framesRef.current * 3) % 360},80%,60%)`; ctx.globalAlpha = 0.5; ctx.fillRect(sx - 12, top - 10, 24, 14); ctx.globalAlpha = 1; break; }
         case 'sign': { const top = block(sx, sy, 1, d.color, theme.accent, d.foot); ctx.fillStyle = theme.accent; ctx.font = '900 10px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SUAV', sx, top); break; }
         case 'disco': { const cy = sy - 2.6 * STACK_H; ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx, cy - 22); ctx.lineTo(sx, cy - 56); ctx.stroke(); ctx.save(); ctx.translate(sx, cy); ctx.rotate(framesRef.current * 0.04); const grd = ctx.createRadialGradient(-6, -6, 3, 0, 0, 20); grd.addColorStop(0, '#fff'); grd.addColorStop(1, '#8893b8'); ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + framesRef.current * 0.04; ctx.fillStyle = `hsla(${(framesRef.current * 4 + i * 60) % 360},90%,65%,0.9)`; ctx.beginPath(); ctx.arc(Math.cos(a) * 12, Math.sin(a) * 12, 3.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); break; }
-        default: block(sx, sy, d.h, d.color, theme.accent, d.foot, d.emoji);
+        case 'chair': {
+          boxAt(sx, sy - TH * 0.2, 0.52, 0.14, 1.15, shade(d.color, 1.08), theme.accent);   // backrest
+          const top = boxAt(sx, sy + TH * 0.16, 0.52, 0.5, 0.5, d.color, theme.accent);       // seat
+          ctx.fillStyle = shade(d.color, 1.35); diamond(sx, top, TW * 0.46, TH * 0.46); ctx.fill();
+          break;
+        }
+        case 'sofa': {
+          const w = d.foot * 0.92;
+          boxAt(sx, sy - TH * 0.22, w, 0.16, 1.0, shade(d.color, 1.06), theme.accent);          // back
+          boxAt(sx - TW * w * 0.9, sy, 0.16, 0.5, 0.85, shade(d.color, 0.92), theme.accent);     // left arm
+          boxAt(sx + TW * w * 0.9, sy, 0.16, 0.5, 0.85, shade(d.color, 0.92), theme.accent);     // right arm
+          const top = boxAt(sx, sy + TH * 0.16, w, 0.52, 0.5, d.color, theme.accent);            // seat
+          ctx.fillStyle = shade(d.color, 1.32); diamond(sx, top, TW * w * 0.9, TH * 0.46); ctx.fill();
+          break;
+        }
+        case 'stool': {
+          const top = boxAt(sx, sy, 0.4, 0.4, 0.7, shade(d.color, 0.85), theme.accent, false);
+          ctx.fillStyle = shade(d.color, 1.25); ctx.beginPath(); ctx.ellipse(sx, top, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = hexA(theme.accent, 0.3); ctx.lineWidth = 1; ctx.stroke();
+          break;
+        }
+        case 'throne': {
+          boxAt(sx, sy - TH * 0.22, 0.66, 0.16, 2.1, d.color, theme.accent);                     // tall back
+          boxAt(sx - TW * 0.62, sy, 0.16, 0.5, 1.0, d.color, theme.accent);
+          boxAt(sx + TW * 0.62, sy, 0.16, 0.5, 1.0, d.color, theme.accent);
+          const top = boxAt(sx, sy + TH * 0.15, 0.66, 0.5, 0.7, shade(d.color, 1.12), theme.accent);
+          ctx.fillStyle = theme.accent; ctx.beginPath(); ctx.arc(sx, sy - 2.1 * STACK_H + 7, 4, 0, Math.PI * 2); ctx.fill();
+          void top; break;
+        }
+        case 'puff': {
+          ctx.fillStyle = shade(d.color, 0.7); ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.5, TH * 0.52, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = shade(d.color, 1.15); ctx.beginPath(); ctx.ellipse(sx, sy - 9, TW * 0.5, TH * 0.46, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = hexA(theme.accent, 0.3); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx - TW * 0.5, sy - 4); ctx.lineTo(sx, sy - 9 + TH * 0.46); ctx.lineTo(sx + TW * 0.5, sy - 4); ctx.stroke();
+          break;
+        }
+        case 'table': {
+          const w = d.foot, legH = 0.7 * STACK_H, top = sy - legH;
+          ctx.strokeStyle = shade(d.color, 0.55); ctx.lineWidth = 3;
+          for (const [lx, ly] of [[-TW * w * 0.8, 0], [TW * w * 0.8, 0], [0, -TH * w * 0.8], [0, TH * w * 0.8]] as [number, number][]) { ctx.beginPath(); ctx.moveTo(sx + lx, sy + ly); ctx.lineTo(sx + lx, sy + ly - legH); ctx.stroke(); }
+          ctx.fillStyle = shade(d.color, 0.7); ctx.beginPath(); ctx.moveTo(sx - TW * w, top); ctx.lineTo(sx, top + TH * w); ctx.lineTo(sx + TW * w, top); ctx.lineTo(sx + TW * w, top + 4); ctx.lineTo(sx, top + TH * w + 4); ctx.lineTo(sx - TW * w, top + 4); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = shade(d.color, 1.22); diamond(sx, top, TW * w, TH * w); ctx.fill();
+          ctx.strokeStyle = hexA(theme.accent, 0.3); ctx.lineWidth = 1; diamond(sx, top, TW * w, TH * w); ctx.stroke();
+          break;
+        }
+        case 'counter': { const top = boxAt(sx, sy, d.foot, d.foot, 2, d.color, theme.accent); ctx.fillStyle = shade(d.color, 1.4); diamond(sx, top - 2, TW * d.foot * 1.06, TH * d.foot * 1.06); ctx.fill(); break; }
+        case 'shelf': {
+          const top = boxAt(sx, sy, d.foot, d.foot, 2, d.color, theme.accent);
+          ctx.strokeStyle = hexA(theme.accent, 0.4); ctx.lineWidth = 1.5;
+          for (let i = 1; i <= 2; i++) { const yy = top + i * (2 * STACK_H / 3); ctx.beginPath(); ctx.moveTo(sx - TW * d.foot, yy - TH * d.foot); ctx.lineTo(sx + TW * d.foot, yy + TH * d.foot); ctx.stroke(); }
+          break;
+        }
+        case 'fridge': {
+          const top = boxAt(sx, sy, d.foot, d.foot, 2, d.color, theme.accent);
+          ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx + TW * d.foot * 0.5, top + TH * d.foot * 0.5); ctx.lineTo(sx + TW * d.foot * 0.5, top + TH * d.foot * 0.5 + 1.8 * STACK_H); ctx.stroke();
+          ctx.strokeStyle = shade(d.color, 0.5); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx + TW * d.foot * 0.18, top + 16); ctx.lineTo(sx + TW * d.foot * 0.18, top + 34); ctx.stroke();
+          break;
+        }
+        case 'vending': {
+          const top = boxAt(sx, sy, d.foot, d.foot, 2, d.color, theme.accent);
+          ctx.fillStyle = 'rgba(10,20,30,0.7)'; ctx.beginPath(); ctx.moveTo(sx + 4, top + TH * d.foot * 0.3); ctx.lineTo(sx + TW * d.foot * 0.72, top); ctx.lineTo(sx + TW * d.foot * 0.72, top + 1.6 * STACK_H); ctx.lineTo(sx + 4, top + TH * d.foot * 0.3 + 1.6 * STACK_H); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = hexA(theme.accent, 0.6); ctx.fillRect(sx - TW * d.foot * 0.55, top + 5, TW * d.foot * 0.5, 4);
+          break;
+        }
+        case 'jukebox': {
+          const top = boxAt(sx, sy, d.foot, d.foot, 2, d.color, theme.accent);
+          ctx.fillStyle = shade(d.color, 1.4); ctx.beginPath(); ctx.ellipse(sx, top, TW * d.foot, TH * d.foot, 0, Math.PI, 0); ctx.fill();
+          for (let i = 0; i < 5; i++) { ctx.fillStyle = `hsl(${(framesRef.current * 4 + i * 70) % 360},90%,62%)`; ctx.beginPath(); ctx.arc(sx - 12 + i * 6, top + 10, 2, 0, Math.PI * 2); ctx.fill(); }
+          break;
+        }
+        case 'frame': { const w = 18, h = 24, by = sy - 6; ctx.fillStyle = d.color; ctx.fillRect(sx - w / 2 - 3, by - h - 3, w + 6, h + 6); ctx.fillStyle = '#243a6a'; ctx.fillRect(sx - w / 2, by - h, w, h); ctx.fillStyle = hexA(theme.accent, 0.5); ctx.fillRect(sx - w / 2 + 3, by - h + 4, w - 6, 5); break; }
+        case 'trophy': { const cy = sy - 5; ctx.fillStyle = '#b88a14'; ctx.fillRect(sx - 6, cy - 2, 12, 4); ctx.fillStyle = d.color; ctx.fillRect(sx - 2, cy - 11, 4, 9); ctx.beginPath(); ctx.moveTo(sx - 9, cy - 24); ctx.quadraticCurveTo(sx, cy - 9, sx + 9, cy - 24); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx - 9, cy - 20, 4, Math.PI * 0.4, Math.PI * 1.5); ctx.stroke(); ctx.beginPath(); ctx.arc(sx + 9, cy - 20, 4, -Math.PI * 0.5, Math.PI * 0.6); ctx.stroke(); break; }
+        case 'vase': { const cy = sy - 4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx - 7, cy); ctx.quadraticCurveTo(sx - 13, cy - 13, sx - 4, cy - 22); ctx.lineTo(sx + 4, cy - 22); ctx.quadraticCurveTo(sx + 13, cy - 13, sx + 7, cy); ctx.closePath(); ctx.fill(); ctx.strokeStyle = shade(d.color, 1.35); ctx.lineWidth = 1; ctx.stroke(); break; }
+        case 'duck': { const cy = sy - 4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.ellipse(sx - 1, cy - 6, 11, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(sx + 7, cy - 14, 5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ff8800'; ctx.beginPath(); ctx.moveTo(sx + 11, cy - 14); ctx.lineTo(sx + 18, cy - 13); ctx.lineTo(sx + 11, cy - 11); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx + 8, cy - 15, 1.2, 0, Math.PI * 2); ctx.fill(); break; }
+        case 'cone': { const cy = sy - 2; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx, cy - 28); ctx.lineTo(sx + 10, cy); ctx.lineTo(sx - 10, cy); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx - 6, cy - 13); ctx.lineTo(sx + 6, cy - 13); ctx.lineTo(sx + 5, cy - 9); ctx.lineTo(sx - 5, cy - 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(d.color, 0.8); ctx.fillRect(sx - 12, cy - 2, 24, 4); break; }
+        case 'statue': { const ped = boxAt(sx, sy, d.foot * 0.8, d.foot * 0.8, 0.45, '#55555f', theme.accent); ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx - 8, ped); ctx.lineTo(sx + 8, ped); ctx.lineTo(sx + 5, ped - 30); ctx.lineTo(sx - 5, ped - 30); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.arc(sx, ped - 36, 6, 0, Math.PI * 2); ctx.fill(); break; }
+        default: block(sx, sy, d.h, d.color, theme.accent, d.foot);   // plain clean block (no emoji)
       }
     };
 
