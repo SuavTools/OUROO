@@ -47,14 +47,11 @@ const result = await page.evaluate(async () => {
       if (tcx !== Infinity) {
         const ws = st.worldSpeed;
         const f = Math.max(1, (tcx - px) / ws);
-        // Only act once the target is within ~one jump's airtime; reacting earlier wastes the
-        // jump (and the prediction is unreliable over long horizons).
-        if (f < 40) {
-          const vy = Math.min(p.vy, TERM);
-          const predictNoJump = pcy + vy * f + 0.5 * G * f * f;
-          const canJump = p.grounded || p.coyote > 0 || p.jumpCount < 2;
-          if (predictNoJump > tcy + 4 && canJump) hook.jump();
-        }
+        const predictY = (v0) => pcy + Math.min(v0, TERM) * f + 0.5 * G * f * f;
+        const distNo = Math.abs(predictY(p.vy) - tcy);
+        const impulse = (p.grounded || p.coyote > 0) ? -14.6 : (p.jumpCount < 2 ? -12.4 : null);
+        // Jump only when it brings our predicted arrival closer to the crystal's height.
+        if (impulse !== null && Math.abs(predictY(impulse) - tcy) < distNo - 2) hook.jump();
       }
 
       if (frames % 120 === 0) samples.push({ s: Math.round(frames/60), lvl: st.level, got: crystalsGot, y: Math.round(p.y) });

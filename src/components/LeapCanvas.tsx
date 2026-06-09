@@ -399,10 +399,26 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
     };
 
-    const loop = () => {
-      update();
-      draw();
+    // Fixed 60Hz timestep — same as the base game. We accumulate real elapsed time and run
+    // update() in whole 60Hz steps, then draw once, so the sim runs at the same wall-clock
+    // speed on a 60Hz phone or a 144Hz monitor (no double-speed "insane gravity").
+    let lastTime = 0, accumulator = 0;
+    const FPS_INTERVAL = 1000 / 60;
+    const loop = (now: number) => {
       if (!endedRef.current) rafRef.current = requestAnimationFrame(loop);
+      if (lastTime === 0) lastTime = now;
+      let delta = now - lastTime;
+      lastTime = now;
+      if (delta > 250) delta = 250;          // clamp after tab-away so we don't fast-forward
+      accumulator += delta;
+      let steps = 0;
+      while (accumulator >= FPS_INTERVAL && steps < 5 && !endedRef.current) {
+        update();
+        accumulator -= FPS_INTERVAL;
+        steps++;
+      }
+      if (steps === 5) accumulator = 0;      // too far behind to catch up — resync, don't spiral
+      draw();
     };
     rafRef.current = requestAnimationFrame(loop);
 
