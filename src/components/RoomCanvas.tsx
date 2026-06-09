@@ -39,9 +39,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef(0);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
+  // Spawn a little off-centre so two people who haven't moved yet don't perfectly overlap
+  // (which reads as a single avatar). Random is fine here — it's just a cosmetic start spot.
+  const spawnX = STAGE_W / 2 + (Math.random() - 0.5) * 320;
+  const spawnY = 500 + Math.random() * 120;
   const selfRef = useRef<Avatar & { id: string }>({
     id: '', handle: 'Convidado', skinId: getSelectedSkinId(),
-    x: STAGE_W / 2, y: 560, tx: STAGE_W / 2, ty: 560, bubble: '', bubbleLife: 0, af: 0,
+    x: spawnX, y: spawnY, tx: spawnX, ty: spawnY, bubble: '', bubbleLife: 0, af: 0,
   });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const trackAccum = useRef(0);
@@ -114,7 +118,25 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
       });
 
-    return () => { setConnected(false); supabase?.removeChannel(ch); channelRef.current = null; };
+    // Mobile suspends the realtime socket when the PWA/tab is backgrounded (screen off, app
+    // switch), which silently drops you from the room. Re-assert presence the moment we're
+    // visible/online again so you rejoin instead of vanishing for everyone else.
+    const onResume = () => {
+      if (document.visibilityState !== 'visible' || !channelRef.current) return;
+      const m = selfRef.current;
+      channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, x: Math.round(m.x), y: Math.round(m.y) });
+    };
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('focus', onResume);
+    window.addEventListener('online', onResume);
+
+    return () => {
+      setConnected(false);
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('online', onResume);
+      supabase?.removeChannel(ch); channelRef.current = null;
+    };
   }, []);
 
   // ---- main loop (fixed 60Hz step, like the games) ----
