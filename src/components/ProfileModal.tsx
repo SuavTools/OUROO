@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUser, signOut, getAuthIdentity } from '@/lib/auth';
-import { getPlayerStats, getLocalPlayer, type PlayerStats } from '@/lib/leaderboard';
+import { getPlayerStats, getBestAcrossGames, getLocalPlayer, type PlayerStats } from '@/lib/leaderboard';
 import { amIModerator } from '@/lib/chat';
 import { Leaderboard } from '@/components/Leaderboard';
 import { shareStatsCard } from '@/lib/sharecard';
@@ -13,6 +13,7 @@ import { fetchUnlocks, redeemCode, createCode } from '@/lib/economy';
 export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useUser();
   const [stats, setStats] = useState<PlayerStats | null>(null);
+  const [unlockBest, setUnlockBest] = useState(0);   // best across ALL games — skins unlock from this, not just OUROO
   const [skin, setSkin] = useState(DEFAULT_SKIN_ID);
   const [sharing, setSharing] = useState(false);
   const [allUnlocked, setAllUnlocked] = useState(false);   // moderators (SUAV) get every skin
@@ -39,7 +40,9 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
     (async () => {
       const auth = await getAuthIdentity();
       const device = auth?.device ?? getLocalPlayer().device;
-      setStats(await getPlayerStats(device));
+      const [s, allBest] = await Promise.all([getPlayerStats(device), getBestAcrossGames(device)]);
+      setStats(s);
+      setUnlockBest(Math.max(allBest, s.best));
     })();
   }, [open, user]);
 
@@ -101,7 +104,7 @@ export function ProfileModal({ open, onClose }: { open: boolean; onClose: () => 
           </div>
           <div className="grid grid-cols-4 gap-2">
             {SKINS.map(s => {
-              const unlocked = allUnlocked || isSkinUnlocked(s, best, codeUnlocks);
+              const unlocked = allUnlocked || isSkinUnlocked(s, unlockBest, codeUnlocks);
               const selected = skin === s.id;
               const hint = s.unlock.type === 'score' ? fmtScore(s.unlock.need)
                 : s.unlock.type === 'code' ? '🔒 código' : '';

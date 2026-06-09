@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
+import { LeapCanvas } from '@/components/LeapCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
@@ -11,7 +12,7 @@ import { ChatModal } from '@/components/ChatModal';
 import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
 
-type View = 'landing' | 'arcade';
+type View = 'landing' | 'arcade' | 'leap';
 
 // --- Artist content (edit here) ---------------------------------------------
 const VIDEO_ID = 's5dhOrRjs7Q';                       // latest clip (YouTube)
@@ -89,6 +90,12 @@ export default function Home() {
     setTimeout(() => { setView('arcade'); setIsZooming(false); }, 550);
   };
 
+  const enterLeap = () => {
+    if (isZooming) return;
+    setIsZooming(true);
+    setTimeout(() => { setView('leap'); setIsZooming(false); }, 550);
+  };
+
   // ==========================================================================
   // THE ARCADE
   // ==========================================================================
@@ -97,6 +104,25 @@ export default function Home() {
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
         <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} />
         {/* In-app-browser users hit the no-rotate wall here — float the "open in browser" nudge on top. */}
+        <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
+        <button
+          onClick={() => setView('landing')}
+          style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+          className="absolute left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
+        >
+          [ SAIR PARA SUAV ]
+        </button>
+      </main>
+    );
+  }
+
+  // ==========================================================================
+  // OUROO LEAP
+  // ==========================================================================
+  if (view === 'leap') {
+    return (
+      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
+        <LeapCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('landing')} />
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
         <button
           onClick={() => setView('landing')}
@@ -246,6 +272,21 @@ export default function Home() {
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandRed px-6 py-3 group-hover:bg-white transition-colors">
               ▶ Entrar no Arcade
+            </span>
+          </button>
+
+          {/* Second game — OUROO LEAP, on the shared engine + skins, its own ranking. */}
+          <button
+            onClick={enterLeap}
+            className="group relative w-full overflow-hidden border border-brandYellow/40 bg-gradient-to-br from-brandYellow/10 to-transparent p-8 sm:p-12 text-left transition-all hover:border-brandYellow mt-5"
+          >
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Novo Modo</p>
+            <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">LEAP<span className="text-brandYellow">.</span></h2>
+            <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
+              Salta de moeda em moeda — as moedas são o teu único apoio. Falha o salto e cais. Mesma skin, novo ranking.
+            </p>
+            <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandYellow px-6 py-3 group-hover:bg-white transition-colors">
+              ▶ Saltar
             </span>
           </button>
 

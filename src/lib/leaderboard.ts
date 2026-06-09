@@ -1,7 +1,8 @@
 import { supabase, supabaseReady } from './supabase';
 import { getAuthIdentity } from './auth';
 
-export const GAME_ID = 'ouroo';
+export const GAME_ID = 'ouroo';            // OUROO arcade (default board)
+export const LEAP_GAME_ID = 'ouroo-leap';  // OUROO LEAP — coin-to-coin auto-runner
 
 export type LbEntry = { handle: string; score: number; player_id: string };
 export type LbPeriod = 'all' | 'today';
@@ -41,6 +42,17 @@ export async function getPlayerStats(device: string, gameId = GAME_ID): Promise<
   return { handle: player.handle, best, runs, rank, playerId: player.id };
 }
 
+// Best score across EVERY game on the platform — drives skin unlocks, which are shared:
+// a record set in any mode counts toward unlocking cosmetics for all of them.
+export async function getBestAcrossGames(device: string): Promise<number> {
+  if (!supabase || !device) return 0;
+  const { data: player } = await supabase.from('players').select('id').eq('device_token', device).maybeSingle();
+  if (!player) return 0;
+  const { data: rows } = await supabase
+    .from('scores').select('score').eq('player_id', player.id).order('score', { ascending: false }).limit(1);
+  return rows?.[0]?.score ?? 0;
+}
+
 // ---- local identity (anonymous device id; Discord can claim it later) ----
 type LocalPlayer = { id: string | null; handle: string | null; device: string };
 
@@ -68,7 +80,8 @@ export type SubmitResult =
   | { ok: false; error: string };
 
 // Submit a score through the API route (server-side name filter + insert).
-export async function submitScore(score: number, handle?: string): Promise<SubmitResult> {
+// gameId selects which board the run lands on (OUROO by default; pass LEAP_GAME_ID for Leap).
+export async function submitScore(score: number, handle?: string, gameId: string = GAME_ID): Promise<SubmitResult> {
   if (!supabaseReady) return { ok: false, error: 'Leaderboard offline.' };
   const p = getLocalPlayer();
   // If signed in with Discord, use that stable identity (same player across devices) and name;
@@ -81,7 +94,7 @@ export async function submitScore(score: number, handle?: string): Promise<Submi
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        gameId: GAME_ID,
+        gameId,
         score,
         device,
         handle: finalHandle,
