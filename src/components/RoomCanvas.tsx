@@ -37,8 +37,9 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 // ---- furni catalogue ---------------------------------------------------------------------
 // h = height in levels. walk = you can stand ON it (false = solid, blocks the tile). foot =
 // footprint scale. special = custom renderer (else a coloured iso cuboid + emoji).
-type FurniDef = { kind: string; name: string; emoji: string; cat: string; color: string; h: number; walk: boolean; foot: number; special?: string };
+type FurniDef = { kind: string; name: string; emoji: string; cat: string; color: string; h: number; walk: boolean; foot: number; special?: string; span?: [number, number] };
 const CATS = [
+  { id: 'tier1',    name: '★ Hi-Fi' },
   { id: 'constr',   name: 'Construção' },
   { id: 'tapetes',  name: 'Pisos' },
   { id: 'assentos', name: 'Assentos' },
@@ -49,6 +50,10 @@ const CATS = [
   { id: 'deco',     name: 'Decoração' },
 ];
 const FURNI: FurniDef[] = [
+  // ★ HI-FI — 1st-tier hand-drawn lounge set (couch spans 2 tiles)
+  { kind: 'lounge_couch', name: 'Sofá Lounge', emoji: '🛋️', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
+  { kind: 'lounge_chair', name: 'Poltrona',    emoji: '💺', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'armchair' },
+  { kind: 'lounge_table', name: 'Mesa Centro', emoji: '🪵', cat: 'tier1', color: '#4a3120', h: 1, walk: false, foot: 1, special: 'coffee' },
   // construção (walkable build pieces + solid walls)
   { kind: 'bloco',      name: 'Bloco',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
   { kind: 'meio',       name: 'Cubo',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
@@ -157,7 +162,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placingKind, setPlacingKind] = useState<string | null>(null);
   const [removeMode, setRemoveMode] = useState(false);
   const [decorOpen, setDecorOpen] = useState(false);
-  const [cat, setCat] = useState('constr');
+  const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode }; }, [decorOpen, placingKind, removeMode]);
   const [isMod, setIsMod] = useState(false);
@@ -184,8 +189,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const rebuildHeight = () => {
     const H = heightRef.current, S = solidRef.current; H.fill(0); S.fill(0);
     for (const it of itemsRef.current) {
-      const d = defOf(it.kind); const k = key(it.gx, it.gy);
-      if (d.walk) H[k] += d.h; else S[k] = 1;
+      const d = defOf(it.kind); const [sw, sh] = d.span ?? [1, 1];
+      for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
+        const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
+        const k = key(gx, gy); if (d.walk) H[k] += d.h; else S[k] = 1;
+      }
     }
   };
   // BFS over tiles; step allowed if not solid and |Δheight| ≤ 1 (the climb rule).
@@ -215,6 +223,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
+    const [sw, sh] = defOf(kind).span ?? [1, 1];
+    if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
     const item: Item = { id, kind, gx, gy, createdBy: selfRef.current.id };
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
@@ -222,7 +232,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => i.gx === gx && i.gy === gy && (modRef.current || i.createdBy === selfRef.current.id));
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = defOf(i.kind).span ?? [1, 1]; return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
     if (!hit) return;
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
     if (hit.createdBy === selfRef.current.id) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
@@ -337,10 +347,81 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (top) { ctx.fillStyle = shade(color, 1.22); diamond(cx, cyT, hw, hh); ctx.fill(); if (accent) { ctx.strokeStyle = hexA(accent, 0.3); ctx.lineWidth = 1; diamond(cx, cyT, hw, hh); ctx.stroke(); } }
       return cyT;
     };
+    const poly = (pts: number[][], fill?: string, stroke?: string, lw = 1) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); } };
+
+    // ★ HI-FI lounge set — hand-drawn iso, lots of layered detail.
+    const drawCouch = (sx: number, sy: number, theme: RoomDef, base: string) => {
+      const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), cD = shade(base, 0.48), hi = shade(base, 1.55);
+      const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => {
+        poly([P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r);   // +u face
+        poly([P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l);   // +v face
+        poly([P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t);   // top
+      };
+      // contact shadow under the whole 2-tile footprint
+      ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; const sc = P(0.5, 0, 0); ctx.beginPath(); ctx.ellipse(sc[0], sc[1] + TH * 0.4, TILE_W * 1.05, TILE_H * 1.05, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      // legs
+      for (const [u, v] of [[-0.28, -0.28], [1.28, -0.28], [-0.28, 0.28], [1.28, 0.28]] as [number, number][]) span(u - 0.06, u + 0.06, v - 0.06, v + 0.06, 0, 0.16, '#3a2616', '#2a1c10', '#1f140a');
+      // back rest (tall) — drawn before front parts
+      span(-0.4, 1.4, -0.42, -0.16, 0.5, 1.5, cT, cR, cL);
+      // left arm (back), back cushions, seat base, seat cushions, pillow, right arm (front)
+      span(-0.42, -0.12, -0.42, 0.4, 0.5, 1.04, cT, cR, cL);
+      { const a = P(-0.27, -0.01, 1.04); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      // back cushions with button tufting
+      for (const [u0, u1] of [[-0.08, 0.6], [0.6, 1.32]] as [number, number][]) {
+        span(u0, u1, -0.16, 0.02, 0.56, 1.42, shade(base, 1.16), cR, cL);
+        for (let bx = 0; bx < 2; bx++) for (let by = 0; by < 2; by++) { const pt = P(u0 + 0.2 + bx * 0.3, 0.0, 0.82 + by * 0.32); ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(pt[0], pt[1], 1.8, 0, Math.PI * 2); ctx.fill(); }
+      }
+      // seat base
+      span(-0.34, 1.34, -0.16, 0.36, 0.18, 0.52, cT, cR, cL);
+      // seat cushions (puffy, highlighted, piped)
+      for (const [u0, u1] of [[-0.3, 0.5], [0.5, 1.3]] as [number, number][]) {
+        span(u0 + 0.02, u1 - 0.02, -0.28, 0.34, 0.52, 0.76, shade(base, 1.24), cR, cL);
+        const c = P((u0 + u1) / 2, 0.03, 0.76); const g = ctx.createRadialGradient(c[0], c[1], 2, c[0], c[1], 28); g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.55, TH * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+        poly([P(u0 + 0.02, -0.28, 0.76), P(u1 - 0.02, -0.28, 0.76), P(u1 - 0.02, 0.34, 0.76), P(u0 + 0.02, 0.34, 0.76)], undefined, hexA(hi, 0.5), 1);
+      }
+      // throw pillow (accent) on the left seat
+      { const pc = P(0.12, 0.04, 0.82); ctx.save(); ctx.translate(pc[0], pc[1]); ctx.rotate(-0.22); ctx.fillStyle = theme.accent; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 8, 5); ctx.fill(); ctx.strokeStyle = hexA('#000', 0.2); ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.stroke(); ctx.restore(); }
+      // right arm (front, occludes)
+      span(1.12, 1.42, -0.42, 0.4, 0.5, 1.04, cT, cR, cL);
+      { const a = P(1.27, -0.01, 1.04); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    };
+
+    const drawArmchair = (sx: number, sy: number, theme: RoomDef, base: string) => {
+      const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), hi = shade(base, 1.55);
+      const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly([P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly([P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly([P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
+      ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; const sc = P(0, 0, 0); ctx.beginPath(); ctx.ellipse(sc[0], sc[1] + TH * 0.4, TILE_W * 0.62, TILE_H * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      for (const [u, v] of [[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]] as [number, number][]) span(u - 0.06, u + 0.06, v - 0.06, v + 0.06, 0, 0.16, '#3a2616', '#2a1c10', '#1f140a');
+      span(-0.4, 0.4, -0.42, -0.14, 0.5, 1.45, cT, cR, cL);                  // back
+      span(-0.42, -0.12, -0.42, 0.4, 0.5, 1.0, cT, cR, cL);                  // left arm
+      span(-0.3, 0.3, -0.14, 0.36, 0.18, 0.52, cT, cR, cL);                  // seat base
+      { const u0 = -0.28, u1 = 0.28; span(u0, u1, -0.26, 0.34, 0.52, 0.78, shade(base, 1.24), cR, cL); const c = P(0, 0.04, 0.78); const g = ctx.createRadialGradient(c[0], c[1], 2, c[0], c[1], 22); g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill(); poly([P(u0, -0.26, 0.78), P(u1, -0.26, 0.78), P(u1, 0.34, 0.78), P(u0, 0.34, 0.78)], undefined, hexA(hi, 0.5), 1); }
+      span(0.12, 0.42, -0.42, 0.4, 0.5, 1.0, cT, cR, cL);                    // right arm (front)
+    };
+
+    const drawCoffee = (sx: number, sy: number, theme: RoomDef, base: string) => {
+      const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.65);
+      const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly([P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly([P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly([P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
+      ctx.save(); ctx.globalAlpha = 0.3; ctx.fillStyle = '#000'; const sc = P(0, 0, 0); ctx.beginPath(); ctx.ellipse(sc[0], sc[1] + TH * 0.3, TILE_W * 0.6, TILE_H * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      for (const [u, v] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]] as [number, number][]) span(u - 0.05, u + 0.05, v - 0.05, v + 0.05, 0, 0.42, cT, shade(base, 0.8), cL);
+      span(-0.36, 0.36, -0.36, 0.36, 0.42, 0.56, cT, cR, cL);               // wood frame top
+      // glass top (translucent) with a reflection streak
+      const z = 0.62; ctx.save(); ctx.globalAlpha = 0.34; ctx.fillStyle = '#bfe6ee'; poly([P(-0.34, -0.34, z), P(0.34, -0.34, z), P(0.34, 0.34, z), P(-0.34, 0.34, z)]); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.fillStyle = '#ffffff'; poly([P(-0.24, -0.1, z), P(-0.05, -0.28, z), P(0.0, -0.22, z), P(-0.18, -0.04, z)]); ctx.fill(); ctx.restore();
+      ctx.strokeStyle = hexA('#dff4f8', 0.5); ctx.lineWidth = 1; poly([P(-0.34, -0.34, z), P(0.34, -0.34, z), P(0.34, 0.34, z), P(-0.34, 0.34, z)], undefined, hexA('#dff4f8', 0.5), 1);
+      // a little book + mug on the glass
+      { const b = P(-0.12, 0.08, z); ctx.save(); ctx.translate(b[0], b[1]); ctx.rotate(0.2); ctx.fillStyle = theme.accent; ctx.fillRect(-9, -6, 18, 12); ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(-9, -6, 18, 2.5); ctx.restore(); }
+      { const m = P(0.16, -0.05, z); ctx.fillStyle = '#e8e8ee'; ctx.beginPath(); ctx.ellipse(m[0], m[1], 5, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(m[0] - 5, m[1] - 7, 10, 7); ctx.fillStyle = '#5a3a22'; ctx.beginPath(); ctx.ellipse(m[0], m[1] - 7, 5, 2.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#e8e8ee'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(m[0] + 6, m[1] - 4, 3, -1, 1.4); ctx.stroke(); }
+    };
 
     const drawFurni = (it: Item, gz: number, theme: RoomDef) => {
       const d = defOf(it.kind); const { sx, sy } = iso(it.gx, it.gy, gz);
       switch (d.special) {
+        case 'couch': drawCouch(sx, sy, theme, d.color); break;
+        case 'armchair': drawArmchair(sx, sy, theme, d.color); break;
+        case 'coffee': drawCoffee(sx, sy, theme, d.color); break;
         case 'rug': { const hw = TW * 0.92, hh = TH * 0.92, top = block(sx, sy, 1, d.color, '#fff', 1); ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; for (let i = 1; i < 4; i++) { const f = i / 4; diamond(sx, top, hw * f, hh * f); ctx.stroke(); } ctx.restore(); break; }
         case 'water': { const top = block(sx, sy, 1, d.color, theme.accent, 1); ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(framesRef.current * 0.1) * 0.2; ctx.fillStyle = '#fff'; diamond(sx, top, TW * 0.5, TH * 0.5); ctx.fill(); ctx.restore(); break; }
         case 'stair': { const top = block(sx, sy, 1, d.color, theme.accent, 1); ctx.strokeStyle = hexA(theme.accent, 0.6); ctx.lineWidth = 1.5; for (let i = 1; i < 3; i++) { ctx.beginPath(); ctx.moveTo(sx - TW * 0.7, top + i * 5); ctx.lineTo(sx, top + i * 5 + TH * 0.7); ctx.stroke(); } break; }
@@ -476,7 +557,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // depth-sorted furni + avatars
       const stack = new Map<string, number>();
       const ents: Array<{ s: number; draw: () => void }> = [];
-      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; stack.set(k, gz + (defOf(it.kind).h || 0)); const ii = it, z = gz; ents.push({ s: it.gx + it.gy + z * 0.01, draw: () => drawFurni(ii, z, theme) }); }
+      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; const dd = defOf(it.kind); const [sw, sh] = dd.span ?? [1, 1]; stack.set(k, gz + (dd.h || 0)); const ii = it, z = gz; ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + z * 0.01, draw: () => drawFurni(ii, z, theme) }); }
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.01 + 0.005, draw: () => drawAvatar(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.01 + 0.005, draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
