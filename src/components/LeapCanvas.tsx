@@ -33,7 +33,7 @@ interface Star { x: number; y: number; z: number; }
 const PW = 38, PH = 52;          // player draw + collision box (matches OUROO)
 const PLAYER_X = 360;            // locked horizontal position (top-left)
 const BASE_SPEED = 4.0;          // level-1 scroll speed
-const MAX_SPEED = 11;
+const MAX_SPEED = 6.5;           // gentle cap — difficulty comes from patterns, not raw speed
 const CRYSTAL_SIZE = 26;
 const CYAN = '#00cfff';
 
@@ -138,16 +138,19 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
     };
 
-    // SPACING grows with difficulty (22 → 36 frames); OFFSET fraction climbs toward the limit.
-    const Tbase = 22 + Math.min(14, g * 1.4);
+    // SPACING (frames between footings) GROWS WITH SPEED, so the faster the world scrolls the
+    // wider the crystal gaps get — the player keeps a steady reaction window instead of getting
+    // crushed. Pixel gap = ws × T, so it widens more than linearly with speed. OFFSET (how steep
+    // each hop climbs/drops) is what ramps the actual difficulty, via genLevel.
+    const reactT = 24 + (ws - BASE_SPEED) * 3;
     const upFrac = 0.5 + Math.min(0.28, g * 0.035);
     const dropAmt = 46 + Math.min(110, g * 14);
 
     for (let i = 0; i < steps; i++) {
       const kind = kindOf(i);
       const impulse = i === 0 ? JUMP_VY : AIR_JUMP_VY;           // first hop is off the platform
-      let T = Tbase * (0.9 + Math.random() * 0.3);
-      if (kind === 'up') T = Math.min(T, 26);                    // up-reach shrinks past ~26 frames
+      let T = reactT * (0.92 + Math.random() * 0.2);
+      if (kind === 'up') T = Math.min(T, 24);                    // up-reach shrinks past ~24 frames
       let dy: number;
       if (kind === 'up')        dy = -reachUp(T, impulse) * upFrac * (0.85 + Math.random() * 0.3);
       else if (kind === 'down') dy =  dropAmt * (0.6 + Math.random() * 0.7);
@@ -160,7 +163,7 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     // Landing platform — reachable from the last crystal with an air-jump. Valley/descend climb
     // back UP onto it; everything else sits at/below the last crystal so you fall onto the top.
-    const Tp = Tbase;
+    const Tp = reactT;
     const pdy = (pat === 'valley' || pat === 'descend')
       ? -reachUp(Tp, AIR_JUMP_VY) * 0.55
       : 20 + Math.random() * 55;
@@ -213,7 +216,8 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const p = st.player;
     if (p.grounded || p.coyote > 0) groundJump(st);
     else if (p.jumpCount < 2) { p.vy = AIR_JUMP_VY; p.jumpCount++; p.stretch = 1.45; synthRef.current?.playJump(); }
-    else st.jumpBuffer = JUMP_BUFFER_FRAMES;   // remember the press; fire on next footing
+    else st.jumpBuffer = JUMP_BUFFER_FRAMES * 2;   // remember the press a bit longer so an early
+                                                   // tap survives until the next crystal grab
   };
   const doJumpRef = useRef(doJump);
   doJumpRef.current = doJump;
@@ -295,18 +299,21 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       p.y += p.vy;
       p.stretch += (1 - p.stretch) * 0.2;
 
-      // ---- platform footing: land when falling onto a top surface ----
+      // ---- platform footing: land on a top surface ----
+      // Generous catch window so brushing a platform near the apex or a hair low snaps you onto
+      // it instead of phasing into the solid bar (the "glitch out"). We allow catching while
+      // barely rising (vy >= -4) so you can step up onto a platform at the top of an arc.
       const wasGrounded = p.grounded;
       p.grounded = false;
       const feetY = p.y + PH;
       for (const pl of st.platforms) {
-        if (p.vy < 0) continue;
-        if (p.x + PW > pl.x && p.x < pl.x + pl.width && feetY >= pl.top - 2 && feetY <= pl.top + Math.max(18, p.vy + 4)) {
+        if (p.vy < -4) continue;
+        if (p.x + PW > pl.x && p.x < pl.x + pl.width && feetY >= pl.top - 8 && feetY <= pl.top + Math.max(26, p.vy + 6)) {
           p.y = pl.top - PH; p.vy = 0; p.grounded = true; p.jumpCount = 0;
           if (!pl.reached) {
             pl.reached = true;
             st.level++;
-            st.worldSpeed = Math.min(MAX_SPEED, BASE_SPEED + (st.level - 1) * 0.45);
+            st.worldSpeed = Math.min(MAX_SPEED, BASE_SPEED + (st.level - 1) * 0.2);
             st.bonus += 200 * st.level;
             st.bannerText = `NÍVEL ${st.level}`;
             st.bannerLife = 95;
@@ -335,10 +342,13 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
       }
 
-      // Buffered jump fires the instant we have footing again.
+      // Buffered jump fires the instant ANY jump becomes available again — a platform/coyote
+      // (ground jump) OR a crystal grab that just refunded the air-jump. Without the air-jump
+      // case, taps made a hair before grabbing a crystal got silently eaten — the "dead" feel.
       if (st.jumpBuffer > 0) {
         st.jumpBuffer--;
         if (p.grounded || p.coyote > 0) { groundJump(st); st.jumpBuffer = 0; }
+        else if (p.jumpCount < 2) { p.vy = AIR_JUMP_VY; p.jumpCount++; p.stretch = 1.45; synthRef.current?.playJump(); st.jumpBuffer = 0; }
       }
 
       st.curScore = st.bonus;
