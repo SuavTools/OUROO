@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { supabase, supabaseReady } from '@/lib/supabase';
 import { getLocalPlayer } from '@/lib/leaderboard';
 import { getAuthIdentity } from '@/lib/auth';
+import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 
 const STAGE_W = 1280, STAGE_H = 720;
@@ -31,6 +32,20 @@ const ROOMS: RoomDef[] = [
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 const freshSpawn = () => ({ x: STAGE_W / 2 + (Math.random() - 0.5) * 320, y: 500 + Math.random() * 120 });
+
+// Furniture catalogue — vector items you can drop in a room. Each persists to room_items and
+// syncs live over broadcast.
+const FURNI: { kind: string; name: string; emoji: string }[] = [
+  { kind: 'speaker', name: 'Coluna',     emoji: '🔈' },
+  { kind: 'disco',   name: 'Bola Disco', emoji: '🪩' },
+  { kind: 'plant',   name: 'Planta',     emoji: '🪴' },
+  { kind: 'rug',     name: 'Tapete',     emoji: '🟪' },
+  { kind: 'sofa',    name: 'Sofá',       emoji: '🛋️' },
+  { kind: 'stool',   name: 'Banco',      emoji: '🪑' },
+  { kind: 'sign',    name: 'Cartaz',     emoji: '🪧' },
+];
+const MAX_ITEMS = 40;
+type Item = { id: string; kind: string; x: number; y: number; createdBy?: string };
 
 type Avatar = {
   handle: string; skinId: string;
@@ -63,6 +78,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const posAccum = useRef(0);          // throttle for outgoing position broadcasts
   const wasMovingRef = useRef(false);
+  const itemsRef = useRef<Item[]>([]);
+  const framesRef = useRef(0);
+  const modRef = useRef(false);        // moderators can remove anyone's furni
+  const [placingKind, setPlacingKind] = useState<string | null>(null);
+  const [removeMode, setRemoveMode] = useState(false);
+  const [decorOpen, setDecorOpen] = useState(false);
 
   const [msg, setMsg] = useState('');
   const [population, setPopulation] = useState(1);
@@ -83,7 +104,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const me = selfRef.current;
     me.x = sp.x; me.y = sp.y; me.tx = sp.x; me.ty = sp.y; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear();
+    itemsRef.current = [];
     setRoom(slug);
+  };
+
+  // ---- furniture: place (persist + broadcast) / remove (own or moderator) ----
+  const placeItem = (kind: string, x: number, y: number) => {
+    if (itemsRef.current.length >= MAX_ITEMS) return;
+    const ty = Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, y));
+    const [lo, hi] = floorXRange(ty);
+    const tx = Math.max(lo, Math.min(hi, x));
+    const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
+    const item: Item = { id, kind, x: tx, y: ty, createdBy: selfRef.current.id };
+    itemsRef.current.push(item);
+    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, x: tx, y: ty, by: item.createdBy } });
+    supabase?.from('room_items').insert({ id, room, kind, x: tx, y: ty, created_by: item.createdBy }).then(undefined, () => {});
+  };
+  const removeAt = (x: number, y: number) => {
+    // topmost item under the tap that I'm allowed to remove (mine, or anyone's if moderator)
+    const hit = [...itemsRef.current].reverse().find(i =>
+      Math.abs(i.x - x) < 42 && Math.abs(i.y - y) < 54 && (modRef.current || i.createdBy === selfRef.current.id));
+    if (!hit) return;
+    itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
+    channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
+    supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
   };
 
   // Append to the readable chat feed (last few lines, auto-expire) so messages don't depend on
@@ -113,10 +157,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     selfRef.current.skinId = getSelectedSkinId();
     // Refine with the signed-in name if there is one.
     getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; });
+    amIModerator().then(m => { modRef.current = m; });
 
     if (!supabase) return;   // offline → still walk around solo
     const me = selfRef.current;
-    remotesRef.current.clear(); setPopulation(1); setConnected(false);
+    remotesRef.current.clear(); itemsRef.current = []; setPopulation(1); setConnected(false);
     const ch = supabase.channel(`room:${room}`, {
       config: { presence: { key: me.id }, broadcast: { self: false } },
     });
@@ -167,10 +212,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (r) { r.bubble = text; r.bubbleLife = BUBBLE_FRAMES; }
         pushFeed(r?.handle ?? '???', text);
       })
+      .on('broadcast', { event: 'place' }, ({ payload }) => {
+        const pl = payload as Record<string, unknown>;
+        const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
+        itemsRef.current.push({ id, kind: String(pl.kind), x: Number(pl.x), y: Number(pl.y), createdBy: String(pl.by ?? '') });
+      })
+      .on('broadcast', { event: 'unplace' }, ({ payload }) => {
+        const id = String((payload as Record<string, unknown>)?.id ?? '');
+        itemsRef.current = itemsRef.current.filter(i => i.id !== id);
+      })
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           setConnected(true);
           await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, x: me.x, y: me.y });
+          // load this room's saved furniture (no-ops gracefully if the table isn't created yet)
+          const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room);
+          if (data) itemsRef.current = data.map(d => ({ id: String(d.id), kind: String(d.kind), x: Number(d.x), y: Number(d.y), createdBy: String(d.created_by ?? '') }));
         }
       });
 
@@ -212,6 +269,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     const update = () => {
+      framesRef.current++;
       const me = selfRef.current;
       const moving = Math.hypot(me.tx - me.x, me.ty - me.y) > 1.5;
       stepAvatar(me);
@@ -236,6 +294,74 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         r.af += Math.hypot(r.tx - r.x, r.ty - r.y) > 1 ? 1 : 0.3;
         if (r.bubbleLife > 0) r.bubbleLife--;
       }
+    };
+
+    // Vector furniture. Drawn at the item's floor position, scaled by depth like avatars.
+    const drawItem = (it: Item, theme: RoomDef) => {
+      const sc = depthScale(it.y);
+      const t = framesRef.current;
+      ctx.save();
+      ctx.translate(it.x, it.y);
+      ctx.scale(sc, sc);
+      switch (it.kind) {
+        case 'rug': {
+          ctx.globalAlpha = 0.5; ctx.fillStyle = theme.accent;
+          ctx.beginPath(); ctx.ellipse(0, 0, 60, 22, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 0.9; ctx.lineWidth = 3; ctx.strokeStyle = '#fff';
+          ctx.beginPath(); ctx.ellipse(0, 0, 52, 18, 0, 0, Math.PI * 2); ctx.stroke();
+          break;
+        }
+        case 'speaker': {
+          ctx.fillStyle = '#15151f'; ctx.strokeStyle = theme.accent; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.roundRect(-20, -70, 40, 70, 4); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#0a0a12';
+          for (const [cy, r] of [[-50, 12], [-22, 16]] as [number, number][]) { ctx.beginPath(); ctx.arc(0, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = theme.accent; ctx.lineWidth = 1.5; ctx.stroke(); }
+          // pulsing cone glow
+          ctx.globalAlpha = 0.25 + Math.abs(Math.sin(t * 0.15)) * 0.3; ctx.fillStyle = theme.accent;
+          ctx.beginPath(); ctx.arc(0, -22, 8, 0, Math.PI * 2); ctx.fill();
+          break;
+        }
+        case 'disco': {
+          ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(0, -86); ctx.lineTo(0, -54); ctx.stroke();
+          const R = 26;
+          ctx.save(); ctx.translate(0, -28); ctx.rotate(t * 0.04);
+          const grd = ctx.createRadialGradient(-8, -8, 4, 0, 0, R);
+          grd.addColorStop(0, '#ffffff'); grd.addColorStop(1, '#8893b8');
+          ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+          for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + t * 0.04; ctx.fillStyle = `hsla(${(t * 4 + i * 60) % 360},90%,65%,0.9)`; ctx.beginPath(); ctx.arc(Math.cos(a) * R * 0.6, Math.sin(a) * R * 0.6, 4, 0, Math.PI * 2); ctx.fill(); }
+          ctx.restore();
+          break;
+        }
+        case 'plant': {
+          ctx.fillStyle = '#b5552e'; ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(14, 0); ctx.lineTo(10, -22); ctx.lineTo(-10, -22); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#1ED760';
+          for (const dx of [-10, 0, 10]) { ctx.beginPath(); ctx.ellipse(dx, -34, 7, 18, dx * 0.04, 0, Math.PI * 2); ctx.fill(); }
+          break;
+        }
+        case 'sofa': {
+          ctx.fillStyle = '#3a2a55'; ctx.strokeStyle = theme.accent; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.roundRect(-42, -28, 84, 30, 8); ctx.fill(); ctx.stroke();   // back
+          ctx.fillStyle = '#4a3768'; ctx.beginPath(); ctx.roundRect(-46, -12, 92, 18, 8); ctx.fill();   // seat
+          ctx.beginPath(); ctx.roundRect(-46, -22, 10, 24, 4); ctx.fill(); ctx.beginPath(); ctx.roundRect(36, -22, 10, 24, 4); ctx.fill();
+          break;
+        }
+        case 'stool': {
+          ctx.strokeStyle = '#888'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-7, -14); ctx.moveTo(10, 0); ctx.lineTo(7, -14); ctx.stroke();
+          ctx.fillStyle = theme.accent; ctx.beginPath(); ctx.ellipse(0, -16, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+          break;
+        }
+        case 'sign': {
+          ctx.strokeStyle = '#666'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -34); ctx.stroke();
+          ctx.fillStyle = '#0a0a12'; ctx.strokeStyle = theme.accent; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.roundRect(-30, -66, 60, 34, 4); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = theme.accent; ctx.font = '900 18px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText('SUAV', 0, -49);
+          break;
+        }
+      }
+      ctx.restore();
     };
 
     const drawAvatar = (a: Avatar, isSelf: boolean) => {
@@ -314,11 +440,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.save(); ctx.globalAlpha = 0.85; ctx.strokeStyle = theme.accent; ctx.lineWidth = 3; ctx.shadowColor = theme.accent; ctx.shadowBlur = 14;
       ctx.beginPath(); ctx.moveTo(bl, FLOOR_BOT); ctx.lineTo(br, FLOOR_BOT); ctx.stroke(); ctx.restore();
 
-      // avatars, painter-sorted back→front
-      const all: Array<{ a: Avatar; self: boolean }> = [{ a: selfRef.current, self: true }];
-      for (const r of remotesRef.current.values()) all.push({ a: r, self: false });
-      all.sort((p, q) => p.a.y - q.a.y);
-      for (const { a, self } of all) drawAvatar(a, self);
+      // flat items (rugs) lie ON the floor, under everyone
+      for (const it of itemsRef.current) if (it.kind === 'rug') drawItem(it, theme);
+
+      // standing furni + avatars, painter-sorted back→front so nearer things overlap farther
+      const ents: Array<{ y: number; draw: () => void }> = [];
+      ents.push({ y: selfRef.current.y, draw: () => drawAvatar(selfRef.current, true) });
+      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ y: rr.y, draw: () => drawAvatar(rr, false) }); }
+      for (const it of itemsRef.current) { if (it.kind === 'rug') continue; const ii = it; ents.push({ y: ii.y, draw: () => drawItem(ii, theme) }); }
+      ents.sort((p, q) => p.y - q.y);
+      for (const e of ents) e.draw();
     };
 
     // fixed 60Hz accumulator (refresh-rate independent walk speed)
@@ -342,7 +473,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const rect = canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * STAGE_W;
     const y = ((e.clientY - rect.top) / rect.height) * STAGE_H;
-    const ty = Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, y));
+    if (placingKind) { placeItem(placingKind, x, y); return; }   // decorating → drop furni
+    if (removeMode) { removeAt(x, y); return; }                  // editing → pick up furni
+    const ty = Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, y));      // else → walk there
     const [lo, hi] = floorXRange(ty);
     selfRef.current.tx = Math.max(lo, Math.min(hi, x));
     selfRef.current.ty = ty;
@@ -366,11 +499,44 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </p>
       </div>
 
-      {/* room switcher */}
-      <button onClick={() => setShowRooms(s => !s)}
-        className="absolute top-3 left-1/2 -translate-x-1/2 z-40 text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">
-        ⤧ Salas
-      </button>
+      {/* room switcher + decorate toggle */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
+        <button onClick={() => setShowRooms(s => !s)}
+          className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">
+          ⤧ Salas
+        </button>
+        <button onClick={() => { setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }}
+          className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>
+          ✦ Decorar
+        </button>
+      </div>
+
+      {/* mode banner */}
+      {(placingKind || removeMode) && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest text-brandYellow bg-black/70 px-3 py-1">
+          {placingKind ? 'toca para colocar' : 'toca para remover'}
+        </div>
+      )}
+
+      {/* furni tray */}
+      {decorOpen && (
+        <div className="absolute z-40 left-1/2 -translate-x-1/2 flex flex-wrap justify-center gap-2 px-3 max-w-[94%]"
+          style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 56px)' }}>
+          {FURNI.map(f => (
+            <button key={f.kind}
+              onClick={() => { setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); }}
+              className={`flex flex-col items-center justify-center w-16 h-16 border text-[10px] gap-1 transition-colors ${placingKind === f.kind ? 'border-brandYellow bg-brandYellow/15 text-white' : 'border-white/20 bg-black/60 text-white/80 hover:border-white/50'}`}>
+              <span className="text-xl leading-none">{f.emoji}</span>
+              <span className="uppercase tracking-wider">{f.name}</span>
+            </button>
+          ))}
+          <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); }}
+            className={`flex flex-col items-center justify-center w-16 h-16 border text-[10px] gap-1 transition-colors ${removeMode ? 'border-brandRed bg-brandRed/20 text-white' : 'border-white/20 bg-black/60 text-white/80 hover:border-white/50'}`}>
+            <span className="text-xl leading-none">🗑️</span>
+            <span className="uppercase tracking-wider">Remover</span>
+          </button>
+        </div>
+      )}
       {showRooms && (
         <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center px-6" onClick={() => setShowRooms(false)}>
           <div className="w-full max-w-xs bg-black border border-white/15 p-5" onClick={e => e.stopPropagation()}>
