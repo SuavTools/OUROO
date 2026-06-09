@@ -1,5 +1,5 @@
-// Two-player presence test: open the PRAÇA in two independent browser contexts (two devices),
-// walk one of them, say a line, and screenshot both — to confirm they see each other live.
+// Two-player test: confirm B sees A MOVE live (broadcast position) and sees A's message in
+// the feed. Walks A to two spots, screenshotting B's view each time.
 import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 const OUT = '/tmp/shots'; mkdirSync(OUT, { recursive: true });
@@ -22,27 +22,25 @@ async function enter(label) {
 
 const A = await enter('A');
 const B = await enter('B');
-await wait(2500);   // let presence sync
+await wait(2500);
 
-// A walks to a spot, then says hello
-await A.page.mouse.click(420, 520);
-await wait(800);
+// A walks far left, then types a message
+await A.page.mouse.click(260, 500);
+await wait(1500);
+await B.page.screenshot({ path: `${OUT}/move-B-1-left.png` });
+
 await A.page.evaluate(() => {
   const inp = document.querySelector('input[placeholder="diz algo…"]');
-  if (inp) { const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(inp,'olá praça!'); inp.dispatchEvent(new Event('input',{bubbles:true})); }
+  const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+  set.call(inp,'segue-me!'); inp.dispatchEvent(new Event('input',{bubbles:true}));
 });
 await A.page.getByRole('button', { name: /Dizer/i }).click().catch(()=>{});
-await wait(1200);
-// B walks elsewhere
-await B.page.mouse.click(900, 600);
-await wait(1500);
+await wait(600);
 
-await A.page.screenshot({ path: `${OUT}/room-A.png` });
-await B.page.screenshot({ path: `${OUT}/room-B.png` });
+// A walks far right — B should see the avatar travel across
+await A.page.mouse.click(1040, 600);
+await wait(1700);
+await B.page.screenshot({ path: `${OUT}/move-B-2-right.png` });
 
-// Read population text from each
-const popA = await A.page.evaluate(() => document.body.innerText.match(/\d+ pessoa/)?.[0] || 'n/a');
-const popB = await B.page.evaluate(() => document.body.innerText.match(/\d+ pessoa/)?.[0] || 'n/a');
-console.log('A sees:', popA, '| B sees:', popB);
-console.log('ERRORS:', [...A.errs, ...B.errs].slice(0, 10).join('\n') || 'none');
+console.log('ERRORS:', [...A.errs, ...B.errs].slice(0, 8).join('\n') || 'none');
 await browser.close();

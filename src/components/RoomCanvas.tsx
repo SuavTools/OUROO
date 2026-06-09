@@ -48,19 +48,31 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     x: spawnX, y: spawnY, tx: spawnX, ty: spawnY, bubble: '', bubbleLife: 0, af: 0,
   });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
-  const trackAccum = useRef(0);
-  const dirtyRef = useRef(true);   // pos changed since last presence track
+  const posAccum = useRef(0);          // throttle for outgoing position broadcasts
+  const wasMovingRef = useRef(false);
 
   const [msg, setMsg] = useState('');
   const [population, setPopulation] = useState(1);
   const [connected, setConnected] = useState(false);
+  const [feed, setFeed] = useState<{ id: number; handle: string; text: string }[]>([]);
+  const feedId = useRef(0);
 
-  // ---- broadcast a chat line + show it over my own head ----
+  // Append to the readable chat feed (last few lines, auto-expire) so messages don't depend on
+  // catching the floating bubble.
+  const pushFeed = (handle: string, text: string) => {
+    const id = ++feedId.current;
+    setFeed(f => [...f.slice(-5), { id, handle, text }]);
+    setTimeout(() => setFeed(f => f.filter(m => m.id !== id)), 9000);
+  };
+
+  // ---- broadcast a chat line + show it over my own head + log it ----
   const say = (raw: string) => {
     const text = raw.trim().slice(0, 120);
     if (!text) return;
-    selfRef.current.bubble = text; selfRef.current.bubbleLife = BUBBLE_FRAMES;
-    channelRef.current?.send({ type: 'broadcast', event: 'say', payload: { id: selfRef.current.id, text } });
+    const me = selfRef.current;
+    me.bubble = text; me.bubbleLife = BUBBLE_FRAMES;
+    channelRef.current?.send({ type: 'broadcast', event: 'say', payload: { id: me.id, text } });
+    pushFeed(me.handle, text);
     setMsg('');
   };
 
@@ -83,12 +95,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const rebuild = () => {
       const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
       const seen = new Set<string>([me.id]);
-      let pop = 1;
       for (const key in state) {
         const meta = state[key]?.[0]; if (!meta) continue;
         const id = String(meta.id ?? key);
         if (id === me.id) continue;
-        seen.add(id); pop++;
+        seen.add(id);
         const mx = Number(meta.x), my = Number(meta.y);
         let r = remotesRef.current.get(id);
         if (!r) {
@@ -96,20 +107,35 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 x: mx, y: my, tx: mx, ty: my, bubble: '', bubbleLife: 0, af: Math.random() * 100 };
           remotesRef.current.set(id, r);
         } else {
-          r.tx = mx; r.ty = my; r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId);
+          // Identity may change; POSITION is driven by live 'pos' broadcasts, so don't clobber
+          // tx/ty here with the (stale) presence value or the avatar snaps backwards.
+          r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId);
         }
       }
       for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
-      setPopulation(pop);
+      setPopulation(remotesRef.current.size + 1);
     };
 
     ch.on('presence', { event: 'sync' }, rebuild)
+      // live movement — broadcast is low-latency (presence would coalesce and look frozen)
+      .on('broadcast', { event: 'pos' }, ({ payload }) => {
+        const pl = payload as Record<string, unknown>;
+        const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
+        const x = Number(pl.x), y = Number(pl.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        let r = remotesRef.current.get(id);
+        if (!r) {
+          r = { handle: '…', skinId: 'diamond-gold', x, y, tx: x, ty: y, bubble: '', bubbleLife: 0, af: Math.random() * 100 };
+          remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1);
+        } else { r.tx = x; r.ty = y; }
+      })
       .on('broadcast', { event: 'say' }, ({ payload }) => {
-        const id = String((payload as Record<string, unknown>)?.id ?? '');
-        const text = String((payload as Record<string, unknown>)?.text ?? '');
-        if (!id || id === me.id) return;
+        const pl = payload as Record<string, unknown>;
+        const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
+        if (!id || id === me.id || !text) return;
         const r = remotesRef.current.get(id);
         if (r) { r.bubble = text; r.bubbleLife = BUBBLE_FRAMES; }
+        pushFeed(r?.handle ?? '???', text);
       })
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
@@ -157,20 +183,28 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     const update = () => {
       const me = selfRef.current;
-      const wasMoving = Math.hypot(me.tx - me.x, me.ty - me.y) > 1.5;
+      const moving = Math.hypot(me.tx - me.x, me.ty - me.y) > 1.5;
       stepAvatar(me);
-      if (wasMoving) dirtyRef.current = true;
+      const ch = channelRef.current;
+      if (ch) {
+        // Stream position while walking (~8.5/s, under the realtime rate limit).
+        if (moving && ++posAccum.current >= 7) {
+          posAccum.current = 0;
+          ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, x: Math.round(me.x), y: Math.round(me.y) } });
+        }
+        // On arrival: one final broadcast so watchers land on the exact spot, and record the
+        // resting position in presence so anyone who joins later sees us where we actually are.
+        if (wasMovingRef.current && !moving) {
+          ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, x: Math.round(me.x), y: Math.round(me.y) } });
+          ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, x: Math.round(me.x), y: Math.round(me.y) });
+        }
+      }
+      wasMovingRef.current = moving;
       // Remotes ease toward their last broadcast position.
       for (const r of remotesRef.current.values()) {
-        r.x += (r.tx - r.x) * 0.18; r.y += (r.ty - r.y) * 0.18;
+        r.x += (r.tx - r.x) * 0.22; r.y += (r.ty - r.y) * 0.22;
         r.af += Math.hypot(r.tx - r.x, r.ty - r.y) > 1 ? 1 : 0.3;
         if (r.bubbleLife > 0) r.bubbleLife--;
-      }
-      // Throttle presence updates to ~8/s, only when we've actually moved.
-      trackAccum.current++;
-      if (trackAccum.current >= 7 && dirtyRef.current && channelRef.current) {
-        trackAccum.current = 0; dirtyRef.current = false;
-        channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, x: Math.round(me.x), y: Math.round(me.y) });
       }
     };
 
@@ -299,6 +333,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">
           {supabaseReady ? (connected ? `${population} ${population === 1 ? 'pessoa' : 'pessoas'}` : 'a ligar…') : 'offline'}
         </p>
+      </div>
+
+      {/* readable chat feed — last few lines, auto-expire (so you don't have to catch a bubble) */}
+      <div className="absolute left-3 z-40 pointer-events-none flex flex-col gap-1 max-w-[70%] sm:max-w-md"
+        style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 56px)' }}>
+        {feed.map(m => (
+          <p key={m.id} className="text-sm leading-tight" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}>
+            <span className="text-brandYellow font-bold">{m.handle}</span>
+            <span className="text-white/90">: {m.text}</span>
+          </p>
+        ))}
       </div>
 
       {/* chat line — ephemeral bubbles only; does NOT touch the real chat */}
