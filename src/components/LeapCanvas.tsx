@@ -102,43 +102,70 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameOver]);
 
-  // ---- procedural generation: each call lays a CRYSTAL STAIRCASE then a landing PLATFORM ----
-  // Reachable BY CONSTRUCTION. The player only controls altitude (the world brings each
-  // crystal to a fixed X), so what matters is vertical timing, not horizontal distance. We
-  // space steps by a constant FRAME gap (dx = speed × frames), which keeps the timing the
-  // same at every speed, and cap each climb to what one well-timed jump clears in that gap.
-  // Difficulty rises via: more steps, steeper (closer-to-limit) climbs, smaller platforms,
-  // faster scroll (less reaction time) — never via an impossible jump.
+  // How far a hop can climb over T frames: |v|·T − ½·g·T². The first hop off a PLATFORM uses
+  // the ground jump (−14.6); every crystal-to-crystal hop uses the weaker air jump (−12.4),
+  // because the air-chain only refunds that one. Cap placements below this so each hop is
+  // actually makeable.
+  const reachUp = (T: number, impulse: number) => Math.max(0, Math.abs(impulse) * T - 0.5 * GRAVITY * T * T);
+
+  // ---- procedural generation: a CRYSTAL PATTERN then a landing PLATFORM ----
+  // The player only controls altitude (the world carries each crystal to a fixed X), so a
+  // "shape" is just a sequence of up/down/flat hops. Difficulty comes from SPACING (the frame
+  // gap between footings — wider = longer airtime to manage) and OFFSET (how much each hop
+  // climbs or drops), plus richer patterns the deeper you go. Everything stays inside reachUp()
+  // so it's always makeable.
   const genSegment = (canvas: HTMLCanvasElement, st: typeof stateRef.current) => {
     const g = st.genLevel;
     const bandTop = 110;
     const bandBot = canvas.height - 170;
     const ws = st.worldSpeed;
-    const frameGap = 30;                                          // frames between footings
-    // A jump (impulse JUMP_VY) rises this much over frameGap frames: |v|·t − ½·g·t².
-    const climbReach = Math.abs(JUMP_VY) * frameGap - 0.5 * GRAVITY * frameGap * frameGap;
-    const climbMax = Math.max(40, climbReach * 0.82);            // stay inside the envelope
-
     const steps = 2 + Math.min(5, Math.floor(g / 2));            // 2 → 7 crystals
-    // Climb direction: mostly up (classic staircase), flip toward the middle at band edges.
-    let dir = Math.random() > 0.4 ? -1 : 1;                       // -1 = up
-    if (st.cursorY < bandTop + climbMax) dir = 1;
-    if (st.cursorY > bandBot - climbMax) dir = -1;
-    const steep = 0.45 + Math.min(0.45, g * 0.05);               // fraction of the reach used
+
+    // Pattern menu unlocks with difficulty. 'arc' = up-then-down, 'valley' = drop-then-climb
+    // (leap DOWN to a crystal, then back UP onto the platform), 'zigzag' = alternating hops.
+    const menu = ['ascend', 'arc'];
+    if (g >= 2) menu.push('valley', 'flat');
+    if (g >= 4) menu.push('zigzag', 'descend');
+    const pat = menu[Math.floor(Math.random() * menu.length)];
+    const kindOf = (i: number): 'up' | 'down' | 'flat' => {
+      switch (pat) {
+        case 'ascend':  return 'up';
+        case 'descend': return 'down';
+        case 'arc':     return i < steps / 2 ? 'up' : 'down';
+        case 'valley':  return i < steps / 2 ? 'down' : 'up';
+        case 'zigzag':  return i % 2 === 0 ? 'up' : 'down';
+        default:        return 'flat';
+      }
+    };
+
+    // SPACING grows with difficulty (22 → 36 frames); OFFSET fraction climbs toward the limit.
+    const Tbase = 22 + Math.min(14, g * 1.4);
+    const upFrac = 0.5 + Math.min(0.28, g * 0.035);
+    const dropAmt = 46 + Math.min(110, g * 14);
 
     for (let i = 0; i < steps; i++) {
-      st.cursorX += ws * frameGap * (0.92 + Math.random() * 0.16);
-      const climb = dir < 0
-        ? -climbMax * steep * (0.7 + Math.random() * 0.5)        // up, bounded by the envelope
-        : climbMax * (0.5 + Math.random() * 0.7);                // down is always reachable
-      st.cursorY = Math.max(bandTop, Math.min(bandBot, st.cursorY + climb));
+      const kind = kindOf(i);
+      const impulse = i === 0 ? JUMP_VY : AIR_JUMP_VY;           // first hop is off the platform
+      let T = Tbase * (0.9 + Math.random() * 0.3);
+      if (kind === 'up') T = Math.min(T, 26);                    // up-reach shrinks past ~26 frames
+      let dy: number;
+      if (kind === 'up')        dy = -reachUp(T, impulse) * upFrac * (0.85 + Math.random() * 0.3);
+      else if (kind === 'down') dy =  dropAmt * (0.6 + Math.random() * 0.7);
+      else                      dy = (Math.random() * 2 - 1) * 16;
+      // Keep inside the band; if clamping would distort an 'up' hop into the ceiling, ease off.
+      st.cursorX += ws * T;
+      st.cursorY = Math.max(bandTop, Math.min(bandBot, st.cursorY + dy));
       st.crystals.push({ x: st.cursorX, y: st.cursorY, size: CRYSTAL_SIZE, collected: false, pulse: Math.random() * Math.PI * 2 });
     }
 
-    // Landing platform — one frame-gap past the last crystal, biased slightly below it so the
-    // player descends onto the top surface, and within the climb envelope.
-    st.cursorX += ws * frameGap;
-    const top = Math.max(bandTop + 40, Math.min(bandBot + 70, st.cursorY + Math.random() * 60));
+    // Landing platform — reachable from the last crystal with an air-jump. Valley/descend climb
+    // back UP onto it; everything else sits at/below the last crystal so you fall onto the top.
+    const Tp = Tbase;
+    const pdy = (pat === 'valley' || pat === 'descend')
+      ? -reachUp(Tp, AIR_JUMP_VY) * 0.55
+      : 20 + Math.random() * 55;
+    st.cursorX += ws * Tp;
+    const top = Math.max(bandTop + 40, Math.min(bandBot + 70, st.cursorY + pdy));
     const width = Math.max(150, 300 - g * 12);
     st.genLevel = g + 1;
     st.platforms.push({ x: st.cursorX, top, width, reached: false, level: st.genLevel });
