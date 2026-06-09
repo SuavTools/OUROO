@@ -19,6 +19,19 @@ const FLOOR_TOP_INSET = 360, FLOOR_BOT_INSET = 150;   // how far the trapezoid p
 const WALK_SPEED = 3.4;                                // px / 60Hz step
 const BUBBLE_FRAMES = 60 * 6;                          // speech bubble lifetime
 
+// The rooms you can hop between. Each is its own realtime channel (room:<slug>) with its own
+// colour identity. Add more here — the switcher and theming pick them up automatically.
+type RoomDef = { slug: string; name: string; accent: string; floor: string };
+const ROOMS: RoomDef[] = [
+  { slug: 'praca',   name: 'Praça',     accent: '#00cfff', floor: '#12121e' },
+  { slug: 'disco',   name: 'Discoteca', accent: '#ff44aa', floor: '#1a0e1e' },
+  { slug: 'lounge',  name: 'Lounge',    accent: '#ffd23a', floor: '#1a160e' },
+  { slug: 'telhado', name: 'Telhado',   accent: '#1ED760', floor: '#0e1a14' },
+  { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#140e1e' },
+];
+const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
+const freshSpawn = () => ({ x: STAGE_W / 2 + (Math.random() - 0.5) * 320, y: 500 + Math.random() * 120 });
+
 type Avatar = {
   handle: string; skinId: string;
   x: number; y: number; tx: number; ty: number;        // pos + walk target
@@ -56,6 +69,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [connected, setConnected] = useState(false);
   const [feed, setFeed] = useState<{ id: number; handle: string; text: string }[]>([]);
   const feedId = useRef(0);
+  const [room, setRoom] = useState('praca');
+  const [showRooms, setShowRooms] = useState(false);
+  const themeRef = useRef<RoomDef>(roomOf('praca'));
+  useEffect(() => { themeRef.current = roomOf(room); }, [room]);
+
+  // Hop to another room: drop the current crowd, respawn, and let the presence effect re-join
+  // the new channel (it depends on `room`).
+  const switchRoom = (slug: string) => {
+    setShowRooms(false);
+    if (slug === room) return;
+    const sp = freshSpawn();
+    const me = selfRef.current;
+    me.x = sp.x; me.y = sp.y; me.tx = sp.x; me.ty = sp.y; me.bubble = ''; me.bubbleLife = 0;
+    remotesRef.current.clear();
+    setRoom(slug);
+  };
 
   // Append to the readable chat feed (last few lines, auto-expire) so messages don't depend on
   // catching the floating bubble.
@@ -87,7 +116,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     if (!supabase) return;   // offline → still walk around solo
     const me = selfRef.current;
-    const ch = supabase.channel('room:praca', {
+    remotesRef.current.clear(); setPopulation(1); setConnected(false);
+    const ch = supabase.channel(`room:${room}`, {
       config: { presence: { key: me.id }, broadcast: { self: false } },
     });
     channelRef.current = ch;
@@ -163,7 +193,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       window.removeEventListener('online', onResume);
       supabase?.removeChannel(ch); channelRef.current = null;
     };
-  }, []);
+  }, [room]);
 
   // ---- main loop (fixed 60Hz step, like the games) ----
   useEffect(() => {
@@ -248,27 +278,28 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     const draw = () => {
+      const theme = themeRef.current;
       // background
       const g = ctx.createLinearGradient(0, 0, 0, STAGE_H);
       g.addColorStop(0, '#0a0a12'); g.addColorStop(1, '#14060c');
       ctx.fillStyle = g; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
 
-      // back wall band + sign
+      // back wall band + sign (per-room name)
       ctx.save();
       ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(0, 0, STAGE_W, FLOOR_TOP);
       ctx.font = '900 56px Helvetica, Arial, sans-serif'; ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.fillText('PRAÇA SUAV', STAGE_W / 2, FLOOR_TOP * 0.5);
+      ctx.fillText(`${theme.name.toUpperCase()} · SUAV`, STAGE_W / 2, FLOOR_TOP * 0.5);
       ctx.restore();
 
-      // perspective floor (trapezoid) + neon grid
+      // perspective floor (trapezoid) + neon grid in the room's accent
       const [tl, tr] = floorXRange(FLOOR_TOP);
       const [bl, br] = floorXRange(FLOOR_BOT);
       ctx.save();
       ctx.beginPath(); ctx.moveTo(tl, FLOOR_TOP); ctx.lineTo(tr, FLOOR_TOP); ctx.lineTo(br, FLOOR_BOT); ctx.lineTo(bl, FLOOR_BOT); ctx.closePath();
-      ctx.fillStyle = '#12121e'; ctx.fill();
+      ctx.fillStyle = theme.floor; ctx.fill();
       ctx.clip();
-      ctx.strokeStyle = 'rgba(0,207,255,0.16)'; ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.16; ctx.strokeStyle = theme.accent; ctx.lineWidth = 1.5;
       for (let i = 0; i <= 10; i++) {           // depth lines
         const y = FLOOR_TOP + (FLOOR_BOT - FLOOR_TOP) * (i / 10);
         const [a, b] = floorXRange(y);
@@ -279,8 +310,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.beginPath(); ctx.moveTo(tl + (tr - tl) * fx, FLOOR_TOP); ctx.lineTo(bl + (br - bl) * fx, FLOOR_BOT); ctx.stroke();
       }
       ctx.restore();
-      // glowing floor edge
-      ctx.save(); ctx.strokeStyle = 'rgba(255,78,62,0.5)'; ctx.lineWidth = 3; ctx.shadowColor = '#ff4e3e'; ctx.shadowBlur = 14;
+      // glowing floor edge in the accent
+      ctx.save(); ctx.globalAlpha = 0.85; ctx.strokeStyle = theme.accent; ctx.lineWidth = 3; ctx.shadowColor = theme.accent; ctx.shadowBlur = 14;
       ctx.beginPath(); ctx.moveTo(bl, FLOOR_BOT); ctx.lineTo(br, FLOOR_BOT); ctx.stroke(); ctx.restore();
 
       // avatars, painter-sorted back→front
@@ -327,13 +358,36 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </div>
       </div>
 
-      {/* top bar: population + connection */}
+      {/* top bar: current room + population */}
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
-        <p className="font-helvetica font-black text-xl text-white leading-none">PRAÇA</p>
+        <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomOf(room).name}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">
           {supabaseReady ? (connected ? `${population} ${population === 1 ? 'pessoa' : 'pessoas'}` : 'a ligar…') : 'offline'}
         </p>
       </div>
+
+      {/* room switcher */}
+      <button onClick={() => setShowRooms(s => !s)}
+        className="absolute top-3 left-1/2 -translate-x-1/2 z-40 text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">
+        ⤧ Salas
+      </button>
+      {showRooms && (
+        <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center px-6" onClick={() => setShowRooms(false)}>
+          <div className="w-full max-w-xs bg-black border border-white/15 p-5" onClick={e => e.stopPropagation()}>
+            <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-3">Escolhe uma sala</p>
+            <div className="flex flex-col gap-2">
+              {ROOMS.map(r => (
+                <button key={r.slug} onClick={() => switchRoom(r.slug)}
+                  className={`flex items-center gap-3 p-3 border transition-colors ${r.slug === room ? 'border-white bg-white/5' : 'border-white/15 hover:border-white/40'}`}>
+                  <span className="w-4 h-4 rounded-full shrink-0" style={{ background: r.accent, boxShadow: `0 0 10px ${r.accent}` }} />
+                  <span className="font-bold text-white">{r.name}</span>
+                  {r.slug === room && <span className="ml-auto text-[10px] uppercase tracking-widest text-white/40">aqui</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* readable chat feed — last few lines, auto-expire (so you don't have to catch a bubble) */}
       <div className="absolute left-3 z-40 pointer-events-none flex flex-col gap-1 max-w-[70%] sm:max-w-md"
