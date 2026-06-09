@@ -4,7 +4,7 @@ import { validateHandle } from '@/lib/names';
 
 export const dynamic = 'force-dynamic';
 
-const ALLOWED_GAMES = new Set(['ouroo']);
+const ALLOWED_GAMES = new Set(['ouroo', 'ouroo-leap']);
 
 export async function POST(request: Request) {
   if (!supabase) return NextResponse.json({ ok: false, error: 'Leaderboard offline.' }, { status: 503 });

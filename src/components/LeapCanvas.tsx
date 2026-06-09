@@ -35,7 +35,16 @@ const PLAYER_X = 360;            // locked horizontal position (top-left)
 const BASE_SPEED = 4.0;          // level-1 scroll speed
 const MAX_SPEED = 6.5;           // gentle cap — difficulty comes from patterns, not raw speed
 const CRYSTAL_SIZE = 26;
-const CYAN = '#00cfff';
+
+// The world's accent colour drifts with the level: relaxing cyan/blue early, climbing through
+// the spectrum as you go, then a full cycling RAINBOW once you reach the deep levels.
+const RAINBOW_LEVEL = 10;
+function accentColor(level: number, ticks: number): string {
+  if (level >= RAINBOW_LEVEL) return `hsl(${(ticks * 2.2) % 360}, 90%, 62%)`;
+  const hue = (195 + (level - 1) * 26) % 360;   // 195 = cyan; drifts ~26°/level
+  const sat = level <= 2 ? 100 : 88;
+  return `hsl(${hue}, ${sat}%, 58%)`;
+}
 
 export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void }> = ({
   stageScale = 1, isMobileStage = false, onExit,
@@ -59,7 +68,10 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     cursorY: 0,          // generation frontier (height)
     gameTicks: 0,
     jumpBuffer: 0,
-    bonus: 0,            // crystal points
+    bonus: 0,            // crystal + platform points
+    dist: 0,             // distance scrolled (trickles into score)
+    combo: 0,            // crystals chained this run — drives the score multiplier
+    comboBest: 0,
     curScore: 0,
     bannerText: '',
     bannerLife: 0,
@@ -190,6 +202,7 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     st.platforms = []; st.crystals = []; st.particles = [];
     st.worldSpeed = BASE_SPEED; st.level = 1; st.genLevel = 0;
     st.gameTicks = 0; st.jumpBuffer = 0; st.bonus = 0; st.curScore = 0; st.bannerLife = 0;
+    st.dist = 0; st.combo = 0; st.comboBest = 0;
 
     // Start platform — wide, centred under the player, exactly like the base game's opener.
     const startTop = canvas.height * 0.62;
@@ -314,12 +327,11 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             pl.reached = true;
             st.level++;
             st.worldSpeed = Math.min(MAX_SPEED, BASE_SPEED + (st.level - 1) * 0.2);
-            st.bonus += 200 * st.level;
+            st.bonus += 250 * st.level;
             st.bannerText = `NÍVEL ${st.level}`;
             st.bannerLife = 95;
-            synthRef.current?.setIntensity(st.level * 2);
             synthRef.current?.playCombo(Math.min(st.level, 6));
-            spawnBurst(st.particles, p.x + PW / 2, pl.top, CYAN, { count: 16, speed: 4, angle: -Math.PI / 2, spread: Math.PI, life: 30 });
+            spawnBurst(st.particles, p.x + PW / 2, pl.top, accentColor(st.level, st.gameTicks), { count: 16, speed: 4, angle: -Math.PI / 2, spread: Math.PI, life: 30 });
             setHudLevel(st.level);
           }
           break;
@@ -336,9 +348,15 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (Math.abs(pcx - ccx) < PW / 2 + c.size * 0.7 && Math.abs(pcy - ccy) < PH / 2 + c.size * 0.7) {
           c.collected = true;
           if (!p.grounded) { p.jumpCount = Math.min(p.jumpCount, 1); p.stretch = 1.3; }
-          st.bonus += 50;
+          // Chain multiplier: every crystal grabbed without dying builds the chain, and the
+          // chain multiplies each crystal's worth — long clean runs score big.
+          st.combo++;
+          if (st.combo > st.comboBest) st.comboBest = st.combo;
+          const mult = 1 + Math.floor(st.combo / 5);
+          st.bonus += 50 * mult;
           spawnBurst(st.particles, c.x + c.size / 2, c.y + c.size / 2, '#ffe65c', { count: 9, speed: 3, life: 24 });
           synthRef.current?.playCrystal();
+          synthRef.current?.setIntensity(Math.min(15, Math.floor(st.combo / 3)));
         }
       }
 
@@ -351,7 +369,8 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         else if (p.jumpCount < 2) { p.vy = AIR_JUMP_VY; p.jumpCount++; p.stretch = 1.45; synthRef.current?.playJump(); st.jumpBuffer = 0; }
       }
 
-      st.curScore = st.bonus;
+      st.dist += st.worldSpeed;
+      st.curScore = st.bonus + Math.floor(st.dist / 8);   // distance trickles in too
       updateParticles(st.particles, 0.18);
 
       // Death: fell past the bottom of the screen.
@@ -361,22 +380,29 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const draw = () => {
       const st = stateRef.current;
       const w = canvas.width, h = canvas.height;
+      const accent = accentColor(st.level, st.gameTicks);
       const g = ctx.createLinearGradient(0, 0, 0, h);
       g.addColorStop(0, '#0a0a12'); g.addColorStop(1, '#13060d');
       ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      // Level-tint wash — barely-there cyan early (relaxing), stronger + shifting as you climb,
+      // full rainbow once you're deep. Kept low-alpha so it sets mood without blinding.
+      ctx.save();
+      ctx.globalAlpha = 0.04 + Math.min(0.10, st.level * 0.011);
+      ctx.fillStyle = accent; ctx.fillRect(0, 0, w, h);
+      ctx.restore();
 
       // Stars.
       ctx.save();
       for (const s of st.stars) { ctx.globalAlpha = 0.12 + s.z * 0.4; ctx.fillStyle = '#ffffff'; ctx.fillRect(s.x, s.y, s.z * 2, s.z * 2); }
       ctx.restore();
 
-      // Platforms — solid bar + cyan top edge (OUROO style).
+      // Platforms — solid bar + glowing accent top edge (OUROO style).
       for (const pl of st.platforms) {
         ctx.fillStyle = '#1b1b28';
         ctx.fillRect(pl.x, pl.top, pl.width, h - pl.top + 40);
-        ctx.fillStyle = CYAN;
+        ctx.fillStyle = accent;
         ctx.fillRect(pl.x, pl.top, pl.width, 5);
-        ctx.save(); ctx.globalAlpha = 0.25; ctx.shadowColor = CYAN; ctx.shadowBlur = 14;
+        ctx.save(); ctx.globalAlpha = 0.25; ctx.shadowColor = accent; ctx.shadowBlur = 14;
         ctx.fillRect(pl.x, pl.top, pl.width, 5); ctx.restore();
       }
 
@@ -418,7 +444,14 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.fillText(String(st.curScore), 28, 24);
       ctx.font = '700 13px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.fillText('PONTOS', 30, 72);
-      ctx.textAlign = 'right'; ctx.fillStyle = CYAN; ctx.font = '900 22px Helvetica, Arial, sans-serif';
+      // Chain + multiplier — the juicy bit: a long clean chain pumps the multiplier.
+      if (st.combo > 1) {
+        const mult = 1 + Math.floor(st.combo / 5);
+        ctx.fillStyle = '#ffe65c'; ctx.font = '900 20px Helvetica, Arial, sans-serif';
+        ctx.fillText(`CADEIA ${st.combo}`, 30, 94);
+        if (mult > 1) { ctx.fillStyle = accent; ctx.fillText(`×${mult}`, 30 + ctx.measureText(`CADEIA ${st.combo} `).width, 94); }
+      }
+      ctx.textAlign = 'right'; ctx.fillStyle = accent; ctx.font = '900 22px Helvetica, Arial, sans-serif';
       ctx.fillText(`NÍVEL ${st.level}`, w - 28, 26);
       ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = '700 12px monospace';
       ctx.fillText(`RECORDE ${Math.max(best, st.curScore)}`, w - 28, 56);
@@ -428,7 +461,7 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (st.bannerLife > 0) {
         const a = Math.min(1, st.bannerLife / 30);
         ctx.save();
-        ctx.globalAlpha = a; ctx.fillStyle = CYAN; ctx.shadowBlur = 24; ctx.shadowColor = CYAN;
+        ctx.globalAlpha = a; ctx.fillStyle = accent; ctx.shadowBlur = 24; ctx.shadowColor = accent;
         ctx.font = '900 60px Helvetica, Arial, sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(st.bannerText, w / 2, h * 0.3);
