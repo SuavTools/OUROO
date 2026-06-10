@@ -66,6 +66,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   stageScale = 1, isMobileStage = false, onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const outerRef = useRef<HTMLDivElement | null>(null);
+  const [fitScale, setFitScale] = useState(1);   // uniform scale to FIT the 1280×720 stage (never stretch)
   const rafRef = useRef(0);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const joinedRef = useRef(false);   // true only while the channel is actually SUBSCRIBED — never send otherwise (avoids REST-fallback floods)
@@ -91,6 +93,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [showRooms, setShowRooms] = useState(false);
   const themeRef = useRef<RoomDef>(roomOf('praca'));
   useEffect(() => { themeRef.current = roomOf(room); }, [room]);
+  // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
+  useEffect(() => {
+    const el = outerRef.current; if (!el) return;
+    const compute = () => { const w = el.clientWidth, h = el.clientHeight; if (w && h) setFitScale(Math.min(w / STAGE_W, h / STAGE_H)); };
+    compute();
+    const ro = new ResizeObserver(compute); ro.observe(el);
+    window.addEventListener('resize', compute); window.addEventListener('orientationchange', compute);
+    return () => { ro.disconnect(); window.removeEventListener('resize', compute); window.removeEventListener('orientationchange', compute); };
+  }, []);
   const [placingKind, setPlacingKind] = useState<string | null>(null);
   const [removeMode, setRemoveMode] = useState(false);
   const [rotateMode, setRotateMode] = useState(false);
@@ -430,9 +441,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy, raw } = evtTile(e); hoverRef.current = (raw.gx < -0.5 || raw.gx > GRID - 0.5 || raw.gy < -0.5 || raw.gy > GRID - 0.5) ? null : { gx, gy }; };
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}>
+    <div ref={outerRef} className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}>
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative shrink-0 origin-center" style={isMobileStage ? { width: STAGE_W, height: STAGE_H, transform: `scale(${stageScale})` } : { width: '100%', height: '100%' }}>
+        <div className="relative shrink-0 origin-center" style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${fitScale})` }}>
           <canvas ref={canvasRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} className="absolute inset-0 block w-full h-full" />
         </div>
       </div>
