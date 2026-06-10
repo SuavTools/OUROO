@@ -446,6 +446,26 @@ const drawFountain = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a:
   ctx.globalAlpha = 0.7; for (let i = 0; i < 8; i++) { const ph = (t * 0.12 + i) % 6.283; const dx = Math.cos(i) * (4 + ph * 2), dy = -pedH - 14 + Math.sin(ph) * 4 + ph * 2; ctx.fillStyle = '#cdeeff'; ctx.beginPath(); ctx.arc(sx + dx, sy + dy, 1.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
 };
 
+// Bar counter (2 tiles): dark body, wood top overhang, brass foot-rail + accent strip on the front,
+// and a row of bottles + a brass tap on the bartop. Rotates 4 ways.
+const drawBar = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.6), wood = '#7a5230';
+  const parts: IsoPart[] = [{ u0: -0.92, u1: 0.92, v0: -0.16, v1: 0.34, z0: 0, z1: 1.45, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 1.45;
+    poly(ctx, [P(-1.0, -0.24, z), P(1.0, -0.24, z), P(1.0, 0.42, z), P(-1.0, 0.42, z)], shade(wood, 1.2));            // wood top
+    poly(ctx, [P(-1.0, 0.42, z), P(1.0, 0.42, z), P(1.0, 0.42, z - 0.12), P(-1.0, 0.42, z - 0.12)], shade(wood, 0.75));
+    poly(ctx, [P(1.0, -0.24, z), P(1.0, 0.42, z), P(1.0, 0.42, z - 0.12), P(1.0, -0.24, z - 0.12)], shade(wood, 0.62));
+    if (faceVisible(0, 1, dir)) {
+      poly(ctx, [P(-0.9, 0.34, 1.0), P(0.9, 0.34, 1.0), P(0.9, 0.34, 0.95), P(-0.9, 0.34, 0.95)], hexA(accent, 0.7));     // accent strip
+      poly(ctx, [P(-0.9, 0.34, 0.3), P(0.9, 0.34, 0.3), P(0.9, 0.34, 0.25), P(-0.9, 0.34, 0.25)], '#c9a44f');             // brass foot-rail
+    }
+    const bottle = (u: number, col: string) => { const b = P(u, 0.04, z); ctx.fillStyle = col; ctx.fillRect(b[0] - 2, b[1] - 13, 4, 13); ctx.fillStyle = shade(col, 1.5); ctx.fillRect(b[0] - 2, b[1] - 13, 1.4, 13); ctx.fillStyle = '#caa24a'; ctx.fillRect(b[0] - 1, b[1] - 16, 2, 3); };
+    for (const [u, c] of [[-0.55, '#2e9e5a'], [-0.36, '#b3242e'], [-0.17, '#caa24a'], [0.5, '#3a7bd0']] as [number, string][]) bottle(u, c);
+    const tp = P(0.18, 0.06, z); ctx.strokeStyle = '#c9a44f'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(tp[0], tp[1]); ctx.lineTo(tp[0], tp[1] - 11); ctx.lineTo(tp[0] + 6, tp[1] - 11); ctx.stroke();   // tap
+  });
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -524,6 +544,7 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
       break;
     }
     case 'counter': { const top = boxAt(ctx, sx, sy, d.foot, d.foot, 2, d.color, accent); ctx.fillStyle = shade(d.color, 1.4); diamond(ctx, sx, top - 2, TW * d.foot * 1.06, TH * d.foot * 1.06); ctx.fill(); break; }
+    case 'bartop': drawBar(ctx, sx, sy, accent, d.color, dir); break;
     case 'shelf': {
       const top = boxAt(ctx, sx, sy, d.foot, d.foot, 2, d.color, accent);
       faceWrap(() => { ctx.strokeStyle = hexA(accent, 0.4); ctx.lineWidth = 1.5; for (let i = 1; i <= 2; i++) { const yy = top + i * (2 * STACK_H / 3); ctx.beginPath(); ctx.moveTo(sx - TW * d.foot, yy - TH * d.foot); ctx.lineTo(sx + TW * d.foot, yy + TH * d.foot); ctx.stroke(); } });

@@ -72,7 +72,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
   { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
   { kind: 'mesacafe', name: 'Café',      emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8, special: 'table' },
-  { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#2a2a3a', h: 2, walk: false, foot: 1,   special: 'counter' },
+  { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#3a2c34', h: 2, walk: false, foot: 1,   special: 'bartop', span: [2, 1] },
   { kind: 'rececao',  name: 'Receção',   emoji: '🛎️', cat: 'mesas', color: '#6b4a2c', h: 2, walk: false, foot: 1,   special: 'reception', span: [3, 1] },
   { kind: 'prat',     name: 'Prateleira',emoji: '📚', cat: 'mesas', color: '#4a3420', h: 2, walk: false, foot: 0.6, special: 'shelf' },
   // plantas
@@ -133,7 +133,7 @@ const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, 
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
-const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope']);
+const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

@@ -52,7 +52,7 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
-type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number };
+type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[] };
 const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
   clube: [
     // stage (back, raised): PA towers + a big screen
@@ -74,7 +74,7 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
     ['poste', 15, 13, 1], ['poste', 15, 16, 1], ['poste', 15, 19, 1], ['poste', 15, 22, 1], ['poste', 15, 25, 1],
     ['poste', 19, 13, 1], ['poste', 19, 16, 1], ['poste', 19, 19, 1], ['poste', 19, 22, 1], ['poste', 19, 25, 1],
     // bar lounge on the right + statues flanking the stage
-    ['bar', 23, 13, 1], ['banco', 22, 13, 0], ['banco', 22, 15, 0], ['vaso', 23, 16, 0],
+    ['bar', 21, 13, 0], ['banco', 21, 14, 0], ['banco', 22, 14, 0], ['vaso', 24, 13, 0],
     ['estatua', 10, 9, 0], ['estatua', 23, 9, 0],
     // chandeliers overhead
     ['lustre', 13, 11, 0], ['lustre', 20, 11, 0], ['lustre', 12, 18, 0], ['lustre', 21, 18, 0], ['lustre', 16, 16, 0],
@@ -88,15 +88,15 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
   clube: [
-    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1 },
-    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24 },
-    { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24 },
-    { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28 },
-    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10 },
-    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10 },
-    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18 },
-    { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20 },
-    { handle: 'Sandra', skinId: 'heart-dourado', gx: 24, gy: 13 },
+    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, lines: ['Bora dançar! 🎶', 'Som no máximo!', 'Esta é pra vocês!', 'Quem é que tá com tudo?!'] },
+    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, lines: ['Bem-vindo ao Clube!', 'Precisas de ajuda?', 'Diverte-te! ✦', 'A piscina é por ali 🏊'] },
+    { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24, lines: ['Bom dia! ☀️', 'Já viste o palco?', 'Fica à vontade.'] },
+    { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28, lines: ['Entra, entra!', 'Segue o tapete vermelho 🟥', 'Bem-vindo ao Clube!'] },
+    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, lines: ['Adoro esta música! 💃', 'Não paro de dançar!', 'Que vibe!'] },
+    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, lines: ['Isto é que é! 🕺', 'O DJ tá on fire!', 'Bora!'] },
+    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, lines: ['A água está óptima 🌊', 'Vou mergulhar!', 'Que calor hoje 😎'] },
+    { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20, lines: ['Que vista 😎', 'Relax total.', 'Só a curtir.'] },
+    { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['O que vais querer? 🍹', 'Um sumo fresquinho?', 'Casa cheia hoje!', 'A próxima é por minha conta 😉'] },
   ],
 };
 
@@ -172,7 +172,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<Avatar[]>([]);   // curated static NPCs
+  const npcsRef = useRef<(Avatar & { lines?: string[] })[]>([]);   // curated static NPCs (with chatter lines)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -350,7 +350,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     matRef.current = planMaterialMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: 0, createdBy: 'curated' }));
-    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0 }));
+    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -545,7 +545,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       wasMovingRef.current = moving;
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
-      for (const n of npcsRef.current) n.af += 0.5;   // idle life for NPCs
+      for (const n of npcsRef.current) { n.af += 0.5; if (n.bubbleLife > 0) n.bubbleLife--; }   // idle life for NPCs
+      // NPC chatter: every so often a random NPC pipes up with one of its lines
+      if (npcsRef.current.length && framesRef.current % 70 === 0) { const sp = npcsRef.current[Math.floor(Math.random() * npcsRef.current.length)]; if (sp && sp.bubbleLife <= 0 && sp.lines && sp.lines.length) { sp.bubble = sp.lines[Math.floor(Math.random() * sp.lines.length)]; sp.bubbleLife = 210; } }
     };
 
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
