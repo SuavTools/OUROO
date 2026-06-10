@@ -12,7 +12,7 @@ import { IconEditor } from '@/components/IconEditor';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
 import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, ownsFurni, removeIcon } from '@/lib/wallet';
-import { CatIcon, FurniThumb } from '@/components/UiIcon';
+import { CatIcon, FurniSprite } from '@/components/UiIcon';
 
 type Tab = 'skins' | 'furni' | 'icons';
 
@@ -154,7 +154,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
                 const price = furniPrice(f.kind);
                 return (
                   <div key={f.kind} className="border border-white/10 p-2 flex flex-col items-center gap-1">
-                    <FurniThumb def={f} size={38} />
+                    <FurniSprite kind={f.kind} size={42} accent="#00cfff" />
                     <span className="text-[9px] uppercase tracking-wide text-white/70 text-center leading-tight">{f.name}</span>
                     {free ? (
                       <span className="text-[8px] uppercase tracking-widest text-white/35">incluído</span>

@@ -1,15 +1,5 @@
-// Self-drawn UI icons (no emojis) for the room designer: category glyphs + generic iso furni thumbs.
-// All draw centred at the current transform origin, fitting a size×size box.
-
-import { type FurniDef } from './furni';
-
-const shade = (hex: string, f: number): string => {
-  const n = parseInt(hex.slice(1), 16);
-  const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
-  const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
-  const b = Math.min(255, Math.round((n & 255) * f));
-  return `rgb(${r},${g},${b})`;
-};
+// Self-drawn UI icons (no emojis): category glyphs for the room designer. Furni thumbnails use the
+// real isometric renderer (see FurniSprite / @/lib/furniRender). All draw centred at the origin.
 
 export type CatGlyph = 'tier1' | 'constr' | 'tapetes' | 'assentos' | 'mesas' | 'plantas' | 'luzes' | 'electro' | 'deco' | 'remove';
 
@@ -55,16 +45,4 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
     default: diamond(0, u * 0.7, u * 0.5); ctx.stroke();
   }
   ctx.restore();
-}
-
-// A small generic isometric cuboid coloured to the furni — a clean, consistent thumbnail (no emoji).
-export function drawFurniThumb(ctx: CanvasRenderingContext2D, d: FurniDef, S: number) {
-  const TW = S * 0.34, TH = S * 0.17, STACK = S * 0.2;
-  const cyBase = S * 0.07;
-  const h = Math.max(d.h > 0 ? d.h : 0.5, 0.5), foot = Math.min(1, d.foot || 0.9);
-  const hw = TW * foot, hh = TH * foot, cyT = cyBase - h * STACK;
-  const base = d.color || '#888';
-  ctx.fillStyle = shade(base, 0.55); ctx.beginPath(); ctx.moveTo(-hw, cyBase); ctx.lineTo(0, cyBase + hh); ctx.lineTo(0, cyT + hh); ctx.lineTo(-hw, cyT); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = shade(base, 0.82); ctx.beginPath(); ctx.moveTo(0, cyBase + hh); ctx.lineTo(hw, cyBase); ctx.lineTo(hw, cyT); ctx.lineTo(0, cyT + hh); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = shade(base, 1.28); ctx.beginPath(); ctx.moveTo(0, cyT - hh); ctx.lineTo(hw, cyT); ctx.lineTo(0, cyT + hh); ctx.lineTo(-hw, cyT); ctx.closePath(); ctx.fill();
 }
