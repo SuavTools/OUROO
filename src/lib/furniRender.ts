@@ -265,8 +265,8 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
     case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
     case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;
-    case 'rug': { const hw = TW * 0.92, hh = TH * 0.92, top = block(ctx, sx, sy, 1, d.color, '#fff', 1); ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; for (let i = 1; i < 4; i++) { const f = i / 4; diamond(ctx, sx, top, hw * f, hh * f); ctx.stroke(); } ctx.restore(); break; }
-    case 'water': { const top = block(ctx, sx, sy, 1, d.color, accent, 1); ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(t * 0.1) * 0.2; ctx.fillStyle = '#fff'; diamond(ctx, sx, top, TW * 0.5, TH * 0.5); ctx.fill(); ctx.restore(); break; }
+    case 'rug': { const hw = TW * 0.94, hh = TH * 0.94, top = d.h === 0 ? (diamond(ctx, sx, sy, hw, hh), ctx.fillStyle = d.color, ctx.fill(), sy) : block(ctx, sx, sy, 1, d.color, '#fff', 1); ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; for (let i = 1; i < 4; i++) { const f = i / 4; diamond(ctx, sx, top, hw * f, hh * f); ctx.stroke(); } ctx.restore(); break; }
+    case 'water': { const top = d.h === 0 ? (diamond(ctx, sx, sy, TW * 0.94, TH * 0.94), ctx.fillStyle = d.color, ctx.fill(), sy) : block(ctx, sx, sy, 1, d.color, accent, 1); ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(t * 0.1) * 0.2; ctx.fillStyle = '#fff'; diamond(ctx, sx, top, TW * 0.5, TH * 0.5); ctx.fill(); ctx.restore(); break; }
     case 'stair': {
       const n = 4, base = d.color, Pl = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
       const t = shade(base, 1.25), r = shade(base, 0.82), l = shade(base, 0.55);

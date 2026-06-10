@@ -172,7 +172,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
         const k2 = key(nx, ny); if (S[k2]) continue;
         if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
-        for (const sz of surf[k2]) {
+        for (let si = surf[k2].length - 1; si >= 0; si--) {   // prefer highest reachable surface (step ON, not under)
+          const sz = surf[k2][si];
           if (Math.abs(sz - cur.l) > 1.001) continue;
           const i2 = id(k2, sz); if (seen.has(i2)) continue;
           seen.add(i2); prev.set(i2, cid); info.set(i2, { gx: nx, gy: ny, z: sz }); q.push({ k: k2, l: sz });
@@ -365,8 +366,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
       for (const it of itemsRef.current) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, z = it.elev || 0; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (z > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
-      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01, draw: () => drawAvatar(selfRef.current, true) });
-      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01, draw: () => drawAvatar(rr, false) }); }
+      // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
+      // sort by their front corner, so add a boost when standing on a seat's footprint.
+      const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of itemsRef.current) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
+      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatar(selfRef.current, true) });
+      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);

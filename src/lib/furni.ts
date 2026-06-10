@@ -49,15 +49,15 @@ export const FURNI: FurniDef[] = [
   { kind: 'parede',     name: 'Parede',    emoji: '🧱', cat: 'constr', color: '#3a2e2e', h: 2, walk: false, foot: 1, special: 'wall' },
   { kind: 'cerca',      name: 'Cerca',     emoji: '🚧', cat: 'constr', color: '#6a5a2a', h: 1, walk: false, foot: 1, special: 'wall' },
   // pisos / tapetes (walkable, 1-high — carpets have height!)
-  { kind: 'tap_red',  name: 'Tapete',  emoji: '🟥', cat: 'tapetes', color: '#b3242e', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'tap_blu',  name: 'Tapete',  emoji: '🟦', cat: 'tapetes', color: '#2452b3', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'tap_grn',  name: 'Tapete',  emoji: '🟩', cat: 'tapetes', color: '#1ea64a', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'tap_pur',  name: 'Tapete',  emoji: '🟪', cat: 'tapetes', color: '#8a44cc', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'relva',    name: 'Relva',   emoji: '🌿', cat: 'tapetes', color: '#2e7d32', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'agua',     name: 'Água',    emoji: '💧', cat: 'tapetes', color: '#1d6fb3', h: 1, walk: true, foot: 1, special: 'water' },
-  { kind: 'gelo',     name: 'Gelo',    emoji: '🧊', cat: 'tapetes', color: '#aee3ff', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'lava',     name: 'Lava',    emoji: '🌋', cat: 'tapetes', color: '#d23a1a', h: 1, walk: true, foot: 1, special: 'water' },
-  { kind: 'xadrez',   name: 'Xadrez',  emoji: '♟️', cat: 'tapetes', color: '#2a2a36', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_red',  name: 'Tapete',  emoji: '🟥', cat: 'tapetes', color: '#b3242e', h: 0, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_blu',  name: 'Tapete',  emoji: '🟦', cat: 'tapetes', color: '#2452b3', h: 0, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_grn',  name: 'Tapete',  emoji: '🟩', cat: 'tapetes', color: '#1ea64a', h: 0, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_pur',  name: 'Tapete',  emoji: '🟪', cat: 'tapetes', color: '#8a44cc', h: 0, walk: true, foot: 1, special: 'rug' },
+  { kind: 'relva',    name: 'Relva',   emoji: '🌿', cat: 'tapetes', color: '#2e7d32', h: 0, walk: true, foot: 1, special: 'rug' },
+  { kind: 'agua',     name: 'Água',    emoji: '💧', cat: 'tapetes', color: '#1d6fb3', h: 0, walk: true, foot: 1, special: 'water' },
+  { kind: 'gelo',     name: 'Gelo',    emoji: '🧊', cat: 'tapetes', color: '#aee3ff', h: 0, walk: true, foot: 1, special: 'rug' },
+  { kind: 'lava',     name: 'Lava',    emoji: '🌋', cat: 'tapetes', color: '#d23a1a', h: 0, walk: true, foot: 1, special: 'water' },
+  { kind: 'xadrez',   name: 'Xadrez',  emoji: '♟️', cat: 'tapetes', color: '#2a2a36', h: 0, walk: true, foot: 1, special: 'rug' },
   // assentos
   { kind: 'cadeira',  name: 'Cadeira',  emoji: '🪑', cat: 'assentos', color: '#6a5436', h: 1, walk: false, foot: 0.7, special: 'chair' },
   { kind: 'poltrona', name: 'Poltrona', emoji: '💺', cat: 'assentos', color: '#5a4080', h: 1, walk: false, foot: 0.8, special: 'sofa' },
@@ -123,7 +123,7 @@ const CAT_INDEX: Record<string, number> = (() => {
 
 // Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
 // keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
-const SEAT_SIT: Record<string, number> = { chair: 0.55, sofa: 0.5, stool: 0.6, throne: 0.72, puff: 0.42, armchair: 0.5, couch: 0.5, couch_hc: 0.5 };
+const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
