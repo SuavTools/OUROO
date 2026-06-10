@@ -386,6 +386,58 @@ const drawLadder = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: s
   for (const z of [0.85, 0.5, 0.18]) { const l = P(-0.22, 0.08, z), r = P(0.22, 0.08, z); ctx.beginPath(); ctx.moveTo(l[0], l[1]); ctx.lineTo(r[0], r[1]); ctx.stroke(); }
 };
 
+// VIP rope post: chrome stanchion on a brass base with a gold ball cap and a velvet rope swag draped
+// to the neighbouring posts (along the local v-axis; rotate with dir to follow a carpet edge).
+const drawRope = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _base: string, dir: number) => {
+  void _a; void _base;
+  const P = (u: number, v: number, z: number): number[] => { const [ru, rv] = rotUV(u, v, dir, 0, 0); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; };
+  const cap = P(0, 0, 0.95), base = P(0, 0, 0), a = P(0, -0.5, 0.7), b = P(0, 0.5, 0.7);
+  ctx.strokeStyle = hexA('#7a1020', 0.9); ctx.lineWidth = 3.5; ctx.lineCap = 'round';   // velvet swags
+  ctx.beginPath(); ctx.moveTo(cap[0], cap[1]); ctx.quadraticCurveTo((cap[0] + a[0]) / 2, Math.max(cap[1], a[1]) + 7, a[0], a[1]); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cap[0], cap[1]); ctx.quadraticCurveTo((cap[0] + b[0]) / 2, Math.max(cap[1], b[1]) + 7, b[0], b[1]); ctx.stroke();
+  ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.ellipse(base[0], base[1], 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();   // brass base
+  const g = ctx.createLinearGradient(base[0] - 3, 0, base[0] + 3, 0); g.addColorStop(0, '#8b93a3'); g.addColorStop(0.5, '#eef2f8'); g.addColorStop(1, '#8b93a3');
+  ctx.fillStyle = g; ctx.fillRect(base[0] - 2.5, cap[1], 5, base[1] - cap[1]);   // chrome post
+  ctx.fillStyle = '#e8c66a'; ctx.beginPath(); ctx.arc(cap[0], cap[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(cap[0] - 1.4, cap[1] - 1.4, 1.6, 0, Math.PI * 2); ctx.fill();
+};
+
+// Hanging chandelier: chain to the ceiling, warm glowing tiered ring with crystal drops.
+const drawChandelier = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _base: string, t: number) => {
+  void _a; void _base;
+  const cy = sy - 3.4 * STACK_H;
+  ctx.strokeStyle = 'rgba(210,214,225,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx, cy - 16); ctx.lineTo(sx, cy - 46); ctx.stroke();
+  const pulse = 0.78 + Math.abs(Math.sin(t * 0.05)) * 0.22;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const gl = ctx.createRadialGradient(sx, cy, 2, sx, cy, 34); gl.addColorStop(0, hexA('#ffe6a8', 0.55 * pulse)); gl.addColorStop(1, 'rgba(255,230,168,0)'); ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(sx, cy, 34, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.ellipse(sx, cy, 17, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade('#caa24a', 1.3); ctx.beginPath(); ctx.ellipse(sx, cy - 2, 11, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2; const dx = sx + Math.cos(a) * 15, dy = cy + Math.sin(a) * 6 + 3; ctx.fillStyle = hexA('#fff6d8', 0.92); ctx.beginPath(); ctx.moveTo(dx, dy); ctx.lineTo(dx - 2, dy + 5); ctx.lineTo(dx, dy + 9); ctx.lineTo(dx + 2, dy + 5); ctx.closePath(); ctx.fill(); }
+  ctx.save(); ctx.shadowColor = '#ffd98a'; ctx.shadowBlur = 14; ctx.fillStyle = hexA('#fff3cf', pulse); ctx.beginPath(); ctx.arc(sx, cy + 1, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+};
+
+// Pool float ring: a glossy two-tone inflatable bobbing on the water surface.
+const drawFloat = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number) => {
+  const by = sy + 5 + Math.sin(t * 0.06 + sx * 0.05) * 1.6, rw = TW * 0.5, rh = TH * 0.62;
+  ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#03313f'; ctx.beginPath(); ctx.ellipse(sx, by + 3, rw, rh, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.fillStyle = shade(base, 0.8); ctx.beginPath(); ctx.ellipse(sx, by, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(sx, by - 2, rw, rh, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; ctx.fillStyle = i % 2 ? '#ffffff' : accent; ctx.beginPath(); ctx.ellipse(sx + Math.cos(a) * rw * 0.74, by - 2 + Math.sin(a) * rh * 0.74, rw * 0.16, rh * 0.16, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#0c5e78'; ctx.beginPath(); ctx.ellipse(sx, by - 2, rw * 0.44, rh * 0.44, 0, 0, Math.PI * 2); ctx.fill();   // water in the hole
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx - rw * 0.3, by - rh * 0.4, rw * 0.3, rh * 0.22, -0.5, 0, Math.PI * 2); ctx.stroke();
+};
+
+// Tiered stone fountain: round basin, a pedestal + upper bowl, and an animated water jet/cascade.
+const drawFountain = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, t: number) => {
+  void _a; const stone = base;
+  ctx.fillStyle = shade(stone, 0.7); ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.84, TH * 0.84, 0, 0, Math.PI * 2); ctx.fill();   // basin rim
+  ctx.fillStyle = '#1d7fa0'; ctx.beginPath(); ctx.ellipse(sx, sy - 2, TW * 0.68, TH * 0.68, 0, 0, Math.PI * 2); ctx.fill();        // basin water
+  ctx.save(); ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 0.1); ctx.strokeStyle = '#bfe9ff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, sy - 2, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  const pedH = STACK_H * 0.9; ctx.fillStyle = shade(stone, 1.05); ctx.fillRect(sx - 6, sy - pedH, 12, pedH);                       // pedestal
+  ctx.fillStyle = shade(stone, 1.2); ctx.beginPath(); ctx.ellipse(sx, sy - pedH, TW * 0.42, TH * 0.42, 0, 0, Math.PI * 2); ctx.fill();   // upper bowl
+  ctx.fillStyle = '#1d7fa0'; ctx.beginPath(); ctx.ellipse(sx, sy - pedH - 1, TW * 0.3, TH * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.strokeStyle = hexA('#dff4ff', 0.85); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sy - pedH - 2); ctx.lineTo(sx, sy - pedH - 16 - Math.abs(Math.sin(t * 0.18)) * 5); ctx.stroke();   // jet
+  ctx.globalAlpha = 0.7; for (let i = 0; i < 8; i++) { const ph = (t * 0.12 + i) % 6.283; const dx = Math.cos(i) * (4 + ph * 2), dy = -pedH - 14 + Math.sin(ph) * 4 + ph * 2; ctx.fillStyle = '#cdeeff'; ctx.beginPath(); ctx.arc(sx + dx, sy + dy, 1.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -413,6 +465,10 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'reception': drawReception(ctx, sx, sy, accent, d.color, dir); break;
     case 'pa': drawPA(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'ladder': drawLadder(ctx, sx, sy, accent, d.color, dir); break;
+    case 'rope': drawRope(ctx, sx, sy, accent, d.color, dir); break;
+    case 'chandelier': drawChandelier(ctx, sx, sy, accent, d.color, t); break;
+    case 'float': drawFloat(ctx, sx, sy, accent, d.color, t); break;
+    case 'fountain': drawFountain(ctx, sx, sy, accent, d.color, t); break;
     case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
     case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
     case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;

@@ -89,6 +89,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'holofote', name: 'Holofote', emoji: '🔦', cat: 'luzes', color: '#ffffff', h: 1, walk: false, foot: 0.5, special: 'lamp' },
   { kind: 'lavalamp', name: 'Lava Lamp',emoji: '🟣', cat: 'luzes', color: '#cc44ff', h: 1, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'tocha',    name: 'Tocha',    emoji: '🔥', cat: 'luzes', color: '#ff8800', h: 1, walk: false, foot: 0.4, special: 'lamp' },
+  { kind: 'lustre',   name: 'Lustre',   emoji: '🛋️', cat: 'luzes', color: '#ffd98a', h: 0, walk: true, foot: 0.5, special: 'chandelier' },
   // eletrónica
   { kind: 'tv',       name: 'TV',       emoji: '📺', cat: 'electro', color: '#15151f', h: 1, walk: false, foot: 1, special: 'tv' },
   { kind: 'coluna',   name: 'Coluna',   emoji: '🔈', cat: 'electro', color: '#23232f', h: 2, walk: false, foot: 0.7, special: 'speaker' },
@@ -105,7 +106,9 @@ export const FURNI: FurniDef[] = [
   { kind: 'pato',     name: 'Patinho',  emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4, special: 'duck' },
   { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4, special: 'cone' },
   { kind: 'estatua',  name: 'Estátua',  emoji: '🗿', cat: 'deco', color: '#9a9aa6', h: 2, walk: false, foot: 0.6, special: 'statue' },
-  { kind: 'fonte',    name: 'Fonte',    emoji: '⛲', cat: 'deco', color: '#2a6fb3', h: 1, walk: false, foot: 1, special: 'water' },
+  { kind: 'fonte',    name: 'Fonte',    emoji: '⛲', cat: 'deco', color: '#c8ccd4', h: 1, walk: false, foot: 0.9, special: 'fountain' },
+  { kind: 'poste',    name: 'Poste VIP',emoji: '🪢', cat: 'deco', color: '#caa24a', h: 0, walk: true,  foot: 0.3, special: 'rope' },
+  { kind: 'boia',     name: 'Bóia',     emoji: '🛟', cat: 'deco', color: '#ff5a5a', h: 0, walk: true,  foot: 0.6, special: 'float' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));

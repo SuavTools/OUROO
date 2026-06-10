@@ -11,7 +11,7 @@ export const PLAN_GRID = 40;
 // Cell chars: 'x'/' '/'.' = void · '0'–'9' = floor at that base level · 'w' = water/pool (walkable,
 // sunken) · material floors at ground level: 'm' marble-checker, 'g' grass, 'c' carpet, 'k' dark-check.
 export type RoomPlan = { id: string; name: string; rows: string[]; spawn?: [number, number] };
-const MATERIALS: Record<string, number> = { m: 1, g: 2, c: 3, k: 4 };   // 0 = default room floor
+const MATERIALS: Record<string, number> = { m: 1, g: 2, c: 3, k: 4, d: 5 };   // 0 = default · 5 = animated dancefloor
 
 const F = '00000000000';
 // Generators for the bigger rooms (kept terse so the shapes stay readable).
@@ -28,7 +28,8 @@ const clube = (): string[] => {
   fill(11, 22, 4, 8, '1');     // raised STAGE across the back
   fill(5, 9, 10, 12, 'g'); fill(24, 28, 10, 12, 'g');   // grass beds flanking the stage
   fill(4, 8, 14, 24, 'w'); fill(25, 29, 14, 24, 'w');   // two long side pools
-  fill(16, 18, 9, 31, 'c');    // red carpet runway: entrance → stage
+  fill(11, 22, 9, 12, 'd');    // dancefloor pads in front of the stage (split by the carpet below)
+  fill(16, 18, 9, 31, 'c');    // red carpet runway: entrance → stage (overrides the centre)
   fill(5, 10, 27, 31, 'g'); fill(23, 28, 27, 31, 'g');  // grass beds at the entrance corners
   return g.map(r => r.join(''));
 };

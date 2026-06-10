@@ -70,6 +70,17 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
     ['banco_jd', 14, 26, 0], ['banco_jd', 19, 26, 0], ['banco_jd', 14, 14, 0], ['banco_jd', 19, 14, 0],
     // reception near the entrance
     ['rececao', 10, 25, 0],
+    // VIP velvet ropes lining the carpet
+    ['poste', 15, 13, 0], ['poste', 15, 16, 0], ['poste', 15, 19, 0], ['poste', 15, 22, 0], ['poste', 15, 25, 0], ['poste', 15, 28, 0],
+    ['poste', 19, 13, 0], ['poste', 19, 16, 0], ['poste', 19, 19, 0], ['poste', 19, 22, 0], ['poste', 19, 25, 0], ['poste', 19, 28, 0],
+    // chandeliers overhead
+    ['lustre', 13, 11, 0], ['lustre', 20, 11, 0], ['lustre', 12, 18, 0], ['lustre', 21, 18, 0], ['lustre', 16, 16, 0],
+    // pool floats
+    ['boia', 6, 17, 0], ['boia', 6, 21, 0], ['boia', 27, 17, 0], ['boia', 27, 21, 0],
+    // fountains flanking the entrance
+    ['fonte', 12, 28, 0], ['fonte', 21, 28, 0],
+    // extra greenery
+    ['planta', 8, 13, 0], ['planta', 25, 13, 0], ['planta', 13, 24, 0], ['planta', 20, 24, 0],
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
@@ -78,6 +89,10 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
     { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24 },
     { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24 },
     { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28 },
+    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10 },
+    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10 },
+    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18 },
+    { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20 },
   ],
 };
 
@@ -526,6 +541,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       wasMovingRef.current = moving;
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
+      for (const n of npcsRef.current) n.af += 0.5;   // idle life for NPCs
     };
 
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
@@ -539,7 +555,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      const bob = moving ? Math.sin(a.af * 0.3) * 3 : 0;
+      const bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       ctx.save(); ctx.translate(sx, sy - 30 + bob); ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;
       if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
@@ -614,6 +630,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           else if (mat === 2) { ctx.fillStyle = odd ? '#3f9d49' : '#358540'; ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fill(); }   // grass
           else if (mat === 3) { ctx.fillStyle = '#9c1f29'; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)'; ctx.fill(); }   // carpet
           else if (mat === 4) { ctx.fillStyle = odd ? '#33333f' : '#1d1d27'; ctx.fill(); }                 // dark check
+          else if (mat === 5) { const hue = (t * 2.4 + (gx * 41 + gy * 67)) % 360, lum = 44 + Math.sin(t * 0.13 + (gx + gy)) * 16; ctx.fillStyle = `hsl(${hue},88%,${lum}%)`; ctx.fill(); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `hsla(${(hue + 40) % 360},90%,70%,0.18)`; diamond(b.sx, b.sy, TW * 0.6, TH * 0.6); ctx.fill(); ctx.restore(); }   // animated dancefloor
           else { ctx.fillStyle = theme.floor; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill(); }
           if (mat === 3) { ctx.strokeStyle = hexA('#e8c66a', 0.5); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW * 0.84, TH * 0.84); ctx.stroke(); }   // carpet gold trim
           else if (mat === 2) { ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2c6e34'; for (let q = 0; q < 5; q++) { const gxp = b.sx + (q - 2) * 6, gyp = b.sy + ((q % 2) - 0.5) * 6; ctx.beginPath(); ctx.moveTo(gxp, gyp + 3); ctx.lineTo(gxp, gyp - 4); ctx.stroke(); } ctx.restore(); }   // grass blades
