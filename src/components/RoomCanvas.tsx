@@ -12,11 +12,12 @@ import { getAuthIdentity } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
-import { CATS, FURNI, defOf, isFurniPremium, furniPrice } from '@/lib/furni';
+import { CATS, FURNI, defOf, furniPrice } from '@/lib/furni';
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { resolveAppearance } from '@/lib/catalog';
 import { ownsFurni, buyFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
 import { InventoryModal } from '@/components/InventoryModal';
+import { CatIcon, FurniThumb } from '@/components/UiIcon';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -153,7 +154,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
     if (roomOf(room).locked && !modRef.current) { flashHint('Sala bloqueada'); return; }
-    if (!modRef.current && isFurniPremium(kind) && !ownsFurni(kind)) { flashHint('Compra primeiro ✦'); return; }
+    if (!modRef.current && !ownsFurni(kind)) { flashHint('Compra primeiro ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
@@ -548,27 +549,53 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
 
       {decorOpen && !locked && (
-        <div className="absolute z-40 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 w-full max-w-2xl px-3" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 56px)' }}>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-white/50">{isMod ? 'moderador · sem limite' : `os teus objetos: ${myCount}/${PLACE_CAP}`}</p>
-          <div className="flex gap-1 overflow-x-auto w-full justify-start sm:justify-center pb-1">
-            {CATS.map(c => (
-              <button key={c.id} onClick={() => setCat(c.id)} className={`shrink-0 text-[10px] font-mono uppercase tracking-wider px-2 py-1 border ${cat === c.id ? 'border-brandYellow text-brandYellow' : 'border-white/15 text-white/55 hover:text-white'}`}>{c.name}</button>
-            ))}
-            <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); }} className={`shrink-0 text-[10px] font-mono uppercase tracking-wider px-2 py-1 border ${removeMode ? 'border-brandRed text-brandRed' : 'border-white/15 text-white/55 hover:text-white'}`}>🗑️</button>
-          </div>
-          <div className="flex gap-2 overflow-x-auto w-full pb-1 justify-start sm:justify-center">
-            {FURNI.filter(f => f.cat === cat).map(f => {
-              const lockedFurni = isFurniPremium(f.kind) && !ownsFurni(f.kind) && !isMod;
-              return (
-                <button key={f.kind} onClick={() => {
-                  if (lockedFurni) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca outra vez' : (r.error || 'Sem Cristais')); return; }
-                  setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false);
-                }} className={`relative shrink-0 flex flex-col items-center justify-center w-14 h-14 border text-[8px] gap-0.5 transition-colors ${placingKind === f.kind ? 'border-brandYellow bg-brandYellow/15 text-white' : lockedFurni ? 'border-white/15 bg-black/60 text-white/45 hover:border-brandYellow/50' : 'border-white/20 bg-black/60 text-white/80 hover:border-white/50'}`}>
-                  <span className="text-lg leading-none">{f.emoji}</span><span className="uppercase tracking-wide leading-none text-center">{f.name}</span>
-                  {lockedFurni && <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-brandYellow">{CURRENCY_SYMBOL}{furniPrice(f.kind)}</span>}
-                </button>
-              );
-            })}
+        <div className="absolute z-40 left-1/2 -translate-x-1/2 w-full max-w-2xl px-2 sm:px-3" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 52px)' }}>
+          <div className="bg-black/85 backdrop-blur-md border border-white/15 rounded-xl overflow-hidden shadow-2xl">
+            {/* header: count + balance */}
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50">{isMod ? 'moderador · sem limite' : `objetos ${myCount}/${PLACE_CAP}`}</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-brandYellow">{CURRENCY_SYMBOL} {wallet.balance.toLocaleString('pt-PT')}</span>
+            </div>
+            {/* category rail (self-drawn icons, no emojis) */}
+            <div className="flex gap-0.5 overflow-x-auto px-2 py-1.5 border-b border-white/10">
+              {CATS.map(c => {
+                const on = cat === c.id && !removeMode;
+                return (
+                  <button key={c.id} onClick={() => { setCat(c.id); setRemoveMode(false); }} title={c.name}
+                    className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${on ? 'bg-white/10' : 'hover:bg-white/5'}`}>
+                    <CatIcon catId={c.id} size={22} color={on ? '#ffe65c' : '#cfd2dc'} />
+                    <span className={`text-[7px] uppercase tracking-wide leading-none text-center ${on ? 'text-brandYellow' : 'text-white/50'}`}>{c.name.replace('★ ', '')}</span>
+                  </button>
+                );
+              })}
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); }} title="Remover"
+                className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
+                <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
+                <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Remover</span>
+              </button>
+            </div>
+            {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
+            {removeMode ? (
+              <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Toca num objeto para o remover.</p>
+            ) : (
+              <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto p-2" style={{ maxHeight: '9.5rem' }}>
+                {FURNI.filter(f => f.cat === cat).map(f => {
+                  const owned = ownsFurni(f.kind) || isMod;
+                  const sel = placingKind === f.kind;
+                  return (
+                    <button key={f.kind} onClick={() => {
+                      if (!owned) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca para colocar' : (r.error || 'Sem Cristais')); return; }
+                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false);
+                    }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : owned ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
+                      <FurniThumb def={f} size={34} />
+                      <span className="text-[7px] uppercase tracking-wide leading-none text-center text-white/65 truncate w-full px-0.5">{f.name}</span>
+                      {!owned && <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-brandYellow bg-black/75 px-1 rounded">{CURRENCY_SYMBOL}{furniPrice(f.kind)}</span>}
+                      {sel && <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-brandYellow" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

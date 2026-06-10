@@ -13,7 +13,7 @@ import { supabase } from './supabase';
 import { getAuthIdentity } from './auth';
 import { getLocalPlayer, getCristalScoreBasis } from './leaderboard';
 import { type CustomIcon, type IconSpec } from './icons';
-import { isFurniPremium, furniPrice } from './furni';
+import { isFurniFree, furniPrice } from './furni';
 
 export const CURRENCY = 'Cristais';
 export const CURRENCY_SYMBOL = '✦';
@@ -98,10 +98,10 @@ export function buySkin(id: string, price: number): { ok: boolean; error?: strin
   w.balance -= price; w.skins.push(id); save(w); return { ok: true };
 }
 
-// ---- furni (basic furni is free + owned by default; premium must be bought) ----
-export function ownsFurni(kind: string): boolean { return !isFurniPremium(kind) || getWallet().furni.includes(kind); }
+// ---- furni (the first couple of each basic category are free; everything else must be bought) ----
+export function ownsFurni(kind: string): boolean { return isFurniFree(kind) || getWallet().furni.includes(kind); }
 export function buyFurni(kind: string): { ok: boolean; error?: string } {
-  if (!isFurniPremium(kind)) return { ok: true };
+  if (isFurniFree(kind)) return { ok: true };
   const w = getWallet();
   if (w.furni.includes(kind)) return { ok: true };
   const price = furniPrice(kind);

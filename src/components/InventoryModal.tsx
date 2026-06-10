@@ -9,9 +9,10 @@ import { SKINS, skinById, getSelectedSkinId, setSelectedSkinId, fmtScore } from 
 import { SkinPreview } from '@/components/SkinPreview';
 import { IconPreview } from '@/components/IconPreview';
 import { IconEditor } from '@/components/IconEditor';
-import { CATS, FURNI, furniPrice, isFurniPremium } from '@/lib/furni';
+import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
 import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, ownsFurni, removeIcon } from '@/lib/wallet';
+import { CatIcon, FurniThumb } from '@/components/UiIcon';
 
 type Tab = 'skins' | 'furni' | 'icons';
 
@@ -52,12 +53,12 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
   const doBuyFurni = (kind: string) => { const r = buyFurni(kind); r.ok ? flash(true, 'Comprado') : flash(false, r.error || 'Erro'); };
 
   const ownedSkins = SKINS.filter(s => isSkinOwned(s, best, codeUnlocks, isMod)).length;
-  const premiumFurni = FURNI.filter(f => isFurniPremium(f.kind));
-  const ownedPremiumFurni = premiumFurni.filter(f => ownsFurni(f.kind)).length;
+  const paidFurni = FURNI.filter(f => !isFurniFree(f.kind));
+  const ownedPaidFurni = paidFurni.filter(f => ownsFurni(f.kind)).length;
 
   const TABS: { id: Tab; label: string; badge: string }[] = [
     { id: 'skins', label: 'Skins', badge: `${ownedSkins}/${SKINS.length}` },
-    { id: 'furni', label: 'Móveis', badge: `${ownedPremiumFurni}/${premiumFurni.length}` },
+    { id: 'furni', label: 'Móveis', badge: `${ownedPaidFurni}/${paidFurni.length}` },
     { id: 'icons', label: 'Ícones', badge: `${wallet.icons.length}` },
   ];
 
@@ -134,24 +135,28 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
         {/* FURNI */}
         {tab === 'furni' && (
           <div>
-            <div className="flex gap-1 overflow-x-auto pb-2 mb-1">
-              {CATS.map(c => (
-                <button key={c.id} onClick={() => setFurniCat(c.id)}
-                  className={`shrink-0 text-[10px] font-mono uppercase tracking-wider px-2 py-1 border ${furniCat === c.id ? 'border-brandYellow text-brandYellow' : 'border-white/15 text-white/55 hover:text-white'}`}>
-                  {c.name}{c.premium ? ' ✦' : ''}
-                </button>
-              ))}
+            <div className="flex gap-0.5 overflow-x-auto pb-2 mb-1">
+              {CATS.map(c => {
+                const on = furniCat === c.id;
+                return (
+                  <button key={c.id} onClick={() => setFurniCat(c.id)} title={c.name}
+                    className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.2rem] py-1.5 rounded-lg transition-colors ${on ? 'bg-white/10' : 'hover:bg-white/5'}`}>
+                    <CatIcon catId={c.id} size={22} color={on ? '#ffe65c' : '#cfd2dc'} />
+                    <span className={`text-[7px] uppercase tracking-wide leading-none text-center ${on ? 'text-brandYellow' : 'text-white/50'}`}>{c.name.replace('★ ', '')}</span>
+                  </button>
+                );
+              })}
             </div>
             <div className="grid grid-cols-3 gap-2">
               {FURNI.filter(f => f.cat === furniCat).map(f => {
-                const premium = isFurniPremium(f.kind);
+                const free = isFurniFree(f.kind);
                 const owned = ownsFurni(f.kind);
                 const price = furniPrice(f.kind);
                 return (
                   <div key={f.kind} className="border border-white/10 p-2 flex flex-col items-center gap-1">
-                    <span className="text-2xl leading-none">{f.emoji}</span>
+                    <FurniThumb def={f} size={38} />
                     <span className="text-[9px] uppercase tracking-wide text-white/70 text-center leading-tight">{f.name}</span>
-                    {!premium ? (
+                    {free ? (
                       <span className="text-[8px] uppercase tracking-widest text-white/35">incluído</span>
                     ) : owned ? (
                       <span className="text-[8px] uppercase tracking-widest text-[#1ED760]">✓ teu</span>
@@ -165,7 +170,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
                 );
               })}
             </div>
-            <p className="text-[11px] text-white/40 mt-3">Os móveis básicos são grátis e já são teus. Compra coleções <span className="text-brandYellow">✦ premium</span> e coloca-as na Praça em <b className="text-white/60">Decorar</b>.</p>
+            <p className="text-[11px] text-white/40 mt-3">Tens 2 de cada categoria de graça. Os restantes são baratos — compra-os e coloca-os na Praça em <b className="text-white/60">Decorar</b>. Coleções <span className="text-brandYellow">✦ Hi-Fi</span> são premium.</p>
           </div>
         )}
 

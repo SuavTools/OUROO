@@ -107,7 +107,24 @@ export const defOf = (kind: string): FurniDef =>
 
 const catOf = (id: string): FurniCat | undefined => CATS.find(c => c.id === id);
 
+// Position of each furni within its own category (array order). The first FREE_PER_CAT items of every
+// NON-premium category are free + owned by default; the rest are cheap, to nudge a little grind even
+// at the basic level. Premium categories (Hi-Fi) have no free items.
+export const FREE_PER_CAT = 2;
+const CAT_INDEX: Record<string, number> = (() => {
+  const seen: Record<string, number> = {}, out: Record<string, number> = {};
+  for (const f of FURNI) { const n = seen[f.cat] ?? 0; out[f.kind] = n; seen[f.cat] = n + 1; }
+  return out;
+})();
+
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
 export const isFurniPremium = (kind: string): boolean => Boolean(catOf(defOf(kind).cat)?.premium);
-// Cristais price (0 for basic furni).
-export const furniPrice = (kind: string): number => CAT_PRICE[defOf(kind).cat] ?? 0;
+// Free + owned by default: the first couple of each basic category.
+export const isFurniFree = (kind: string): boolean => !isFurniPremium(kind) && (CAT_INDEX[kind] ?? 99) < FREE_PER_CAT;
+// Cristais price: premium uses CAT_PRICE; free basics cost 0; other basics are cheap (a touch by height).
+export function furniPrice(kind: string): number {
+  const d = defOf(kind);
+  if (catOf(d.cat)?.premium) return CAT_PRICE[d.cat] ?? 0;
+  if (isFurniFree(kind)) return 0;
+  return 120 + Math.max(0, d.h) * 60;   // ≈ 180 (1-high) / 240 (2-high)
+}
