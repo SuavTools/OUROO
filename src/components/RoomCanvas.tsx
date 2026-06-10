@@ -12,7 +12,7 @@ import { getAuthIdentity } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
-import { CATS, FURNI, defOf, furniPrice } from '@/lib/furni';
+import { CATS, FURNI, defOf, furniPrice, sitHeight } from '@/lib/furni';
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { resolveAppearance } from '@/lib/catalog';
 import { ownsFurni, buyFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
@@ -127,7 +127,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const d = defOf(it.kind); const [sw, sh] = d.span ?? [1, 1];
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
-        const k = key(gx, gy); if (d.walk) H[k] += d.h; else S[k] = 1;
+        const k = key(gx, gy);
+        if (d.walk) { H[k] += d.h; continue; }
+        const sit = sitHeight(it.kind);   // seats: stand/sit ON them (walkable at sit height), not solid
+        if (sit != null) H[k] = Math.max(H[k], sit); else S[k] = 1;
       }
     }
   };

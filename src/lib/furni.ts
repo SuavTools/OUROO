@@ -121,6 +121,11 @@ const CAT_INDEX: Record<string, number> = (() => {
   return out;
 })();
 
+// Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
+// keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
+const SEAT_SIT: Record<string, number> = { chair: 0.55, sofa: 0.5, stool: 0.6, throne: 0.72, puff: 0.42, armchair: 0.5, couch: 0.5, couch_hc: 0.5 };
+export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
+
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
 export const isFurniPremium = (kind: string): boolean => Boolean(catOf(defOf(kind).cat)?.premium);
 // Free + owned by default: the first couple of each basic category.
