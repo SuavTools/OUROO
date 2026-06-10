@@ -101,6 +101,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { placeElevRef.current = placeElev; }, [placeElev]);
   const [decorOpen, setDecorOpen] = useState(false);
   const [entered, setEntered] = useState(false);   // lobby gate — connect to the room only on deliberate entry
+  const [rtStatus, setRtStatus] = useState('—');   // realtime channel status (diagnostic)
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -243,6 +244,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     const rebuild = () => {
       const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
+      if (typeof console !== 'undefined') console.log('[praça] presence sync — keys:', Object.keys(state).length, 'me:', me.id);
       const seen = new Set<string>([me.id]);
       for (const k in state) {
         const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
@@ -258,6 +260,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     ch.on('presence', { event: 'sync' }, rebuild)
+      .on('presence', { event: 'join' }, rebuild)
+      .on('presence', { event: 'leave' }, rebuild)
       .on('broadcast', { event: 'pos' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
         const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
@@ -278,6 +282,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
       .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
       .subscribe(async status => {
+        if (typeof console !== 'undefined') console.log('[praça] channel status:', status, 'room:', room);
+        setRtStatus(String(status));
+        if (status !== 'SUBSCRIBED') setConnected(false);
         if (status === 'SUBSCRIBED') {
           setConnected(true);
           const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;   // ensure the real name is tracked, not a race-stale placeholder
@@ -438,6 +445,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomOf(room).name}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{supabaseReady ? (connected ? `${population} ${population === 1 ? 'pessoa' : 'pessoas'}` : 'a ligar…') : 'offline'}</p>
+        <p className="text-[9px] font-mono tracking-wider text-white/30 mt-0.5">rt: {rtStatus}</p>
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
