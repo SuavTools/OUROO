@@ -7,7 +7,7 @@ import { validateHandle } from '@/lib/names';
 import { supabaseReady } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import { drawSkinShape, skinById, getSelectedSkinId, type SkinShape } from '@/lib/skins';
-import { creditRun, CURRENCY_SYMBOL } from '@/lib/wallet';
+import { reconcileNow, CURRENCY_SYMBOL } from '@/lib/wallet';
 import { ArcadeSynth } from '@/lib/engine/synth';
 import { BrandText } from './BrandText';
 
@@ -163,7 +163,6 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const [lbPlayerId, setLbPlayerId] = useState<string | null>(null);
   const [lbRefresh, setLbRefresh] = useState(0);
   const submittedRef = useRef(false);  // guard against double-submit per run
-  const earnedRef = useRef(false);     // guard against double-credit of Cristais per run
   const [cristaisEarned, setCristaisEarned] = useState(0);
   const { user: discordUser } = useUser();   // logged-in Discord identity (null when anon)
 
@@ -172,6 +171,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     const res = await submitScore(score, handle);
     if (res.ok) {
       setLbRank(res.rank); setLbPlayerId(res.playerId); setLbState('done'); setLbRefresh(k => k + 1);
+      // Now that the run is recorded, top up the Cristais wallet from lifetime points.
+      reconcileNow().then(got => { if (got > 0) setCristaisEarned(got); });
     } else {
       setLbError(res.error); setLbState(handle || getLocalPlayer().handle ? 'error' : 'need-handle');
     }
@@ -180,16 +181,12 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   // On game over: returning players (saved handle) auto-submit; new players are asked for a name.
   // Reset the guard whenever a fresh run starts.
   useEffect(() => {
-    if (isPlaying) { submittedRef.current = false; earnedRef.current = false; setCristaisEarned(0); setLbState('idle'); setLbRank(null); setLbError(''); return; }
-    if (!showIntro && score > 0) {
-      // Bank Cristais from the run (works offline too — wallet is localStorage-first).
-      if (!earnedRef.current) { earnedRef.current = true; setCristaisEarned(creditRun(score, crystalCount)); }
-      if (supabaseReady && !submittedRef.current) {
-        submittedRef.current = true;
-        // doSubmit() uses the Discord identity (if signed in) or a saved handle; with neither it
-        // lands in 'need-handle' and asks for a name.
-        doSubmit();
-      }
+    if (isPlaying) { submittedRef.current = false; setCristaisEarned(0); setLbState('idle'); setLbRank(null); setLbError(''); return; }
+    if (!showIntro && score > 0 && supabaseReady && !submittedRef.current) {
+      submittedRef.current = true;
+      // doSubmit() records the run, then reconciles the wallet from lifetime points (banking the
+      // Cristais this run is worth). It uses the Discord identity / saved handle, else asks for a name.
+      doSubmit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, showIntro]);

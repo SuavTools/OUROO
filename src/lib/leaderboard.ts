@@ -53,6 +53,17 @@ export async function getBestAcrossGames(device: string): Promise<number> {
   return rows?.[0]?.score ?? 0;
 }
 
+// Lifetime points: the sum of every run this player has ever submitted, across ALL games. This is
+// the basis for the Cristais wallet — one global balance fed by the whole site. Degrades to 0.
+export async function getLifetimePoints(device: string): Promise<number> {
+  if (!supabase || !device) return 0;
+  const { data: player } = await supabase.from('players').select('id').eq('device_token', device).maybeSingle();
+  if (!player) return 0;
+  const { data } = await supabase.from('scores').select('score').eq('player_id', player.id).limit(5000);
+  if (!data) return 0;
+  return data.reduce((sum, r) => sum + (Number(r.score) || 0), 0);
+}
+
 // ---- local identity (anonymous device id; Discord can claim it later) ----
 type LocalPlayer = { id: string | null; handle: string | null; device: string };
 

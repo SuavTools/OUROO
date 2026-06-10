@@ -11,18 +11,22 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { getAuthIdentity } from './auth';
-import { getLocalPlayer } from './leaderboard';
+import { getLocalPlayer, getLifetimePoints } from './leaderboard';
 import { type CustomIcon, type IconSpec } from './icons';
 import { isFurniPremium, furniPrice } from './furni';
 
 export const CURRENCY = 'Cristais';
 export const CURRENCY_SYMBOL = '✦';
-export const ICON_PRICE = 250;   // Cristais to mint one custom icon
+export const ICON_PRICE = 250;             // Cristais to mint one custom icon
+export const POINTS_PER_CRISTAL = 1000;    // 1 ✦ for every 1000 lifetime points scored
 
-export type WalletData = { balance: number; skins: string[]; furni: string[]; icons: CustomIcon[] };
+// `scoreCredited` is a high-water mark: the most Cristais ever GRANTED from lifetime score. Spending
+// lowers `balance` but not this, so spent Cristais are never re-earned and reconnecting never double-
+// counts. The balance is fed by your whole history across every game — not just future runs.
+export type WalletData = { balance: number; skins: string[]; furni: string[]; icons: CustomIcon[]; scoreCredited: number };
 
 const LS_KEY = 'ouroo_wallet';
-const empty = (): WalletData => ({ balance: 0, skins: [], furni: [], icons: [] });
+const empty = (): WalletData => ({ balance: 0, skins: [], furni: [], icons: [], scoreCredited: 0 });
 
 // ---- pub/sub so the UI (and the PRAÇA balance chip) refresh after any change ----
 const listeners = new Set<() => void>();
@@ -41,6 +45,7 @@ export function getWallet(): WalletData {
       skins: Array.isArray(w.skins) ? w.skins.map(String) : [],
       furni: Array.isArray(w.furni) ? w.furni.map(String) : [],
       icons: Array.isArray(w.icons) ? (w.icons as CustomIcon[]) : [],
+      scoreCredited: Math.max(0, Math.floor(Number(w.scoreCredited) || 0)),
     };
   } catch { return empty(); }
 }
@@ -51,16 +56,29 @@ function save(w: WalletData) {
   void pushWallet(w);   // best-effort cloud mirror
 }
 
-const isFresh = (w: WalletData) => w.balance === 0 && !w.skins.length && !w.furni.length && !w.icons.length;
+const isFresh = (w: WalletData) => w.balance === 0 && !w.skins.length && !w.furni.length && !w.icons.length && w.scoreCredited === 0;
 
 // ---- balance ----
 export const getBalance = (): number => getWallet().balance;
 export function addBalance(n: number): number { const w = getWallet(); w.balance = Math.max(0, w.balance + Math.floor(n)); save(w); return w.balance; }
 export function spend(n: number): boolean { const w = getWallet(); if (w.balance < n) return false; w.balance -= Math.floor(n); save(w); return true; }
 
-// Cristais earned from one arcade run: a slice of the score plus the crystals you actually grabbed.
-export const runReward = (score: number, crystals: number): number => Math.max(0, Math.floor(score / 1000) + Math.max(0, crystals));
-export function creditRun(score: number, crystals: number): number { const r = runReward(score, crystals); if (r > 0) addBalance(r); return r; }
+// Grant Cristais for lifetime points not yet credited. Returns how many were just granted (the delta
+// since last reconcile). Backfills existing players on first run and tops up after every new score.
+export function reconcileFromScores(lifetimePoints: number): number {
+  const target = Math.floor(Math.max(0, lifetimePoints) / POINTS_PER_CRISTAL);
+  const w = getWallet();
+  if (target <= w.scoreCredited) return 0;
+  const delta = target - w.scoreCredited;
+  w.balance += delta; w.scoreCredited = target; save(w); return delta;
+}
+// Fetch lifetime points for this device and reconcile. Returns the Cristais just granted (0 if none).
+export async function reconcileNow(): Promise<number> {
+  const device = await deviceToken();
+  if (!device) return 0;
+  const pts = await getLifetimePoints(device);
+  return reconcileFromScores(pts);
+}
 
 // ---- skins (currency-bought; default/score/code unlocks are tracked elsewhere) ----
 export const ownsSkin = (id: string): boolean => getWallet().skins.includes(id);
@@ -116,7 +134,7 @@ async function pushWallet(w: WalletData) {
     try {
       const device = await deviceToken();
       if (!device) return;
-      await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons } }, { onConflict: 'device_token' });
+      await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons, scoreCredited: w.scoreCredited } }, { onConflict: 'device_token' });
     } catch { /* table may not exist yet — ignore */ }
   }, 600);
 }
@@ -137,8 +155,16 @@ export async function refreshWalletFromCloud(): Promise<void> {
       skins: Array.isArray(d.skins) ? d.skins.map(String) : [],
       furni: Array.isArray(d.furni) ? d.furni.map(String) : [],
       icons: Array.isArray(d.icons) ? (d.icons as CustomIcon[]) : [],
+      scoreCredited: Math.max(0, Math.floor(Number(d.scoreCredited) || 0)),
     });
   } catch { /* ignore */ }
+}
+
+// Full wallet sync: pull the cloud snapshot (if local is fresh), then credit any lifetime points
+// not yet banked. Run on mount so opening the inventory / entering PRAÇA backfills your balance.
+export async function syncWallet(): Promise<void> {
+  await refreshWalletFromCloud();
+  await reconcileNow();
 }
 
 // React hook: live wallet that re-renders on any change.
@@ -146,7 +172,7 @@ export function useWallet(): WalletData {
   const [w, setW] = useState<WalletData>(empty);
   useEffect(() => {
     setW(getWallet());
-    refreshWalletFromCloud();
+    syncWallet();
     return subscribeWallet(() => setW(getWallet()));
   }, []);
   return w;
