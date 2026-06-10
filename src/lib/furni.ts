@@ -33,6 +33,7 @@ export const CAT_PRICE: Record<string, number> = {
 export const FURNI: FurniDef[] = [
   // ★ HI-FI — 1st-tier hand-drawn lounge set (couch spans 2 tiles)
   { kind: 'lounge_couch', name: 'Sofá Lounge', emoji: '🛋️', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
+  { kind: 'couch_px',     name: 'Sofá Pixel',  emoji: '🛋️', cat: 'tier1', color: '#e07b1f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
   { kind: 'lounge_chair', name: 'Poltrona',    emoji: '💺', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'armchair' },
   { kind: 'lounge_table', name: 'Mesa Centro', emoji: '🪵', cat: 'tier1', color: '#4a3120', h: 1, walk: false, foot: 1, special: 'coffee' },
   { kind: 'hc_sofa',   name: 'Sofá HC',      emoji: '🛋️', cat: 'tier1', color: '#7b2d3a', h: 1, walk: false, foot: 1,    special: 'couch_hc', span: [2, 1] },

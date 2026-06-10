@@ -6,6 +6,7 @@
 
 import { defOf } from './furni';
 import { hasSvg, drawSvgFurni } from './furniSvg';
+import { hasPng, drawPngFurni } from './furniPng';
 
 export const TILE_W = 64, TILE_H = 32, TW = TILE_W / 2, TH = TILE_H / 2, STACK_H = 26;
 
@@ -838,7 +839,13 @@ function getSprite(kind: string, accent: string, dir: number): HTMLCanvasElement
 // Public entry: cached blit for static pieces (with baked outline + shadow); live draw for animated ones.
 export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
-  // Hand-authored SVG art (with a soft contact shadow). Multi-tile pieces centre on their footprint.
+  // Hand-authored raster (PNG) or SVG art (with a soft contact shadow). Multi-tile pieces centre on
+  // their footprint. PNGs already bake their own outline/shadow, so no extra contact ellipse for them.
+  if (hasPng(kind)) {
+    let cx = sx, cy = sy; const [esw, esh] = effSpan(kind, dir);
+    if (esw !== 1 || esh !== 1) { const ocx = (esw - 1) / 2, ocy = (esh - 1) / 2; cx += (ocx - ocy) * TW; cy += (ocx + ocy) * TH; }
+    if (drawPngFurni(ctx, kind, cx, cy)) return;   // fall through to procedural only until the image loads
+  }
   if (hasSvg(kind)) {
     let cx = sx, cy = sy; const [esw, esh] = effSpan(kind, dir);
     if (esw !== 1 || esh !== 1) { const ocx = (esw - 1) / 2, ocy = (esh - 1) / 2; cx += (ocx - ocy) * TW; cy += (ocx + ocy) * TH; }
