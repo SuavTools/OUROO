@@ -57,8 +57,11 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
   clube: [
     // stage (back, raised): PA towers + a big screen
     ['pa', 11, 5, 0], ['pa', 21, 5, 0], ['tv', 16, 4, 0], ['planta', 12, 9, 0], ['planta', 21, 9, 0],
-    // trees on the grass beds
-    ['arvore', 7, 11, 0], ['arvore', 26, 11, 0], ['arvore', 7, 29, 0], ['arvore', 26, 29, 0],
+    // trees on the entrance grass beds
+    ['arvore', 7, 29, 0], ['arvore', 26, 29, 0],
+    // VIP raised decks flanking the stage — peacock thrones + cloud sofas framed by Greek columns
+    ['peacock', 6, 10, 0], ['cloud', 7, 11, 0], ['coluna_gr', 5, 9, 0], ['coluna_gr', 9, 9, 0],
+    ['peacock', 27, 10, 0], ['cloud', 24, 11, 0], ['coluna_gr', 24, 9, 0], ['coluna_gr', 28, 9, 0],
     // palms framing the pools
     ['palmeira', 10, 15, 0], ['palmeira', 10, 23, 0], ['palmeira', 23, 15, 0], ['palmeira', 23, 23, 0],
     // pool handrails / ladders
@@ -92,9 +95,9 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
     // topiaries + stage banners
     ['topiary', 8, 25, 0], ['topiary', 25, 25, 0], ['topiary', 14, 29, 0], ['topiary', 19, 29, 0],
     ['banner', 12, 4, 0], ['banner', 21, 4, 0],
-    // grand Greek arch over the entrance + tall columns lining the sides
+    // grand Greek arch over the entrance + tall columns flanking the entrance
     ['arco_gr', 16, 29, 0],
-    ['coluna_gr', 8, 11, 0], ['coluna_gr', 25, 11, 0], ['coluna_gr', 8, 26, 0], ['coluna_gr', 25, 26, 0],
+    ['coluna_gr', 8, 26, 0], ['coluna_gr', 25, 26, 0],
     // VIP canopy daybeds + egg pod chairs
     ['cama_dossel', 12, 23, 1], ['cama_dossel', 21, 23, 1],
     ['ovo', 9, 20, 0], ['ovo', 24, 17, 0],
@@ -621,22 +624,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // risers (floor thickness) toward lower/void neighbours, and back walls only behind the footprint.
       const plan = planRef.current; const wh = WALL_H * STACK_H; const veranda = !!theme.day && !!theme.veranda;
       const lvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : plan[gy * GRID + gx]);
-      // A veranda "bay": an open colonnade arch onto a sky/sea view, with a balustrade + stone pilasters.
+      // A veranda bay: an open balcony onto a sky/sea view — clipped sky, a clean white balustrade,
+      // a top beam, and a slim stone column at the near corner (adjacent bays line up into a colonnade).
       const verandaBay = (ax: number, ay: number, bx: number, by: number) => {
-        const a1x = ax, a1y = ay - wh, b1x = bx, b1y = by - wh;
-        ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(b1x, b1y); ctx.lineTo(a1x, a1y); ctx.closePath(); ctx.clip();
+        const a1y = ay - wh, b1y = by - wh;
+        ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(bx, b1y); ctx.lineTo(ax, a1y); ctx.closePath(); ctx.clip();
         const yTop = Math.min(a1y, b1y), yBot = Math.max(ay, by), sky = ctx.createLinearGradient(0, yTop, 0, yBot);
-        sky.addColorStop(0, '#7cc0f5'); sky.addColorStop(0.5, '#bfe4ff'); sky.addColorStop(0.6, '#eef6ff'); sky.addColorStop(0.64, '#8fc3e6'); sky.addColorStop(1, '#4f93c4');   // sky → horizon → sea
+        sky.addColorStop(0, '#86c8f7'); sky.addColorStop(0.52, '#cdeaff'); sky.addColorStop(0.58, '#eef7ff'); sky.addColorStop(0.63, '#7fb8df'); sky.addColorStop(1, '#3f7fb0');   // sky → horizon → sea
         ctx.fillStyle = sky; ctx.fillRect(Math.min(ax, bx) - 4, yTop - 2, Math.abs(bx - ax) + 8, wh + 6);
-        const sunX = ax + (bx - ax) * 0.5, sunY = yTop + wh * 0.45; const sg = ctx.createRadialGradient(sunX, sunY, 1, sunX, sunY, 22); sg.addColorStop(0, 'rgba(255,250,224,0.95)'); sg.addColorStop(1, 'rgba(255,250,224,0)'); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sunX, sunY, 22, 0, Math.PI * 2); ctx.fill();
-        // balustrade along the floor edge (posts + top & bottom rails)
-        for (let i = 0; i <= 6; i++) { const f = i / 6, px = ax + (bx - ax) * f, py = ay + (by - ay) * f; ctx.fillStyle = '#e8e3d6'; ctx.fillRect(px - 1.5, py - wh * 0.34, 3, wh * 0.34); }
-        ctx.strokeStyle = '#d8d2c2'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(ax, ay - wh * 0.34); ctx.lineTo(bx, by - wh * 0.34); ctx.stroke();
-        ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ax, ay - 2); ctx.lineTo(bx, by - 2); ctx.stroke();
+        const sunX = ax + (bx - ax) * 0.5, sunY = yTop + wh * 0.42, sg = ctx.createRadialGradient(sunX, sunY, 1, sunX, sunY, 20); sg.addColorStop(0, 'rgba(255,250,224,0.95)'); sg.addColorStop(1, 'rgba(255,250,224,0)'); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sunX, sunY, 20, 0, Math.PI * 2); ctx.fill();
+        // balustrade: bottom rail, balusters, top rail (white stone)
+        const railH = wh * 0.32;
+        ctx.strokeStyle = '#eef0e8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(ax, ay - railH); ctx.lineTo(bx, by - railH); ctx.stroke();
+        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(ax, ay - 2); ctx.lineTo(bx, by - 2); ctx.stroke();
+        ctx.strokeStyle = '#dcd8cb'; ctx.lineWidth = 2; for (let i = 1; i < 6; i++) { const f = i / 6, px = ax + (bx - ax) * f, py = ay + (by - ay) * f; ctx.beginPath(); ctx.moveTo(px, py - 2); ctx.lineTo(px, py - railH); ctx.stroke(); }
+        // top beam (lintel)
+        ctx.strokeStyle = shade('#cfcabb', 1.1); ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(ax, a1y + 3); ctx.lineTo(bx, b1y + 3); ctx.stroke();
         ctx.restore();
-        // stone pilaster + arch spandrel at the back corner (a-edge), drawn over the opening
-        ctx.fillStyle = shade('#cfcabb', 1.05); ctx.beginPath(); ctx.moveTo(ax - 3, ay); ctx.lineTo(ax + 3, ay); ctx.lineTo(a1x + 3, a1y); ctx.lineTo(a1x - 3, a1y); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = shade('#cfcabb', 1.15); ctx.beginPath(); ctx.moveTo(a1x - 5, a1y); ctx.lineTo(b1x + 5, b1y); ctx.lineTo(b1x + 5, b1y + 5); ctx.lineTo(a1x - 5, a1y + 5); ctx.closePath(); ctx.fill();   // top lintel
+        // slim stone column at the near (shared) corner
+        const cg = ctx.createLinearGradient(ax - 4, 0, ax + 4, 0); cg.addColorStop(0, shade('#cfcabb', 0.7)); cg.addColorStop(0.5, shade('#eceadf', 1.0)); cg.addColorStop(1, shade('#cfcabb', 0.7));
+        ctx.fillStyle = cg; ctx.fillRect(ax - 3.5, a1y, 7, ay - a1y);
+        ctx.fillStyle = shade('#cfcabb', 1.05); ctx.fillRect(ax - 5, a1y - 2, 10, 4); ctx.fillRect(ax - 5, ay - 4, 10, 4);
       };
       for (let gx = 0; gx < GRID; gx++) for (let gy = 0; gy < GRID; gy++) {
         const L = lvl(gx, gy); if (L < 0) continue;

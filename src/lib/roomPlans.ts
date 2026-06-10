@@ -26,7 +26,7 @@ const clube = (): string[] => {
   for (let y = 0; y < n; y++) { const row: string[] = []; for (let x = 0; x < n; x++) { const corner = (x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k); row.push(corner ? 'x' : 'm'); } g.push(row); }   // base = marble
   const fill = (x0: number, x1: number, y0: number, y1: number, ch: string) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (g[y] && g[y][x] !== 'x') g[y][x] = ch; };
   fill(11, 22, 4, 8, '1');     // raised STAGE across the back
-  fill(5, 9, 10, 12, 'g'); fill(24, 28, 10, 12, 'g');   // grass beds flanking the stage
+  fill(5, 9, 9, 12, '1'); fill(24, 28, 9, 12, '1');     // raised VIP decks flanking the stage
   fill(4, 8, 14, 24, 'w'); fill(25, 29, 14, 24, 'w');   // two long side pools
   fill(11, 22, 9, 12, 'd');    // dancefloor pads in front of the stage (split by the carpet below)
   fill(16, 18, 9, 31, 'c');    // red carpet runway: entrance → stage (overrides the centre)

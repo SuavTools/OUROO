@@ -613,6 +613,47 @@ const drawArch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent:
   ctx.save(); ctx.fillStyle = shade(m, 1.32); ctx.translate(ap[0], ap[1] - 10); ctx.beginPath(); ctx.moveTo(-5, -9); ctx.lineTo(5, -9); ctx.lineTo(7, 9); ctx.lineTo(-7, 9); ctx.closePath(); ctx.fill(); ctx.restore();   // keystone
 };
 
+// Peacock throne: gold-framed seat with a towering fan of teal/green plumes tipped with jewelled
+// eye-spots. Tall + sittable, rotates.
+const drawPeacock = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const gold = '#caa24a', cT = shade(gold, 1.2), cR = shade(gold, 0.9), cL = shade(gold, 0.58);
+  const parts: IsoPart[] = [
+    ...legs([[-0.34, -0.28], [0.34, -0.28], [-0.34, 0.32], [0.34, 0.32]], 0.16).map(p => ({ ...p, t: cT, r: cR, l: cL })),
+    { u0: -0.4, u1: 0.4, v0: -0.26, v1: 0.34, z0: 0.16, z1: 0.52, t: cT, r: cR, l: cL },               // seat box
+    { u0: -0.36, u1: 0.36, v0: -0.22, v1: 0.3, z0: 0.52, z1: 0.72, t: shade(base, 1.2), r: cR, l: cL }]; // cushion
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const root = P(0, -0.24, 0.52), blades = 13, spread = 2.3, len = STACK_H * 2.0;
+    for (let i = 0; i < blades; i++) {
+      const f = i / (blades - 1) - 0.5, a = f * spread, tipx = root[0] + Math.sin(a) * len * 0.62, tipy = root[1] - len + Math.abs(f) * len * 0.16;
+      ctx.strokeStyle = i % 2 ? '#0e7c86' : '#1e8a4a'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(root[0], root[1]); ctx.quadraticCurveTo((root[0] + tipx) / 2, root[1] - len * 0.62, tipx, tipy); ctx.stroke();
+      ctx.fillStyle = '#1f5fb0'; ctx.beginPath(); ctx.arc(tipx, tipy, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#1e8a4a'; ctx.beginPath(); ctx.arc(tipx, tipy, 3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#e8c66a'; ctx.beginPath(); ctx.arc(tipx, tipy, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    const a = P(0, 0.04, 0.72); ctx.fillStyle = accent; ctx.beginPath(); ctx.ellipse(a[0], a[1] - 3, 10, 6, 0, 0, Math.PI * 2); ctx.fill();   // seat cushion accent
+  });
+};
+
+// Cloud sofa: an oversized puffy sofa built from overlapping soft gradient lobes (back row + seat row).
+const drawCloud = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cT = shade(base, 1.28), cR = shade(base, 0.96), cL = shade(base, 0.64);
+  const parts: IsoPart[] = [{ u0: -0.92, u1: 0.92, v0: -0.3, v1: 0.34, z0: 0.1, z1: 0.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const lobe = (u: number, zt: number, v: number, r: number) => { const c = P(u, v, zt); const g = ctx.createRadialGradient(c[0] - r * 0.3, c[1] - r * 0.4, 2, c[0], c[1], r); g.addColorStop(0, shade(base, 1.5)); g.addColorStop(0.7, shade(base, 1.18)); g.addColorStop(1, shade(base, 0.84)); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], r, r * 0.82, 0, 0, Math.PI * 2); ctx.fill(); };
+    for (const u of [-0.72, -0.36, 0, 0.36, 0.72]) lobe(u, 0.98, -0.12, 15);   // back lobes
+    for (const u of [-0.58, 0, 0.58]) lobe(u, 0.62, 0.16, 16);                 // seat lobes
+    const c = P(0.5, 0.0, 0.64); ctx.fillStyle = accent; ctx.beginPath(); ctx.ellipse(c[0], c[1] - 3, 8, 6, 0.3, 0, Math.PI * 2); ctx.fill();   // throw pillow
+  });
+};
+
+// Round conversation pit: a circular sectional ring with backrest bumps + a low accent centre table.
+const drawPit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  ctx.fillStyle = shade(base, 0.78); ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.96, TH * 0.96, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade(base, 1.26); ctx.beginPath(); ctx.ellipse(sx, sy - 8, TW * 0.96, TH * 0.82, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < 6; i++) { const ang = Math.PI * (1.08 + i * 0.165), bx = sx + Math.cos(ang) * TW * 0.82, by = sy - 8 + Math.sin(ang) * TH * 0.72; ctx.fillStyle = shade(base, 1.4); ctx.beginPath(); ctx.ellipse(bx, by - 6, 11, 9, 0, 0, Math.PI * 2); ctx.fill(); }   // backrest bumps
+  ctx.fillStyle = shade(base, 0.5); ctx.beginPath(); ctx.ellipse(sx, sy - 6, TW * 0.5, TH * 0.42, 0, 0, Math.PI * 2); ctx.fill();   // sunken centre
+  ctx.fillStyle = hexA(accent, 0.55); ctx.beginPath(); ctx.ellipse(sx, sy - 8, TW * 0.3, TH * 0.25, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA('#fff', 0.3); ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, sy - 8, TW * 0.3, TH * 0.25, 0, 0, Math.PI * 2); ctx.stroke();
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -651,6 +692,9 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'chaise': drawChaise(ctx, sx, sy, accent, d.color, dir); break;
     case 'greekcol': drawGreekCol(ctx, sx, sy, accent, d.color); break;
     case 'arch': drawArch(ctx, sx, sy, accent, d.color, dir); break;
+    case 'peacock': drawPeacock(ctx, sx, sy, accent, d.color, dir); break;
+    case 'cloud': drawCloud(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pit': drawPit(ctx, sx, sy, accent, d.color); break;
     case 'chandelier': drawChandelier(ctx, sx, sy, accent, d.color, t); break;
     case 'float': drawFloat(ctx, sx, sy, accent, d.color, t); break;
     case 'fountain': drawFountain(ctx, sx, sy, accent, d.color, t); break;
