@@ -56,9 +56,6 @@ const drawParts = (ctx: CanvasRenderingContext2D, sx: number, sy: number, dir: n
   if (deco) deco((u, v, z = 0) => { const [ru, rv] = rotUV(u, v, dir, cu, cv); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; });
 };
 const legs = (us: [number, number][], z1: number): IsoPart[] => us.map(([u, v]) => ({ u0: u - 0.05, u1: u + 0.05, v0: v - 0.05, v1: v + 0.05, z0: 0, z1, t: '#3a2616', r: '#2a1c10', l: '#1f140a' }));
-// True if a face whose local outward normal is (du,dv) points toward the camera under this dir.
-const faceVisible = (du: number, dv: number, dir: number): boolean => { let u = du, v = dv; const n = ((dir % 4) + 4) % 4; for (let i = 0; i < n; i++) { const t = u; u = -v; v = t; } return u + v > 0.001; };
-
 const drawChair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a; const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.64);
   const parts: IsoPart[] = [...legs([[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]], 0.16),
@@ -93,7 +90,7 @@ const drawThroneR = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
 
 // ★ HI-FI lounge set — 2-tile couch, centered local frame so it rotates 4 ways.
 const drawCouch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
-  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), cD = shade(base, 0.48), hi = shade(base, 1.55), bc = shade(base, 1.16), sc = shade(base, 1.24);
+  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), hi = shade(base, 1.55), bc = shade(base, 1.16), sc = shade(base, 1.24);
   const parts: IsoPart[] = [
     ...legs([[-0.78, -0.28], [0.78, -0.28], [-0.78, 0.28], [0.78, 0.28]], 0.16),
     { u0: -0.9, u1: 0.9, v0: -0.42, v1: -0.16, z0: 0.5, z1: 1.5, t: cT, r: cR, l: cL },              // back
@@ -107,7 +104,6 @@ const drawCouch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
     for (const [u0, u1] of [[-0.78, -0.02], [0.02, 0.78]] as [number, number][]) poly(ctx, [P(u0, -0.28, 0.78), P(u1, -0.28, 0.78), P(u1, 0.34, 0.78), P(u0, 0.34, 0.78)], undefined, hexA(hi, 0.5), 1);
     for (const uc of [-0.77, 0.77]) { const a = P(uc, -0.01, 1.04); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-    if (faceVisible(0, 1, dir)) for (const u0 of [-0.58, 0.08]) for (let bx = 0; bx < 2; bx++) for (let by = 0; by < 2; by++) { const pt = P(u0 + 0.18 + bx * 0.3, -0.07, 0.82 + by * 0.32); ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(pt[0], pt[1], 1.8, 0, Math.PI * 2); ctx.fill(); }
     const pc = P(-0.38, 0.04, 0.82); ctx.save(); ctx.translate(pc[0], pc[1]); ctx.rotate(-0.22); ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 8, 5); ctx.fill(); ctx.strokeStyle = hexA('#000', 0.2); ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.stroke(); ctx.restore();
   });
 };
@@ -145,7 +141,7 @@ const drawCoffee = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
 // Tufted Chesterfield-style sofa (2 tiles): diamond button tufting, rolled arms, brass feet + nailheads.
 // Tufted Chesterfield (2 tiles, centered local frame so it rotates 4 ways).
 const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
-  void _a; const cT = shade(base, 1.34), cR = shade(base, 1.0), cL = shade(base, 0.62), cD = shade(base, 0.38), hi = shade(base, 1.8), brass = '#c9a44f';
+  void _a; const cT = shade(base, 1.34), cR = shade(base, 1.0), cL = shade(base, 0.62), hi = shade(base, 1.8), brass = '#c9a44f';
   const parts: IsoPart[] = [
     { u0: -0.825, u1: -0.735, v0: -0.305, v1: -0.215, z0: 0, z1: 0.2, t: shade(brass, 1.2), r: shade(brass, 0.85), l: shade(brass, 0.55) },
     { u0: 0.735, u1: 0.825, v0: -0.305, v1: -0.215, z0: 0, z1: 0.2, t: shade(brass, 1.2), r: shade(brass, 0.85), l: shade(brass, 0.55) },
@@ -162,8 +158,6 @@ const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
     for (const [u0, u1] of [[-0.77, -0.03], [0.03, 0.77]] as [number, number][]) poly(ctx, [P(u0, -0.32, 0.8), P(u1, -0.32, 0.8), P(u1, 0.36, 0.8), P(u0, 0.36, 0.8)], undefined, hexA(hi, 0.5), 1);
     // rolled-arm sheen (top-facing)
     for (const uc of [-0.79, 0.79]) { const a = P(uc, -0.02, 1.06); ctx.save(); const g = ctx.createRadialGradient(a[0] - 3, a[1] - 4, 1, a[0], a[1], TILE_W * 0.5); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.5, TH * 0.8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-    // diamond button tufting — only when the backrest's front face is toward camera
-    if (faceVisible(0, 1, dir)) { const rows = [0.66, 0.95, 1.24]; for (let zi = 0; zi < rows.length; zi++) { const z = rows[zi], off = zi % 2 ? 0.18 : 0; for (let u = -0.7; u <= 0.82; u += 0.36) { const b = P(u + off, -0.2, z); const g = ctx.createRadialGradient(b[0], b[1] + 1, 0, b[0], b[1], 6); g.addColorStop(0, cD); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalAlpha = 0.85; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(b[0], b[1], 5, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(b[0], b[1], 1.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = hexA(hi, 0.7); ctx.beginPath(); ctx.arc(b[0] - 0.6, b[1] - 0.8, 0.9, 0, Math.PI * 2); ctx.fill(); } } }
   });
 };
 
