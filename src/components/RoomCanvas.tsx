@@ -211,7 +211,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
     channelRef.current?.send({ type: 'broadcast', event: 'rotate', payload: { id: hit.id, dir: hit.dir } });
-    supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
+    // room_items has no UPDATE policy (only insert/delete), so persist by replacing the row (same id).
+    const enc = encodeKind(hit.kind, hit.dir, hit.elev || 0);
+    const sb = supabase; if (sb) (async () => { try { await sb.from('room_items').delete().eq('id', hit.id); await sb.from('room_items').insert({ id: hit.id, room, kind: enc, x: hit.gx, y: hit.gy, created_by: hit.createdBy }); } catch { /* ignore */ } })();
   };
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === deviceRef.current); });
