@@ -23,10 +23,9 @@ import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteR
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planSpawn } from '@/lib/roomPlans';
 
 const STAGE_W = 1280, STAGE_H = 720;
-const GRID = 11;
+const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
 const TILE_W = 64, TILE_H = 32, TW = TILE_W / 2, TH = TILE_H / 2;
 const STACK_H = 26;
-const ORIGIN_X = STAGE_W / 2, ORIGIN_Y = 236;
 const WALL_H = 3;
 const WALK = 0.09;          // tiles per 60Hz step
 const BUBBLE_FRAMES = 60 * 6;
@@ -50,16 +49,20 @@ const ROOMS: RoomDef[] = [
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
-// Tiny preview of a floor plan: an 11×11 grid where present tiles glow (brighter = higher level).
-const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent }) => (
-  <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${PLAN_GRID}, 1fr)`, width: 40, height: 40 }}>
-    {Array.from({ length: PLAN_GRID * PLAN_GRID }, (_, i) => {
-      const gx = i % PLAN_GRID, gy = (i / PLAN_GRID) | 0; const row = plan.rows[gy] || ''; const ch = row[gx];
-      const on = ch && ch !== 'x' && ch !== ' ' && ch !== '.'; const lv = on ? ch.charCodeAt(0) - 48 : -1;
-      return <span key={i} style={{ background: on ? hexA(accent, 0.35 + Math.min(lv, 3) * 0.2) : 'transparent', borderRadius: 1 }} />;
-    })}
-  </div>
-);
+// Tiny preview of a floor plan: a grid sized to the plan's footprint where present tiles glow
+// (brighter = higher level). Bigger plans read as denser thumbnails.
+const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent }) => {
+  const h = plan.rows.length, w = plan.rows.reduce((m, r) => Math.max(m, r.length), 0);
+  return (
+    <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${w}, 1fr)`, width: 40, height: 40 * (h / w) }}>
+      {Array.from({ length: w * h }, (_, i) => {
+        const gx = i % w, gy = (i / w) | 0; const ch = (plan.rows[gy] || '')[gx];
+        const on = !!ch && ch !== 'x' && ch !== ' ' && ch !== '.'; const lv = on ? ch.charCodeAt(0) - 48 : -1;
+        return <span key={i} style={{ background: on ? hexA(accent, 0.35 + Math.min(lv, 3) * 0.2) : 'transparent', borderRadius: 1 }} />;
+      })}
+    </div>
+  );
+};
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string };
@@ -71,8 +74,28 @@ type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[]
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, Math.round(((n >> 16) & 255) * f)), g = Math.min(255, Math.round(((n >> 8) & 255) * f)), b = Math.min(255, Math.round((n & 255) * f)); return `rgb(${r},${g},${b})`; };
-const iso = (gx: number, gy: number, gz = 0) => ({ sx: ORIGIN_X + (gx - gy) * TW, sy: ORIGIN_Y + (gx + gy) * TH - gz * STACK_H });
-const screenToTile = (sx: number, sy: number) => { const a = (sx - ORIGIN_X) / TW, b = (sy - ORIGIN_Y) / TH; return { gx: (a + b) / 2, gy: (b - a) / 2 }; };
+// World-space iso (no origin) — positioned + scaled on screen by the room camera (see computeCam).
+const iso = (gx: number, gy: number, gz = 0) => ({ sx: (gx - gy) * TW, sy: (gx + gy) * TH - gz * STACK_H });
+type Cam = { x: number; y: number; s: number };
+const worldToTile = (wx: number, wy: number) => { const a = wx / TW, b = wy / TH; return { gx: (a + b) / 2, gy: (b - a) / 2 }; };
+// Fit the plan's walkable footprint into the stage (leaving room for the title up top). Bigger rooms
+// → smaller scale (zoom out). Capped so tiny rooms don't balloon.
+const computeCam = (mask: Int8Array, grid: number): Cam => {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, any = false;
+  for (let gy = 0; gy < grid; gy++) for (let gx = 0; gx < grid; gx++) {
+    const L = mask[gy * grid + gx]; if (L < 0) continue; any = true;
+    const cx = (gx - gy) * TW, cy = (gx + gy) * TH - L * STACK_H;
+    if (cx - TW < minX) minX = cx - TW; if (cx + TW > maxX) maxX = cx + TW;
+    if (cy - TH - WALL_H * STACK_H < minY) minY = cy - TH - WALL_H * STACK_H;   // wall above
+    if (cy + TH + STACK_H > maxY) maxY = cy + TH + STACK_H;                     // riser below
+  }
+  if (!any) { minX = -TW; maxX = TW; minY = -TH; maxY = TH; }
+  const w = maxX - minX, h = maxY - minY;
+  const padX = 46, padTop = 118, padBot = 28;
+  const availW = STAGE_W - padX * 2, availH = STAGE_H - padTop - padBot;
+  const s = Math.min(availW / w, availH / h, 1.18);
+  return { x: padX + (availW - w * s) / 2 - minX * s, y: padTop + (availH - h * s) / 2 - minY * s, s };
+};
 const clampTile = (v: number) => Math.max(0, Math.min(GRID - 1, Math.round(v)));
 const key = (gx: number, gy: number) => gy * GRID + gx;
 // Validate an icon spec received over presence (others may broadcast a custom-icon avatar).
@@ -100,6 +123,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
   const planRef = useRef<Int8Array>(planMask(planById('salao')));          // base floor level per tile (-1 = void)
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
+  const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
   const framesRef = useRef(0);
   const posAccum = useRef(0);
@@ -263,6 +287,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => {
     const plan = planById(roomMeta.plan);
     planRef.current = planMask(plan);
+    camRef.current = computeCam(planRef.current, GRID);
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -494,6 +519,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore();
       ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· SALA PESSOAL ·' : theme.locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
+      // camera: scale + position the whole room so its footprint fits the stage (bigger rooms zoom out)
+      const cam = camRef.current; ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.s, cam.s);
+
       // floor + walls follow the room PLAN: skip void tiles, raise each to its base level, draw side
       // risers (floor thickness) toward lower/void neighbours, and back walls only behind the footprint.
       const plan = planRef.current; const wh = WALL_H * STACK_H;
@@ -532,6 +560,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatar(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
+      ctx.restore();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);
       vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)'); ctx.fillStyle = vig; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
@@ -546,9 +575,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const evtTile = (e: React.PointerEvent) => {
     const canvas = canvasRef.current!; const rect = canvas.getBoundingClientRect();
     const sx = (e.clientX - rect.left) / rect.width * STAGE_W, sy = (e.clientY - rect.top) / rect.height * STAGE_H;
-    const raw = screenToTile(sx, sy); let gx = clampTile(raw.gx), gy = clampTile(raw.gy);
+    const cam = camRef.current; const wx = (sx - cam.x) / cam.s, wy = (sy - cam.y) / cam.s;   // invert the room camera
+    const raw = worldToTile(wx, wy); let gx = clampTile(raw.gx), gy = clampTile(raw.gy);
     // Prefer a RAISED tile whose lifted top is under the cursor (so clicks land on raised floors).
-    for (let L = 1; L <= 9; L++) { const r = screenToTile(sx, sy + L * STACK_H); const cx = Math.round(r.gx), cy = Math.round(r.gy); if (cx >= 0 && cy >= 0 && cx < GRID && cy < GRID && planLvl(cx, cy) === L) { gx = cx; gy = cy; } }
+    for (let L = 1; L <= 9; L++) { const r = worldToTile(wx, wy + L * STACK_H); const cx = Math.round(r.gx), cy = Math.round(r.gy); if (cx >= 0 && cy >= 0 && cx < GRID && cy < GRID && planLvl(cx, cy) === L) { gx = cx; gy = cy; } }
     return { gx, gy, raw };
   };
   const onPointerDown = (e: React.PointerEvent) => {

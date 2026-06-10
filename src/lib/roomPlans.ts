@@ -4,11 +4,18 @@
 // split-level floors (you step up/down one level, same ±1 rule as furni decks). Rows/cols beyond the
 // strings are treated as void, so plans can be smaller than the grid.
 
-export const PLAN_GRID = 11;
+// Max grid the engine supports (array stride + bounds). Plans can be any size up to this; the room
+// camera scales the footprint to fit the stage, so bigger plans just zoom out.
+export const PLAN_GRID = 20;
 
 export type RoomPlan = { id: string; name: string; rows: string[]; spawn?: [number, number] };
 
 const F = '00000000000';
+// Generators for the bigger rooms (kept terse so the shapes stay readable).
+const full = (n: number) => Array.from({ length: n }, () => '0'.repeat(n));
+const octa = (n: number, k: number) => Array.from({ length: n }, (_, y) =>
+  Array.from({ length: n }, (_, x) => ((x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k)) ? 'x' : '0').join(''));
+
 export const ROOM_PLANS: RoomPlan[] = [
   { id: 'salao', name: 'Salão', rows: [F, F, F, F, F, F, F, F, F, F, F] },
   {
@@ -101,6 +108,9 @@ export const ROOM_PLANS: RoomPlan[] = [
       '00000000000',
     ], spawn: [5, 0],
   },
+  { id: 'grande', name: 'Grande', rows: full(14) },
+  { id: 'enorme', name: 'Enorme', rows: full(18) },
+  { id: 'pista', name: 'Pista', rows: octa(16, 5), spawn: [8, 8] },
 ];
 
 export const planById = (id?: string): RoomPlan => ROOM_PLANS.find(p => p.id === id) ?? ROOM_PLANS[0];
@@ -120,14 +130,24 @@ export const planMask = (plan: RoomPlan): Int8Array => {
   return m;
 };
 
-// Spawn tile: explicit, else the first walkable cell (scanning from the front/centre outward).
+// Bounding box of the walkable footprint (used to centre the camera + the spawn).
+export const planFootprint = (plan: RoomPlan): { minX: number; minY: number; maxX: number; maxY: number } => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (let gy = 0; gy < PLAN_GRID; gy++) for (let gx = 0; gx < PLAN_GRID; gx++) {
+    if (planLevelAt(plan, gx, gy) < 0) continue;
+    if (gx < minX) minX = gx; if (gx > maxX) maxX = gx; if (gy < minY) minY = gy; if (gy > maxY) maxY = gy;
+  }
+  return Number.isFinite(minX) ? { minX, minY, maxX, maxY } : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+};
+
+// Spawn tile: explicit, else the walkable cell nearest the footprint centre.
 export const planSpawn = (plan: RoomPlan): { gx: number; gy: number; lvl: number } => {
   if (plan.spawn && planLevelAt(plan, plan.spawn[0], plan.spawn[1]) >= 0) return { gx: plan.spawn[0], gy: plan.spawn[1], lvl: planLevelAt(plan, plan.spawn[0], plan.spawn[1]) };
-  const c = (PLAN_GRID - 1) / 2;
+  const fp = planFootprint(plan); const cx = (fp.minX + fp.maxX) / 2, cy = (fp.minY + fp.maxY) / 2;
   let best: { gx: number; gy: number; lvl: number } | null = null, bd = Infinity;
   for (let gy = 0; gy < PLAN_GRID; gy++) for (let gx = 0; gx < PLAN_GRID; gx++) {
     const l = planLevelAt(plan, gx, gy); if (l < 0) continue;
-    const d = (gx - c) ** 2 + (gy - c) ** 2; if (d < bd) { bd = d; best = { gx, gy, lvl: l }; }
+    const d = (gx - cx) ** 2 + (gy - cy) ** 2; if (d < bd) { bd = d; best = { gx, gy, lvl: l }; }
   }
   return best ?? { gx: 5, gy: 5, lvl: 0 };
 };
