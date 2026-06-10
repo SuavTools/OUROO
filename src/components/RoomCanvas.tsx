@@ -53,7 +53,7 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number };
-const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
+const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
   clube: [
     // stage (back, raised): PA towers + a big screen
     ['pa', 11, 5, 0], ['pa', 21, 5, 0], ['tv', 16, 4, 0], ['planta', 12, 9, 0], ['planta', 21, 9, 0],
@@ -98,9 +98,14 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
     // grand Greek arch over the entrance + tall columns flanking the entrance
     ['arco_gr', 16, 29, 0],
     ['coluna_gr', 8, 26, 0], ['coluna_gr', 25, 26, 0],
-    // VIP canopy daybeds + egg pod chairs
+    // VIP canopy daybeds + egg pod chairs (egg now faces an iso direction)
     ['cama_dossel', 12, 23, 1], ['cama_dossel', 21, 23, 1],
-    ['ovo', 9, 20, 0], ['ovo', 24, 17, 0],
+    ['ovo', 9, 20, 1], ['ovo', 24, 17, 3],
+    // STACKED side decor (shows off elevation): laptop + lantern on side tables, urns + lanterns atop columns
+    ['mesa', 13, 16, 0], ['pc', 13, 16, 0, 1],
+    ['mesa', 20, 16, 0], ['lanterna', 20, 16, 0, 1],
+    ['vaso', 8, 26, 0, 4], ['vaso', 25, 26, 0, 4],
+    ['lanterna', 5, 9, 0, 4], ['lanterna', 9, 9, 0, 4], ['lanterna', 24, 9, 0, 4], ['lanterna', 28, 9, 0, 4],
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
@@ -366,7 +371,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     waterRef.current = planWaterMask(plan);
     matRef.current = planMaterialMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
-    decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: 0, createdBy: 'curated' }));
+    decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' }));
     npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
@@ -413,7 +418,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const mine = itemsRef.current.filter(i => i.createdBy === deviceRef.current).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
     const dir = isRotatable(kind) ? placeDirRef.current : 0;
-    const elev = defOf(kind).walk ? placeElevRef.current : 0;   // only walkable pieces float (decks/bridges)
+    const elev = placeElevRef.current;   // any piece can be lifted — stack decks, mount decor on tables, build tall
     const [sw, sh] = effSpan(kind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
     for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) if (planLvl(gx + du, gy + dv) < 0) { flashHint('Não cabe aqui'); return; }
@@ -795,12 +800,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             {/* header: count + altura (for floating decks) + balance */}
             <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
               <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderador' : `objetos ${myCount}/${PLACE_CAP}`}</span>
-              {placingKind && defOf(placingKind).walk && (
+              {placingKind && (
                 <span className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[#00cfff]">
                   Altura
                   <button onClick={() => setPlaceElev(e => Math.max(0, e - 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▼</button>
-                  <span className="w-3 text-center text-white">{placeElev}</span>
-                  <button onClick={() => setPlaceElev(e => Math.min(6, e + 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▲</button>
+                  <span className="w-4 text-center text-white tabular-nums">{placeElev}</span>
+                  <button onClick={() => setPlaceElev(e => Math.min(16, e + 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▲</button>
                 </span>
               )}
               <span className="text-[10px] font-mono uppercase tracking-widest text-brandYellow shrink-0">{CURRENCY_SYMBOL} {wallet.balance.toLocaleString('pt-PT')}</span>

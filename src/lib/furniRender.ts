@@ -545,17 +545,35 @@ const drawCanopy = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   });
 };
 
-// Egg pod chair: weighted base, curved chrome arm, a glossy open egg shell with an accent cushion.
-const drawEgg = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+// Egg pod chair: weighted base, curved chrome arm, glossy open egg shell. The opening faces one of the
+// 4 ISO directions (dir) — when it faces away from the camera you see the closed shell, as it should.
+const drawEgg = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const dv = [[-1, 1], [1, 1], [1, -1], [-1, -1]][((dir % 4) + 4) % 4];   // forward = iso screen dir the seat opens toward
+  const fx = dv[0], fy = dv[1], facingCam = fy > 0;
   ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   ctx.fillStyle = '#3a3a44'; ctx.beginPath(); ctx.ellipse(sx, sy, 11, 5.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx + 9, sy - 2); ctx.quadraticCurveTo(sx + 20, sy - STACK_H * 1.7, sx + 2, sy - STACK_H * 1.78); ctx.stroke();
-  const cy = sy - STACK_H * 1.15;
-  const g = ctx.createLinearGradient(sx - 19, 0, sx + 19, 0); g.addColorStop(0, shade(base, 0.68)); g.addColorStop(0.5, shade(base, 1.22)); g.addColorStop(1, shade(base, 0.82));
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, 19, 25, 0, Math.PI * 0.12, Math.PI * 1.88); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = shade(base, 0.55); ctx.beginPath(); ctx.ellipse(sx, cy + 5, 13, 17, 0, 0, Math.PI * 2); ctx.fill();   // inner shadow
-  ctx.fillStyle = hexA(accent, 0.9); ctx.beginPath(); ctx.ellipse(sx, cy + 7, 11, 13, 0, 0, Math.PI * 2); ctx.fill();   // cushion
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(sx - 7, cy - 8, 4, 9, -0.5, 0, Math.PI * 2); ctx.fill();   // shell sheen
+  const cy = sy - STACK_H * 1.18, eggCx = sx + fx * 4;
+  // chrome arm from the BACK side (−forward) up to the top of the shell
+  ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - fx * 9, sy - 2 - fy * 2); ctx.quadraticCurveTo(sx - fx * 18, cy - STACK_H * 0.6, eggCx - fx * 2, cy - 22); ctx.stroke();
+  // glossy shell
+  const g = ctx.createLinearGradient(eggCx - 19, 0, eggCx + 19, 0); g.addColorStop(0, shade(base, 0.68)); g.addColorStop(0.5, shade(base, 1.22)); g.addColorStop(1, shade(base, 0.82));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(eggCx, cy, 19, 25, 0, 0, Math.PI * 2); ctx.fill();
+  if (facingCam) {   // opening toward the camera → show the scooped interior + cushion, offset along forward
+    const ox = eggCx + fx * 5, oy = cy + fy * 5;
+    ctx.fillStyle = shade(base, 0.5); ctx.beginPath(); ctx.ellipse(ox, oy, 13, 16, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hexA(accent, 0.9); ctx.beginPath(); ctx.ellipse(ox, oy + 3, 11, 12, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(eggCx - 7, cy - 9, 4, 9, -0.5, 0, Math.PI * 2); ctx.fill();   // shell sheen
+};
+
+// Small lantern: a glass cage with a warm pulsing flame, a metal cap and a top ring (mount it on tables).
+const drawLantern = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, t: number) => {
+  void _a; const top = boxAt(ctx, sx, sy, 0.16, 0.16, 0.18, '#2c2c34', '#000', false);
+  const gx = sx, gy = top - 9, gw = 6, gh = 12;
+  ctx.fillStyle = hexA(base, 0.3); ctx.fillRect(gx - gw, gy - gh, gw * 2, gh);                                  // glass
+  ctx.save(); ctx.shadowColor = base; ctx.shadowBlur = 14; ctx.globalAlpha = 0.6 + Math.abs(Math.sin(t * 0.1)) * 0.4; ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(gx, gy - gh * 0.45, 2.6, 4.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();   // flame
+  ctx.fillStyle = '#3a3a44'; ctx.fillRect(gx - gw - 1, gy - gh - 3, gw * 2 + 2, 3); ctx.fillRect(gx - gw - 1, gy - 2, gw * 2 + 2, 3);   // metal cap + base
+  ctx.strokeStyle = '#5a5a66'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(gx, gy - gh - 4, 2.5, Math.PI, 0); ctx.stroke();   // hanging ring
 };
 
 // Lux chaise longue (2 tiles): gold legs, deep cushion, a high sloped back at one end + scroll, with
@@ -688,7 +706,8 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'topiary': drawTopiary(ctx, sx, sy, accent, d.color); break;
     case 'banner': drawBanner(ctx, sx, sy, accent, d.color); break;
     case 'canopy': drawCanopy(ctx, sx, sy, accent, d.color, dir); break;
-    case 'eggchair': drawEgg(ctx, sx, sy, accent, d.color); break;
+    case 'eggchair': drawEgg(ctx, sx, sy, accent, d.color, dir); break;
+    case 'lantern': drawLantern(ctx, sx, sy, accent, d.color, t); break;
     case 'chaise': drawChaise(ctx, sx, sy, accent, d.color, dir); break;
     case 'greekcol': drawGreekCol(ctx, sx, sy, accent, d.color); break;
     case 'arch': drawArch(ctx, sx, sy, accent, d.color, dir); break;
