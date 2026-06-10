@@ -66,18 +66,20 @@ export const FURNI: FurniDef[] = [
   { kind: 'banco',    name: 'Banco',    emoji: '🪑', cat: 'assentos', color: '#6a6a76', h: 1, walk: false, foot: 0.6, special: 'stool' },
   { kind: 'trono',    name: 'Trono',    emoji: '👑', cat: 'assentos', color: '#7a1aaa', h: 2, walk: false, foot: 0.8, special: 'throne' },
   { kind: 'puff',     name: 'Puff',     emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7, special: 'puff' },
+  { kind: 'banco_jd', name: 'Banco Jardim', emoji: '🪑', cat: 'assentos', color: '#5a6e44', h: 1, walk: false, foot: 1, special: 'bench', span: [2, 1] },
   // mesas
   { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
   { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
   { kind: 'mesacafe', name: 'Café',      emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8, special: 'table' },
   { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#2a2a3a', h: 2, walk: false, foot: 1,   special: 'counter' },
+  { kind: 'rececao',  name: 'Receção',   emoji: '🛎️', cat: 'mesas', color: '#6b4a2c', h: 2, walk: false, foot: 1,   special: 'reception', span: [3, 1] },
   { kind: 'prat',     name: 'Prateleira',emoji: '📚', cat: 'mesas', color: '#4a3420', h: 2, walk: false, foot: 0.6, special: 'shelf' },
   // plantas
   { kind: 'planta',   name: 'Planta',   emoji: '🪴', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
   { kind: 'cato',     name: 'Cato',     emoji: '🌵', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
   { kind: 'bonsai',   name: 'Bonsai',   emoji: '🎍', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
-  { kind: 'arvore',   name: 'Árvore',   emoji: '🌳', cat: 'plantas', color: '#8a4f2a', h: 2, walk: false, foot: 0.8, special: 'plant' },
-  { kind: 'palmeira', name: 'Palmeira', emoji: '🌴', cat: 'plantas', color: '#8a4f2a', h: 2, walk: false, foot: 0.7, special: 'plant' },
+  { kind: 'arvore',   name: 'Árvore',   emoji: '🌳', cat: 'plantas', color: '#6a4326', h: 3, walk: false, foot: 0.85, special: 'tree' },
+  { kind: 'palmeira', name: 'Palmeira', emoji: '🌴', cat: 'plantas', color: '#7a5230', h: 3, walk: false, foot: 0.7, special: 'palm' },
   { kind: 'flores',   name: 'Flores',   emoji: '🌷', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
   // luzes
   { kind: 'candeeiro',name: 'Candeeiro',emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
@@ -122,11 +124,11 @@ const CAT_INDEX: Record<string, number> = (() => {
 
 // Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
 // keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
-const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8 };
+const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
-const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table']);
+const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

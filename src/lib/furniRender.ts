@@ -279,6 +279,78 @@ const drawLaptop = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   });
 };
 
+// ═══════════ HI-FI garden / lobby pieces (trees, palm, park bench, reception desk) ═══════════
+
+// Leafy tree: tapered bark trunk with root flare + a layered, gradient-shaded canopy and speckle light.
+const drawTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string) => {
+  void _a;
+  ctx.save(); ctx.globalAlpha = 0.24; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.7, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 1.7, tw = TW * 0.17;
+  const tg = ctx.createLinearGradient(sx - tw, 0, sx + tw, 0); tg.addColorStop(0, shade(base, 0.5)); tg.addColorStop(0.5, shade(base, 1.18)); tg.addColorStop(1, shade(base, 0.62));
+  ctx.fillStyle = tg; ctx.beginPath();
+  ctx.moveTo(sx - tw, sy); ctx.quadraticCurveTo(sx - tw * 0.5, sy - trunkH * 0.5, sx - tw * 0.5, sy - trunkH);
+  ctx.lineTo(sx + tw * 0.5, sy - trunkH); ctx.quadraticCurveTo(sx + tw * 0.5, sy - trunkH * 0.5, sx + tw, sy);
+  ctx.lineTo(sx + tw * 1.7, sy + 3); ctx.lineTo(sx - tw * 1.7, sy + 3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA('#000', 0.16); ctx.lineWidth = 1; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(sx + i * tw * 0.45, sy - 4); ctx.lineTo(sx + i * tw * 0.45, sy - trunkH + 4); ctx.stroke(); }
+  const cy = sy - trunkH - TH * 0.2; const greens = ['#1c6e34', '#268a45', '#2fa356', '#185f2c', '#37b561'];
+  const blob = (ox: number, oy: number, r: number, col: string) => { const g = ctx.createRadialGradient(sx + ox - r * 0.3, cy + oy - r * 0.35, r * 0.1, sx + ox, cy + oy, r); g.addColorStop(0, shade(col, 1.36)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, 0.68)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill(); };
+  blob(0, TH * 0.4, TW * 0.95, greens[3]);
+  blob(-TW * 0.52, 0, TW * 0.56, greens[1]); blob(TW * 0.52, 0, TW * 0.56, greens[1]);
+  blob(-TW * 0.26, -TH * 0.7, TW * 0.56, greens[2]); blob(TW * 0.32, -TH * 0.62, TW * 0.6, greens[2]);
+  blob(0, -TH * 1.1, TW * 0.62, greens[4]);
+  ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#cdfaa8'; for (let i = 0; i < 16; i++) { const a = i * 2.39917, rr = TW * (0.2 + (i % 5) * 0.13); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * rr, cy - TH * 0.3 + Math.sin(a) * rr * 0.6, 1.8, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+};
+
+// Palm: curved segmented trunk + a crown of arcing gradient fronds with midribs and coconuts.
+const drawPalm = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string) => {
+  void _a;
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.55, TH * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const H = STACK_H * 2.1, lean = TW * 0.28, segs = 7;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < segs; i++) { const f0 = i / segs, f1 = (i + 1) / segs; const x0 = sx + lean * f0 * f0, y0 = sy - H * f0, x1 = sx + lean * f1 * f1, y1 = sy - H * f1; ctx.strokeStyle = shade(base, 0.78 + (i % 2) * 0.28); ctx.lineWidth = TW * (0.21 - 0.07 * f0); ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  const tx = sx + lean, ty = sy - H; const greens = ['#2aa050', '#1f8a42', '#33b85e', '#188036'];
+  const blade = (ang: number, len: number, col: string) => {
+    ctx.save(); ctx.translate(tx, ty); ctx.rotate(ang);
+    const g = ctx.createLinearGradient(0, 0, len, 0); g.addColorStop(0, shade(col, 1.28)); g.addColorStop(1, shade(col, 0.64));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * 0.55, -len * 0.22, len, -len * 0.02); ctx.quadraticCurveTo(len * 0.55, len * 0.07, 0, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA('#0a3a18', 0.5); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * 0.55, -len * 0.08, len, -len * 0.02); ctx.stroke(); ctx.restore();
+  };
+  const angs = [-3.0, -2.6, -2.2, -1.85, -1.5, -1.1, -0.7, -0.25, 0.2];
+  angs.forEach((a, i) => blade(a, TW * (0.95 + (i % 3) * 0.13), greens[i % greens.length]));
+  ctx.fillStyle = '#6b4a28'; for (const o of [[-4, 3], [3, 4], [0, 6]] as [number, number][]) { ctx.beginPath(); ctx.arc(tx + o[0], ty + o[1], 3, 0, Math.PI * 2); ctx.fill(); }
+};
+
+// Park bench: metal frame + legs/armrests with slatted wood seat and a gapped slatted back. Rotates 4 ways.
+const drawBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.62); const m = '#2c2f36', mT = shade(m, 1.2), mR = shade(m, 0.8), mL = shade(m, 0.5);
+  const parts: IsoPart[] = [
+    ...legs([[-0.8, -0.16], [0.8, -0.16], [-0.8, 0.3], [0.8, 0.3]], 0.42).map(p => ({ ...p, t: mT, r: mR, l: mL })),
+    { u0: -0.92, u1: 0.92, v0: -0.2, v1: -0.07, z0: 0.42, z1: 0.5, t: cT, r: cR, l: cL },          // seat slat back
+    { u0: -0.92, u1: 0.92, v0: -0.03, v1: 0.1, z0: 0.42, z1: 0.5, t: cT, r: cR, l: cL },           // seat slat mid
+    { u0: -0.92, u1: 0.92, v0: 0.14, v1: 0.28, z0: 0.42, z1: 0.5, t: cT, r: cR, l: cL },           // seat slat front
+    { u0: -0.92, u1: 0.92, v0: -0.3, v1: -0.24, z0: 0.52, z1: 0.76, t: cT, r: cR, l: cL },         // back slat lower
+    { u0: -0.92, u1: 0.92, v0: -0.3, v1: -0.24, z0: 0.84, z1: 1.06, t: cT, r: cR, l: cL },         // back slat upper
+    { u0: -0.93, u1: -0.79, v0: -0.28, v1: 0.3, z0: 0.5, z1: 0.86, t: mT, r: mR, l: mL },          // left armrest
+    { u0: 0.79, u1: 0.93, v0: -0.28, v1: 0.3, z0: 0.5, z1: 0.86, t: mT, r: mR, l: mL }];           // right armrest
+  drawParts(ctx, sx, sy, dir, 0, 0, parts);
+};
+
+// Reception desk (3 tiles): tall wood body, marble counter-top overhang, accent strip + CLUBE logo.
+const drawReception = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cT = shade(base, 1.24), cR = shade(base, 0.92), cL = shade(base, 0.6), top = '#dfe3ea';
+  const parts: IsoPart[] = [{ u0: -1.42, u1: 1.42, v0: -0.16, v1: 0.34, z0: 0, z1: 1.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 1.5;
+    poly(ctx, [P(-1.5, -0.26, z), P(1.5, -0.26, z), P(1.5, 0.42, z), P(-1.5, 0.42, z)], shade(top, 1.2));   // counter slab
+    poly(ctx, [P(-1.5, 0.42, z), P(1.5, 0.42, z), P(1.5, 0.42, z - 0.14), P(-1.5, 0.42, z - 0.14)], shade(top, 0.82));   // front lip
+    poly(ctx, [P(1.5, -0.26, z), P(1.5, 0.42, z), P(1.5, 0.42, z - 0.14), P(1.5, -0.26, z - 0.14)], shade(top, 0.7));    // right lip
+    if (faceVisible(0, 1, dir)) {
+      poly(ctx, [P(-1.3, 0.34, 1.18), P(1.3, 0.34, 1.18), P(1.3, 0.34, 0.86), P(-1.3, 0.34, 0.86)], hexA(accent, 0.85));   // accent strip
+      const c = P(0, 0.34, 1.02); ctx.save(); ctx.fillStyle = '#fff'; ctx.font = '900 11px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('CLUBE', c[0], c[1]); ctx.restore();
+    }
+  });
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -300,6 +372,10 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'sofa': drawSofaR(ctx, sx, sy, accent, d.color, dir); break;
     case 'throne': drawThroneR(ctx, sx, sy, accent, d.color, dir); break;
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
+    case 'tree': drawTree(ctx, sx, sy, accent, d.color); break;
+    case 'palm': drawPalm(ctx, sx, sy, accent, d.color); break;
+    case 'bench': drawBench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'reception': drawReception(ctx, sx, sy, accent, d.color, dir); break;
     case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
     case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
     case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;

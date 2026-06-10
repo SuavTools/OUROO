@@ -31,7 +31,7 @@ const WALK = 0.09;          // tiles per 60Hz step
 const BUBBLE_FRAMES = 60 * 6;
 const MAX_ITEMS = 200, PLACE_CAP = 20;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
 // ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
@@ -46,9 +46,32 @@ const ROOMS: RoomDef[] = [
   { slug: 'telhado', name: 'Telhado',   accent: '#1ED760', floor: '#121e18', plan: 'palco' },
   { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
   { slug: 'atrio',   name: 'Átrio',     accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
-  { slug: 'clube',   name: 'Clube',     accent: '#00cfff', floor: '#10202c', locked: true, plan: 'clube' },
+  { slug: 'clube',   name: 'Clube',     accent: '#1aa3d8', floor: '#2c4a5e', locked: true, plan: 'clube', day: true },
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
+
+// Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
+// them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
+type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number };
+const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
+  clube: [
+    ['arvore', 8, 8], ['arvore', 25, 8], ['arvore', 8, 25], ['arvore', 25, 25],
+    ['palmeira', 11, 11], ['palmeira', 22, 11], ['palmeira', 11, 22], ['palmeira', 22, 22],
+    ['rececao', 15, 8, 0],
+    ['lounge_couch', 6, 23, 0], ['lounge_chair', 10, 22, 2], ['lounge_table', 8, 24, 0],
+    ['lounge_couch', 24, 23, 2], ['lounge_chair', 23, 22, 1], ['lounge_table', 25, 24, 0],
+    ['banco_jd', 12, 31, 0], ['banco_jd', 19, 31, 0], ['banco_jd', 10, 17, 0], ['banco_jd', 22, 17, 0],
+    ['estatua', 16, 16, 0], ['planta', 14, 14, 0], ['planta', 19, 19, 0], ['planta', 14, 9, 0], ['planta', 18, 9, 0],
+  ],
+};
+const CURATED_NPCS: Record<string, NpcDef[]> = {
+  clube: [
+    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 15, gy: 7 },
+    { handle: 'Tó', skinId: 'nave-verde', gx: 17, gy: 7 },
+    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 15, lvl: 1 },
+    { handle: 'Guia', skinId: 'diamond-cyan', gx: 10, gy: 28 },
+  ],
+};
 
 // Tiny preview of a floor plan: a grid sized to the plan's footprint where present tiles glow
 // (brighter = higher level). Bigger plans read as denser thumbnails.
@@ -121,6 +144,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const selfRef = useRef<Self>({ id: '', handle: 'Convidado', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, lvl: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
+  const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
+  const npcsRef = useRef<Avatar[]>([]);   // curated static NPCs
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -270,7 +295,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const surf = surfRef.current, S = solidRef.current; S.fill(0);
     for (let i = 0; i < surf.length; i++) surf[i].length = 0;
     const grounded = new Uint8Array(GRID * GRID);
-    for (const it of itemsRef.current) {
+    for (const it of (decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current)) {
       const d = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const elev = it.elev || 0; const sit = sitHeight(it.kind);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
@@ -295,6 +320,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     planRef.current = planMask(plan);
     waterRef.current = planWaterMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
+    decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: 0, createdBy: 'curated' }));
+    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0 }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -522,10 +549,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     const draw = () => {
-      const theme = themeRef.current; const t = framesRef.current;
-      const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H); bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610');
+      const theme = themeRef.current; const t = framesRef.current; const day = !!theme.day;
+      const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H);
+      if (day) { bg.addColorStop(0, '#aedcff'); bg.addColorStop(0.5, '#cfeaff'); bg.addColorStop(1, '#eaf6ef'); }
+      else { bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610'); }
       ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
-      ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore();
+      if (day) {   // soft sun glow + drifting clouds instead of dust motes
+        ctx.save(); const sun = ctx.createRadialGradient(STAGE_W * 0.78, 120, 10, STAGE_W * 0.78, 120, 230); sun.addColorStop(0, 'rgba(255,250,224,0.9)'); sun.addColorStop(1, 'rgba(255,250,224,0)'); ctx.fillStyle = sun; ctx.fillRect(0, 0, STAGE_W, 360);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 5; i++) { const cx = ((i * 320 + t * 0.25) % (STAGE_W + 240)) - 120, cy = 60 + (i % 3) * 46; ctx.beginPath(); ctx.ellipse(cx, cy, 60, 17, 0, 0, Math.PI * 2); ctx.ellipse(cx + 40, cy + 6, 44, 14, 0, 0, Math.PI * 2); ctx.ellipse(cx - 36, cy + 7, 38, 12, 0, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+      } else { ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore(); }
       ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· SALA PESSOAL ·' : theme.locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
       // camera: scale + position the whole room so its footprint fits the stage (bigger rooms zoom out)
@@ -570,17 +602,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       };
       // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
-      for (const it of itemsRef.current) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (lift > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
+      const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
+      for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (lift > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
       // sort by their front corner, so add a boost when standing on a seat's footprint.
-      const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of itemsRef.current) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
+      const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of allItems) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
+      for (const n of npcsRef.current) { const nn = n; ents.push({ s: nn.fx + nn.fy + nn.z * 0.02 + 0.005 + seatBoost(nn.fx, nn.fy), draw: () => drawAvatar(nn, false) }); }
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatar(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
       ctx.restore();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);
-      vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)'); ctx.fillStyle = vig; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+      vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, day ? 'rgba(20,40,30,0.22)' : 'rgba(0,0,0,0.5)'); ctx.fillStyle = vig; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
     };
 
     let last = 0, acc = 0; const STEP = 1000 / 60;
