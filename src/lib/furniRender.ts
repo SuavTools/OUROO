@@ -56,6 +56,9 @@ const drawParts = (ctx: CanvasRenderingContext2D, sx: number, sy: number, dir: n
   if (deco) deco((u, v, z = 0) => { const [ru, rv] = rotUV(u, v, dir, cu, cv); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; });
 };
 const legs = (us: [number, number][], z1: number): IsoPart[] => us.map(([u, v]) => ({ u0: u - 0.05, u1: u + 0.05, v0: v - 0.05, v1: v + 0.05, z0: 0, z1, t: '#3a2616', r: '#2a1c10', l: '#1f140a' }));
+// True if a face whose local outward normal is (du,dv) points toward the camera under this dir.
+const faceVisible = (du: number, dv: number, dir: number): boolean => { let u = du, v = dv; const n = ((dir % 4) + 4) % 4; for (let i = 0; i < n; i++) { const tt = u; u = -v; v = tt; } return u + v > 0.001; };
+
 const drawChair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a; const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.64);
   const parts: IsoPart[] = [...legs([[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]], 0.16),
@@ -245,6 +248,37 @@ const drawBallHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; const hg = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.45, 0, cx - R * 0.4, cy - R * 0.45, R * 0.55); hg.addColorStop(0, 'rgba(255,255,255,0.9)'); hg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(cx - R * 0.4, cy - R * 0.45, R * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 };
 
+// Flatscreen TV on a pedestal stand: a thin panel that truly sits in iso space; the screen lights up
+// on whichever broad face points at the camera, and you see the dark back when it's turned away.
+const drawTV = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  const ped = '#26262e';
+  const parts: IsoPart[] = [
+    { u0: -0.2, u1: 0.2, v0: -0.14, v1: 0.14, z0: 0, z1: 0.08, t: shade(ped, 1.15), r: shade(ped, 0.8), l: shade(ped, 0.6) },   // base
+    { u0: -0.05, u1: 0.05, v0: -0.05, v1: 0.05, z0: 0.08, z1: 0.44, t: ped, r: shade(ped, 0.78), l: shade(ped, 0.62) },         // neck
+    { u0: -0.46, u1: 0.46, v0: -0.045, v1: 0.045, z0: 0.42, z1: 1.18, t: shade(base, 1.15), r: shade(base, 0.7), l: shade(base, 0.92) }];  // panel (thin in v)
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;   // screen on the +v broad face
+    poly(ctx, [P(-0.38, 0.05, 1.08), P(0.38, 0.05, 1.08), P(0.38, 0.05, 0.52), P(-0.38, 0.05, 0.52)], hexA(accent, 0.75));
+    ctx.save(); ctx.globalAlpha = 0.55; poly(ctx, [P(-0.33, 0.05, 1.02), P(0.33, 0.05, 1.02), P(0.33, 0.05, 0.58), P(-0.33, 0.05, 0.58)], `hsl(${(t * 3) % 360},80%,60%)`); ctx.restore();
+  });
+};
+
+// Open laptop: keyboard deck (top always visible) + an upright lid whose screen glows toward the user.
+const drawLaptop = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  const parts: IsoPart[] = [
+    { u0: -0.28, u1: 0.28, v0: -0.12, v1: 0.28, z0: 0, z1: 0.06, t: shade(base, 1.2), r: shade(base, 0.8), l: shade(base, 0.62) },   // keyboard deck
+    { u0: -0.28, u1: 0.28, v0: -0.2, v1: -0.13, z0: 0.06, z1: 0.52, t: shade(base, 1.1), r: shade(base, 0.7), l: shade(base, 0.88) }]; // upright lid at back
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.save(); ctx.fillStyle = hexA('#000', 0.3);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) { const kp = P(-0.18 + c * 0.09, -0.02 + r * 0.08, 0.07); ctx.fillRect(kp[0] - 2, kp[1] - 1.5, 4, 3); }
+    const tp = P(0, 0.2, 0.07); ctx.fillStyle = hexA('#000', 0.22); ctx.fillRect(tp[0] - 5, tp[1] - 3, 10, 6); ctx.restore();
+    if (faceVisible(0, 1, dir)) {   // screen on the lid's +v face (toward the keyboard)
+      poly(ctx, [P(-0.24, -0.125, 0.48), P(0.24, -0.125, 0.48), P(0.24, -0.125, 0.12), P(-0.24, -0.125, 0.12)], hexA(accent, 0.7));
+      ctx.save(); ctx.globalAlpha = 0.5; poly(ctx, [P(-0.2, -0.125, 0.44), P(0.2, -0.125, 0.44), P(0.2, -0.125, 0.16), P(-0.2, -0.125, 0.16)], `hsl(${(t * 2) % 360},70%,60%)`); ctx.restore();
+    }
+  });
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -287,7 +321,8 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'plant': { const top = block(ctx, sx, sy, 1, '#8a4f2a', accent, d.foot * 0.8); const lc = kind === 'flores' ? '#ff66aa' : '#1ED760'; const lvl = d.h; for (let r = 0; r < (lvl === 2 ? 5 : 3); r++) { const ox = (r - 1) * 7; ctx.fillStyle = lc; ctx.beginPath(); ctx.ellipse(sx + ox, top - 8 - (lvl === 2 ? r * 6 : 0), 6, 13, ox * 0.05, 0, Math.PI * 2); ctx.fill(); } break; }
     case 'lamp': { const top = block(ctx, sx, sy, d.h, '#2a2a30', accent, d.foot); ctx.save(); ctx.shadowColor = d.color; ctx.shadowBlur = 22; ctx.globalAlpha = 0.5 + Math.abs(Math.sin(t * 0.08)) * 0.4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(sx, top - 4, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break; }
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
-    case 'tv': { const top = block(ctx, sx, sy, d.h, d.color, accent, d.foot); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.7); ctx.fillRect(sx - 14, top - 12, 28, 18); ctx.fillStyle = `hsl(${(t * 3) % 360},80%,60%)`; ctx.globalAlpha = 0.5; ctx.fillRect(sx - 12, top - 10, 24, 14); ctx.globalAlpha = 1; }); break; }
+    case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'sign': { const top = block(ctx, sx, sy, 1, d.color, accent, d.foot); if (showDet) { ctx.fillStyle = accent; ctx.font = '900 10px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SUAV', sx, top); } break; }
     case 'disco': { const cy = sy - 2.6 * STACK_H; ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx, cy - 22); ctx.lineTo(sx, cy - 56); ctx.stroke(); ctx.save(); ctx.translate(sx, cy); ctx.rotate(t * 0.04); const grd = ctx.createRadialGradient(-6, -6, 3, 0, 0, 20); grd.addColorStop(0, '#fff'); grd.addColorStop(1, '#8893b8'); ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + t * 0.04; ctx.fillStyle = `hsla(${(t * 4 + i * 60) % 360},90%,65%,0.9)`; ctx.beginPath(); ctx.arc(Math.cos(a) * 12, Math.sin(a) * 12, 3.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); break; }
     case 'stool': {

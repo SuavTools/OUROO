@@ -89,11 +89,10 @@ export const FURNI: FurniDef[] = [
   // eletrónica
   { kind: 'tv',       name: 'TV',       emoji: '📺', cat: 'electro', color: '#15151f', h: 1, walk: false, foot: 1, special: 'tv' },
   { kind: 'coluna',   name: 'Coluna',   emoji: '🔈', cat: 'electro', color: '#23232f', h: 2, walk: false, foot: 0.7, special: 'speaker' },
-  { kind: 'jukebox',  name: 'Jukebox',  emoji: '🎵', cat: 'electro', color: '#aa2266', h: 2, walk: false, foot: 0.7, special: 'jukebox' },
   { kind: 'arcade',   name: 'Arcade',   emoji: '🕹️', cat: 'electro', color: '#2a1a4a', h: 2, walk: false, foot: 0.8, special: 'tv' },
   { kind: 'frigo',    name: 'Frigorífico',emoji: '🧊', cat: 'electro', color: '#cdd6e0', h: 2, walk: false, foot: 0.7, special: 'fridge' },
   { kind: 'vending',  name: 'Máquina',  emoji: '🥤', cat: 'electro', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'vending' },
-  { kind: 'pc',       name: 'PC',       emoji: '💻', cat: 'electro', color: '#2a2a3a', h: 1, walk: false, foot: 0.6, special: 'tv' },
+  { kind: 'pc',       name: 'Portátil', emoji: '💻', cat: 'electro', color: '#3a3f4e', h: 1, walk: false, foot: 0.6, special: 'laptop' },
   // decoração
   { kind: 'cartaz',   name: 'Cartaz',   emoji: '🪧', cat: 'deco', color: '#16161f', h: 1, walk: false, foot: 0.7, special: 'sign' },
   { kind: 'quadro',   name: 'Quadro',   emoji: '🖼️', cat: 'deco', color: '#caa24a', h: 1, walk: false, foot: 0.6, special: 'frame' },
@@ -127,7 +126,7 @@ const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, 
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
-const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'counter', 'fridge', 'vending', 'jukebox', 'speaker', 'shelf', 'sign', 'table']);
+const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
