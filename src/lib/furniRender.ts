@@ -386,19 +386,27 @@ const drawLadder = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: s
   for (const z of [0.85, 0.5, 0.18]) { const l = P(-0.22, 0.08, z), r = P(0.22, 0.08, z); ctx.beginPath(); ctx.moveTo(l[0], l[1]); ctx.lineTo(r[0], r[1]); ctx.stroke(); }
 };
 
-// VIP rope post: chrome stanchion on a brass base with a gold ball cap and a velvet rope swag draped
-// to the neighbouring posts (along the local v-axis; rotate with dir to follow a carpet edge).
+// VIP cordon (3 tiles): three chrome stanchions joined by two draped velvet ropes. Rotates 4 ways so
+// it can line either carpet edge. Local frame spans u=-1..1; centred by the multi-tile shift.
 const drawRope = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _base: string, dir: number) => {
   void _a; void _base;
   const P = (u: number, v: number, z: number): number[] => { const [ru, rv] = rotUV(u, v, dir, 0, 0); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; };
-  const cap = P(0, 0, 0.95), base = P(0, 0, 0), a = P(0, -0.5, 0.7), b = P(0, 0.5, 0.7);
-  ctx.strokeStyle = hexA('#7a1020', 0.9); ctx.lineWidth = 3.5; ctx.lineCap = 'round';   // velvet swags
-  ctx.beginPath(); ctx.moveTo(cap[0], cap[1]); ctx.quadraticCurveTo((cap[0] + a[0]) / 2, Math.max(cap[1], a[1]) + 7, a[0], a[1]); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cap[0], cap[1]); ctx.quadraticCurveTo((cap[0] + b[0]) / 2, Math.max(cap[1], b[1]) + 7, b[0], b[1]); ctx.stroke();
-  ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.ellipse(base[0], base[1], 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();   // brass base
-  const g = ctx.createLinearGradient(base[0] - 3, 0, base[0] + 3, 0); g.addColorStop(0, '#8b93a3'); g.addColorStop(0.5, '#eef2f8'); g.addColorStop(1, '#8b93a3');
-  ctx.fillStyle = g; ctx.fillRect(base[0] - 2.5, cap[1], 5, base[1] - cap[1]);   // chrome post
-  ctx.fillStyle = '#e8c66a'; ctx.beginPath(); ctx.arc(cap[0], cap[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(cap[0] - 1.4, cap[1] - 1.4, 1.6, 0, Math.PI * 2); ctx.fill();
+  const us = [-1, 0, 1]; const ropeZ = 0.78;
+  // velvet ropes between consecutive poles (drawn first, behind the poles)
+  for (let i = 0; i < us.length - 1; i++) {
+    const a = P(us[i], 0, ropeZ), b = P(us[i + 1], 0, ropeZ), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2 + 11;
+    ctx.lineCap = 'round'; ctx.strokeStyle = hexA('#7a1020', 0.95); ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo(mx, my, b[0], b[1]); ctx.stroke();
+    ctx.strokeStyle = hexA('#d4435e', 0.7); ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo(mx, my - 1, b[0], b[1]); ctx.stroke();
+  }
+  // poles, back-to-front so they occlude the ropes correctly
+  for (const u of [...us].sort((p, q) => { const [au, av] = rotUV(p, 0, dir, 0, 0); const [bu, bv] = rotUV(q, 0, dir, 0, 0); return (au + av) - (bu + bv); })) {
+    const base = P(u, 0, 0), cap = P(u, 0, 0.98);
+    ctx.fillStyle = '#b8923f'; ctx.beginPath(); ctx.ellipse(base[0], base[1], 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();           // brass base
+    const g = ctx.createLinearGradient(base[0] - 3, 0, base[0] + 3, 0); g.addColorStop(0, '#888f9e'); g.addColorStop(0.5, '#f2f5fa'); g.addColorStop(1, '#888f9e');
+    ctx.fillStyle = g; ctx.fillRect(base[0] - 2.5, cap[1], 5, base[1] - cap[1]);                                                  // chrome post
+    ctx.fillStyle = '#e8c66a'; ctx.beginPath(); ctx.arc(cap[0], cap[1], 4.8, 0, Math.PI * 2); ctx.fill();                        // gold ball cap
+    ctx.fillStyle = 'rgba(255,255,255,0.65)'; ctx.beginPath(); ctx.arc(cap[0] - 1.5, cap[1] - 1.6, 1.7, 0, Math.PI * 2); ctx.fill();
+  }
 };
 
 // Hanging chandelier: chain to the ceiling, warm glowing tiered ring with crystal drops.

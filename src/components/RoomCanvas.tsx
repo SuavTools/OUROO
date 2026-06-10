@@ -70,9 +70,12 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
     ['banco_jd', 14, 26, 0], ['banco_jd', 19, 26, 0], ['banco_jd', 14, 14, 0], ['banco_jd', 19, 14, 0],
     // reception near the entrance
     ['rececao', 10, 25, 0],
-    // VIP velvet ropes lining the carpet
-    ['poste', 15, 13, 0], ['poste', 15, 16, 0], ['poste', 15, 19, 0], ['poste', 15, 22, 0], ['poste', 15, 25, 0], ['poste', 15, 28, 0],
-    ['poste', 19, 13, 0], ['poste', 19, 16, 0], ['poste', 19, 19, 0], ['poste', 19, 22, 0], ['poste', 19, 25, 0], ['poste', 19, 28, 0],
+    // VIP cordons (3 poles + 2 ropes each) lining both sides of the carpet
+    ['poste', 15, 13, 1], ['poste', 15, 16, 1], ['poste', 15, 19, 1], ['poste', 15, 22, 1], ['poste', 15, 25, 1],
+    ['poste', 19, 13, 1], ['poste', 19, 16, 1], ['poste', 19, 19, 1], ['poste', 19, 22, 1], ['poste', 19, 25, 1],
+    // bar lounge on the right + statues flanking the stage
+    ['bar', 23, 13, 1], ['banco', 22, 13, 0], ['banco', 22, 15, 0], ['vaso', 23, 16, 0],
+    ['estatua', 10, 9, 0], ['estatua', 23, 9, 0],
     // chandeliers overhead
     ['lustre', 13, 11, 0], ['lustre', 20, 11, 0], ['lustre', 12, 18, 0], ['lustre', 21, 18, 0], ['lustre', 16, 16, 0],
     // pool floats
@@ -93,6 +96,7 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
     { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10 },
     { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18 },
     { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20 },
+    { handle: 'Sandra', skinId: 'heart-dourado', gx: 24, gy: 13 },
   ],
 };
 
@@ -582,7 +586,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
       if (day) {   // soft sun glow + drifting clouds instead of dust motes
         ctx.save(); const sun = ctx.createRadialGradient(STAGE_W * 0.78, 120, 10, STAGE_W * 0.78, 120, 230); sun.addColorStop(0, 'rgba(255,250,224,0.9)'); sun.addColorStop(1, 'rgba(255,250,224,0)'); ctx.fillStyle = sun; ctx.fillRect(0, 0, STAGE_W, 360);
-        ctx.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 5; i++) { const cx = ((i * 320 + t * 0.25) % (STAGE_W + 240)) - 120, cy = 60 + (i % 3) * 46; ctx.beginPath(); ctx.ellipse(cx, cy, 60, 17, 0, 0, Math.PI * 2); ctx.ellipse(cx + 40, cy + 6, 44, 14, 0, 0, Math.PI * 2); ctx.ellipse(cx - 36, cy + 7, 38, 12, 0, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 5; i++) { const cx = ((i * 320 + t * 0.25) % (STAGE_W + 240)) - 120, cy = 60 + (i % 3) * 46; ctx.beginPath(); ctx.ellipse(cx, cy, 60, 17, 0, 0, Math.PI * 2); ctx.ellipse(cx + 40, cy + 6, 44, 14, 0, 0, Math.PI * 2); ctx.ellipse(cx - 36, cy + 7, 38, 12, 0, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,248,214,0.05)'; for (const bx of [STAGE_W * 0.34, STAGE_W * 0.62]) { ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx + 110, 0); ctx.lineTo(bx + 300, STAGE_H); ctx.lineTo(bx + 150, STAGE_H); ctx.closePath(); ctx.fill(); } ctx.restore();   // god-rays
       } else { ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore(); }
       ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· SALA PESSOAL ·' : theme.locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
@@ -636,6 +641,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           else if (mat === 2) { ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2c6e34'; for (let q = 0; q < 5; q++) { const gxp = b.sx + (q - 2) * 6, gyp = b.sy + ((q % 2) - 0.5) * 6; ctx.beginPath(); ctx.moveTo(gxp, gyp + 3); ctx.lineTo(gxp, gyp - 4); ctx.stroke(); } ctx.restore(); }   // grass blades
           ctx.strokeStyle = hexA(mat === 1 ? '#8a8475' : theme.accent, mat ? 0.16 : 0.10); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW, TH); ctx.stroke();
         }
+      }
+      // stage light show — animated coloured spotlights sweeping the dancefloor (Clube)
+      if (theme.slug === 'clube') {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 5; i++) { const ph = t * 0.022 + i * 1.4; const sgx = 16 + Math.sin(ph) * (3 + i * 0.9), sgy = 10.5 + Math.cos(ph * 0.7) * 1.6; const p = iso(sgx, sgy, 0); const hue = (t * 2 + i * 72) % 360; const rg = ctx.createRadialGradient(p.sx, p.sy, 2, p.sx, p.sy, 50); rg.addColorStop(0, `hsla(${hue},92%,62%,0.5)`); rg.addColorStop(1, `hsla(${hue},92%,62%,0)`); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(p.sx, p.sy, 50, 26, 0, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
       }
       const hv = hoverRef.current, ui = uiRef.current;
       if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
