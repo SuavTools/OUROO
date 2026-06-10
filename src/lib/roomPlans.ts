@@ -130,7 +130,20 @@ export const ROOM_PLANS: RoomPlan[] = [
   { id: 'enorme', name: 'Enorme', rows: full(18) },
   { id: 'pista', name: 'Pista', rows: octa(16, 5), spawn: [8, 8] },
   { id: 'clube', name: 'Clube', rows: clube(), spawn: [17, 31] },
+  { id: 'jardim', name: 'Jardim', rows: jardim(), spawn: [11, 19] },
 ];
+
+// Jardim Imperial — a Japanese garden: octagonal grass with a central koi pond and stone paths.
+function jardim(): string[] {
+  const n = 22, k = 6; const g: string[][] = [];
+  for (let y = 0; y < n; y++) { const row: string[] = []; for (let x = 0; x < n; x++) { const corner = (x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k); row.push(corner ? 'x' : 'g'); } g.push(row); }
+  const fill = (x0: number, x1: number, y0: number, y1: number, ch: string) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (g[y] && g[y][x] !== 'x') g[y][x] = ch; };
+  fill(8, 13, 8, 13, 'w');      // koi pond (centre)
+  fill(7, 14, 14, 15, 'm');     // stone terrace south of the pond
+  fill(10, 11, 14, 21, 'm');    // stone path to the entrance
+  fill(2, 19, 10, 11, 'm');     // an east–west stone walk
+  return g.map(r => r.join(''));
+}
 
 export const planById = (id?: string): RoomPlan => ROOM_PLANS.find(p => p.id === id) ?? ROOM_PLANS[0];
 

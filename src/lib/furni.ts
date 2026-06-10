@@ -92,6 +92,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'palmeira', name: 'Palmeira', emoji: '🌴', cat: 'plantas', color: '#7a5230', h: 3, walk: false, foot: 0.7, special: 'palm' },
   { kind: 'flores',   name: 'Flores',   emoji: '🌷', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
   { kind: 'topiary',  name: 'Topiária', emoji: '🌳', cat: 'plantas', color: '#2a8a44', h: 2, walk: false, foot: 0.7, special: 'topiary' },
+  { kind: 'sakura',   name: 'Sakura',   emoji: '🌸', cat: 'plantas', color: '#ff9ec7', h: 3, walk: false, foot: 0.9, special: 'svg' },
+  { kind: 'bonsai_lux', name: 'Bonsai Lux', emoji: '🎋', cat: 'plantas', color: '#2f9a4c', h: 1, walk: false, foot: 0.7, special: 'svg' },
   // luzes
   { kind: 'candeeiro',name: 'Candeeiro',emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'neon',     name: 'Néon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
@@ -118,6 +120,9 @@ export const FURNI: FurniDef[] = [
   { kind: 'pato',     name: 'Patinho',  emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4, special: 'duck' },
   { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4, special: 'cone' },
   { kind: 'estatua',  name: 'Estátua',  emoji: '🗿', cat: 'deco', color: '#9a9aa6', h: 2, walk: false, foot: 0.6, special: 'statue' },
+  { kind: 'torii',    name: 'Torii',    emoji: '⛩️', cat: 'deco', color: '#e8492f', h: 3, walk: true,  foot: 1, special: 'svg', span: [3, 1] },
+  { kind: 'pagoda',   name: 'Pagode',   emoji: '🏯', cat: 'deco', color: '#d8402a', h: 4, walk: false, foot: 0.8, special: 'svg' },
+  { kind: 'toro',     name: 'Lanterna Pedra', emoji: '🏮', cat: 'deco', color: '#b8b8b0', h: 2, walk: false, foot: 0.5, special: 'svg' },
   { kind: 'fonte',    name: 'Fonte',    emoji: '⛲', cat: 'deco', color: '#c8ccd4', h: 1, walk: false, foot: 0.9, special: 'fountain' },
   { kind: 'poste',    name: 'Cordão VIP',emoji: '🪢', cat: 'deco', color: '#caa24a', h: 0, walk: true,  foot: 0.3, special: 'rope', span: [3, 1] },
   { kind: 'boia',     name: 'Bóia',     emoji: '🛟', cat: 'deco', color: '#ff5a5a', h: 0, walk: true,  foot: 0.6, special: 'float' },

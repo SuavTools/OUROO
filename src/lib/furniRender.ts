@@ -5,6 +5,7 @@
 // `accent` = the room accent colour; `t` = frame counter for the few animated pieces.
 
 import { defOf } from './furni';
+import { hasSvg, drawSvgFurni } from './furniSvg';
 
 export const TILE_W = 64, TILE_H = 32, TW = TILE_W / 2, TH = TILE_H / 2, STACK_H = 26;
 
@@ -837,6 +838,13 @@ function getSprite(kind: string, accent: string, dir: number): HTMLCanvasElement
 // Public entry: cached blit for static pieces (with baked outline + shadow); live draw for animated ones.
 export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
+  // Hand-authored SVG art (with a soft contact shadow). Multi-tile pieces centre on their footprint.
+  if (hasSvg(kind)) {
+    let cx = sx, cy = sy; const [esw, esh] = effSpan(kind, dir);
+    if (esw !== 1 || esh !== 1) { const ocx = (esw - 1) / 2, ocy = (esh - 1) / 2; cx += (ocx - ocy) * TW; cy += (ocx + ocy) * TH; }
+    ctx.save(); ctx.globalAlpha = 0.24; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, cy, TW * (esw + esh) * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    if (drawSvgFurni(ctx, kind, cx, cy)) return;   // fall through to procedural only until the image loads
+  }
   if (ANIMATED.has(d.special ?? '')) {
     ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     drawRaw(ctx, kind, sx, sy, accent, t, dir); return;

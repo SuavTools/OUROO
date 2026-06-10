@@ -47,6 +47,7 @@ const ROOMS: RoomDef[] = [
   { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
   { slug: 'atrio',   name: 'Átrio',     accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
   { slug: 'clube',   name: 'Clube',     accent: '#1aa3d8', floor: '#2c4a5e', locked: true, plan: 'clube', day: true, veranda: true },
+  { slug: 'jardim',  name: 'Jardim',    accent: '#e8628f', floor: '#1d3a24', locked: true, plan: 'jardim', day: true },
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
@@ -107,6 +108,15 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['vaso', 8, 26, 0, 4], ['vaso', 25, 26, 0, 4],
     ['lanterna', 5, 9, 0, 4], ['lanterna', 9, 9, 0, 4], ['lanterna', 24, 9, 0, 4], ['lanterna', 28, 9, 0, 4],
   ],
+  jardim: [
+    // hand-painted SVG centrepieces: a pagoda, a torii gateway, sakura trees + stone lanterns
+    ['pagoda', 10, 5, 0],
+    ['torii', 9, 18, 0],
+    ['sakura', 4, 4, 0], ['sakura', 17, 4, 0], ['sakura', 4, 17, 0], ['sakura', 17, 17, 0],
+    ['toro', 8, 16, 0], ['toro', 13, 16, 0], ['toro', 7, 7, 0], ['toro', 14, 7, 0],
+    ['bonsai_lux', 8, 14, 0], ['bonsai_lux', 13, 14, 0],
+    ['flores', 5, 9, 0], ['flores', 16, 9, 0], ['flores', 6, 14, 0], ['flores', 15, 14, 0],
+  ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
   clube: [
@@ -119,6 +129,10 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
     { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, lines: ['A água está óptima 🌊', 'Vou mergulhar!', 'Que calor hoje 😎'] },
     { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20, lines: ['Que vista 😎', 'Relax total.', 'Só a curtir.'] },
     { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['O que vais querer? 🍹', 'Um sumo fresquinho?', 'Casa cheia hoje!', 'A próxima é por minha conta 😉'] },
+  ],
+  jardim: [
+    { handle: 'Mei', skinId: 'heart-rosa', gx: 9, gy: 6, roam: 2, lines: ['Konnichiwa! 🌸', 'Vê os koi 🐟', 'As sakuras estão a florir', 'Respira fundo 🌿'] },
+    { handle: 'Jardineiro', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, lines: ['Bem-vindo ao jardim', 'Silêncio e paz...', 'Cuidado com as flores 🌷'] },
   ],
 };
 
