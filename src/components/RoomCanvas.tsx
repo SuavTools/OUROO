@@ -12,10 +12,10 @@ import { getAuthIdentity } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
-import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable } from '@/lib/furni';
+import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } from '@/lib/furni';
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { resolveAppearance } from '@/lib/catalog';
-import { ownsFurni, buyFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
@@ -201,7 +201,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
     if (roomOf(room).locked && !modRef.current) { flashHint('Sala bloqueada'); return; }
-    if (!modRef.current && !ownsFurni(kind)) { flashHint('Compra primeiro ✦'); return; }
+    // Inventory: non-mods need stock (free basics are unlimited). Mods build freely (creative mode).
+    if (!modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Indisponível' : 'Sem stock — compra mais ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === deviceRef.current).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
@@ -209,6 +210,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const elev = defOf(kind).walk ? placeElevRef.current : 0;   // only walkable pieces float (decks/bridges)
     const [sw, sh] = effSpan(kind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
+    if (!modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
     const item: Item = { id, kind, gx, gy, dir, elev, createdBy: deviceRef.current };
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
@@ -222,13 +224,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
     channelRef.current?.send({ type: 'broadcast', event: 'rotate', payload: { id: hit.id, dir: hit.dir } });
-    // room_items has no UPDATE policy (only insert/delete), so persist by replacing the row (same id).
-    const enc = encodeKind(hit.kind, hit.dir, hit.elev || 0);
-    const sb = supabase; if (sb) (async () => { try { await sb.from('room_items').delete().eq('id', hit.id); await sb.from('room_items').insert({ id: hit.id, room, kind: enc, x: hit.gx, y: hit.gy, created_by: hit.createdBy }); } catch { /* ignore */ } })();
+    supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === deviceRef.current); });
     if (!hit) return;
+    returnFurni(hit.kind);   // pick it up into MY inventory (free basics: no-op)
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
     if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
     channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
@@ -478,7 +479,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       {(hint || placingKind || removeMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
-          {hint || (placingKind ? 'toca num tile · clica de novo para empilhar' : 'toca para remover')}
+          {hint || (placingKind ? 'toca num tile · clica de novo para empilhar' : 'toca para apanhar (volta ao teu inventário)')}
         </div>
       )}
 
@@ -517,30 +518,33 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Virar ${placeDir + 1}/4` : 'Rodar'}</span>
                 </button>
               ); })()}
-              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); }} title="Remover"
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); }} title="Apanhar"
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
-                <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Remover</span>
+                <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Apanhar</span>
               </button>
             </div>
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
             {removeMode ? (
-              <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Toca num objeto para o remover.</p>
+              <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Toca num objeto para o apanhar — volta ao teu inventário.</p>
             ) : rotateMode ? (
               <p className="text-[11px] text-center text-[#00cfff]/90 py-4 px-3">Toca num objeto para o rodar (assentos, TV, bar, frigorífico, máquinas…).</p>
             ) : (
               <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto p-2" style={{ maxHeight: '9.5rem' }}>
                 {FURNI.filter(f => f.cat === cat).map(f => {
-                  const owned = ownsFurni(f.kind) || isMod;
+                  const free = isFurniFree(f.kind);
+                  const n = furniCount(f.kind);          // Infinity for free basics
+                  const canPlace = isMod || n > 0;
                   const sel = placingKind === f.kind;
                   return (
                     <button key={f.kind} onClick={() => {
-                      if (!owned) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca para colocar' : (r.error || 'Sem Cristais')); return; }
+                      if (!canPlace) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca para colocar' : (r.error || 'Sem Cristais')); return; }
                       setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false);
-                    }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : owned ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
+                    }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : canPlace ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
                       <FurniSprite kind={f.kind} size={38} accent={roomOf(room).accent} />
                       <span className="text-[7px] uppercase tracking-wide leading-none text-center text-white/65 truncate w-full px-0.5">{f.name}</span>
-                      {!owned && <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-brandYellow bg-black/75 px-1 rounded">{CURRENCY_SYMBOL}{furniPrice(f.kind)}</span>}
+                      {!free && Number.isFinite(n) && n > 0 && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold text-white bg-black/75 px-1 rounded tabular-nums">×{n}</span>}
+                      {!canPlace && <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-brandYellow bg-black/75 px-1 rounded">{CURRENCY_SYMBOL}{furniPrice(f.kind)}</span>}
                       {sel && <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-brandYellow" />}
                     </button>
                   );

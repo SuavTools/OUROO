@@ -11,7 +11,7 @@ import { IconPreview } from '@/components/IconPreview';
 import { IconEditor } from '@/components/IconEditor';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
-import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, ownsFurni, removeIcon } from '@/lib/wallet';
+import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon } from '@/lib/wallet';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 
 type Tab = 'skins' | 'furni' | 'icons';
@@ -54,7 +54,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
 
   const ownedSkins = SKINS.filter(s => isSkinOwned(s, best, codeUnlocks, isMod)).length;
   const paidFurni = FURNI.filter(f => !isFurniFree(f.kind));
-  const ownedPaidFurni = paidFurni.filter(f => ownsFurni(f.kind)).length;
+  const ownedPaidFurni = paidFurni.filter(f => furniCount(f.kind) > 0).length;
 
   const TABS: { id: Tab; label: string; badge: string }[] = [
     { id: 'skins', label: 'Skins', badge: `${ownedSkins}/${SKINS.length}` },
@@ -150,20 +150,19 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
             <div className="grid grid-cols-3 gap-2">
               {FURNI.filter(f => f.cat === furniCat).map(f => {
                 const free = isFurniFree(f.kind);
-                const owned = ownsFurni(f.kind);
+                const n = furniCount(f.kind);
                 const price = furniPrice(f.kind);
                 return (
-                  <div key={f.kind} className="border border-white/10 p-2 flex flex-col items-center gap-1">
+                  <div key={f.kind} className="relative border border-white/10 p-2 flex flex-col items-center gap-1">
                     <FurniSprite kind={f.kind} size={42} accent="#00cfff" />
+                    {!free && n > 0 && <span className="absolute top-1 right-1 text-[9px] font-bold text-white bg-white/10 px-1 rounded tabular-nums">×{n}</span>}
                     <span className="text-[9px] uppercase tracking-wide text-white/70 text-center leading-tight">{f.name}</span>
                     {free ? (
                       <span className="text-[8px] uppercase tracking-widest text-white/35">incluído</span>
-                    ) : owned ? (
-                      <span className="text-[8px] uppercase tracking-widest text-[#1ED760]">✓ teu</span>
                     ) : (
                       <button onClick={() => doBuyFurni(f.kind)} disabled={wallet.balance < price}
                         className="text-[8px] uppercase tracking-wide px-2 py-0.5 bg-brandYellow/15 hover:bg-brandYellow/30 text-brandYellow disabled:opacity-40">
-                        {CURRENCY_SYMBOL}{price}
+                        {n > 0 ? `+1 ${CURRENCY_SYMBOL}${price}` : `${CURRENCY_SYMBOL}${price}`}
                       </button>
                     )}
                   </div>

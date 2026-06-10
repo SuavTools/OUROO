@@ -28,10 +28,18 @@ const WALLET_VERSION = 2;
 // `scoreCredited` is a high-water mark: the most Cristais ever GRANTED from your score basis. Spending
 // lowers `balance` but not this, so spent Cristais are never re-earned and reconnecting never double-
 // counts. The basis = sum of your BEST score per game (skill, not grind) — see getCristalScoreBasis.
-export type WalletData = { balance: number; skins: string[]; furni: string[]; icons: CustomIcon[]; scoreCredited: number; version: number };
+// `furni` is now a QUANTITY map { kind: count } (Habbo-style inventory): buying adds to the count,
+// placing a piece consumes one, picking one up returns one. (Older wallets stored a string[] of owned
+// kinds — that's normalised to {kind:1} on read.)
+export type WalletData = { balance: number; skins: string[]; furni: Record<string, number>; icons: CustomIcon[]; scoreCredited: number; version: number };
 
 const LS_KEY = 'ouroo_wallet';
-const empty = (): WalletData => ({ balance: 0, skins: [], furni: [], icons: [], scoreCredited: 0, version: WALLET_VERSION });
+const empty = (): WalletData => ({ balance: 0, skins: [], furni: {}, icons: [], scoreCredited: 0, version: WALLET_VERSION });
+const normFurni = (f: unknown): Record<string, number> => {
+  if (Array.isArray(f)) { const o: Record<string, number> = {}; for (const k of f) o[String(k)] = (o[String(k)] || 0) + 1; return o; }
+  if (f && typeof f === 'object') { const o: Record<string, number> = {}; for (const [k, v] of Object.entries(f as Record<string, unknown>)) { const n = Math.floor(Number(v) || 0); if (n > 0) o[k] = n; } return o; }
+  return {};
+};
 
 // ---- pub/sub so the UI (and the PRAÇA balance chip) refresh after any change ----
 const listeners = new Set<() => void>();
@@ -46,7 +54,7 @@ export function getWallet(): WalletData {
     if (!raw) return empty();
     const w = JSON.parse(raw) as Partial<WalletData>;
     const skins = Array.isArray(w.skins) ? w.skins.map(String) : [];
-    const furni = Array.isArray(w.furni) ? w.furni.map(String) : [];
+    const furni = normFurni(w.furni);
     const icons = Array.isArray(w.icons) ? (w.icons as CustomIcon[]) : [];
     // Earn-formula migration: keep what you OWN, but reset money so the new basis re-grants cleanly.
     if (Number(w.version) !== WALLET_VERSION) return { balance: 0, skins, furni, icons, scoreCredited: 0, version: WALLET_VERSION };
@@ -98,15 +106,28 @@ export function buySkin(id: string, price: number): { ok: boolean; error?: strin
   w.balance -= price; w.skins.push(id); save(w); return { ok: true };
 }
 
-// ---- furni (the first couple of each basic category are free; everything else must be bought) ----
-export function ownsFurni(kind: string): boolean { return isFurniFree(kind) || getWallet().furni.includes(kind); }
+// ---- furni inventory (quantity per kind; first couple of each basic category are free + unlimited) ----
+// How many of this kind you hold (free basics are unlimited → Infinity).
+export function furniCount(kind: string): number { return isFurniFree(kind) ? Infinity : (getWallet().furni[kind] || 0); }
+export function ownsFurni(kind: string): boolean { return furniCount(kind) > 0; }
+// Buy one more into the inventory (free basics need no buying).
 export function buyFurni(kind: string): { ok: boolean; error?: string } {
   if (isFurniFree(kind)) return { ok: true };
   const w = getWallet();
-  if (w.furni.includes(kind)) return { ok: true };
   const price = furniPrice(kind);
   if (w.balance < price) return { ok: false, error: 'Cristais insuficientes' };
-  w.balance -= price; w.furni.push(kind); save(w); return { ok: true };
+  w.balance -= price; w.furni[kind] = (w.furni[kind] || 0) + 1; save(w); return { ok: true };
+}
+// Consume one when placing (free basics are unlimited → never consumed). Returns false if out of stock.
+export function consumeFurni(kind: string): boolean {
+  if (isFurniFree(kind)) return true;
+  const w = getWallet(); const n = w.furni[kind] || 0; if (n < 1) return false;
+  if (n <= 1) delete w.furni[kind]; else w.furni[kind] = n - 1; save(w); return true;
+}
+// Return one to the inventory when picking a placed piece back up (free basics are not tracked).
+export function returnFurni(kind: string): void {
+  if (isFurniFree(kind)) return;
+  const w = getWallet(); w.furni[kind] = (w.furni[kind] || 0) + 1; save(w);
 }
 
 // ---- custom icons ----
@@ -169,7 +190,7 @@ export async function refreshWalletFromCloud(): Promise<void> {
     save({
       balance: Math.max(0, Math.floor(Number(data.balance) || 0)),
       skins: Array.isArray(d.skins) ? d.skins.map(String) : [],
-      furni: Array.isArray(d.furni) ? d.furni.map(String) : [],
+      furni: normFurni(d.furni),
       icons: Array.isArray(d.icons) ? (d.icons as CustomIcon[]) : [],
       scoreCredited: Math.max(0, Math.floor(Number(d.scoreCredited) || 0)),
       version: WALLET_VERSION,
