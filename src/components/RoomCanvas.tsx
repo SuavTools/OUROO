@@ -42,12 +42,12 @@ const ROOMS: RoomDef[] = [
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; createdBy?: string };
-// Direction is persisted inside the room_items `kind` text as `kind@dir` (no migration needed).
-const encodeKind = (kind: string, dir: number) => (dir ? `${kind}@${dir}` : kind);
-const decodeKind = (raw: string): { kind: string; dir: number } => { const i = raw.indexOf('@'); return i < 0 ? { kind: raw, dir: 0 } : { kind: raw.slice(0, i), dir: (Number(raw.slice(i + 1)) % 4 + 4) % 4 }; };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; bubble: string; bubbleLife: number; af: number };
-type Self = Avatar & { id: string; path: { gx: number; gy: number }[] };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string };
+// Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
+const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
+const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number };
+type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, Math.round(((n >> 16) & 255) * f)), g = Math.min(255, Math.round(((n >> 8) & 255) * f)), b = Math.min(255, Math.round((n & 255) * f)); return `rgb(${r},${g},${b})`; };
@@ -68,10 +68,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef(0);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
-  const selfRef = useRef<Self>({ id: '', handle: 'Convidado', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
+  const selfRef = useRef<Self>({ id: '', handle: 'Convidado', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, lvl: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
-  const heightRef = useRef<Float32Array>(new Float32Array(GRID * GRID));   // walkable height per tile
+  const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
   const framesRef = useRef(0);
@@ -94,6 +94,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placeDir, setPlaceDir] = useState(0);
   const placeDirRef = useRef(0);
   useEffect(() => { placeDirRef.current = placeDir; }, [placeDir]);
+  const [placeElev, setPlaceElev] = useState(0);   // lift (levels off the floor) for floating decks / bridges
+  const placeElevRef = useRef(0);
+  useEffect(() => { placeElevRef.current = placeElev; }, [placeElev]);
   const [decorOpen, setDecorOpen] = useState(false);
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
@@ -110,7 +113,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const equipAppearance = (id: string) => {
     const me = selfRef.current; me.skinId = id;
     const ap = resolveAppearance(id); me.icon = ap.kind === 'icon' ? ap.spec : null;
-    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) });
+    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
   };
 
   const pushFeed = (handle: string, text: string) => { const id = ++feedId.current; setFeed(f => [...f.slice(-5), { id, handle, text }]); setTimeout(() => setFeed(f => f.filter(m => m.id !== id)), 9000); };
@@ -122,41 +125,58 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const switchRoom = (slug: string) => {
     setShowRooms(false); if (slug === room) return;
-    const me = selfRef.current; me.fx = 5; me.fy = 5; me.tx = 5; me.ty = 5; me.z = 0; me.path = []; me.bubble = ''; me.bubbleLife = 0;
-    remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setDecorOpen(false);
+    const me = selfRef.current; me.fx = 5; me.fy = 5; me.tx = 5; me.ty = 5; me.z = 0; me.lvl = 0; me.path = []; me.bubble = ''; me.bubbleLife = 0;
+    remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
     setRoom(slug);
   };
 
   // recompute the heightmap (walkable height + solid mask) from items
+  // Layered heightmap: each tile holds a sorted list of WALKABLE surface levels. Floor pieces sit at
+  // elev 0 (cover the ground); floating pieces (elev>0) leave the ground exposed → a tunnel under +
+  // a deck above. Solids block the whole tile.
   const rebuildHeight = () => {
-    const H = heightRef.current, S = solidRef.current; H.fill(0); S.fill(0);
+    const surf = surfRef.current, S = solidRef.current; S.fill(0);
+    for (let i = 0; i < surf.length; i++) surf[i].length = 0;
+    const grounded = new Uint8Array(GRID * GRID);
     for (const it of itemsRef.current) {
-      const d = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0);
+      const d = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const elev = it.elev || 0; const sit = sitHeight(it.kind);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
         const k = key(gx, gy);
-        if (d.walk) { H[k] += d.h; continue; }
-        const sit = sitHeight(it.kind);   // seats: stand/sit ON them (walkable at sit height), not solid
-        if (sit != null) H[k] = Math.max(H[k], sit); else S[k] = 1;
+        if (d.walk) { surf[k].push(elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
+        else if (sit != null) { surf[k].push(elev + sit); if (elev <= 0.01) grounded[k] = 1; }
+        else S[k] = 1;
       }
     }
+    for (let k = 0; k < surf.length; k++) {
+      if (S[k]) { surf[k].length = 0; continue; }
+      if (!grounded[k]) surf[k].push(0);            // exposed floor (walk underneath floating decks)
+      surf[k].sort((a, b) => a - b);
+    }
   };
-  // BFS over tiles; step allowed if not solid and |Δheight| ≤ 1 (the climb rule).
-  const findPath = (sx: number, sy: number, tx: number, ty: number) => {
-    const H = heightRef.current, S = solidRef.current;
-    if (S[key(tx, ty)] || (sx === tx && sy === ty)) return [];
-    const prev = new Int16Array(GRID * GRID).fill(-1); const seen = new Uint8Array(GRID * GRID);
-    const q = [key(sx, sy)]; seen[key(sx, sy)] = 1;
+  // Level-aware BFS over (tile, surface) nodes: step to a neighbour surface within ±1 of the current
+  // level. From the ground you can't reach a high deck (gap>1) so you pass UNDER it; ramps/stairs add
+  // the intermediate surfaces to climb ON. Returns waypoints {gx,gy,z}.
+  const findPath = (sx: number, sy: number, slvl: number, tx: number, ty: number) => {
+    const surf = surfRef.current, S = solidRef.current; const tk = key(tx, ty);
+    if (S[tk] || !surf[tk].length || (sx === tx && sy === ty)) return [];
+    const id = (k: number, l: number) => `${k}:${l}`;
+    const start = { k: key(sx, sy), l: slvl }; const startId = id(start.k, start.l);
+    const prev = new Map<string, string>(); const info = new Map<string, { gx: number; gy: number; z: number }>();
+    const seen = new Set([startId]); const q: { k: number; l: number }[] = [start];
     const N = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     while (q.length) {
-      const cur = q.shift()!; const cx = cur % GRID, cy = (cur / GRID) | 0;
-      if (cx === tx && cy === ty) { const path: { gx: number; gy: number }[] = []; let c = cur; while (c !== key(sx, sy)) { path.unshift({ gx: c % GRID, gy: (c / GRID) | 0 }); c = prev[c]; } return path; }
+      const cur = q.shift()!; const cx = cur.k % GRID, cy = (cur.k / GRID) | 0; const cid = id(cur.k, cur.l);
+      if (cx === tx && cy === ty) { const path: { gx: number; gy: number; z: number }[] = []; let c = cid; while (c !== startId) { const inf = info.get(c); if (!inf) break; path.unshift(inf); c = prev.get(c)!; } return path; }
       for (const [dx, dy] of N) {
         const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
-        const nk = key(nx, ny); if (seen[nk] || S[nk]) continue;
-        if (Math.abs(H[nk] - H[cur]) > 1) continue;                         // can't step up/down >1
-        if (dx && dy && (S[key(cx + dx, cy)] && S[key(cx, cy + dy)])) continue; // no diagonal through a corner
-        seen[nk] = 1; prev[nk] = cur; q.push(nk);
+        const k2 = key(nx, ny); if (S[k2]) continue;
+        if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
+        for (const sz of surf[k2]) {
+          if (Math.abs(sz - cur.l) > 1.001) continue;
+          const i2 = id(k2, sz); if (seen.has(i2)) continue;
+          seen.add(i2); prev.set(i2, cid); info.set(i2, { gx: nx, gy: ny, z: sz }); q.push({ k: k2, l: sz });
+        }
       }
     }
     return null;
@@ -170,13 +190,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
     const dir = isRotatable(kind) ? placeDirRef.current : 0;
+    const elev = defOf(kind).walk ? placeElevRef.current : 0;   // only walkable pieces float (decks/bridges)
     const [sw, sh] = effSpan(kind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
-    const item: Item = { id, kind, gx, gy, dir, createdBy: selfRef.current.id };
+    const item: Item = { id, kind, gx, gy, dir, elev, createdBy: selfRef.current.id };
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
-    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, dir, by: item.createdBy } });
-    supabase?.from('room_items').insert({ id, room, kind: encodeKind(kind, dir), x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
+    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, dir, elev, by: item.createdBy } });
+    supabase?.from('room_items').insert({ id, room, kind: encodeKind(kind, dir, elev), x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => {
@@ -185,7 +206,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
     channelRef.current?.send({ type: 'broadcast', event: 'rotate', payload: { id: hit.id, dir: hit.dir } });
-    supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir) }).eq('id', hit.id).then(undefined, () => {});
+    supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
@@ -219,8 +240,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const k in state) {
         const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
         seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id);
-        if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: parseIcon(meta.icon), fx, fy, tx: fx, ty: fy, z: 0, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
-        else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.icon = parseIcon(meta.icon); }
+        const lvl = Number(meta.lvl) || 0;
+        if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: parseIcon(meta.icon), fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
+        else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.icon = parseIcon(meta.icon); r.lvl = lvl; }
       }
       for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
       setPopulation(remotesRef.current.size + 1);
@@ -230,9 +252,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       .on('broadcast', { event: 'pos' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
         const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
-        let r = remotesRef.current.get(id);
-        if (!r) { r = { handle: '…', skinId: 'diamond-gold', fx, fy, tx: fx, ty: fy, z: 0, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
-        else { r.tx = fx; r.ty = fy; }
+        const lvl = Number(pl.lvl) || 0; let r = remotesRef.current.get(id);
+        if (!r) { r = { handle: '…', skinId: 'diamond-gold', fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
+        else { r.tx = fx; r.ty = fy; r.lvl = lvl; }
       })
       .on('broadcast', { event: 'say' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
@@ -240,20 +262,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       })
       .on('broadcast', { event: 'place' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
-        itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, createdBy: String(pl.by ?? '') }); rebuildHeight();
+        itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, elev: Number(pl.elev) || 0, createdBy: String(pl.by ?? '') }); rebuildHeight();
       })
       .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
       .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           setConnected(true);
-          await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy });
+          await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl });
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
-          if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length); rebuildHeight(); }
+          if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length); rebuildHeight(); }
         }
       });
 
-    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, icon: m.icon ?? undefined, fx: m.fx, fy: m.fy }); } };
+    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, icon: m.icon ?? undefined, fx: m.fx, fy: m.fy, lvl: m.lvl }); } };
     document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume);
     return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); supabase?.removeChannel(ch); channelRef.current = null; };
   }, [room]);
@@ -263,28 +285,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D; if (!ctx) return;
     canvas.width = STAGE_W; canvas.height = STAGE_H;
-    const H = heightRef.current;
-    const tileZ = (fx: number, fy: number) => H[key(clampTile(fx), clampTile(fy))] || 0;
-
     const update = () => {
       framesRef.current++;
       const me = selfRef.current;
       let moving = false;
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
-        if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.path.shift(); }
+        if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
         else { const s = Math.min(WALK, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; }
       }
       if (!moving) me.af += 0.3;
-      me.z += (tileZ(me.fx, me.fy) - me.z) * 0.25;
+      const targetZ = me.path.length ? me.path[0].z : me.lvl;   // climb toward the next surface as we walk
+      me.z += (targetZ - me.z) * 0.25;
       if (me.bubbleLife > 0) me.bubbleLife--;
       const ch = channelRef.current;
       if (ch) {
-        if (moving && ++posAccum.current >= 7) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) } }); }
-        if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) } }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) }); }
+        if (moving && ++posAccum.current >= 7) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } }); }
+        if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl }); }
       }
       wasMovingRef.current = moving;
-      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.2; r.fy += (r.ty - r.fy) * 0.2; r.z += (tileZ(r.fx, r.fy) - r.z) * 0.25; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
+      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.2; r.fy += (r.ty - r.fy) * 0.2; r.z += (r.lvl - r.z) * 0.25; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
     };
 
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
@@ -337,12 +357,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const hv = hoverRef.current, ui = uiRef.current;
       if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode) && hv) { const { sx, sy } = iso(hv.gx, hv.gy); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
 
-      // depth-sorted furni + avatars
-      const stack = new Map<string, number>();
+      // support posts under a floating deck (so it reads as a bridge)
+      const drawSupports = (it: Item, z: number, sw: number, sh: number) => {
+        ctx.fillStyle = 'rgba(18,18,26,0.55)';
+        for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) { const { sx, sy } = iso(it.gx + du, it.gy + dv, 0); ctx.fillRect(sx - 2.5, sy - z * STACK_H, 5, z * STACK_H); }
+      };
+      // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
-      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); stack.set(k, gz + (dd.h || 0)); const ii = it, z = gz; ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + z * 0.01, draw: () => { const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
-      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.01 + 0.005, draw: () => drawAvatar(selfRef.current, true) });
-      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.01 + 0.005, draw: () => drawAvatar(rr, false) }); }
+      for (const it of itemsRef.current) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, z = it.elev || 0; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (z > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
+      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01, draw: () => drawAvatar(selfRef.current, true) });
+      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01, draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);
@@ -362,7 +386,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
-    const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), gx, gy); if (p && p.length) me.path = p;
+    const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
   const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy, raw } = evtTile(e); hoverRef.current = (raw.gx < -0.5 || raw.gx > GRID - 0.5 || raw.gy < -0.5 || raw.gy > GRID - 0.5) ? null : { gx, gy }; };
 
@@ -394,10 +418,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {decorOpen && !locked && (
         <div className="absolute z-40 left-1/2 -translate-x-1/2 w-full max-w-2xl px-2 sm:px-3" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 52px)' }}>
           <div className="bg-black/85 backdrop-blur-md border border-white/15 rounded-xl overflow-hidden shadow-2xl">
-            {/* header: count + balance */}
-            <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50">{isMod ? 'moderador · sem limite' : `objetos ${myCount}/${PLACE_CAP}`}</span>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-brandYellow">{CURRENCY_SYMBOL} {wallet.balance.toLocaleString('pt-PT')}</span>
+            {/* header: count + altura (for floating decks) + balance */}
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderador' : `objetos ${myCount}/${PLACE_CAP}`}</span>
+              {placingKind && defOf(placingKind).walk && (
+                <span className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[#00cfff]">
+                  Altura
+                  <button onClick={() => setPlaceElev(e => Math.max(0, e - 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▼</button>
+                  <span className="w-3 text-center text-white">{placeElev}</span>
+                  <button onClick={() => setPlaceElev(e => Math.min(6, e + 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▲</button>
+                </span>
+              )}
+              <span className="text-[10px] font-mono uppercase tracking-widest text-brandYellow shrink-0">{CURRENCY_SYMBOL} {wallet.balance.toLocaleString('pt-PT')}</span>
             </div>
             {/* category rail (self-drawn icons, no emojis) */}
             <div className="flex gap-0.5 overflow-x-auto px-2 py-1.5 border-b border-white/10">
