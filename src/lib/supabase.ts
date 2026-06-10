@@ -23,6 +23,8 @@ export const supabase: SupabaseClient | null =
           // to lose across the mobile OAuth redirect (which was leaving sessions un-detected).
           flowType: 'implicit',
         },
+        // Headroom for live room movement broadcasts (default is 10/s, which the room can exceed).
+        realtime: { params: { eventsPerSecond: 20 } },
       })
     : null;
 

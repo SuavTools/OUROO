@@ -135,26 +135,32 @@ async function deviceToken(): Promise<string> {
   return auth?.device ?? getLocalPlayer().device;
 }
 
+// If the `wallets` table isn't deployed (404 / 42P01), stop hitting the cloud — wallet stays local.
+let cloudOff = false;
+const markCloud = (error: { code?: string; message?: string } | null) => { if (error && (error.code === '42P01' || /not exist|not find the table|schema cache/i.test(error.message || ''))) cloudOff = true; };
+
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 async function pushWallet(w: WalletData) {
-  if (!supabase) return;
+  if (!supabase || cloudOff) return;
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(async () => {
     try {
       const device = await deviceToken();
       if (!device) return;
-      await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons, scoreCredited: w.scoreCredited, version: WALLET_VERSION } }, { onConflict: 'device_token' });
-    } catch { /* table may not exist yet — ignore */ }
+      const { error } = await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons, scoreCredited: w.scoreCredited, version: WALLET_VERSION } }, { onConflict: 'device_token' });
+      markCloud(error);
+    } catch { /* ignore */ }
   }, 600);
 }
 
 // Pull the cloud snapshot; adopt it only when the local wallet is still fresh (nothing to lose).
 export async function refreshWalletFromCloud(): Promise<void> {
-  if (!supabase) return;
+  if (!supabase || cloudOff) return;
   try {
     const device = await deviceToken();
     if (!device) return;
-    const { data } = await supabase.from('wallets').select('balance, data').eq('device_token', device).maybeSingle();
+    const { data, error } = await supabase.from('wallets').select('balance, data').eq('device_token', device).maybeSingle();
+    if (error) { markCloud(error); return; }
     if (!data) return;
     const local = getWallet();
     if (!isFresh(local)) return;

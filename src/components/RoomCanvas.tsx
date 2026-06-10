@@ -255,8 +255,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
       setPopulation(remotesRef.current.size + 1);
-      // roster changed → announce my position+name so everyone (incl. fresh joiners) renders me live
-      channelRef.current?.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } });
     };
 
     ch.on('presence', { event: 'sync' }, rebuild)
@@ -289,7 +287,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           setConnected(true);
           const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;   // ensure the real name is tracked, not a race-stale placeholder
           await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl });
-          ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl } });
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
           if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
         }
@@ -324,7 +321,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const ch = channelRef.current;
       if (ch) {
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
-        if (moving && ++posAccum.current >= 5) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
+        if (moving && ++posAccum.current >= 8) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl }); }
       }
       wasMovingRef.current = moving;
