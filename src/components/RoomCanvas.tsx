@@ -68,6 +68,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef(0);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
+  const joinedRef = useRef(false);   // true only while the channel is actually SUBSCRIBED — never send otherwise (avoids REST-fallback floods)
   const selfRef = useRef<Self>({ id: '', handle: 'Convidado', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, lvl: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
@@ -244,7 +245,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     const rebuild = () => {
       const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
-      if (typeof console !== 'undefined') console.log('[praça] presence sync — keys:', Object.keys(state).length, 'me:', me.id);
       const seen = new Set<string>([me.id]);
       for (const k in state) {
         const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
@@ -258,8 +258,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     ch.on('presence', { event: 'sync' }, rebuild)
-      .on('presence', { event: 'join' }, rebuild)
-      .on('presence', { event: 'leave' }, rebuild)
       .on('broadcast', { event: 'pos' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
         const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
@@ -282,6 +280,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       .subscribe(async status => {
         if (typeof console !== 'undefined') console.log('[praça] channel status:', status, 'room:', room);
         setRtStatus(String(status));
+        joinedRef.current = status === 'SUBSCRIBED';
         if (status !== 'SUBSCRIBED') setConnected(false);
         if (status === 'SUBSCRIBED') {
           setConnected(true);
@@ -297,7 +296,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // others see a frozen ghost until Supabase's heartbeat times out (tens of seconds).
     const onLeave = () => { try { channelRef.current?.untrack(); } catch { /* ignore */ } };
     document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume); window.addEventListener('pagehide', onLeave);
-    return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); supabase?.removeChannel(ch); channelRef.current = null; };
+    return () => { setConnected(false); joinedRef.current = false; document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); supabase?.removeChannel(ch); channelRef.current = null; };
   }, [room, entered]);
 
   // ---- main loop ----
@@ -319,7 +318,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       me.z += (targetZ - me.z) * 0.25;
       if (me.bubbleLife > 0) me.bubbleLife--;
       const ch = channelRef.current;
-      if (ch) {
+      if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
         if (moving && ++posAccum.current >= 8) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl }); }
