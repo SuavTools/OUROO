@@ -19,7 +19,7 @@ import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
-import { type RoomRow, fetchRooms, createRoom } from '@/lib/rooms';
+import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom } from '@/lib/rooms';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -95,12 +95,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const roomMetaRef = useRef<RoomDef>(roomMeta);
   const [showRooms, setShowRooms] = useState(false);
   const [personalRooms, setPersonalRooms] = useState<RoomRow[]>([]);
+  const [myRooms, setMyRooms] = useState<RoomRow[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
+  const [newRoomPrivate, setNewRoomPrivate] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
   const [myOwnerId, setMyOwnerId] = useState('');
   const ownerIdRef = useRef('');
   const themeRef = useRef<RoomDef>(roomMeta);
   useEffect(() => { themeRef.current = roomMeta; roomMetaRef.current = roomMeta; }, [roomMeta]);
-  useEffect(() => { if (showRooms) fetchRooms().then(setPersonalRooms); }, [showRooms]);
+  const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); };
+  useEffect(() => { if (showRooms) refreshRoomLists(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showRooms]);
   // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
   useEffect(() => {
     const el = outerRef.current; if (!el) return;
@@ -163,9 +167,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
-    const res = await createRoom(newRoomName);
+    const res = await createRoom(newRoomName, !newRoomPrivate);
     if (!res.ok) { flashHint(res.error || 'Erro ao criar sala'); return; }
-    setNewRoomName(''); switchRoom(roomDefOf(res.room));
+    setNewRoomName(''); flashHint(`Sala criada · código ${res.room.code}`); switchRoom(roomDefOf(res.room));
+  };
+  const doJoinByCode = async () => {
+    const r = await roomByCode(joinCode);
+    if (!r) { flashHint('Sala não encontrada'); return; }
+    setJoinCode(''); switchRoom(roomDefOf(r));
+  };
+  const doDeleteRoom = async (r: RoomRow) => {
+    if (!confirm(`Apagar "${r.name}"? Os móveis dela vão-se.`)) return;
+    const ok = await deleteRoom(r.slug);
+    if (!ok) { flashHint('Erro ao apagar'); return; }
+    if (room === r.slug) switchRoom(roomOf('praca'));
+    refreshRoomLists();
   };
 
   // recompute the heightmap (walkable height + solid mask) from items
@@ -582,8 +598,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
 
       {showRooms && (() => {
-        const mine = personalRooms.filter(r => r.owner === myOwnerId);
-        const community = personalRooms.filter(r => r.owner !== myOwnerId);
+        const myKeys = new Set(myRooms.map(r => r.slug));
+        const community = personalRooms.filter(r => r.owner !== myOwnerId && !myKeys.has(r.slug));
         const roomBtn = (d: RoomDef, tag?: string) => (
           <button key={d.slug} onClick={() => switchRoom(d)} className={`flex items-center gap-3 p-3 border transition-colors ${d.slug === room ? 'border-white bg-white/5' : 'border-white/15 hover:border-white/40'}`}>
             <span className="w-4 h-4 rounded-full shrink-0" style={{ background: d.accent, boxShadow: `0 0 10px ${d.accent}` }} />
@@ -592,15 +608,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <span className="ml-auto text-[10px] uppercase tracking-widest text-white/40">{d.slug === room ? 'aqui' : tag || ''}</span>
           </button>
         );
+        const copyCode = (c: string) => { try { navigator.clipboard?.writeText(c); flashHint(`Código ${c} copiado`); } catch { /* ignore */ } };
         return (
           <div className="absolute inset-0 z-50 bg-black/80 flex justify-center overflow-y-auto px-6 py-10" onClick={() => setShowRooms(false)}>
             <div className="w-full max-w-sm bg-black border border-white/15 p-5 h-fit" onClick={e => e.stopPropagation()}>
               <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Salas oficiais</p>
               <div className="flex flex-col gap-2">{ROOMS.map(r => roomBtn(r))}</div>
 
-              {mine.length > 0 && (<>
+              {myRooms.length > 0 && (<>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">As tuas salas</p>
-                <div className="flex flex-col gap-2">{mine.map(r => roomBtn(roomDefOf(r), 'tua'))}</div>
+                <div className="flex flex-col gap-2">{myRooms.map(r => (
+                  <div key={r.slug} className={`flex items-center gap-2 p-3 border ${r.slug === room ? 'border-white bg-white/5' : 'border-white/15'}`}>
+                    <button onClick={() => switchRoom(roomDefOf(r))} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      <span className="w-4 h-4 rounded-full shrink-0" style={{ background: r.accent, boxShadow: `0 0 10px ${r.accent}` }} />
+                      <span className="font-bold text-white truncate">{r.name}</span>
+                      {!r.public && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒 privada</span>}
+                    </button>
+                    {r.code && <button onClick={() => copyCode(r.code)} title="Copiar código de convite" className="text-[11px] font-mono tracking-widest text-[#00cfff] border border-[#00cfff]/30 px-2 py-1 hover:bg-[#00cfff]/10">{r.code}</button>}
+                    <button onClick={() => doDeleteRoom(r)} title="Apagar sala" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
+                  </div>
+                ))}</div>
               </>)}
 
               {community.length > 0 && (<>
@@ -608,13 +635,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{community.map(r => roomBtn(roomDefOf(r)))}</div>
               </>)}
 
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Entrar com código</p>
+              <div className="flex gap-2">
+                <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="CÓDIGO" onKeyDown={e => { if (e.key === 'Enter') doJoinByCode(); }}
+                  className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm tracking-[0.3em] font-mono outline-none focus:border-[#00cfff]" />
+                <button onClick={doJoinByCode} className="bg-white/10 text-white font-bold uppercase text-xs tracking-widest px-4 hover:bg-white hover:text-black transition-colors active:scale-95">Entrar</button>
+              </div>
+
               <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Cria a tua sala</p>
               <div className="flex gap-2">
                 <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} maxLength={24} placeholder="Nome da sala"
                   className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff]" />
                 <button onClick={doCreateRoom} className="bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Criar</button>
               </div>
-              <p className="text-[10px] text-white/35 mt-2">A tua sala é tua para decorar. Outros podem visitar mas só tu (e mods) constroem nela.</p>
+              <label className="flex items-center gap-2 mt-2 text-[11px] text-white/55 cursor-pointer">
+                <input type="checkbox" checked={newRoomPrivate} onChange={e => setNewRoomPrivate(e.target.checked)} className="accent-[#00cfff]" />
+                Privada — só por código (não aparece na lista)
+              </label>
+              <p className="text-[10px] text-white/35 mt-2">A tua sala é tua para decorar. Partilha o <span className="text-[#00cfff]">código</span> para convidar — só tu (e mods) constroem nela.</p>
             </div>
           </div>
         );

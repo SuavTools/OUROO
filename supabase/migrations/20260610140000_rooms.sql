@@ -8,11 +8,13 @@ create table if not exists public.rooms (
   owner      text not null,                     -- owner id: discord:<id> if signed in, else device token
   accent     text not null default '#00cfff',
   floor      text not null default '#161628',
-  public     boolean not null default true,     -- listed for everyone vs invite-only (join by slug)
+  public     boolean not null default true,     -- listed for everyone vs invite-only (join by code)
+  code       text,                               -- short shareable invite code
   created_at timestamptz not null default now()
 );
 
 create index if not exists rooms_owner_idx on public.rooms (owner);
+create index if not exists rooms_code_idx on public.rooms (code);
 
 alter table public.rooms enable row level security;
 
