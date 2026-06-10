@@ -37,6 +37,10 @@ export async function createRoom(name: string, isPublic = true): Promise<{ ok: t
   const rnd = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}${Math.random()}`).replace(/[^a-z0-9]/gi, '').slice(0, 12);
   const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'A Minha Sala', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic };
   const { error } = await supabase.from('rooms').insert(room);
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    const m = error.message || '';
+    if (/schema cache|does not exist|not find the table|relation .* does not exist/i.test(m)) return { ok: false, error: 'Salas ainda não ativadas no servidor 🛠️' };
+    return { ok: false, error: m };
+  }
   return { ok: true, room };
 }
