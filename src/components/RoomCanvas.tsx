@@ -464,7 +464,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             {removeMode ? (
               <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Toca num objeto para o remover.</p>
             ) : rotateMode ? (
-              <p className="text-[11px] text-center text-[#00cfff]/90 py-4 px-3">Toca num assento para o rodar (cadeira · sofá · poltrona · trono).</p>
+              <p className="text-[11px] text-center text-[#00cfff]/90 py-4 px-3">Toca num objeto para o rodar (assentos, TV, bar, frigorífico, máquinas…).</p>
             ) : (
               <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto p-2" style={{ maxHeight: '9.5rem' }}>
                 {FURNI.filter(f => f.cat === cat).map(f => {
