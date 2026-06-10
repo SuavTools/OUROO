@@ -238,65 +238,73 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
     if (!supabase || !entered) return;   // wait for the lobby "Entrar" so the join is deliberate + clean
+    const sb = supabase;
     const me = selfRef.current;
     remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false);
-    const ch = supabase.channel(`room:${room}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
-    channelRef.current = ch;
+    let alive = true; let rejoinTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const rebuild = () => {
-      const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
-      const seen = new Set<string>([me.id]);
-      for (const k in state) {
-        const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
-        seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id);
-        const lvl = Number(meta.lvl) || 0;
-        if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: parseIcon(meta.icon), fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
-        else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.icon = parseIcon(meta.icon); r.lvl = lvl; }
-      }
-      for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
-      setPopulation(remotesRef.current.size + 1);
-    };
-
-    ch.on('presence', { event: 'sync' }, rebuild)
-      .on('broadcast', { event: 'pos' }, ({ payload }) => {
-        const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
-        const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
-        const lvl = Number(pl.lvl) || 0; const h = pl.h != null ? String(pl.h) : null; const s = pl.s != null ? String(pl.s) : null; const ic = parseIcon(pl.icon);
-        let r = remotesRef.current.get(id);
-        // Movement carries name/skin too, so a moving player is fully visible even if presence is flaky.
-        if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
-        else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; }
-      })
-      .on('broadcast', { event: 'say' }, ({ payload }) => {
-        const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
-        if (!id || id === me.id || !text) return; const r = remotesRef.current.get(id); if (r) { r.bubble = text; r.bubbleLife = BUBBLE_FRAMES; } pushFeed(r?.handle ?? '???', text);
-      })
-      .on('broadcast', { event: 'place' }, ({ payload }) => {
-        const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
-        itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, elev: Number(pl.elev) || 0, createdBy: String(pl.by ?? '') }); rebuildHeight();
-      })
-      .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
-      .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
-      .subscribe(async status => {
-        if (typeof console !== 'undefined') console.log('[praça] channel status:', status, 'room:', room);
-        setRtStatus(String(status));
-        joinedRef.current = status === 'SUBSCRIBED';
-        if (status !== 'SUBSCRIBED') setConnected(false);
-        if (status === 'SUBSCRIBED') {
-          setConnected(true);
-          const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;   // ensure the real name is tracked, not a race-stale placeholder
-          await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl });
-          const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
-          if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
+    // (Re)create + subscribe the room channel. Auto-rejoins itself if the socket/channel drops.
+    const connect = () => {
+      if (!alive) return;
+      const ch = sb.channel(`room:${room}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
+      channelRef.current = ch;
+      const rebuild = () => {
+        const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
+        const seen = new Set<string>([me.id]);
+        for (const k in state) {
+          const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
+          seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id); const lvl = Number(meta.lvl) || 0;
+          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
+          else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; }
         }
-      });
+        for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
+        setPopulation(remotesRef.current.size + 1);
+      };
+      ch.on('presence', { event: 'sync' }, rebuild)
+        .on('broadcast', { event: 'pos' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
+          const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
+          const lvl = Number(pl.lvl) || 0; const h = pl.h != null ? String(pl.h) : null; const s = pl.s != null ? String(pl.s) : null; const ic = parseIcon(pl.icon);
+          let r = remotesRef.current.get(id);
+          if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
+          else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; }
+        })
+        .on('broadcast', { event: 'say' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
+          if (!id || id === me.id || !text) return; const r = remotesRef.current.get(id); if (r) { r.bubble = text; r.bubbleLife = BUBBLE_FRAMES; } pushFeed(r?.handle ?? '???', text);
+        })
+        .on('broadcast', { event: 'place' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
+          itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, elev: Number(pl.elev) || 0, createdBy: String(pl.by ?? '') }); rebuildHeight();
+        })
+        .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
+        .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
+        .subscribe(async status => {
+          if (!alive) return;
+          if (typeof console !== 'undefined') console.log('[praça] channel status:', status);
+          setRtStatus(String(status));
+          joinedRef.current = status === 'SUBSCRIBED';
+          if (status === 'SUBSCRIBED') {
+            setConnected(true);
+            const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
+            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl });   // small payload only — no nested objects
+            const { data } = await sb.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
+            if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
+          } else {
+            setConnected(false);
+            if (alive && (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')) {   // self-heal: rebuild the channel
+              if (rejoinTimer) clearTimeout(rejoinTimer);
+              rejoinTimer = setTimeout(() => { try { sb.removeChannel(ch); } catch { /* ignore */ } connect(); }, 2000);
+            }
+          }
+        });
+    };
+    connect();
 
-    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, icon: m.icon ?? undefined, fx: m.fx, fy: m.fy, lvl: m.lvl }); } };
-    // Tab close / app quit / navigation don't unmount React, so drop presence immediately here, else
-    // others see a frozen ghost until Supabase's heartbeat times out (tens of seconds).
+    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl }); } };
     const onLeave = () => { try { channelRef.current?.untrack(); } catch { /* ignore */ } };
     document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume); window.addEventListener('pagehide', onLeave);
-    return () => { setConnected(false); joinedRef.current = false; document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); supabase?.removeChannel(ch); channelRef.current = null; };
+    return () => { alive = false; if (rejoinTimer) clearTimeout(rejoinTimer); setConnected(false); joinedRef.current = false; document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); try { if (channelRef.current) sb.removeChannel(channelRef.current); } catch { /* ignore */ } channelRef.current = null; };
   }, [room, entered]);
 
   // ---- main loop ----
