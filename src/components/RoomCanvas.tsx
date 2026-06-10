@@ -102,7 +102,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { placeElevRef.current = placeElev; }, [placeElev]);
   const [decorOpen, setDecorOpen] = useState(false);
   const [entered, setEntered] = useState(false);   // lobby gate — connect to the room only on deliberate entry
-  const [rtStatus, setRtStatus] = useState('—');   // realtime channel status (diagnostic)
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -227,7 +226,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => {
     const lp = getLocalPlayer();
     deviceRef.current = lp.device || `guest_${Math.floor(Math.random() * 1e9)}`;
-    if (!sessionRef.current) sessionRef.current = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`).slice(0, 8);
+    if (!sessionRef.current) {
+      // Per-TAB id (sessionStorage): survives a refresh (same id → presence replaces, no ghost duplicate)
+      // but differs between tabs/windows (no collision). Falls back to a fresh id if storage is blocked.
+      let s = ''; try { s = sessionStorage.getItem('ouroo_sess') || ''; } catch { /* ignore */ }
+      if (!s) { s = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`).slice(0, 8); try { sessionStorage.setItem('ouroo_sess', s); } catch { /* ignore */ } }
+      sessionRef.current = s;
+    }
     // Presence/broadcast id is UNIQUE per session so two tabs/accounts never collide; ownership uses the stable device.
     selfRef.current.id = `${deviceRef.current}::${sessionRef.current}`;
     selfRef.current.handle = lp.handle || 'Convidado';
@@ -281,8 +286,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .subscribe(async status => {
           if (!alive) return;
-          if (typeof console !== 'undefined') console.log('[praça] channel status:', status);
-          setRtStatus(String(status));
           joinedRef.current = status === 'SUBSCRIBED';
           if (status === 'SUBSCRIBED') {
             setConnected(true);
@@ -449,7 +452,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomOf(room).name}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{supabaseReady ? (connected ? `${population} ${population === 1 ? 'pessoa' : 'pessoas'}` : 'a ligar…') : 'offline'}</p>
-        <p className="text-[9px] font-mono tracking-wider text-white/30 mt-0.5">rt: {rtStatus}</p>
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
