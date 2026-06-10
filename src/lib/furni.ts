@@ -126,6 +126,10 @@ const CAT_INDEX: Record<string, number> = (() => {
 const SEAT_SIT: Record<string, number> = { chair: 0.55, sofa: 0.5, stool: 0.6, throne: 0.72, puff: 0.42, armchair: 0.5, couch: 0.5, couch_hc: 0.5 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
+// Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
+const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne']);
+export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
+
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
 export const isFurniPremium = (kind: string): boolean => Boolean(catOf(defOf(kind).cat)?.premium);
 // Free + owned by default: the first couple of each basic category.

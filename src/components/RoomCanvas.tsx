@@ -12,7 +12,7 @@ import { getAuthIdentity } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
-import { CATS, FURNI, defOf, furniPrice, sitHeight } from '@/lib/furni';
+import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable } from '@/lib/furni';
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { resolveAppearance } from '@/lib/catalog';
 import { ownsFurni, buyFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
@@ -42,7 +42,10 @@ const ROOMS: RoomDef[] = [
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
-type Item = { id: string; kind: string; gx: number; gy: number; createdBy?: string };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; createdBy?: string };
+// Direction is persisted inside the room_items `kind` text as `kind@dir` (no migration needed).
+const encodeKind = (kind: string, dir: number) => (dir ? `${kind}@${dir}` : kind);
+const decodeKind = (raw: string): { kind: string; dir: number } => { const i = raw.indexOf('@'); return i < 0 ? { kind: raw, dir: 0 } : { kind: raw.slice(0, i), dir: (Number(raw.slice(i + 1)) % 4 + 4) % 4 }; };
 type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; bubble: string; bubbleLife: number; af: number };
 type Self = Avatar & { id: string; path: { gx: number; gy: number }[] };
 
@@ -87,10 +90,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { themeRef.current = roomOf(room); }, [room]);
   const [placingKind, setPlacingKind] = useState<string | null>(null);
   const [removeMode, setRemoveMode] = useState(false);
+  const [rotateMode, setRotateMode] = useState(false);
+  const [placeDir, setPlaceDir] = useState(0);
+  const placeDirRef = useRef(0);
+  useEffect(() => { placeDirRef.current = placeDir; }, [placeDir]);
   const [decorOpen, setDecorOpen] = useState(false);
   const [cat, setCat] = useState('tier1');
-  const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false });
-  useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode }; }, [decorOpen, placingKind, removeMode]);
+  const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
+  useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
   const [isMod, setIsMod] = useState(false);
   const [myCount, setMyCount] = useState(0);
   const [hint, setHint] = useState('');
@@ -116,7 +123,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const switchRoom = (slug: string) => {
     setShowRooms(false); if (slug === room) return;
     const me = selfRef.current; me.fx = 5; me.fy = 5; me.tx = 5; me.ty = 5; me.z = 0; me.path = []; me.bubble = ''; me.bubbleLife = 0;
-    remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setDecorOpen(false);
+    remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setDecorOpen(false);
     setRoom(slug);
   };
 
@@ -165,10 +172,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const [sw, sh] = defOf(kind).span ?? [1, 1];
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
-    const item: Item = { id, kind, gx, gy, createdBy: selfRef.current.id };
+    const dir = isRotatable(kind) ? placeDirRef.current : 0;
+    const item: Item = { id, kind, gx, gy, dir, createdBy: selfRef.current.id };
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
-    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, by: item.createdBy } });
-    supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
+    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, dir, by: item.createdBy } });
+    supabase?.from('room_items').insert({ id, room, kind: encodeKind(kind, dir), x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
+  };
+  // Rotate the top item on a tile (own items / mods) one 90° step.
+  const rotateAt = (gx: number, gy: number) => {
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = defOf(i.kind).span ?? [1, 1]; return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
+    if (!hit) return;
+    if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
+    hit.dir = ((hit.dir ?? 0) + 1) % 4;
+    channelRef.current?.send({ type: 'broadcast', event: 'rotate', payload: { id: hit.id, dir: hit.dir } });
+    supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir) }).eq('id', hit.id).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = defOf(i.kind).span ?? [1, 1]; return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
@@ -223,15 +240,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       })
       .on('broadcast', { event: 'place' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
-        itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), createdBy: String(pl.by ?? '') }); rebuildHeight();
+        itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, createdBy: String(pl.by ?? '') }); rebuildHeight();
       })
+      .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
       .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           setConnected(true);
           await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy });
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
-          if (data) { itemsRef.current = data.map(d => ({ id: String(d.id), kind: String(d.kind), gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') })); setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length); rebuildHeight(); }
+          if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length); rebuildHeight(); }
         }
       });
 
@@ -317,12 +335,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.strokeStyle = hexA(theme.accent, 0.10); ctx.lineWidth = 1; ctx.stroke();
       }
       const hv = hoverRef.current, ui = uiRef.current;
-      if (ui.decorOpen && (ui.placingKind || ui.removeMode) && hv) { const { sx, sy } = iso(hv.gx, hv.gy); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode) && hv) { const { sx, sy } = iso(hv.gx, hv.gy); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
 
       // depth-sorted furni + avatars
       const stack = new Map<string, number>();
       const ents: Array<{ s: number; draw: () => void }> = [];
-      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; const dd = defOf(it.kind); const [sw, sh] = dd.span ?? [1, 1]; stack.set(k, gz + (dd.h || 0)); const ii = it, z = gz; ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + z * 0.01, draw: () => { const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current); } }); }
+      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; const dd = defOf(it.kind); const [sw, sh] = dd.span ?? [1, 1]; stack.set(k, gz + (dd.h || 0)); const ii = it, z = gz; ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + z * 0.01, draw: () => { const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.01 + 0.005, draw: () => drawAvatar(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.01 + 0.005, draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
@@ -343,6 +361,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (raw.gx < -0.5 || raw.gx > GRID - 0.5 || raw.gy < -0.5 || raw.gy > GRID - 0.5) return;
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
+    if (rotateMode) { rotateAt(gx, gy); return; }
     const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), gx, gy); if (p && p.length) me.path = p;
   };
   const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy, raw } = evtTile(e); hoverRef.current = (raw.gx < -0.5 || raw.gx > GRID - 0.5 || raw.gy < -0.5 || raw.gy > GRID - 0.5) ? null : { gx, gy }; };
@@ -392,8 +411,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   </button>
                 );
               })}
-              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); }} title="Remover"
-                className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
+              {(() => { const spin = !!(placingKind && isRotatable(placingKind)); const on = rotateMode || spin; return (
+                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); } }} title="Rodar"
+                  className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${on ? 'bg-[#00cfff]/15' : 'hover:bg-white/5'}`}>
+                  <CatIcon catId="rotate" size={22} color={on ? '#00cfff' : '#cfd2dc'} />
+                  <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Virar ${placeDir + 1}/4` : 'Rodar'}</span>
+                </button>
+              ); })()}
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); }} title="Remover"
+                className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Remover</span>
               </button>
@@ -401,6 +427,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
             {removeMode ? (
               <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Toca num objeto para o remover.</p>
+            ) : rotateMode ? (
+              <p className="text-[11px] text-center text-[#00cfff]/90 py-4 px-3">Toca num assento para o rodar (cadeira · sofá · poltrona · trono).</p>
             ) : (
               <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto p-2" style={{ maxHeight: '9.5rem' }}>
                 {FURNI.filter(f => f.cat === cat).map(f => {
@@ -409,7 +437,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   return (
                     <button key={f.kind} onClick={() => {
                       if (!owned) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca para colocar' : (r.error || 'Sem Cristais')); return; }
-                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false);
+                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false);
                     }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : owned ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
                       <FurniSprite kind={f.kind} size={38} accent={roomOf(room).accent} />
                       <span className="text-[7px] uppercase tracking-wide leading-none text-center text-white/65 truncate w-full px-0.5">{f.name}</span>

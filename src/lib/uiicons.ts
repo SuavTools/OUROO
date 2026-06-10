@@ -38,6 +38,12 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       ctx.beginPath(); ctx.moveTo(0, u * 0.42); ctx.lineTo(0, u * 0.64); ctx.moveTo(-u * 0.26, u * 0.64); ctx.lineTo(u * 0.26, u * 0.64); ctx.stroke(); break;
     }
     case 'deco': { ctx.strokeRect(-u * 0.6, -u * 0.6, u * 1.2, u * 1.2); ctx.strokeRect(-u * 0.3, -u * 0.3, u * 0.6, u * 0.6); break; }  // frame
+    case 'rotate': {  // circular arrow
+      ctx.beginPath(); ctx.arc(0, 0, u * 0.62, Math.PI * 0.55, Math.PI * 2.15); ctx.stroke();
+      const ang = Math.PI * 2.15, ex = Math.cos(ang) * u * 0.62, ey = Math.sin(ang) * u * 0.62;
+      ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - u * 0.26, ey + u * 0.02); ctx.moveTo(ex, ey); ctx.lineTo(ex - u * 0.04, ey - u * 0.26); ctx.stroke();
+      break;
+    }
     case 'remove': {  // trash can
       ctx.beginPath(); ctx.moveTo(-u * 0.55, -u * 0.42); ctx.lineTo(u * 0.55, -u * 0.42); ctx.moveTo(-u * 0.28, -u * 0.42); ctx.lineTo(-u * 0.28, -u * 0.6); ctx.lineTo(u * 0.28, -u * 0.6); ctx.lineTo(u * 0.28, -u * 0.42); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-u * 0.42, -u * 0.42); ctx.lineTo(-u * 0.32, u * 0.64); ctx.lineTo(u * 0.32, u * 0.64); ctx.lineTo(u * 0.42, -u * 0.42); ctx.stroke(); break;
