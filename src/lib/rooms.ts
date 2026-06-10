@@ -5,12 +5,12 @@ import { supabase } from './supabase';
 import { getAuthIdentity } from './auth';
 import { getLocalPlayer } from './leaderboard';
 
-export type RoomRow = { slug: string; name: string; owner: string; accent: string; floor: string; public: boolean; code: string; build_all: boolean; rights: string[] };
+export type RoomRow = { slug: string; name: string; owner: string; accent: string; floor: string; public: boolean; code: string; build_all: boolean; rights: string[]; plan: string };
 
 const ACCENTS = ['#00cfff', '#ff44aa', '#ffd23a', '#1ED760', '#cc44ff', '#ff6a3a'];
-const SEL = 'slug,name,owner,accent,floor,public,code,build_all,rights';
-// Normalise a raw row: rights may come back null (pre-migration) — always expose an array.
-const norm = (r: Record<string, unknown>): RoomRow => ({ ...(r as RoomRow), rights: Array.isArray(r.rights) ? (r.rights as string[]) : [] });
+const SEL = 'slug,name,owner,accent,floor,public,code,build_all,rights,plan';
+// Normalise a raw row: rights/plan may come back null (pre-migration) — always expose sane values.
+const norm = (r: Record<string, unknown>): RoomRow => ({ ...(r as RoomRow), rights: Array.isArray(r.rights) ? (r.rights as string[]) : [], plan: typeof r.plan === 'string' && r.plan ? (r.plan as string) : 'salao' });
 // Short shareable code (no ambiguous chars) for inviting people to a room.
 const newCode = () => Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
 
@@ -44,11 +44,11 @@ export async function roomByCode(code: string): Promise<RoomRow | null> {
 }
 
 // Create a personal room owned by the current player. `isPublic=false` → invite-only (join by code).
-export async function createRoom(name: string, isPublic = true): Promise<{ ok: true; room: RoomRow } | { ok: false; error: string }> {
+export async function createRoom(name: string, isPublic = true, plan = 'salao'): Promise<{ ok: true; room: RoomRow } | { ok: false; error: string }> {
   if (!supabase) return { ok: false, error: 'Offline.' };
   const oid = await ownerId();
   const rnd = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}${Math.random()}`).replace(/[^a-z0-9]/gi, '').slice(0, 12);
-  const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'A Minha Sala', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic, code: newCode(), build_all: false, rights: [] };
+  const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'A Minha Sala', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic, code: newCode(), build_all: false, rights: [], plan };
   const { error } = await supabase.from('rooms').insert(room);
   if (error) {
     const m = error.message || '';

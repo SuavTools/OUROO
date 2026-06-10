@@ -20,6 +20,7 @@ import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
+import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planSpawn } from '@/lib/roomPlans';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -31,22 +32,34 @@ const WALK = 0.09;          // tiles per 60Hz step
 const BUBBLE_FRAMES = 60 * 6;
 const MAX_ITEMS = 200, PLACE_CAP = 20;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[] };
-// Who may drop/take furni in a room: a mod, the owner, an open ("build_all") room, or a granted handle.
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string };
+// Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
+// ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
   if (mod) return true;
-  if (def.owner) return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
-  return !def.locked;
+  if (!def.owner) return false;   // official/public rooms — only moderators build or take
+  return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
 };
 const ROOMS: RoomDef[] = [
-  { slug: 'praca',   name: 'Praça',     accent: '#00cfff', floor: '#161628' },
-  { slug: 'disco',   name: 'Discoteca', accent: '#ff44aa', floor: '#1e1226' },
-  { slug: 'lounge',  name: 'Lounge',    accent: '#ffd23a', floor: '#1e1a12' },
-  { slug: 'telhado', name: 'Telhado',   accent: '#1ED760', floor: '#121e18' },
-  { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#181226' },
-  { slug: 'atrio',   name: 'Átrio',     accent: '#ffffff', floor: '#191921', locked: true },
+  { slug: 'praca',   name: 'Praça',     accent: '#00cfff', floor: '#161628', plan: 'salao' },
+  { slug: 'disco',   name: 'Discoteca', accent: '#ff44aa', floor: '#1e1226', plan: 'octo' },
+  { slug: 'lounge',  name: 'Lounge',    accent: '#ffd23a', floor: '#1e1a12', plan: 'quadrado' },
+  { slug: 'telhado', name: 'Telhado',   accent: '#1ED760', floor: '#121e18', plan: 'palco' },
+  { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
+  { slug: 'atrio',   name: 'Átrio',     accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
+
+// Tiny preview of a floor plan: an 11×11 grid where present tiles glow (brighter = higher level).
+const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent }) => (
+  <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${PLAN_GRID}, 1fr)`, width: 40, height: 40 }}>
+    {Array.from({ length: PLAN_GRID * PLAN_GRID }, (_, i) => {
+      const gx = i % PLAN_GRID, gy = (i / PLAN_GRID) | 0; const row = plan.rows[gy] || ''; const ch = row[gx];
+      const on = ch && ch !== 'x' && ch !== ' ' && ch !== '.'; const lv = on ? ch.charCodeAt(0) - 48 : -1;
+      return <span key={i} style={{ background: on ? hexA(accent, 0.35 + Math.min(lv, 3) * 0.2) : 'transparent', borderRadius: 1 }} />;
+    })}
+  </div>
+);
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string };
@@ -85,6 +98,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
+  const planRef = useRef<Int8Array>(planMask(planById('salao')));          // base floor level per tile (-1 = void)
+  const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
   const framesRef = useRef(0);
   const posAccum = useRef(0);
@@ -104,6 +119,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [myRooms, setMyRooms] = useState<RoomRow[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPrivate, setNewRoomPrivate] = useState(false);
+  const [newRoomPlan, setNewRoomPlan] = useState('salao');
   const [joinCode, setJoinCode] = useState('');
   // Permissions editor (for one of your own rooms): open everyone-toggle + a list of granted handles.
   const [permsRoom, setPermsRoom] = useState<RoomRow | null>(null);
@@ -175,14 +191,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const switchRoom = (def: RoomDef) => {
     setShowRooms(false); if (def.slug === room) return;
-    const me = selfRef.current; me.fx = 5; me.fy = 5; me.tx = 5; me.ty = 5; me.z = 0; me.lvl = 0; me.path = []; me.bubble = ''; me.bubbleLife = 0;
+    const sp = planSpawn(planById(def.plan));
+    const me = selfRef.current; me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = []; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
     setRoomMeta(def); setRoom(def.slug);
   };
-  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights });
+  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
-    const res = await createRoom(newRoomName, !newRoomPrivate);
+    const res = await createRoom(newRoomName, !newRoomPrivate, newRoomPlan);
     if (!res.ok) { flashHint(res.error || 'Erro ao criar sala'); return; }
     setNewRoomName(''); flashHint(`Sala criada · código ${res.room.code}`); switchRoom(roomDefOf(res.room));
   };
@@ -227,18 +244,31 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const d = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const elev = it.elev || 0; const sit = sitHeight(it.kind);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
-        const k = key(gx, gy);
-        if (d.walk) { surf[k].push(elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
-        else if (sit != null) { surf[k].push(elev + sit); if (elev <= 0.01) grounded[k] = 1; }
+        const k = key(gx, gy); const base = planRef.current[k]; if (base < 0) continue;   // can't sit on a void tile
+        if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
+        else if (sit != null) { surf[k].push(base + elev + sit); if (elev <= 0.01) grounded[k] = 1; }
         else S[k] = 1;
       }
     }
     for (let k = 0; k < surf.length; k++) {
+      const base = planRef.current[k];
+      if (base < 0) { S[k] = 1; surf[k].length = 0; continue; }   // void tile — no floor, blocked
       if (S[k]) { surf[k].length = 0; continue; }
-      if (!grounded[k]) surf[k].push(0);            // exposed floor (walk underneath floating decks)
+      if (!grounded[k]) surf[k].push(base);          // exposed floor at its base level (walk under floating decks)
       surf[k].sort((a, b) => a - b);
     }
   };
+  // Apply the current room's floor plan (shape + base levels), then rebuild walkability. Repositions
+  // you to the plan's spawn if your tile became void after a shape change.
+  useEffect(() => {
+    const plan = planById(roomMeta.plan);
+    planRef.current = planMask(plan);
+    const me = selfRef.current;
+    if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
+      const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
+    }
+    rebuildHeight();
+  }, [roomMeta.slug, roomMeta.plan]);
   // Level-aware BFS over (tile, surface) nodes: step to a neighbour surface within ±1 of the current
   // level. From the ground you can't reach a high deck (gap>1) so you pass UNDER it; ramps/stairs add
   // the intermediate surfaces to climb ON. Returns waypoints {gx,gy,z}.
@@ -281,6 +311,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const elev = defOf(kind).walk ? placeElevRef.current : 0;   // only walkable pieces float (decks/bridges)
     const [sw, sh] = effSpan(kind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
+    for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) if (planLvl(gx + du, gy + dv) < 0) { flashHint('Não cabe aqui'); return; }
     if (!modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
     const item: Item = { id, kind, gx, gy, dir, elev, createdBy: deviceRef.current };
@@ -463,20 +494,29 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore();
       ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· SALA PESSOAL ·' : theme.locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
-      // walls
-      const bc = iso(-0.5, -0.5), rEnd = iso(GRID - 0.5, -0.5), lEnd = iso(-0.5, GRID - 0.5), wh = WALL_H * STACK_H;
-      ctx.fillStyle = shade(theme.floor, 1.5); ctx.beginPath(); ctx.moveTo(bc.sx, bc.sy); ctx.lineTo(rEnd.sx, rEnd.sy); ctx.lineTo(rEnd.sx, rEnd.sy - wh); ctx.lineTo(bc.sx, bc.sy - wh); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = shade(theme.floor, 1.0); ctx.beginPath(); ctx.moveTo(bc.sx, bc.sy); ctx.lineTo(lEnd.sx, lEnd.sy); ctx.lineTo(lEnd.sx, lEnd.sy - wh); ctx.lineTo(bc.sx, bc.sy - wh); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = hexA(theme.accent, 0.5); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(rEnd.sx, rEnd.sy - wh); ctx.lineTo(bc.sx, bc.sy - wh); ctx.lineTo(lEnd.sx, lEnd.sy - wh); ctx.stroke();
-
-      // floor tiles
+      // floor + walls follow the room PLAN: skip void tiles, raise each to its base level, draw side
+      // risers (floor thickness) toward lower/void neighbours, and back walls only behind the footprint.
+      const plan = planRef.current; const wh = WALL_H * STACK_H;
+      const lvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : plan[gy * GRID + gx]);
       for (let gx = 0; gx < GRID; gx++) for (let gy = 0; gy < GRID; gy++) {
-        const { sx, sy } = iso(gx, gy); diamond(sx, sy, TW, TH); ctx.fillStyle = theme.floor; ctx.fill();
+        const L = lvl(gx, gy); if (L < 0) continue;
+        const b = iso(gx, gy, L);
+        const top = b.sy - TH, rX = b.sx + TW, lX = b.sx - TW, botY = b.sy + TH;
+        // back walls behind edges whose neighbour is absent (up-right = gy-1, up-left = gx-1)
+        if (lvl(gx, gy - 1) < 0) { ctx.fillStyle = shade(theme.floor, 1.5); ctx.beginPath(); ctx.moveTo(b.sx, top); ctx.lineTo(rX, b.sy); ctx.lineTo(rX, b.sy - wh); ctx.lineTo(b.sx, top - wh); ctx.closePath(); ctx.fill(); }
+        if (lvl(gx - 1, gy) < 0) { ctx.fillStyle = shade(theme.floor, 1.0); ctx.beginPath(); ctx.moveTo(b.sx, top); ctx.lineTo(lX, b.sy); ctx.lineTo(lX, b.sy - wh); ctx.lineTo(b.sx, top - wh); ctx.closePath(); ctx.fill(); }
+        // side risers toward lower front neighbours (down-right = gx+1, down-left = gy+1); void drops to 0
+        const rn = lvl(gx + 1, gy), dr = (L - (rn < 0 ? 0 : rn)) * STACK_H;
+        if (rn < L && dr > 0) { ctx.fillStyle = shade(theme.floor, 0.6); ctx.beginPath(); ctx.moveTo(b.sx, botY); ctx.lineTo(rX, b.sy); ctx.lineTo(rX, b.sy + dr); ctx.lineTo(b.sx, botY + dr); ctx.closePath(); ctx.fill(); }
+        const ln = lvl(gx, gy + 1), dl = (L - (ln < 0 ? 0 : ln)) * STACK_H;
+        if (ln < L && dl > 0) { ctx.fillStyle = shade(theme.floor, 0.42); ctx.beginPath(); ctx.moveTo(b.sx, botY); ctx.lineTo(lX, b.sy); ctx.lineTo(lX, b.sy + dl); ctx.lineTo(b.sx, botY + dl); ctx.closePath(); ctx.fill(); }
+        // top face
+        diamond(b.sx, b.sy, TW, TH); ctx.fillStyle = theme.floor; ctx.fill();
         ctx.fillStyle = (gx + gy) % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill();
         ctx.strokeStyle = hexA(theme.accent, 0.10); ctx.lineWidth = 1; ctx.stroke();
       }
       const hv = hoverRef.current, ui = uiRef.current;
-      if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode) && hv) { const { sx, sy } = iso(hv.gx, hv.gy); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
 
       // support posts under a floating deck (so it reads as a bridge)
       const drawSupports = (it: Item, z: number, sw: number, sh: number) => {
@@ -485,7 +525,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       };
       // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
-      for (const it of itemsRef.current) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, z = it.elev || 0; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (z > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
+      for (const it of itemsRef.current) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (lift > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
       // sort by their front corner, so add a boost when standing on a seat's footprint.
       const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of itemsRef.current) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
@@ -503,16 +543,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const evtTile = (e: React.PointerEvent) => { const canvas = canvasRef.current!; const rect = canvas.getBoundingClientRect(); const sx = (e.clientX - rect.left) / rect.width * STAGE_W, sy = (e.clientY - rect.top) / rect.height * STAGE_H; const raw = screenToTile(sx, sy); return { gx: clampTile(raw.gx), gy: clampTile(raw.gy), raw }; };
+  const evtTile = (e: React.PointerEvent) => {
+    const canvas = canvasRef.current!; const rect = canvas.getBoundingClientRect();
+    const sx = (e.clientX - rect.left) / rect.width * STAGE_W, sy = (e.clientY - rect.top) / rect.height * STAGE_H;
+    const raw = screenToTile(sx, sy); let gx = clampTile(raw.gx), gy = clampTile(raw.gy);
+    // Prefer a RAISED tile whose lifted top is under the cursor (so clicks land on raised floors).
+    for (let L = 1; L <= 9; L++) { const r = screenToTile(sx, sy + L * STACK_H); const cx = Math.round(r.gx), cy = Math.round(r.gy); if (cx >= 0 && cy >= 0 && cx < GRID && cy < GRID && planLvl(cx, cy) === L) { gx = cx; gy = cy; } }
+    return { gx, gy, raw };
+  };
   const onPointerDown = (e: React.PointerEvent) => {
-    const { gx, gy, raw } = evtTile(e);
-    if (raw.gx < -0.5 || raw.gx > GRID - 0.5 || raw.gy < -0.5 || raw.gy > GRID - 0.5) return;
+    const { gx, gy } = evtTile(e);
+    if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
     const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
-  const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy, raw } = evtTile(e); hoverRef.current = (raw.gx < -0.5 || raw.gx > GRID - 0.5 || raw.gy < -0.5 || raw.gy > GRID - 0.5) ? null : { gx, gy }; };
+  const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy } = evtTile(e); hoverRef.current = planLvl(gx, gy) < 0 ? null : { gx, gy }; };
 
   return (
     <div ref={outerRef} className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}>
@@ -676,6 +723,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               </div>
 
               <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Cria a tua sala</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/35 mb-1.5">Forma da sala</p>
+              <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+                {ROOM_PLANS.map(p => (
+                  <button key={p.id} onClick={() => setNewRoomPlan(p.id)} title={p.name}
+                    className={`shrink-0 flex flex-col items-center gap-1 p-1.5 border rounded transition-colors ${newRoomPlan === p.id ? 'border-[#00cfff] bg-[#00cfff]/10' : 'border-white/12 hover:border-white/40'}`}>
+                    <PlanThumb plan={p} accent="#00cfff" />
+                    <span className="text-[8px] uppercase tracking-wide text-white/60">{p.name}</span>
+                  </button>
+                ))}
+              </div>
               <div className="flex gap-2">
                 <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} maxLength={24} placeholder="Nome da sala"
                   className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff]" />
@@ -685,7 +742,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <input type="checkbox" checked={newRoomPrivate} onChange={e => setNewRoomPrivate(e.target.checked)} className="accent-[#00cfff]" />
                 Privada — só por código (não aparece na lista)
               </label>
-              <p className="text-[10px] text-white/35 mt-2">A tua sala é tua para decorar. Partilha o <span className="text-[#00cfff]">código</span> para convidar — só tu (e mods) constroem nela.</p>
+              <p className="text-[10px] text-white/35 mt-2">A tua sala é tua para decorar. Partilha o <span className="text-[#00cfff]">código</span> para convidar e dá permissão (⚙) a quem quiseres. Nas salas oficiais só os moderadores constroem.</p>
             </div>
           </div>
         );
