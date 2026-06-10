@@ -12,6 +12,11 @@ import { getAuthIdentity } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
+import { CATS, FURNI, defOf, isFurniPremium, furniPrice } from '@/lib/furni';
+import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
+import { resolveAppearance } from '@/lib/catalog';
+import { ownsFurni, buyFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
+import { InventoryModal } from '@/components/InventoryModal';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -34,96 +39,9 @@ const ROOMS: RoomDef[] = [
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
-// ---- furni catalogue ---------------------------------------------------------------------
-// h = height in levels. walk = you can stand ON it (false = solid, blocks the tile). foot =
-// footprint scale. special = custom renderer (else a coloured iso cuboid + emoji).
-type FurniDef = { kind: string; name: string; emoji: string; cat: string; color: string; h: number; walk: boolean; foot: number; special?: string; span?: [number, number] };
-const CATS = [
-  { id: 'tier1',    name: '★ Hi-Fi' },
-  { id: 'constr',   name: 'Construção' },
-  { id: 'tapetes',  name: 'Pisos' },
-  { id: 'assentos', name: 'Assentos' },
-  { id: 'mesas',    name: 'Mesas' },
-  { id: 'plantas',  name: 'Plantas' },
-  { id: 'luzes',    name: 'Luzes' },
-  { id: 'electro',  name: 'Eletrónica' },
-  { id: 'deco',     name: 'Decoração' },
-];
-const FURNI: FurniDef[] = [
-  // ★ HI-FI — 1st-tier hand-drawn lounge set (couch spans 2 tiles)
-  { kind: 'lounge_couch', name: 'Sofá Lounge', emoji: '🛋️', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
-  { kind: 'lounge_chair', name: 'Poltrona',    emoji: '💺', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'armchair' },
-  { kind: 'lounge_table', name: 'Mesa Centro', emoji: '🪵', cat: 'tier1', color: '#4a3120', h: 1, walk: false, foot: 1, special: 'coffee' },
-  // construção (walkable build pieces + solid walls)
-  { kind: 'bloco',      name: 'Bloco',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
-  { kind: 'meio',       name: 'Cubo',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
-  { kind: 'plataforma', name: 'Plataforma',emoji: '⬛', cat: 'constr', color: '#303048', h: 1, walk: true,  foot: 1 },
-  { kind: 'escada',     name: 'Escada',    emoji: '🪜', cat: 'constr', color: '#4a4a66', h: 1, walk: true,  foot: 1, special: 'stair' },
-  { kind: 'rampa',      name: 'Rampa',     emoji: '📐', cat: 'constr', color: '#40405a', h: 1, walk: true,  foot: 1, special: 'stair' },
-  { kind: 'pilar',      name: 'Pilar',     emoji: '🏛️', cat: 'constr', color: '#2e2e3e', h: 2, walk: false, foot: 0.55 },
-  { kind: 'parede',     name: 'Parede',    emoji: '🧱', cat: 'constr', color: '#3a2e2e', h: 2, walk: false, foot: 1, special: 'wall' },
-  { kind: 'cerca',      name: 'Cerca',     emoji: '🚧', cat: 'constr', color: '#6a5a2a', h: 1, walk: false, foot: 1, special: 'wall' },
-  // pisos / tapetes (walkable, 1-high — carpets have height!)
-  { kind: 'tap_red',  name: 'Tapete',  emoji: '🟥', cat: 'tapetes', color: '#b3242e', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'tap_blu',  name: 'Tapete',  emoji: '🟦', cat: 'tapetes', color: '#2452b3', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'tap_grn',  name: 'Tapete',  emoji: '🟩', cat: 'tapetes', color: '#1ea64a', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'tap_pur',  name: 'Tapete',  emoji: '🟪', cat: 'tapetes', color: '#8a44cc', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'relva',    name: 'Relva',   emoji: '🌿', cat: 'tapetes', color: '#2e7d32', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'agua',     name: 'Água',    emoji: '💧', cat: 'tapetes', color: '#1d6fb3', h: 1, walk: true, foot: 1, special: 'water' },
-  { kind: 'gelo',     name: 'Gelo',    emoji: '🧊', cat: 'tapetes', color: '#aee3ff', h: 1, walk: true, foot: 1, special: 'rug' },
-  { kind: 'lava',     name: 'Lava',    emoji: '🌋', cat: 'tapetes', color: '#d23a1a', h: 1, walk: true, foot: 1, special: 'water' },
-  { kind: 'xadrez',   name: 'Xadrez',  emoji: '♟️', cat: 'tapetes', color: '#2a2a36', h: 1, walk: true, foot: 1, special: 'rug' },
-  // assentos
-  { kind: 'cadeira',  name: 'Cadeira',  emoji: '🪑', cat: 'assentos', color: '#6a5436', h: 1, walk: false, foot: 0.7, special: 'chair' },
-  { kind: 'poltrona', name: 'Poltrona', emoji: '💺', cat: 'assentos', color: '#5a4080', h: 1, walk: false, foot: 0.8, special: 'sofa' },
-  { kind: 'sofa',     name: 'Sofá',     emoji: '🛋️', cat: 'assentos', color: '#4a3768', h: 1, walk: false, foot: 1,   special: 'sofa' },
-  { kind: 'sofahc',   name: 'Sofá HC',  emoji: '👑', cat: 'assentos', color: '#ffd23a', h: 1, walk: false, foot: 1,   special: 'sofa' },
-  { kind: 'banco',    name: 'Banco',    emoji: '🪑', cat: 'assentos', color: '#6a6a76', h: 1, walk: false, foot: 0.6, special: 'stool' },
-  { kind: 'trono',    name: 'Trono',    emoji: '👑', cat: 'assentos', color: '#7a1aaa', h: 2, walk: false, foot: 0.8, special: 'throne' },
-  { kind: 'puff',     name: 'Puff',     emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7, special: 'puff' },
-  // mesas
-  { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
-  { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
-  { kind: 'mesacafe', name: 'Café',      emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8, special: 'table' },
-  { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#2a2a3a', h: 2, walk: false, foot: 1,   special: 'counter' },
-  { kind: 'prat',     name: 'Prateleira',emoji: '📚', cat: 'mesas', color: '#4a3420', h: 2, walk: false, foot: 0.6, special: 'shelf' },
-  // plantas
-  { kind: 'planta',   name: 'Planta',   emoji: '🪴', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
-  { kind: 'cato',     name: 'Cato',     emoji: '🌵', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
-  { kind: 'bonsai',   name: 'Bonsai',   emoji: '🎍', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
-  { kind: 'arvore',   name: 'Árvore',   emoji: '🌳', cat: 'plantas', color: '#8a4f2a', h: 2, walk: false, foot: 0.8, special: 'plant' },
-  { kind: 'palmeira', name: 'Palmeira', emoji: '🌴', cat: 'plantas', color: '#8a4f2a', h: 2, walk: false, foot: 0.7, special: 'plant' },
-  { kind: 'flores',   name: 'Flores',   emoji: '🌷', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
-  // luzes
-  { kind: 'candeeiro',name: 'Candeeiro',emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
-  { kind: 'neon',     name: 'Néon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
-  { kind: 'disco',    name: 'Bola Disco',emoji: '🪩', cat: 'luzes', color: '#cfd6ff', h: 0, walk: true,  foot: 1, special: 'disco' },
-  { kind: 'holofote', name: 'Holofote', emoji: '🔦', cat: 'luzes', color: '#ffffff', h: 1, walk: false, foot: 0.5, special: 'lamp' },
-  { kind: 'lavalamp', name: 'Lava Lamp',emoji: '🟣', cat: 'luzes', color: '#cc44ff', h: 1, walk: false, foot: 0.4, special: 'lamp' },
-  { kind: 'tocha',    name: 'Tocha',    emoji: '🔥', cat: 'luzes', color: '#ff8800', h: 1, walk: false, foot: 0.4, special: 'lamp' },
-  // eletrónica
-  { kind: 'tv',       name: 'TV',       emoji: '📺', cat: 'electro', color: '#15151f', h: 1, walk: false, foot: 1, special: 'tv' },
-  { kind: 'coluna',   name: 'Coluna',   emoji: '🔈', cat: 'electro', color: '#23232f', h: 2, walk: false, foot: 0.7, special: 'speaker' },
-  { kind: 'jukebox',  name: 'Jukebox',  emoji: '🎵', cat: 'electro', color: '#aa2266', h: 2, walk: false, foot: 0.7, special: 'jukebox' },
-  { kind: 'arcade',   name: 'Arcade',   emoji: '🕹️', cat: 'electro', color: '#2a1a4a', h: 2, walk: false, foot: 0.8, special: 'tv' },
-  { kind: 'frigo',    name: 'Frigorífico',emoji: '🧊', cat: 'electro', color: '#cdd6e0', h: 2, walk: false, foot: 0.7, special: 'fridge' },
-  { kind: 'vending',  name: 'Máquina',  emoji: '🥤', cat: 'electro', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'vending' },
-  { kind: 'pc',       name: 'PC',       emoji: '💻', cat: 'electro', color: '#2a2a3a', h: 1, walk: false, foot: 0.6, special: 'tv' },
-  // decoração
-  { kind: 'cartaz',   name: 'Cartaz',   emoji: '🪧', cat: 'deco', color: '#16161f', h: 1, walk: false, foot: 0.7, special: 'sign' },
-  { kind: 'quadro',   name: 'Quadro',   emoji: '🖼️', cat: 'deco', color: '#caa24a', h: 1, walk: false, foot: 0.6, special: 'frame' },
-  { kind: 'trofeu',   name: 'Troféu',   emoji: '🏆', cat: 'deco', color: '#ffd700', h: 1, walk: false, foot: 0.4, special: 'trophy' },
-  { kind: 'vaso',     name: 'Vaso',     emoji: '🏺', cat: 'deco', color: '#c4632e', h: 1, walk: false, foot: 0.5, special: 'vase' },
-  { kind: 'pato',     name: 'Patinho',  emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4, special: 'duck' },
-  { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4, special: 'cone' },
-  { kind: 'estatua',  name: 'Estátua',  emoji: '🗿', cat: 'deco', color: '#9a9aa6', h: 2, walk: false, foot: 0.6, special: 'statue' },
-  { kind: 'fonte',    name: 'Fonte',    emoji: '⛲', cat: 'deco', color: '#2a6fb3', h: 1, walk: false, foot: 1, special: 'water' },
-];
-const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
-const defOf = (kind: string) => FMAP[kind] ?? { kind, name: '?', emoji: '?', cat: 'deco', color: '#666', h: 1, walk: false, foot: 0.8 };
-
+// Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 type Item = { id: string; kind: string; gx: number; gy: number; createdBy?: string };
-type Avatar = { handle: string; skinId: string; fx: number; fy: number; tx: number; ty: number; z: number; bubble: string; bubbleLife: number; af: number };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; bubble: string; bubbleLife: number; af: number };
 type Self = Avatar & { id: string; path: { gx: number; gy: number }[] };
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -132,6 +50,12 @@ const iso = (gx: number, gy: number, gz = 0) => ({ sx: ORIGIN_X + (gx - gy) * TW
 const screenToTile = (sx: number, sy: number) => { const a = (sx - ORIGIN_X) / TW, b = (sy - ORIGIN_Y) / TH; return { gx: (a + b) / 2, gy: (b - a) / 2 }; };
 const clampTile = (v: number) => Math.max(0, Math.min(GRID - 1, Math.round(v)));
 const key = (gx: number, gy: number) => gy * GRID + gx;
+// Validate an icon spec received over presence (others may broadcast a custom-icon avatar).
+const parseIcon = (v: unknown): IconSpec | null => {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as { layers?: unknown };
+  return Array.isArray(o.layers) && o.layers.length ? (v as IconSpec) : null;
+};
 
 export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void }> = ({
   stageScale = 1, isMobileStage = false, onExit,
@@ -170,6 +94,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [hint, setHint] = useState('');
   const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
   const locked = roomOf(room).locked && !isMod;
+  const [invOpen, setInvOpen] = useState(false);
+  const wallet = useWallet();
+
+  // Equip a skin or custom icon on the live avatar and broadcast it to the room.
+  const equipAppearance = (id: string) => {
+    const me = selfRef.current; me.skinId = id;
+    const ap = resolveAppearance(id); me.icon = ap.kind === 'icon' ? ap.spec : null;
+    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) });
+  };
 
   const pushFeed = (handle: string, text: string) => { const id = ++feedId.current; setFeed(f => [...f.slice(-5), { id, handle, text }]); setTimeout(() => setFeed(f => f.filter(m => m.id !== id)), 9000); };
   const say = (raw: string) => {
@@ -220,6 +153,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
     if (roomOf(room).locked && !modRef.current) { flashHint('Sala bloqueada'); return; }
+    if (!modRef.current && isFurniPremium(kind) && !ownsFurni(kind)) { flashHint('Compra primeiro ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
@@ -245,7 +179,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const lp = getLocalPlayer();
     selfRef.current.id = lp.device || `guest_${Math.floor(Math.random() * 1e9)}`;
     selfRef.current.handle = lp.handle || 'Convidado';
-    selfRef.current.skinId = getSelectedSkinId();
+    const ap0 = getSelectedSkinId(); selfRef.current.skinId = ap0;
+    const r0 = resolveAppearance(ap0); selfRef.current.icon = r0.kind === 'icon' ? r0.spec : null;
+    refreshWalletFromCloud();
     getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; });
     amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
@@ -261,8 +197,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const k in state) {
         const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
         seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id);
-        if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), fx, fy, tx: fx, ty: fy, z: 0, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
-        else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); }
+        if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: parseIcon(meta.icon), fx, fy, tx: fx, ty: fy, z: 0, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
+        else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.icon = parseIcon(meta.icon); }
       }
       for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
       setPopulation(remotesRef.current.size + 1);
@@ -288,13 +224,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           setConnected(true);
-          await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy });
+          await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy });
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
           if (data) { itemsRef.current = data.map(d => ({ id: String(d.id), kind: String(d.kind), gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') })); setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length); rebuildHeight(); }
         }
       });
 
-    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy }); } };
+    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, icon: m.icon ?? undefined, fx: m.fx, fy: m.fy }); } };
     document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume);
     return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); supabase?.removeChannel(ch); channelRef.current = null; };
   }, [room]);
@@ -322,7 +258,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const ch = channelRef.current;
       if (ch) {
         if (moving && ++posAccum.current >= 7) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) } }); }
-        if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) } }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) }); }
+        if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) } }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2) }); }
       }
       wasMovingRef.current = moving;
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.2; r.fy += (r.ty - r.fy) * 0.2; r.z += (tileZ(r.fx, r.fy) - r.z) * 0.25; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
@@ -512,21 +448,25 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     const drawAvatar = (a: Avatar, isSelf: boolean) => {
-      const sk = skinById(a.skinId); const { sx, sy } = iso(a.fx, a.fy, a.z);
+      const { sx, sy } = iso(a.fx, a.fy, a.z);
+      const col = a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.5; ctx.fillStyle = sk.color; ctx.shadowColor = sk.color; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const bob = moving ? Math.sin(a.af * 0.3) * 3 : 0;
-      ctx.save(); ctx.translate(sx, sy - 30 + bob); ctx.shadowColor = sk.color; ctx.shadowBlur = isSelf ? 22 : 12; drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); ctx.restore();
+      ctx.save(); ctx.translate(sx, sy - 30 + bob); ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;
+      if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
+      else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
+      ctx.restore();
       ctx.save(); ctx.font = '700 11px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const nw = ctx.measureText(a.handle).width + 12, ny = sy + 13;
       ctx.fillStyle = 'rgba(8,8,14,0.72)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();
-      if (isSelf) { ctx.strokeStyle = hexA(sk.color, 0.8); ctx.lineWidth = 1; ctx.stroke(); }
-      ctx.fillStyle = isSelf ? sk.color : 'rgba(255,255,255,0.82)'; ctx.fillText(a.handle, sx, ny); ctx.restore();
+      if (isSelf) { ctx.strokeStyle = hexA(col, 0.8); ctx.lineWidth = 1; ctx.stroke(); }
+      ctx.fillStyle = isSelf ? col : 'rgba(255,255,255,0.82)'; ctx.fillText(a.handle, sx, ny); ctx.restore();
       if (a.bubbleLife > 0 && a.bubble) {
         const alpha = Math.min(1, a.bubbleLife / 30); ctx.save(); ctx.globalAlpha = alpha; ctx.font = '600 15px Helvetica, Arial';
         const tw = ctx.measureText(a.bubble).width, bw = tw + 22, bh = 28, bx = sx - bw / 2, by = sy - 86;
-        ctx.fillStyle = 'rgba(10,10,18,0.94)'; ctx.strokeStyle = sk.color; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = 'rgba(10,10,18,0.94)'; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(sx - 6, by + bh); ctx.lineTo(sx + 6, by + bh); ctx.lineTo(sx, by + bh + 8); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.bubble, sx, by + bh / 2); ctx.restore();
       }
@@ -597,6 +537,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
         <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Salas</button>
+        <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>
         {!locked && <button onClick={() => { setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorar</button>}
       </div>
 
@@ -616,11 +557,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); }} className={`shrink-0 text-[10px] font-mono uppercase tracking-wider px-2 py-1 border ${removeMode ? 'border-brandRed text-brandRed' : 'border-white/15 text-white/55 hover:text-white'}`}>🗑️</button>
           </div>
           <div className="flex gap-2 overflow-x-auto w-full pb-1 justify-start sm:justify-center">
-            {FURNI.filter(f => f.cat === cat).map(f => (
-              <button key={f.kind} onClick={() => { setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); }} className={`shrink-0 flex flex-col items-center justify-center w-14 h-14 border text-[8px] gap-0.5 transition-colors ${placingKind === f.kind ? 'border-brandYellow bg-brandYellow/15 text-white' : 'border-white/20 bg-black/60 text-white/80 hover:border-white/50'}`}>
-                <span className="text-lg leading-none">{f.emoji}</span><span className="uppercase tracking-wide leading-none text-center">{f.name}</span>
-              </button>
-            ))}
+            {FURNI.filter(f => f.cat === cat).map(f => {
+              const lockedFurni = isFurniPremium(f.kind) && !ownsFurni(f.kind) && !isMod;
+              return (
+                <button key={f.kind} onClick={() => {
+                  if (lockedFurni) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca outra vez' : (r.error || 'Sem Cristais')); return; }
+                  setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false);
+                }} className={`relative shrink-0 flex flex-col items-center justify-center w-14 h-14 border text-[8px] gap-0.5 transition-colors ${placingKind === f.kind ? 'border-brandYellow bg-brandYellow/15 text-white' : lockedFurni ? 'border-white/15 bg-black/60 text-white/45 hover:border-brandYellow/50' : 'border-white/20 bg-black/60 text-white/80 hover:border-white/50'}`}>
+                  <span className="text-lg leading-none">{f.emoji}</span><span className="uppercase tracking-wide leading-none text-center">{f.name}</span>
+                  {lockedFurni && <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-brandYellow">{CURRENCY_SYMBOL}{furniPrice(f.kind)}</span>}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -655,6 +603,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       </form>
 
       {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ SAIR ]</button>}
+
+      <InventoryModal open={invOpen} onClose={() => setInvOpen(false)} onEquip={equipAppearance} title="Personagem" />
     </div>
   );
 };

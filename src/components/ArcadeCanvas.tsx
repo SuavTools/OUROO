@@ -7,6 +7,7 @@ import { validateHandle } from '@/lib/names';
 import { supabaseReady } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import { drawSkinShape, skinById, getSelectedSkinId, type SkinShape } from '@/lib/skins';
+import { creditRun, CURRENCY_SYMBOL } from '@/lib/wallet';
 import { ArcadeSynth } from '@/lib/engine/synth';
 import { BrandText } from './BrandText';
 
@@ -162,6 +163,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const [lbPlayerId, setLbPlayerId] = useState<string | null>(null);
   const [lbRefresh, setLbRefresh] = useState(0);
   const submittedRef = useRef(false);  // guard against double-submit per run
+  const earnedRef = useRef(false);     // guard against double-credit of Cristais per run
+  const [cristaisEarned, setCristaisEarned] = useState(0);
   const { user: discordUser } = useUser();   // logged-in Discord identity (null when anon)
 
   const doSubmit = async (handle?: string) => {
@@ -177,12 +180,16 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   // On game over: returning players (saved handle) auto-submit; new players are asked for a name.
   // Reset the guard whenever a fresh run starts.
   useEffect(() => {
-    if (isPlaying) { submittedRef.current = false; setLbState('idle'); setLbRank(null); setLbError(''); return; }
-    if (!showIntro && score > 0 && supabaseReady && !submittedRef.current) {
-      submittedRef.current = true;
-      // doSubmit() uses the Discord identity (if signed in) or a saved handle; with neither it
-      // lands in 'need-handle' and asks for a name.
-      doSubmit();
+    if (isPlaying) { submittedRef.current = false; earnedRef.current = false; setCristaisEarned(0); setLbState('idle'); setLbRank(null); setLbError(''); return; }
+    if (!showIntro && score > 0) {
+      // Bank Cristais from the run (works offline too — wallet is localStorage-first).
+      if (!earnedRef.current) { earnedRef.current = true; setCristaisEarned(creditRun(score, crystalCount)); }
+      if (supabaseReady && !submittedRef.current) {
+        submittedRef.current = true;
+        // doSubmit() uses the Discord identity (if signed in) or a saved handle; with neither it
+        // lands in 'need-handle' and asks for a name.
+        doSubmit();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, showIntro]);
@@ -2692,6 +2699,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                   {score >= personalBest && personalBest > 0 && <p className="text-[#1ED760] font-bold text-xs">🏆 Novo recorde pessoal!</p>}
                   <div className="flex justify-between"><span className="text-white/50">Recorde</span><span className="text-white/80 tabular-nums">{personalBest.toLocaleString('pt-PT')}</span></div>
                   <div className="flex justify-between"><span className="text-white/50">Cristais</span><span className="text-white/80 tabular-nums">{crystalCount}</span></div>
+                  {cristaisEarned > 0 && <div className="flex justify-between"><span className="text-white/50">Ganhaste</span><span className="text-brandYellow font-bold tabular-nums">{CURRENCY_SYMBOL} {cristaisEarned.toLocaleString('pt-PT')}</span></div>}
                   <div className="flex justify-between"><span className="text-white/50">Tempo</span><span className="text-white/80 tabular-nums">{runStreak}s</span></div>
                   <div className="flex justify-between"><span className="text-white/50">Distância</span><span className="text-white/80 tabular-nums">{Math.floor(stateRef.current.milesTraveled)}</span></div>
                   {stateRef.current.perks.length > 0 && <div className="pt-2 border-t border-white/10"><p className="text-white/40 text-[10px] uppercase tracking-widest mb-1">Extras</p>{stateRef.current.perks.map((perk, i) => <span key={i} className="text-white/60 text-[11px] block">• {perkLabel(perk)}</span>)}</div>}

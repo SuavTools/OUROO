@@ -9,6 +9,7 @@ import { useUser, signInWithDiscord } from '@/lib/auth';
 import { supabaseReady } from '@/lib/supabase';
 import { amISuperAdmin } from '@/lib/chat';
 import { ProfileModal } from '@/components/ProfileModal';
+import { InventoryModal } from '@/components/InventoryModal';
 import { ChatModal } from '@/components/ChatModal';
 import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
@@ -33,6 +34,7 @@ export default function Home() {
   const [isZooming, setIsZooming] = useState(false);
   const { user } = useUser();   // Discord login state (null when logged out)
   const [profileOpen, setProfileOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
@@ -172,6 +174,7 @@ export default function Home() {
               <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Ouvir</a>
               <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
               <button onClick={() => setChatOpen(true)} className="hover:text-white transition-colors">Chat</button>
+              <button onClick={() => setInventoryOpen(true)} className="hover:text-white transition-colors">Inventário</button>
               {isSuper && <button onClick={() => setAdminOpen(true)} title="Admin" className="text-brandYellow hover:text-white transition-colors">📊</button>}
               {supabaseReady && (user
                 ? (
@@ -365,6 +368,7 @@ export default function Home() {
       )}
 
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <InventoryModal open={inventoryOpen} onClose={() => setInventoryOpen(false)} />
       <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} />
       {isSuper && <AdminModal open={adminOpen} onClose={() => setAdminOpen(false)} />}
     </main>

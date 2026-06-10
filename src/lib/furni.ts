@@ -1,0 +1,113 @@
+// OUROO PRAÇA — furniture catalogue (data only; the iso renderers live in RoomCanvas).
+// Extracted into a lib so the inventory/economy can read the same source of truth.
+//
+// Economy seam: most furni is BASIC — free and owned by default (placing it has always been
+// free, that doesn't change). Premium categories (Hi-Fi today, more collections later) cost
+// Cristais and must be bought into your wallet before you can place them. `premium` on a CAT
+// turns the whole collection into a paid one; `CAT_PRICE` sets the per-item Cristais cost.
+
+export type FurniDef = {
+  kind: string; name: string; emoji: string; cat: string; color: string;
+  h: number; walk: boolean; foot: number; special?: string; span?: [number, number];
+};
+
+export type FurniCat = { id: string; name: string; premium?: boolean };
+
+export const CATS: FurniCat[] = [
+  { id: 'tier1',    name: '★ Hi-Fi', premium: true },
+  { id: 'constr',   name: 'Construção' },
+  { id: 'tapetes',  name: 'Pisos' },
+  { id: 'assentos', name: 'Assentos' },
+  { id: 'mesas',    name: 'Mesas' },
+  { id: 'plantas',  name: 'Plantas' },
+  { id: 'luzes',    name: 'Luzes' },
+  { id: 'electro',  name: 'Eletrónica' },
+  { id: 'deco',     name: 'Decoração' },
+];
+
+// Per-item Cristais price for premium collections (0 / absent = free basic furni).
+export const CAT_PRICE: Record<string, number> = {
+  tier1: 300,
+};
+
+export const FURNI: FurniDef[] = [
+  // ★ HI-FI — 1st-tier hand-drawn lounge set (couch spans 2 tiles)
+  { kind: 'lounge_couch', name: 'Sofá Lounge', emoji: '🛋️', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
+  { kind: 'lounge_chair', name: 'Poltrona',    emoji: '💺', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'armchair' },
+  { kind: 'lounge_table', name: 'Mesa Centro', emoji: '🪵', cat: 'tier1', color: '#4a3120', h: 1, walk: false, foot: 1, special: 'coffee' },
+  // construção (walkable build pieces + solid walls)
+  { kind: 'bloco',      name: 'Bloco',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
+  { kind: 'meio',       name: 'Cubo',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
+  { kind: 'plataforma', name: 'Plataforma',emoji: '⬛', cat: 'constr', color: '#303048', h: 1, walk: true,  foot: 1 },
+  { kind: 'escada',     name: 'Escada',    emoji: '🪜', cat: 'constr', color: '#4a4a66', h: 1, walk: true,  foot: 1, special: 'stair' },
+  { kind: 'rampa',      name: 'Rampa',     emoji: '📐', cat: 'constr', color: '#40405a', h: 1, walk: true,  foot: 1, special: 'stair' },
+  { kind: 'pilar',      name: 'Pilar',     emoji: '🏛️', cat: 'constr', color: '#2e2e3e', h: 2, walk: false, foot: 0.55 },
+  { kind: 'parede',     name: 'Parede',    emoji: '🧱', cat: 'constr', color: '#3a2e2e', h: 2, walk: false, foot: 1, special: 'wall' },
+  { kind: 'cerca',      name: 'Cerca',     emoji: '🚧', cat: 'constr', color: '#6a5a2a', h: 1, walk: false, foot: 1, special: 'wall' },
+  // pisos / tapetes (walkable, 1-high — carpets have height!)
+  { kind: 'tap_red',  name: 'Tapete',  emoji: '🟥', cat: 'tapetes', color: '#b3242e', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_blu',  name: 'Tapete',  emoji: '🟦', cat: 'tapetes', color: '#2452b3', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_grn',  name: 'Tapete',  emoji: '🟩', cat: 'tapetes', color: '#1ea64a', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'tap_pur',  name: 'Tapete',  emoji: '🟪', cat: 'tapetes', color: '#8a44cc', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'relva',    name: 'Relva',   emoji: '🌿', cat: 'tapetes', color: '#2e7d32', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'agua',     name: 'Água',    emoji: '💧', cat: 'tapetes', color: '#1d6fb3', h: 1, walk: true, foot: 1, special: 'water' },
+  { kind: 'gelo',     name: 'Gelo',    emoji: '🧊', cat: 'tapetes', color: '#aee3ff', h: 1, walk: true, foot: 1, special: 'rug' },
+  { kind: 'lava',     name: 'Lava',    emoji: '🌋', cat: 'tapetes', color: '#d23a1a', h: 1, walk: true, foot: 1, special: 'water' },
+  { kind: 'xadrez',   name: 'Xadrez',  emoji: '♟️', cat: 'tapetes', color: '#2a2a36', h: 1, walk: true, foot: 1, special: 'rug' },
+  // assentos
+  { kind: 'cadeira',  name: 'Cadeira',  emoji: '🪑', cat: 'assentos', color: '#6a5436', h: 1, walk: false, foot: 0.7, special: 'chair' },
+  { kind: 'poltrona', name: 'Poltrona', emoji: '💺', cat: 'assentos', color: '#5a4080', h: 1, walk: false, foot: 0.8, special: 'sofa' },
+  { kind: 'sofa',     name: 'Sofá',     emoji: '🛋️', cat: 'assentos', color: '#4a3768', h: 1, walk: false, foot: 1,   special: 'sofa' },
+  { kind: 'sofahc',   name: 'Sofá HC',  emoji: '👑', cat: 'assentos', color: '#ffd23a', h: 1, walk: false, foot: 1,   special: 'sofa' },
+  { kind: 'banco',    name: 'Banco',    emoji: '🪑', cat: 'assentos', color: '#6a6a76', h: 1, walk: false, foot: 0.6, special: 'stool' },
+  { kind: 'trono',    name: 'Trono',    emoji: '👑', cat: 'assentos', color: '#7a1aaa', h: 2, walk: false, foot: 0.8, special: 'throne' },
+  { kind: 'puff',     name: 'Puff',     emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7, special: 'puff' },
+  // mesas
+  { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
+  { kind: 'mesacafe', name: 'Café',      emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8, special: 'table' },
+  { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#2a2a3a', h: 2, walk: false, foot: 1,   special: 'counter' },
+  { kind: 'prat',     name: 'Prateleira',emoji: '📚', cat: 'mesas', color: '#4a3420', h: 2, walk: false, foot: 0.6, special: 'shelf' },
+  // plantas
+  { kind: 'planta',   name: 'Planta',   emoji: '🪴', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
+  { kind: 'cato',     name: 'Cato',     emoji: '🌵', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
+  { kind: 'bonsai',   name: 'Bonsai',   emoji: '🎍', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
+  { kind: 'arvore',   name: 'Árvore',   emoji: '🌳', cat: 'plantas', color: '#8a4f2a', h: 2, walk: false, foot: 0.8, special: 'plant' },
+  { kind: 'palmeira', name: 'Palmeira', emoji: '🌴', cat: 'plantas', color: '#8a4f2a', h: 2, walk: false, foot: 0.7, special: 'plant' },
+  { kind: 'flores',   name: 'Flores',   emoji: '🌷', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
+  // luzes
+  { kind: 'candeeiro',name: 'Candeeiro',emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
+  { kind: 'neon',     name: 'Néon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
+  { kind: 'disco',    name: 'Bola Disco',emoji: '🪩', cat: 'luzes', color: '#cfd6ff', h: 0, walk: true,  foot: 1, special: 'disco' },
+  { kind: 'holofote', name: 'Holofote', emoji: '🔦', cat: 'luzes', color: '#ffffff', h: 1, walk: false, foot: 0.5, special: 'lamp' },
+  { kind: 'lavalamp', name: 'Lava Lamp',emoji: '🟣', cat: 'luzes', color: '#cc44ff', h: 1, walk: false, foot: 0.4, special: 'lamp' },
+  { kind: 'tocha',    name: 'Tocha',    emoji: '🔥', cat: 'luzes', color: '#ff8800', h: 1, walk: false, foot: 0.4, special: 'lamp' },
+  // eletrónica
+  { kind: 'tv',       name: 'TV',       emoji: '📺', cat: 'electro', color: '#15151f', h: 1, walk: false, foot: 1, special: 'tv' },
+  { kind: 'coluna',   name: 'Coluna',   emoji: '🔈', cat: 'electro', color: '#23232f', h: 2, walk: false, foot: 0.7, special: 'speaker' },
+  { kind: 'jukebox',  name: 'Jukebox',  emoji: '🎵', cat: 'electro', color: '#aa2266', h: 2, walk: false, foot: 0.7, special: 'jukebox' },
+  { kind: 'arcade',   name: 'Arcade',   emoji: '🕹️', cat: 'electro', color: '#2a1a4a', h: 2, walk: false, foot: 0.8, special: 'tv' },
+  { kind: 'frigo',    name: 'Frigorífico',emoji: '🧊', cat: 'electro', color: '#cdd6e0', h: 2, walk: false, foot: 0.7, special: 'fridge' },
+  { kind: 'vending',  name: 'Máquina',  emoji: '🥤', cat: 'electro', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'vending' },
+  { kind: 'pc',       name: 'PC',       emoji: '💻', cat: 'electro', color: '#2a2a3a', h: 1, walk: false, foot: 0.6, special: 'tv' },
+  // decoração
+  { kind: 'cartaz',   name: 'Cartaz',   emoji: '🪧', cat: 'deco', color: '#16161f', h: 1, walk: false, foot: 0.7, special: 'sign' },
+  { kind: 'quadro',   name: 'Quadro',   emoji: '🖼️', cat: 'deco', color: '#caa24a', h: 1, walk: false, foot: 0.6, special: 'frame' },
+  { kind: 'trofeu',   name: 'Troféu',   emoji: '🏆', cat: 'deco', color: '#ffd700', h: 1, walk: false, foot: 0.4, special: 'trophy' },
+  { kind: 'vaso',     name: 'Vaso',     emoji: '🏺', cat: 'deco', color: '#c4632e', h: 1, walk: false, foot: 0.5, special: 'vase' },
+  { kind: 'pato',     name: 'Patinho',  emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4, special: 'duck' },
+  { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4, special: 'cone' },
+  { kind: 'estatua',  name: 'Estátua',  emoji: '🗿', cat: 'deco', color: '#9a9aa6', h: 2, walk: false, foot: 0.6, special: 'statue' },
+  { kind: 'fonte',    name: 'Fonte',    emoji: '⛲', cat: 'deco', color: '#2a6fb3', h: 1, walk: false, foot: 1, special: 'water' },
+];
+
+export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
+export const defOf = (kind: string): FurniDef =>
+  FMAP[kind] ?? { kind, name: '?', emoji: '?', cat: 'deco', color: '#666', h: 1, walk: false, foot: 0.8 };
+
+const catOf = (id: string): FurniCat | undefined => CATS.find(c => c.id === id);
+
+// Is this furniture from a paid collection? (Hi-Fi today; more later.)
+export const isFurniPremium = (kind: string): boolean => Boolean(catOf(defOf(kind).cat)?.premium);
+// Cristais price (0 for basic furni).
+export const furniPrice = (kind: string): number => CAT_PRICE[defOf(kind).cat] ?? 0;
