@@ -18,7 +18,7 @@ import { resolveAppearance } from '@/lib/catalog';
 import { ownsFurni, buyFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
-import { drawFurniSprite } from '@/lib/furniRender';
+import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -131,7 +131,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const rebuildHeight = () => {
     const H = heightRef.current, S = solidRef.current; H.fill(0); S.fill(0);
     for (const it of itemsRef.current) {
-      const d = defOf(it.kind); const [sw, sh] = d.span ?? [1, 1];
+      const d = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
         const k = key(gx, gy);
@@ -169,10 +169,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
-    const [sw, sh] = defOf(kind).span ?? [1, 1];
+    const dir = isRotatable(kind) ? placeDirRef.current : 0;
+    const [sw, sh] = effSpan(kind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
-    const dir = isRotatable(kind) ? placeDirRef.current : 0;
     const item: Item = { id, kind, gx, gy, dir, createdBy: selfRef.current.id };
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
     channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, dir, by: item.createdBy } });
@@ -180,7 +180,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = defOf(i.kind).span ?? [1, 1]; return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
     if (!hit) return;
     if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
@@ -188,7 +188,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir) }).eq('id', hit.id).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = defOf(i.kind).span ?? [1, 1]; return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
     if (!hit) return;
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
     if (hit.createdBy === selfRef.current.id) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
@@ -340,7 +340,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // depth-sorted furni + avatars
       const stack = new Map<string, number>();
       const ents: Array<{ s: number; draw: () => void }> = [];
-      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; const dd = defOf(it.kind); const [sw, sh] = dd.span ?? [1, 1]; stack.set(k, gz + (dd.h || 0)); const ii = it, z = gz; ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + z * 0.01, draw: () => { const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
+      for (const it of itemsRef.current) { const k = `${it.gx},${it.gy}`; const gz = stack.get(k) ?? 0; const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); stack.set(k, gz + (dd.h || 0)); const ii = it, z = gz; ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + z * 0.01, draw: () => { const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.01 + 0.005, draw: () => drawAvatar(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.01 + 0.005, draw: () => drawAvatar(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();

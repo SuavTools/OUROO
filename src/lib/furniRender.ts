@@ -56,17 +56,16 @@ const drawParts = (ctx: CanvasRenderingContext2D, sx: number, sy: number, dir: n
   if (deco) deco((u, v, z = 0) => { const [ru, rv] = rotUV(u, v, dir, cu, cv); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; });
 };
 const legs = (us: [number, number][], z1: number): IsoPart[] => us.map(([u, v]) => ({ u0: u - 0.05, u1: u + 0.05, v0: v - 0.05, v1: v + 0.05, z0: 0, z1, t: '#3a2616', r: '#2a1c10', l: '#1f140a' }));
-const cushionSheen = (ctx: CanvasRenderingContext2D, P: (u: number, v: number, z?: number) => number[], cu: number, cv: number, z: number, rx: number, hi: string) => {
-  const c = P(cu, cv, z); const g = ctx.createRadialGradient(c[0], c[1] - 3, 2, c[0], c[1], 28); g.addColorStop(0, hexA(hi, 0.5)); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], rx, rx * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-};
+// True if a face whose local outward normal is (du,dv) points toward the camera under this dir.
+const faceVisible = (du: number, dv: number, dir: number): boolean => { let u = du, v = dv; const n = ((dir % 4) + 4) % 4; for (let i = 0; i < n; i++) { const t = u; u = -v; v = t; } return u + v > 0.001; };
 
 const drawChair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
-  void _a; const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.64), hi = shade(base, 1.6);
+  void _a; const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.64);
   const parts: IsoPart[] = [...legs([[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]], 0.16),
     { u0: -0.34, u1: 0.34, v0: -0.44, v1: -0.26, z0: 0.16, z1: 1.25, t: cT, r: cR, l: cL },
     { u0: -0.34, u1: 0.34, v0: -0.24, v1: 0.34, z0: 0.16, z1: 0.5, t: cT, r: cR, l: cL },
     { u0: -0.3, u1: 0.3, v0: -0.2, v1: 0.32, z0: 0.5, z1: 0.72, t: shade(base, 1.24), r: cR, l: cL }];
-  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => cushionSheen(ctx, P, 0, 0.06, 0.72, TW * 0.46, hi));
+  drawParts(ctx, sx, sy, dir, 0, 0, parts);
 };
 
 const drawSofaR = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
@@ -78,47 +77,39 @@ const drawSofaR = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: st
     { u0: -0.32, u1: 0.32, v0: -0.26, v1: 0.42, z0: 0.14, z1: 0.46, t: cT, r: cR, l: cL },
     { u0: -0.3, u1: 0.3, v0: -0.22, v1: 0.4, z0: 0.46, z1: 0.66, t: shade(base, 1.24), r: cR, l: cL }];
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
-    cushionSheen(ctx, P, 0, 0.08, 0.66, TW * 0.58, hi);
     for (const uc of [-0.38, 0.38]) { const a = P(uc, -0.03, 0.78); const g = ctx.createRadialGradient(a[0] - 2, a[1] - 3, 1, a[0], a[1], TW * 0.3); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.26, TH * 0.46, 0, 0, Math.PI * 2); ctx.fill(); }
   });
 };
 
 const drawThroneR = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
-  const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.62), hi = shade(base, 1.6);
+  const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.62);
   const parts: IsoPart[] = [
     { u0: -0.4, u1: 0.4, v0: -0.46, v1: -0.3, z0: 0.15, z1: 2.1, t: cT, r: cR, l: cL },
     { u0: -0.42, u1: -0.28, v0: -0.46, v1: 0.4, z0: 0.15, z1: 1.0, t: cT, r: cR, l: cL },
     { u0: 0.28, u1: 0.42, v0: -0.46, v1: 0.4, z0: 0.15, z1: 1.0, t: cT, r: cR, l: cL },
     { u0: -0.34, u1: 0.34, v0: -0.28, v1: 0.42, z0: 0.15, z1: 0.7, t: shade(base, 1.12), r: cR, l: cL }];
-  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => { cushionSheen(ctx, P, 0, 0.08, 0.7, TW * 0.5, hi); const g = P(0, -0.38, 2.1); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(g[0], g[1], 3.5, 0, Math.PI * 2); ctx.fill(); });
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => { const g = P(0, -0.38, 2.1); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(g[0], g[1], 3.5, 0, Math.PI * 2); ctx.fill(); });
 };
 
-// ★ HI-FI lounge set — hand-drawn iso, lots of layered detail.
-const drawCouch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
-  const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
-  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), cD = shade(base, 0.48), hi = shade(base, 1.55);
-  const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => {
-    poly(ctx, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r);
-    poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l);
-    poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t);
-  };
-  for (const [u, v] of [[-0.28, -0.28], [1.28, -0.28], [-0.28, 0.28], [1.28, 0.28]] as [number, number][]) span(u - 0.06, u + 0.06, v - 0.06, v + 0.06, 0, 0.16, '#3a2616', '#2a1c10', '#1f140a');
-  span(-0.4, 1.4, -0.42, -0.16, 0.5, 1.5, cT, cR, cL);
-  span(-0.42, -0.12, -0.42, 0.4, 0.5, 1.04, cT, cR, cL);
-  { const a = P(-0.27, -0.01, 1.04); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-  for (const [u0, u1] of [[-0.08, 0.6], [0.6, 1.32]] as [number, number][]) {
-    span(u0, u1, -0.16, 0.02, 0.56, 1.42, shade(base, 1.16), cR, cL);
-    for (let bx = 0; bx < 2; bx++) for (let by = 0; by < 2; by++) { const pt = P(u0 + 0.2 + bx * 0.3, 0.0, 0.82 + by * 0.32); ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(pt[0], pt[1], 1.8, 0, Math.PI * 2); ctx.fill(); }
-  }
-  span(-0.34, 1.34, -0.16, 0.36, 0.18, 0.52, cT, cR, cL);
-  for (const [u0, u1] of [[-0.3, 0.5], [0.5, 1.3]] as [number, number][]) {
-    span(u0 + 0.02, u1 - 0.02, -0.28, 0.34, 0.52, 0.76, shade(base, 1.24), cR, cL);
-    const c = P((u0 + u1) / 2, 0.03, 0.76); const g = ctx.createRadialGradient(c[0], c[1], 2, c[0], c[1], 28); g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.55, TH * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-    poly(ctx, [P(u0 + 0.02, -0.28, 0.76), P(u1 - 0.02, -0.28, 0.76), P(u1 - 0.02, 0.34, 0.76), P(u0 + 0.02, 0.34, 0.76)], undefined, hexA(hi, 0.5), 1);
-  }
-  { const pc = P(0.12, 0.04, 0.82); ctx.save(); ctx.translate(pc[0], pc[1]); ctx.rotate(-0.22); ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 8, 5); ctx.fill(); ctx.strokeStyle = hexA('#000', 0.2); ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.stroke(); ctx.restore(); }
-  span(1.12, 1.42, -0.42, 0.4, 0.5, 1.04, cT, cR, cL);
-  { const a = P(1.27, -0.01, 1.04); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+// ★ HI-FI lounge set — 2-tile couch, centered local frame so it rotates 4 ways.
+const drawCouch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), cD = shade(base, 0.48), hi = shade(base, 1.55), bc = shade(base, 1.16), sc = shade(base, 1.24);
+  const parts: IsoPart[] = [
+    ...legs([[-0.78, -0.28], [0.78, -0.28], [-0.78, 0.28], [0.78, 0.28]], 0.16),
+    { u0: -0.9, u1: 0.9, v0: -0.42, v1: -0.16, z0: 0.5, z1: 1.5, t: cT, r: cR, l: cL },              // back
+    { u0: -0.58, u1: 0.08, v0: -0.18, v1: 0.0, z0: 0.56, z1: 1.42, t: bc, r: cR, l: cL },            // back cushion L
+    { u0: 0.08, u1: 0.82, v0: -0.18, v1: 0.0, z0: 0.56, z1: 1.42, t: bc, r: cR, l: cL },             // back cushion R
+    { u0: -0.92, u1: -0.62, v0: -0.42, v1: 0.4, z0: 0.5, z1: 1.04, t: cT, r: cR, l: cL },            // left arm
+    { u0: 0.62, u1: 0.92, v0: -0.42, v1: 0.4, z0: 0.5, z1: 1.04, t: cT, r: cR, l: cL },              // right arm
+    { u0: -0.84, u1: 0.84, v0: -0.16, v1: 0.36, z0: 0.18, z1: 0.52, t: cT, r: cR, l: cL },           // seat base
+    { u0: -0.78, u1: -0.02, v0: -0.28, v1: 0.34, z0: 0.52, z1: 0.78, t: sc, r: cR, l: cL },          // seat cushion L
+    { u0: 0.02, u1: 0.78, v0: -0.28, v1: 0.34, z0: 0.52, z1: 0.78, t: sc, r: cR, l: cL }];           // seat cushion R
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (const [u0, u1] of [[-0.78, -0.02], [0.02, 0.78]] as [number, number][]) poly(ctx, [P(u0, -0.28, 0.78), P(u1, -0.28, 0.78), P(u1, 0.34, 0.78), P(u0, 0.34, 0.78)], undefined, hexA(hi, 0.5), 1);
+    for (const uc of [-0.77, 0.77]) { const a = P(uc, -0.01, 1.04); ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.42, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    if (faceVisible(0, 1, dir)) for (const u0 of [-0.58, 0.08]) for (let bx = 0; bx < 2; bx++) for (let by = 0; by < 2; by++) { const pt = P(u0 + 0.18 + bx * 0.3, -0.07, 0.82 + by * 0.32); ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(pt[0], pt[1], 1.8, 0, Math.PI * 2); ctx.fill(); }
+    const pc = P(-0.38, 0.04, 0.82); ctx.save(); ctx.translate(pc[0], pc[1]); ctx.rotate(-0.22); ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 8, 5); ctx.fill(); ctx.strokeStyle = hexA('#000', 0.2); ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(-12, -9, 24, 18, 5); ctx.stroke(); ctx.restore();
+  });
 };
 
 const drawArmchair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _accent: string, base: string, dir: number) => {
@@ -130,7 +121,6 @@ const drawArmchair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _ac
     { u0: -0.32, u1: 0.32, v0: -0.24, v1: 0.4, z0: 0.16, z1: 0.46, t: cT, r: cR, l: cL },       // seat base
     { u0: -0.3, u1: 0.3, v0: -0.2, v1: 0.38, z0: 0.46, z1: 0.72, t: shade(base, 1.24), r: cR, l: cL }]; // cushion
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
-    cushionSheen(ctx, P, 0, 0.08, 0.72, TW * 0.5, hi);
     for (const uc of [-0.36, 0.36]) { const a = P(uc, -0.02, 0.92); const g = ctx.createRadialGradient(a[0] - 2, a[1] - 3, 1, a[0], a[1], TW * 0.34); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.28, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill(); }
   });
 };
@@ -153,42 +143,28 @@ const drawCoffee = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 
 // Tufted Chesterfield-style sofa (2 tiles): diamond button tufting, rolled arms, brass feet + nailheads.
-const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
-  const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
-  const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly(ctx, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
-  const cT = shade(base, 1.34), cR = shade(base, 1.0), cL = shade(base, 0.62), cD = shade(base, 0.38), hi = shade(base, 1.8);
-  const brass = '#c9a44f';
-  // brass tapered feet
-  for (const [u, v] of [[-0.28, -0.26], [1.28, -0.26], [-0.28, 0.32], [1.28, 0.32]] as [number, number][]) span(u - 0.045, u + 0.045, v - 0.045, v + 0.045, 0, 0.2, shade(brass, 1.2), shade(brass, 0.85), shade(brass, 0.55));
-  // back rest (tall)
-  span(-0.42, 1.42, -0.48, -0.18, 0.42, 1.5, cT, cR, cL);
-  // diamond button tufting on the back's front face
-  ctx.save();
-  const rows = [0.66, 0.95, 1.24];
-  for (let zi = 0; zi < rows.length; zi++) {
-    const z = rows[zi], offset = zi % 2 ? 0.18 : 0;
-    for (let u = -0.2; u <= 1.32; u += 0.36) {
-      const b = P(u + offset, -0.2, z);
-      const g = ctx.createRadialGradient(b[0], b[1] + 1, 0, b[0], b[1], 6); g.addColorStop(0, cD); g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.globalAlpha = 0.85; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(b[0], b[1], 5, 4, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1; ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(b[0], b[1], 1.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = hexA(hi, 0.7); ctx.beginPath(); ctx.arc(b[0] - 0.6, b[1] - 0.8, 0.9, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-  ctx.restore();
-  const arm = (uc: number) => {
-    span(uc - 0.16, uc + 0.16, -0.46, 0.42, 0.42, 1.06, cT, cR, cL);
-    const a = P(uc, -0.02, 1.06); ctx.save(); const g = ctx.createRadialGradient(a[0] - 3, a[1] - 4, 1, a[0], a[1], TILE_W * 0.5); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.5, TH * 0.8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    for (let v = -0.4; v <= 0.38; v += 0.16) { const n = P(uc + 0.16, v, 0.5); ctx.fillStyle = brass; ctx.beginPath(); ctx.arc(n[0], n[1], 1.3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = hexA('#fff', 0.6); ctx.beginPath(); ctx.arc(n[0] - 0.4, n[1] - 0.4, 0.5, 0, Math.PI * 2); ctx.fill(); }
-  };
-  arm(-0.26);
-  span(-0.34, 1.34, -0.18, 0.4, 0.16, 0.5, cT, cR, cL);   // seat base
-  for (const [u0, u1] of [[-0.3, 0.5], [0.5, 1.3]] as [number, number][]) {
-    span(u0 + 0.03, u1 - 0.03, -0.32, 0.36, 0.5, 0.8, shade(base, 1.22), cR, cL);
-    const c = P((u0 + u1) / 2, 0.02, 0.8); const g = ctx.createRadialGradient(c[0], c[1] - 3, 2, c[0], c[1], 30); g.addColorStop(0, hexA(hi, 0.55)); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.6, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill();
-    poly(ctx, [P(u0 + 0.03, -0.32, 0.8), P(u1 - 0.03, -0.32, 0.8), P(u1 - 0.03, 0.36, 0.8), P(u0 + 0.03, 0.36, 0.8)], undefined, hexA(hi, 0.5), 1);
-  }
-  arm(1.26);
+// Tufted Chesterfield (2 tiles, centered local frame so it rotates 4 ways).
+const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const cT = shade(base, 1.34), cR = shade(base, 1.0), cL = shade(base, 0.62), cD = shade(base, 0.38), hi = shade(base, 1.8), brass = '#c9a44f';
+  const parts: IsoPart[] = [
+    { u0: -0.825, u1: -0.735, v0: -0.305, v1: -0.215, z0: 0, z1: 0.2, t: shade(brass, 1.2), r: shade(brass, 0.85), l: shade(brass, 0.55) },
+    { u0: 0.735, u1: 0.825, v0: -0.305, v1: -0.215, z0: 0, z1: 0.2, t: shade(brass, 1.2), r: shade(brass, 0.85), l: shade(brass, 0.55) },
+    { u0: -0.825, u1: -0.735, v0: 0.275, v1: 0.365, z0: 0, z1: 0.2, t: shade(brass, 1.2), r: shade(brass, 0.85), l: shade(brass, 0.55) },
+    { u0: 0.735, u1: 0.825, v0: 0.275, v1: 0.365, z0: 0, z1: 0.2, t: shade(brass, 1.2), r: shade(brass, 0.85), l: shade(brass, 0.55) },
+    { u0: -0.92, u1: 0.92, v0: -0.48, v1: -0.18, z0: 0.42, z1: 1.5, t: cT, r: cR, l: cL },         // back
+    { u0: -0.92, u1: -0.66, v0: -0.46, v1: 0.42, z0: 0.42, z1: 1.06, t: cT, r: cR, l: cL },        // left arm
+    { u0: 0.66, u1: 0.92, v0: -0.46, v1: 0.42, z0: 0.42, z1: 1.06, t: cT, r: cR, l: cL },          // right arm
+    { u0: -0.84, u1: 0.84, v0: -0.18, v1: 0.4, z0: 0.16, z1: 0.5, t: cT, r: cR, l: cL },           // seat base
+    { u0: -0.77, u1: -0.03, v0: -0.32, v1: 0.36, z0: 0.5, z1: 0.8, t: shade(base, 1.22), r: cR, l: cL }, // seat cushion L
+    { u0: 0.03, u1: 0.77, v0: -0.32, v1: 0.36, z0: 0.5, z1: 0.8, t: shade(base, 1.22), r: cR, l: cL }];  // seat cushion R
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    // seat cushion piping (top)
+    for (const [u0, u1] of [[-0.77, -0.03], [0.03, 0.77]] as [number, number][]) poly(ctx, [P(u0, -0.32, 0.8), P(u1, -0.32, 0.8), P(u1, 0.36, 0.8), P(u0, 0.36, 0.8)], undefined, hexA(hi, 0.5), 1);
+    // rolled-arm sheen (top-facing)
+    for (const uc of [-0.79, 0.79]) { const a = P(uc, -0.02, 1.06); ctx.save(); const g = ctx.createRadialGradient(a[0] - 3, a[1] - 4, 1, a[0], a[1], TILE_W * 0.5); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.5, TH * 0.8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    // diamond button tufting — only when the backrest's front face is toward camera
+    if (faceVisible(0, 1, dir)) { const rows = [0.66, 0.95, 1.24]; for (let zi = 0; zi < rows.length; zi++) { const z = rows[zi], off = zi % 2 ? 0.18 : 0; for (let u = -0.7; u <= 0.82; u += 0.36) { const b = P(u + off, -0.2, z); const g = ctx.createRadialGradient(b[0], b[1] + 1, 0, b[0], b[1], 6); g.addColorStop(0, cD); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.globalAlpha = 0.85; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(b[0], b[1], 5, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(b[0], b[1], 1.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = hexA(hi, 0.7); ctx.beginPath(); ctx.arc(b[0] - 0.6, b[1] - 0.8, 0.9, 0, Math.PI * 2); ctx.fill(); } } }
+  });
 };
 
 // Habbo-club style plant: glossy pot, soil, layered monstera leaves with veins + gradients.
@@ -276,16 +252,22 @@ const drawBallHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
 };
 
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
+// Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
+export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
+
 export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
+  // Multi-tile pieces draw in a centered local frame — shift the anchor to the footprint centre.
+  const [esw, esh] = effSpan(kind, dir);
+  if (esw !== 1 || esh !== 1) { const ocx = (esw - 1) / 2, ocy = (esh - 1) / 2; sx += (ocx - ocy) * TW; sy += (ocx + ocy) * TH; }
   switch (d.special) {
-    case 'couch': drawCouch(ctx, sx, sy, accent, d.color); break;
+    case 'couch': drawCouch(ctx, sx, sy, accent, d.color, dir); break;
+    case 'couch_hc': drawCouchHC(ctx, sx, sy, accent, d.color, dir); break;
     case 'armchair': drawArmchair(ctx, sx, sy, accent, d.color, dir); break;
     case 'chair': drawChair(ctx, sx, sy, accent, d.color, dir); break;
     case 'sofa': drawSofaR(ctx, sx, sy, accent, d.color, dir); break;
     case 'throne': drawThroneR(ctx, sx, sy, accent, d.color, dir); break;
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
-    case 'couch_hc': drawCouchHC(ctx, sx, sy, accent, d.color); break;
     case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
     case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
     case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;
