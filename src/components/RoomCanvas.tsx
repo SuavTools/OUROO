@@ -545,7 +545,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D; if (!ctx) return;
-    canvas.width = STAGE_W; canvas.height = STAGE_H;
+    // Supersample: back the 1280×720 stage with 2× device pixels so everything renders crisp (not soft-upscaled).
+    const SS = 2; canvas.width = STAGE_W * SS; canvas.height = STAGE_H * SS; ctx.setTransform(SS, 0, 0, SS, 0, 0);
     const update = () => {
       framesRef.current++;
       const me = selfRef.current;

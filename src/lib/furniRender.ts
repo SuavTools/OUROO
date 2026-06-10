@@ -676,7 +676,7 @@ const drawPit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: 
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
-export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
+function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
   // Multi-tile pieces draw in a centered local frame — shift the anchor to the footprint centre.
   const [esw, esh] = effSpan(kind, dir);
@@ -799,4 +799,48 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'statue': { const ped = boxAt(ctx, sx, sy, d.foot * 0.8, d.foot * 0.8, 0.45, '#55555f', accent); ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx - 8, ped); ctx.lineTo(sx + 8, ped); ctx.lineTo(sx + 5, ped - 30); ctx.lineTo(sx - 5, ped - 30); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.arc(sx, ped - 36, 6, 0, Math.PI * 2); ctx.fill(); break; }
     default: block(ctx, sx, sy, d.h, d.color, accent, d.foot);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// Sprite cache + quality pass. Static pieces are rendered ONCE to an offscreen canvas at 2×, with a
+// baked dark keyline OUTLINE (8-way silhouette stamp) and a soft contact SHADOW — then blitted. This
+// is what lifts the look toward Habbo (crisp edges + grounding) and lets each piece carry far more
+// detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox']);
+const spriteCache = new Map<string, HTMLCanvasElement>();
+const spriteOrder: string[] = []; const SPRITE_CAP = 140;
+const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+
+function buildSprite(kind: string, accent: string, dir: number): HTMLCanvasElement {
+  const W = SPR_W * SS, H = SPR_H * SS;
+  // 1) the art on its own layer
+  const art = mkCanvas(W, H); const ax = art.getContext('2d')!; ax.scale(SS, SS); drawRaw(ax, kind, OX, OY, accent, 0, dir);
+  // 2) a solid dark silhouette of the art (for the outline)
+  const sil = mkCanvas(W, H); const sc = sil.getContext('2d')!; sc.drawImage(art, 0, 0); sc.globalCompositeOperation = 'source-in'; sc.fillStyle = 'rgba(12,10,16,0.95)'; sc.fillRect(0, 0, W, H);
+  // 3) compose: contact shadow → outline (silhouette stamped around) → art on top
+  const out = mkCanvas(W, H); const cx = out.getContext('2d')!;
+  cx.save(); cx.globalAlpha = 0.26; cx.fillStyle = '#000'; cx.beginPath(); cx.ellipse(OX * SS, OY * SS, TW * 0.82 * SS, TH * 0.72 * SS, 0, 0, Math.PI * 2); cx.fill(); cx.restore();
+  const k = Math.round(1.6 * SS); for (let a = 0; a < 8; a++) cx.drawImage(sil, Math.round(Math.cos(a * Math.PI / 4) * k), Math.round(Math.sin(a * Math.PI / 4) * k));
+  cx.drawImage(art, 0, 0);
+  return out;
+}
+
+function getSprite(kind: string, accent: string, dir: number): HTMLCanvasElement {
+  const key = `${kind}|${accent}|${dir}`;
+  let c = spriteCache.get(key);
+  if (!c) { c = buildSprite(kind, accent, dir); spriteCache.set(key, c); spriteOrder.push(key); if (spriteOrder.length > SPRITE_CAP) { const old = spriteOrder.shift(); if (old) spriteCache.delete(old); } }
+  return c;
+}
+
+// Public entry: cached blit for static pieces (with baked outline + shadow); live draw for animated ones.
+export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
+  const d = defOf(kind);
+  if (ANIMATED.has(d.special ?? '')) {
+    ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    drawRaw(ctx, kind, sx, sy, accent, t, dir); return;
+  }
+  try { ctx.drawImage(getSprite(kind, accent, dir), 0, 0, SPR_W * SS, SPR_H * SS, sx - OX, sy - OY, SPR_W, SPR_H); }
+  catch { drawRaw(ctx, kind, sx, sy, accent, t, dir); }   // fall back to live draw if offscreen canvas is unavailable
 }
