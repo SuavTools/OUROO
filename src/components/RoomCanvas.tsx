@@ -71,6 +71,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const selfRef = useRef<Self>({ id: '', handle: 'Convidado', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, lvl: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
+  const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
+  const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
@@ -188,21 +190,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (roomOf(room).locked && !modRef.current) { flashHint('Sala bloqueada'); return; }
     if (!modRef.current && !ownsFurni(kind)) { flashHint('Compra primeiro ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
-    const mine = itemsRef.current.filter(i => i.createdBy === selfRef.current.id).length;
+    const mine = itemsRef.current.filter(i => i.createdBy === deviceRef.current).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
     const dir = isRotatable(kind) ? placeDirRef.current : 0;
     const elev = defOf(kind).walk ? placeElevRef.current : 0;   // only walkable pieces float (decks/bridges)
     const [sw, sh] = effSpan(kind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
-    const item: Item = { id, kind, gx, gy, dir, elev, createdBy: selfRef.current.id };
+    const item: Item = { id, kind, gx, gy, dir, elev, createdBy: deviceRef.current };
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
     channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, dir, elev, by: item.createdBy } });
     supabase?.from('room_items').insert({ id, room, kind: encodeKind(kind, dir, elev), x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === deviceRef.current); });
     if (!hit) return;
     if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
@@ -210,10 +212,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === selfRef.current.id); });
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === deviceRef.current); });
     if (!hit) return;
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
-    if (hit.createdBy === selfRef.current.id) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
+    if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
     channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
     supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
   };
@@ -221,7 +223,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- identity + realtime ----
   useEffect(() => {
     const lp = getLocalPlayer();
-    selfRef.current.id = lp.device || `guest_${Math.floor(Math.random() * 1e9)}`;
+    deviceRef.current = lp.device || `guest_${Math.floor(Math.random() * 1e9)}`;
+    if (!sessionRef.current) sessionRef.current = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`).slice(0, 8);
+    // Presence/broadcast id is UNIQUE per session so two tabs/accounts never collide; ownership uses the stable device.
+    selfRef.current.id = `${deviceRef.current}::${sessionRef.current}`;
     selfRef.current.handle = lp.handle || 'Convidado';
     const ap0 = getSelectedSkinId(); selfRef.current.skinId = ap0;
     const r0 = resolveAppearance(ap0); selfRef.current.icon = r0.kind === 'icon' ? r0.spec : null;
@@ -272,13 +277,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           setConnected(true);
           await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl });
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
-          if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === me.id).length); rebuildHeight(); }
+          if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
         }
       });
 
     const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, icon: m.icon ?? undefined, fx: m.fx, fy: m.fy, lvl: m.lvl }); } };
-    document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume);
-    return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); supabase?.removeChannel(ch); channelRef.current = null; };
+    // Tab close / app quit / navigation don't unmount React, so drop presence immediately here, else
+    // others see a frozen ghost until Supabase's heartbeat times out (tens of seconds).
+    const onLeave = () => { try { channelRef.current?.untrack(); } catch { /* ignore */ } };
+    document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume); window.addEventListener('pagehide', onLeave);
+    return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); supabase?.removeChannel(ch); channelRef.current = null; };
   }, [room]);
 
   // ---- main loop ----
