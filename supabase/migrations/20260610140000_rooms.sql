@@ -10,6 +10,8 @@ create table if not exists public.rooms (
   floor      text not null default '#161628',
   public     boolean not null default true,     -- listed for everyone vs invite-only (join by code)
   code       text,                               -- short shareable invite code
+  build_all  boolean not null default false,     -- anyone in the room can drop/take furni
+  rights     jsonb   not null default '[]'::jsonb, -- handles granted build (drop + take) rights
   created_at timestamptz not null default now()
 );
 

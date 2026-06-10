@@ -19,7 +19,7 @@ import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
-import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom } from '@/lib/rooms';
+import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -31,7 +31,13 @@ const WALK = 0.09;          // tiles per 60Hz step
 const BUBBLE_FRAMES = 60 * 6;
 const MAX_ITEMS = 200, PLACE_CAP = 20;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[] };
+// Who may drop/take furni in a room: a mod, the owner, an open ("build_all") room, or a granted handle.
+const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
+  if (mod) return true;
+  if (def.owner) return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
+  return !def.locked;
+};
 const ROOMS: RoomDef[] = [
   { slug: 'praca',   name: 'Praça',     accent: '#00cfff', floor: '#161628' },
   { slug: 'disco',   name: 'Discoteca', accent: '#ff44aa', floor: '#1e1226' },
@@ -99,8 +105,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPrivate, setNewRoomPrivate] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  // Permissions editor (for one of your own rooms): open everyone-toggle + a list of granted handles.
+  const [permsRoom, setPermsRoom] = useState<RoomRow | null>(null);
+  const [permsAll, setPermsAll] = useState(false);
+  const [permsList, setPermsList] = useState<string[]>([]);
+  const [permsHandle, setPermsHandle] = useState('');
   const [myOwnerId, setMyOwnerId] = useState('');
   const ownerIdRef = useRef('');
+  const [myHandle, setMyHandle] = useState('Convidado');
+  const myHandleRef = useRef('Convidado');
   const themeRef = useRef<RoomDef>(roomMeta);
   useEffect(() => { themeRef.current = roomMeta; roomMetaRef.current = roomMeta; }, [roomMeta]);
   const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); };
@@ -132,9 +145,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [myCount, setMyCount] = useState(0);
   const [hint, setHint] = useState('');
   const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
-  // You can build if: you're a mod, OR it's your personal room, OR it's an open official room.
-  const canBuild = isMod || (roomMeta.owner ? roomMeta.owner === myOwnerId : !roomMeta.locked);
+  // You can build if: you're a mod, the owner, an open ("everyone") room, or a granted handle.
+  const canBuild = canBuildIn(roomMeta, myOwnerId, myHandle, isMod);
   const locked = !canBuild;
+  // Same check from inside canvas closures (reads refs, not render state).
+  const canBuildHere = () => canBuildIn(roomMetaRef.current, ownerIdRef.current, myHandleRef.current, modRef.current);
   const [invOpen, setInvOpen] = useState(false);
   const wallet = useWallet();
   // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in.
@@ -164,7 +179,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
     setRoomMeta(def); setRoom(def.slug);
   };
-  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner });
+  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
     const res = await createRoom(newRoomName, !newRoomPrivate);
@@ -182,6 +197,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!ok) { flashHint('Erro ao apagar'); return; }
     if (room === r.slug) switchRoom(roomOf('praca'));
     refreshRoomLists();
+  };
+  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsList(r.rights ?? []); setPermsHandle(''); };
+  const addPermHandle = () => {
+    const h = permsHandle.trim(); if (!h) return;
+    if (!permsList.some(x => x.toLowerCase() === h.toLowerCase())) setPermsList(l => [...l, h]);
+    setPermsHandle('');
+  };
+  const savePerms = async () => {
+    if (!permsRoom) return;
+    const list = Array.from(new Set(permsList.map(h => h.trim()).filter(Boolean)));
+    const ok = await updateRoomPerms(permsRoom.slug, permsAll, list);
+    if (!ok) { flashHint('Erro ao guardar permissões'); return; }
+    // Reflect immediately in local lists + the live room if it's the one open.
+    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list } : r));
+    if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list }));
+    setPermsRoom(null); flashHint('Permissões guardadas ✓');
   };
 
   // recompute the heightmap (walkable height + solid mask) from items
@@ -240,8 +271,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
     if (!requireAccount()) return;
-    const def = roomMetaRef.current; const canB = modRef.current || (def.owner ? def.owner === ownerIdRef.current : !def.locked);
-    if (!canB) { flashHint('Sala bloqueada'); return; }
+    if (!canBuildHere()) { flashHint('Sem permissão para construir aqui'); return; }
     // Inventory: non-mods need stock (free basics are unlimited). Mods build freely (creative mode).
     if (!modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Indisponível' : 'Sem stock — compra mais ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
@@ -260,7 +290,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === deviceRef.current); });
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
     if (!hit) return;
     if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
@@ -268,7 +298,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
   };
   const removeAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (modRef.current || i.createdBy === deviceRef.current); });
+    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
     if (!hit) return;
     returnFurni(hit.kind);   // pick it up into MY inventory (free basics: no-op)
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
@@ -291,11 +321,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // Presence/broadcast id is UNIQUE per session so two tabs/accounts never collide; ownership uses the stable device.
     selfRef.current.id = `${deviceRef.current}::${sessionRef.current}`;
     selfRef.current.handle = lp.handle || 'Convidado';
+    myHandleRef.current = selfRef.current.handle; setMyHandle(selfRef.current.handle);
     const ap0 = getSelectedSkinId(); selfRef.current.skinId = ap0;
     const r0 = resolveAppearance(ap0); selfRef.current.icon = r0.kind === 'icon' ? r0.spec : null;
     refreshWalletFromCloud();
     setMyOwnerId(deviceRef.current); ownerIdRef.current = deviceRef.current;
-    getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
+    getAuthIdentity().then(a => { if (a?.handle) { selfRef.current.handle = a.handle; myHandleRef.current = a.handle; setMyHandle(a.handle); } if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
     amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
     if (!supabase || !entered) return;   // wait for the lobby "Entrar" so the join is deliberate + clean
@@ -624,7 +655,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                       <span className="font-bold text-white truncate">{r.name}</span>
                       {!r.public && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒 privada</span>}
                     </button>
+                    {(r.build_all || (r.rights ?? []).length > 0) && <span title={r.build_all ? 'Todos podem construir' : `${r.rights.length} com permissão`} className="text-[10px] text-[#1ED760] shrink-0">{r.build_all ? '✦ aberta' : `+${r.rights.length}`}</span>}
                     {r.code && <button onClick={() => copyCode(r.code)} title="Copiar código de convite" className="text-[11px] font-mono tracking-widest text-[#00cfff] border border-[#00cfff]/30 px-2 py-1 hover:bg-[#00cfff]/10">{r.code}</button>}
+                    <button onClick={() => openPerms(r)} title="Permissões" className="text-white/40 hover:text-white text-base leading-none px-1">⚙</button>
                     <button onClick={() => doDeleteRoom(r)} title="Apagar sala" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
                   </div>
                 ))}</div>
@@ -657,6 +690,42 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </div>
         );
       })()}
+
+      {permsRoom && (
+        <div className="absolute inset-0 z-[60] bg-black/85 flex justify-center overflow-y-auto px-6 py-10" onClick={() => setPermsRoom(null)}>
+          <div className="w-full max-w-sm bg-black border border-white/15 p-5 h-fit" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">Permissões</p>
+              <button onClick={() => setPermsRoom(null)} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <p className="font-bold text-white truncate mb-4">{permsRoom.name}</p>
+
+            <label className="flex items-center gap-3 p-3 border border-white/15 cursor-pointer hover:border-white/35">
+              <input type="checkbox" checked={permsAll} onChange={e => setPermsAll(e.target.checked)} className="accent-[#1ED760] w-4 h-4" />
+              <span className="text-sm text-white">Todos podem construir<br /><span className="text-[11px] text-white/45">Qualquer visitante pode largar e apanhar móveis.</span></span>
+            </label>
+
+            <p className={`text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2 ${permsAll ? 'opacity-40' : ''}`}>Pessoas com permissão</p>
+            <div className={`flex flex-col gap-2 ${permsAll ? 'opacity-40 pointer-events-none' : ''}`}>
+              {permsList.length === 0 && <p className="text-[11px] text-white/35">Ninguém ainda. Adiciona pelo handle.</p>}
+              {permsList.map(h => (
+                <div key={h} className="flex items-center gap-2 px-3 py-2 border border-white/12 bg-white/[0.03]">
+                  <span className="flex-1 min-w-0 truncate text-sm text-white">{h}</span>
+                  <button onClick={() => setPermsList(l => l.filter(x => x !== h))} title="Remover" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input value={permsHandle} onChange={e => setPermsHandle(e.target.value)} maxLength={32} placeholder="Handle da pessoa" onKeyDown={e => { if (e.key === 'Enter') addPermHandle(); }}
+                  className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#1ED760]" />
+                <button onClick={addPermHandle} className="bg-white/10 text-white font-bold uppercase text-xs tracking-widest px-4 hover:bg-white hover:text-black transition-colors active:scale-95">Add</button>
+              </div>
+            </div>
+            <p className="text-[10px] text-white/35 mt-2">O handle tem de bater certo com o nome da conta da pessoa. Construir inclui apanhar/tirar móveis.</p>
+
+            <button onClick={savePerms} className="w-full mt-4 bg-[#1ED760] text-black font-bold uppercase text-xs tracking-widest py-2.5 hover:bg-white transition-colors active:scale-95">Guardar</button>
+          </div>
+        </div>
+      )}
 
       <div className="absolute left-3 z-40 pointer-events-none flex flex-col gap-1 max-w-[60%] sm:max-w-md" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 56px)' }}>
         {feed.map(m => (<p key={m.id} className="text-sm leading-tight" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}><span className="text-brandYellow font-bold">{m.handle}</span><span className="text-white/90">: {m.text}</span></p>))}
