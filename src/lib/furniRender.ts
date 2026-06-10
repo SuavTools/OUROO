@@ -525,6 +525,94 @@ const drawBanner = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   ctx.fillStyle = '#fff'; ctx.font = '900 9px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('C', sx, topY + 17);
 };
 
+// Canopy daybed (2 tiles): four gold posts, a translucent canopy roof with corner drapes, plush
+// mattress + headboard, bolster pillows and an accent throw cushion. Tall + sittable. Rotates.
+const drawCanopy = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.62), gold = '#caa24a';
+  const post = (u: number, v: number): IsoPart => ({ u0: u - 0.05, u1: u + 0.05, v0: v - 0.05, v1: v + 0.05, z0: 0, z1: 1.75, t: shade(gold, 1.2), r: shade(gold, 0.85), l: shade(gold, 0.55) });
+  const parts: IsoPart[] = [
+    post(-0.85, -0.28), post(0.85, -0.28), post(-0.85, 0.3), post(0.85, 0.3),
+    { u0: -0.9, u1: 0.9, v0: -0.3, v1: 0.34, z0: 0.16, z1: 0.34, t: cT, r: cR, l: cL },               // mattress base
+    { u0: -0.86, u1: 0.86, v0: -0.28, v1: 0.32, z0: 0.34, z1: 0.52, t: shade(base, 1.32), r: cR, l: cL }, // cushion
+    { u0: -0.9, u1: 0.9, v0: -0.32, v1: -0.24, z0: 0.34, z1: 0.92, t: cT, r: cR, l: cL }];              // headboard
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 1.7;
+    ctx.save(); ctx.globalAlpha = 0.5; poly(ctx, [P(-0.9, -0.3, z), P(0.9, -0.3, z), P(0.9, 0.34, z), P(-0.9, 0.34, z)], hexA(accent, 0.6)); ctx.restore();   // canopy roof
+    poly(ctx, [P(-0.9, -0.3, z), P(0.9, -0.3, z), P(0.9, 0.34, z), P(-0.9, 0.34, z)], undefined, hexA('#fff', 0.4), 1);
+    for (const u of [-0.85, 0.85]) { const a = P(u, -0.28, z), b = P(u, -0.28, z - 0.5); ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = hexA(accent, 0.7); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0] - 5, b[1]); ctx.lineTo(b[0] + 5, b[1]); ctx.closePath(); ctx.fill(); ctx.restore(); }   // corner drapes
+    for (const u of [-0.4, 0.4]) { const c = P(u, 0.02, 0.52); ctx.fillStyle = shade(base, 1.5); ctx.beginPath(); ctx.ellipse(c[0], c[1] - 2, 9, 6, 0, 0, Math.PI * 2); ctx.fill(); }   // bolsters
+    const pc = P(0, -0.08, 0.52); ctx.save(); ctx.translate(pc[0], pc[1]); ctx.rotate(0.2); ctx.fillStyle = accent; ctx.fillRect(-8, -7, 16, 13); ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(-8, -7, 16, 4); ctx.restore();   // throw cushion
+  });
+};
+
+// Egg pod chair: weighted base, curved chrome arm, a glossy open egg shell with an accent cushion.
+const drawEgg = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#3a3a44'; ctx.beginPath(); ctx.ellipse(sx, sy, 11, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx + 9, sy - 2); ctx.quadraticCurveTo(sx + 20, sy - STACK_H * 1.7, sx + 2, sy - STACK_H * 1.78); ctx.stroke();
+  const cy = sy - STACK_H * 1.15;
+  const g = ctx.createLinearGradient(sx - 19, 0, sx + 19, 0); g.addColorStop(0, shade(base, 0.68)); g.addColorStop(0.5, shade(base, 1.22)); g.addColorStop(1, shade(base, 0.82));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, 19, 25, 0, Math.PI * 0.12, Math.PI * 1.88); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(base, 0.55); ctx.beginPath(); ctx.ellipse(sx, cy + 5, 13, 17, 0, 0, Math.PI * 2); ctx.fill();   // inner shadow
+  ctx.fillStyle = hexA(accent, 0.9); ctx.beginPath(); ctx.ellipse(sx, cy + 7, 11, 13, 0, 0, Math.PI * 2); ctx.fill();   // cushion
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(sx - 7, cy - 8, 4, 9, -0.5, 0, Math.PI * 2); ctx.fill();   // shell sheen
+};
+
+// Lux chaise longue (2 tiles): gold legs, deep cushion, a high sloped back at one end + scroll, with
+// piping and an accent bolster. Sittable, rotates.
+const drawChaise = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cT = shade(base, 1.32), cR = shade(base, 0.97), cL = shade(base, 0.6), hi = shade(base, 1.6), gold = '#caa24a';
+  const parts: IsoPart[] = [
+    ...legs([[-0.78, -0.24], [0.78, -0.24], [-0.78, 0.3], [0.78, 0.3]], 0.16).map(p => ({ ...p, t: shade(gold, 1.2), r: shade(gold, 0.85), l: shade(gold, 0.55) })),
+    { u0: -0.9, u1: 0.92, v0: -0.3, v1: 0.34, z0: 0.16, z1: 0.36, t: cT, r: cR, l: cL },               // base
+    { u0: -0.86, u1: 0.9, v0: -0.28, v1: 0.32, z0: 0.36, z1: 0.56, t: shade(base, 1.28), r: cR, l: cL }, // cushion
+    { u0: -0.92, u1: -0.66, v0: -0.3, v1: 0.34, z0: 0.36, z1: 1.0, t: cT, r: cR, l: cL },               // back lower
+    { u0: -0.92, u1: -0.76, v0: -0.3, v1: 0.34, z0: 1.0, z1: 1.34, t: cT, r: cR, l: cL }];              // back upper (sloped)
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.86, -0.28, 0.56), P(0.9, -0.28, 0.56), P(0.9, 0.32, 0.56), P(-0.86, 0.32, 0.56)], undefined, hexA(hi, 0.45), 1);   // cushion piping
+    const c = P(0.66, 0.02, 0.56); ctx.fillStyle = accent; ctx.beginPath(); ctx.ellipse(c[0], c[1] - 4, 11, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.ellipse(c[0] - 2, c[1] - 6, 4, 3, 0, 0, Math.PI * 2); ctx.fill();   // bolster
+  });
+};
+
+// Tall Greek column (4 high): stepped plinth, fluted marble shaft with veining, flared capital, and a
+// decorative urn finial on top.
+const drawGreekCol = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  const cx = sx, m = base, totalH = 4 * STACK_H, baseH = STACK_H * 0.5, capH = STACK_H * 0.55, shaftW = TW * 0.4;
+  const shaftBottom = sy - baseH, shaftTop = sy - (totalH - capH);
+  boxAt(ctx, cx, sy, 0.52, 0.52, baseH / STACK_H, shade(m, 0.82), accent);
+  boxAt(ctx, cx, sy - baseH * 0.45, 0.42, 0.42, baseH * 0.55 / STACK_H, shade(m, 0.95), accent);
+  const g = ctx.createLinearGradient(cx - shaftW, 0, cx + shaftW, 0); g.addColorStop(0, shade(m, 0.55)); g.addColorStop(0.3, shade(m, 1.08)); g.addColorStop(0.5, shade(m, 1.3)); g.addColorStop(0.7, shade(m, 1.0)); g.addColorStop(1, shade(m, 0.5));
+  ctx.fillStyle = g; ctx.fillRect(cx - shaftW, shaftTop, shaftW * 2, shaftBottom - shaftTop);
+  ctx.beginPath(); ctx.ellipse(cx, shaftBottom, shaftW, TH * 0.42, 0, 0, Math.PI); ctx.fill();
+  for (let i = -3; i <= 3; i++) { const x = cx + i * shaftW * 0.26; ctx.strokeStyle = hexA('#000', 0.12); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, shaftTop + 2); ctx.lineTo(x, shaftBottom); ctx.stroke(); ctx.strokeStyle = hexA('#fff', 0.12); ctx.beginPath(); ctx.moveTo(x + 1.4, shaftTop + 2); ctx.lineTo(x + 1.4, shaftBottom); ctx.stroke(); }
+  ctx.fillStyle = shade(m, 1.32); ctx.beginPath(); ctx.ellipse(cx, shaftTop, shaftW, TH * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  boxAt(ctx, cx, shaftTop + TH * 0.4, 0.5, 0.5, capH * 0.7 / STACK_H, shade(m, 1.1), accent);
+  boxAt(ctx, cx, shaftTop - capH * 0.3, 0.62, 0.62, 0.22, shade(m, 1.0), accent);
+  const uy = shaftTop - capH * 0.3 - STACK_H * 0.5;   // urn finial
+  ctx.fillStyle = shade(m, 1.12); ctx.beginPath(); ctx.moveTo(cx - 8, uy); ctx.quadraticCurveTo(cx - 11, uy - 11, cx - 4, uy - 16); ctx.lineTo(cx + 4, uy - 16); ctx.quadraticCurveTo(cx + 11, uy - 11, cx + 8, uy); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(m, 0.9); ctx.fillRect(cx - 5, uy - 19, 10, 4);
+  ctx.strokeStyle = hexA(accent, 0.4); ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(cx, uy - 16, 4, 2, 0, 0, Math.PI * 2); ctx.stroke();
+};
+
+// Greek arch (3 tiles): two fluted columns joined by a rounded arch with a keystone + accent underglow.
+// Walkable so avatars pass under it. Rotates to span either axis.
+const drawArch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const P = (u: number, v: number, z: number): number[] => { const [ru, rv] = rotUV(u, v, dir, 0, 0); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; };
+  const m = base;
+  for (const u of [-1.1, 1.1]) {
+    const b0 = P(u, 0, 0), top = P(u, 0, 2.6);
+    const g = ctx.createLinearGradient(b0[0] - TW * 0.22, 0, b0[0] + TW * 0.22, 0); g.addColorStop(0, shade(m, 0.6)); g.addColorStop(0.5, shade(m, 1.28)); g.addColorStop(1, shade(m, 0.6));
+    ctx.fillStyle = g; ctx.fillRect(b0[0] - TW * 0.2, top[1], TW * 0.4, b0[1] - top[1]);
+    ctx.fillStyle = shade(m, 0.9); ctx.fillRect(b0[0] - TW * 0.26, b0[1] - 6, TW * 0.52, 6);
+    ctx.fillStyle = shade(m, 1.12); ctx.fillRect(top[0] - TW * 0.27, top[1] - 2, TW * 0.54, 8);
+  }
+  const lt = P(-1.1, 0, 2.75), rt = P(1.1, 0, 2.75), ap = P(0, 0, 3.5);
+  ctx.lineCap = 'round'; ctx.strokeStyle = shade(m, 1.15); ctx.lineWidth = 11; ctx.beginPath(); ctx.moveTo(lt[0], lt[1]); ctx.quadraticCurveTo(ap[0], ap[1] - 12, rt[0], rt[1]); ctx.stroke();
+  ctx.strokeStyle = shade(m, 0.8); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(lt[0], lt[1]); ctx.quadraticCurveTo(ap[0], ap[1] - 12, rt[0], rt[1]); ctx.stroke();
+  ctx.strokeStyle = hexA(accent, 0.5); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(lt[0], lt[1] + 7); ctx.quadraticCurveTo(ap[0], ap[1] - 3, rt[0], rt[1] + 7); ctx.stroke();
+  ctx.save(); ctx.fillStyle = shade(m, 1.32); ctx.translate(ap[0], ap[1] - 10); ctx.beginPath(); ctx.moveTo(-5, -9); ctx.lineTo(5, -9); ctx.lineTo(7, 9); ctx.lineTo(-7, 9); ctx.closePath(); ctx.fill(); ctx.restore();   // keystone
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -558,6 +646,11 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'lounger': drawLounger(ctx, sx, sy, accent, d.color, dir); break;
     case 'topiary': drawTopiary(ctx, sx, sy, accent, d.color); break;
     case 'banner': drawBanner(ctx, sx, sy, accent, d.color); break;
+    case 'canopy': drawCanopy(ctx, sx, sy, accent, d.color, dir); break;
+    case 'eggchair': drawEgg(ctx, sx, sy, accent, d.color); break;
+    case 'chaise': drawChaise(ctx, sx, sy, accent, d.color, dir); break;
+    case 'greekcol': drawGreekCol(ctx, sx, sy, accent, d.color); break;
+    case 'arch': drawArch(ctx, sx, sy, accent, d.color, dir); break;
     case 'chandelier': drawChandelier(ctx, sx, sy, accent, d.color, t); break;
     case 'float': drawFloat(ctx, sx, sy, accent, d.color, t); break;
     case 'fountain': drawFountain(ctx, sx, sy, accent, d.color, t); break;

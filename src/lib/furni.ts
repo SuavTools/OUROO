@@ -39,6 +39,9 @@ export const FURNI: FurniDef[] = [
   { kind: 'hc_plant',  name: 'Planta HC',    emoji: '🪴', cat: 'tier1', color: '#1f7a3a', h: 2, walk: false, foot: 0.8,  special: 'plant_hc' },
   { kind: 'hc_column', name: 'Coluna HC',    emoji: '🏛️', cat: 'tier1', color: '#dfe2ea', h: 3, walk: false, foot: 0.5,  special: 'column_hc' },
   { kind: 'hc_ball',   name: 'Bola Espelho', emoji: '🪩', cat: 'tier1', color: '#cfe0ff', h: 0, walk: true,  foot: 1,    special: 'ball_hc' },
+  { kind: 'chaise',    name: 'Chaise Lux',  emoji: '🛋️', cat: 'tier1', color: '#5a2d4a', h: 1, walk: false, foot: 1,    special: 'chaise', span: [2, 1] },
+  { kind: 'coluna_gr', name: 'Coluna Grega',emoji: '🏛️', cat: 'tier1', color: '#e8e8ee', h: 4, walk: false, foot: 0.5,  special: 'greekcol' },
+  { kind: 'arco_gr',   name: 'Arco Grego',  emoji: '🏛️', cat: 'tier1', color: '#e8e8ee', h: 3, walk: true,  foot: 1,    special: 'arch', span: [3, 1] },
   // construção (walkable build pieces + solid walls)
   { kind: 'bloco',      name: 'Bloco',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
   { kind: 'meio',       name: 'Cubo',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
@@ -69,6 +72,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'puff',     name: 'Puff',     emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7, special: 'puff' },
   { kind: 'banco_jd', name: 'Banco Jardim', emoji: '🪑', cat: 'assentos', color: '#5a6e44', h: 1, walk: false, foot: 1, special: 'bench', span: [2, 1] },
   { kind: 'espreguic',name: 'Espreguiçadeira', emoji: '🏖️', cat: 'assentos', color: '#e6ebf2', h: 1, walk: false, foot: 1, special: 'lounger', span: [2, 1] },
+  { kind: 'cama_dossel', name: 'Cama Dossel', emoji: '🛏️', cat: 'assentos', color: '#6a3a52', h: 2, walk: false, foot: 1, special: 'canopy', span: [2, 1] },
+  { kind: 'ovo',      name: 'Cadeira Ovo', emoji: '🥚', cat: 'assentos', color: '#eef0f4', h: 2, walk: false, foot: 0.7, special: 'eggchair' },
   // mesas
   { kind: 'mesa',     name: 'Mesa',      emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
   { kind: 'mesajant', name: 'Jantar',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
@@ -134,11 +139,11 @@ const CAT_INDEX: Record<string, number> = (() => {
 
 // Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
 // keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
-const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5 };
+const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
-const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger']);
+const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
