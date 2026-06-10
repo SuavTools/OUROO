@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ICON_SHAPES, ICON_PALETTE, MAX_ICON_LAYERS, emptyIcon, type IconLayer, type IconShape, type IconSpec, type CustomIcon } from '@/lib/icons';
-import { buyIcon, ICON_PRICE, CURRENCY_SYMBOL, useWallet } from '@/lib/wallet';
+import { buyIcon, mintIcon, ICON_PRICE, CURRENCY_SYMBOL, useWallet } from '@/lib/wallet';
+import { amIModerator } from '@/lib/chat';
 import { IconPreview } from '@/components/IconPreview';
 
 const SHAPE_GLYPH: Record<IconShape, string> = {
@@ -16,6 +17,8 @@ export function IconEditor({ open, onClose, onSaved }: { open: boolean; onClose:
   const [sel, setSel] = useState(0);
   const [name, setName] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
+  const [isMod, setIsMod] = useState(false);   // moderators mint icons for free
+  useEffect(() => { if (open) amIModerator().then(setIsMod); }, [open]);
 
   if (!open) return null;
   const layer = spec.layers[sel] ?? spec.layers[0];
@@ -35,7 +38,7 @@ export function IconEditor({ open, onClose, onSaved }: { open: boolean; onClose:
 
   const save = () => {
     setMsg(null);
-    const res = buyIcon(name, spec);
+    const res = isMod ? { ok: true as const, icon: mintIcon(name, spec) } : buyIcon(name, spec);
     if (!res.ok || !res.icon) { setMsg(res.error || 'Erro'); return; }
     onSaved?.(res.icon);
     setSpec(emptyIcon()); setSel(0); setName('');
@@ -125,11 +128,11 @@ export function IconEditor({ open, onClose, onSaved }: { open: boolean; onClose:
         {/* Name + save */}
         <input value={name} onChange={e => setName(e.target.value)} maxLength={24} placeholder="Nome do ícone"
           className="w-full bg-white/5 border border-white/15 text-white px-3 py-2.5 text-sm outline-none focus:border-brandYellow mb-3" />
-        <button onClick={save} disabled={wallet.balance < ICON_PRICE}
+        <button onClick={save} disabled={!isMod && wallet.balance < ICON_PRICE}
           className="w-full bg-brandYellow text-black font-bold uppercase tracking-[0.15em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed">
-          Criar por {CURRENCY_SYMBOL} {ICON_PRICE}
+          {isMod ? 'Criar ícone (grátis · mod)' : `Criar por ${CURRENCY_SYMBOL} ${ICON_PRICE}`}
         </button>
-        <p className="text-[11px] text-center mt-2 text-white/40">Tens {CURRENCY_SYMBOL} {wallet.balance.toLocaleString('pt-PT')}</p>
+        <p className="text-[11px] text-center mt-2 text-white/40">{isMod ? 'Mods criam sem custo.' : `Tens ${CURRENCY_SYMBOL} ${wallet.balance.toLocaleString('pt-PT')}`}</p>
         {msg && <p className="text-[11px] text-center mt-1 text-brandRed">{msg}</p>}
       </div>
     </div>

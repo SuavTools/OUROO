@@ -85,12 +85,19 @@ export function buyFurni(kind: string): { ok: boolean; error?: string } {
 // ---- custom icons ----
 export const getIcons = (): CustomIcon[] => getWallet().icons;
 export const getIcon = (id: string): CustomIcon | undefined => getWallet().icons.find(i => i.id === id);
+const newIconId = (): string => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `ic_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+
+// Add an icon to the wallet WITHOUT charging — for moderators (who get cosmetics free).
+export function mintIcon(name: string, spec: IconSpec): CustomIcon {
+  const w = getWallet();
+  const icon: CustomIcon = { id: newIconId(), name: name.slice(0, 24) || 'Ícone', spec };
+  w.icons.push(icon); save(w); return icon;
+}
 // Mint a new icon (costs ICON_PRICE). Returns the created icon, or an error.
 export function buyIcon(name: string, spec: IconSpec): { ok: boolean; icon?: CustomIcon; error?: string } {
   const w = getWallet();
   if (w.balance < ICON_PRICE) return { ok: false, error: 'Cristais insuficientes' };
-  const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `ic_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-  const icon: CustomIcon = { id, name: name.slice(0, 24) || 'Ícone', spec };
+  const icon: CustomIcon = { id: newIconId(), name: name.slice(0, 24) || 'Ícone', spec };
   w.balance -= ICON_PRICE; w.icons.push(icon); save(w); return { ok: true, icon };
 }
 export function removeIcon(id: string) { const w = getWallet(); w.icons = w.icons.filter(i => i.id !== id); save(w); }
