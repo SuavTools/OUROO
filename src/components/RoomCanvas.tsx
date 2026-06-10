@@ -20,7 +20,7 @@ import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
-import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planSpawn } from '@/lib/roomPlans';
+import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -55,21 +55,29 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number };
 const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
   clube: [
-    ['arvore', 8, 8], ['arvore', 25, 8], ['arvore', 8, 25], ['arvore', 25, 25],
-    ['palmeira', 11, 11], ['palmeira', 22, 11], ['palmeira', 11, 22], ['palmeira', 22, 22],
-    ['rececao', 15, 8, 0],
-    ['lounge_couch', 6, 23, 0], ['lounge_chair', 10, 22, 2], ['lounge_table', 8, 24, 0],
-    ['lounge_couch', 24, 23, 2], ['lounge_chair', 23, 22, 1], ['lounge_table', 25, 24, 0],
-    ['banco_jd', 12, 31, 0], ['banco_jd', 19, 31, 0], ['banco_jd', 10, 17, 0], ['banco_jd', 22, 17, 0],
-    ['estatua', 16, 16, 0], ['planta', 14, 14, 0], ['planta', 19, 19, 0], ['planta', 14, 9, 0], ['planta', 18, 9, 0],
+    // stage (back, raised): PA towers + a big screen
+    ['pa', 11, 5, 0], ['pa', 21, 5, 0], ['tv', 16, 4, 0], ['planta', 12, 9, 0], ['planta', 21, 9, 0],
+    // trees on the grass beds
+    ['arvore', 7, 11, 0], ['arvore', 26, 11, 0], ['arvore', 7, 29, 0], ['arvore', 26, 29, 0],
+    // palms framing the pools
+    ['palmeira', 10, 15, 0], ['palmeira', 10, 23, 0], ['palmeira', 23, 15, 0], ['palmeira', 23, 23, 0],
+    // pool handrails / ladders
+    ['corrimao', 9, 16, 3], ['corrimao', 9, 22, 3], ['corrimao', 24, 16, 1], ['corrimao', 24, 22, 1],
+    // lounge sets between the pools and the carpet
+    ['lounge_couch', 10, 19, 0], ['lounge_chair', 13, 19, 2], ['lounge_table', 12, 20, 0],
+    ['lounge_couch', 22, 19, 2], ['lounge_chair', 20, 19, 1], ['lounge_table', 21, 20, 0],
+    // benches lining the carpet
+    ['banco_jd', 14, 26, 0], ['banco_jd', 19, 26, 0], ['banco_jd', 14, 14, 0], ['banco_jd', 19, 14, 0],
+    // reception near the entrance
+    ['rececao', 10, 25, 0],
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
   clube: [
-    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 15, gy: 7 },
-    { handle: 'Tó', skinId: 'nave-verde', gx: 17, gy: 7 },
-    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 15, lvl: 1 },
-    { handle: 'Guia', skinId: 'diamond-cyan', gx: 10, gy: 28 },
+    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1 },
+    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24 },
+    { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24 },
+    { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28 },
   ],
 };
 
@@ -152,6 +160,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
   const planRef = useRef<Int8Array>(planMask(planById('salao')));          // base floor level per tile (-1 = void)
   const waterRef = useRef<Uint8Array>(planWaterMask(planById('salao')));    // 1 = pool/water tile
+  const matRef = useRef<Uint8Array>(planMaterialMask(planById('salao')));   // floor material per tile
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
   const isWater = (gx: number, gy: number) => gx >= 0 && gy >= 0 && gx < GRID && gy < GRID && waterRef.current[gy * GRID + gx] === 1;
   const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
@@ -319,6 +328,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const plan = planById(roomMeta.plan);
     planRef.current = planMask(plan);
     waterRef.current = planWaterMask(plan);
+    matRef.current = planMaterialMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: 0, createdBy: 'curated' }));
     npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0 }));
@@ -579,17 +589,35 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (rn < L && dr > 0) { ctx.fillStyle = shade(theme.floor, 0.6); ctx.beginPath(); ctx.moveTo(b.sx, botY); ctx.lineTo(rX, b.sy); ctx.lineTo(rX, b.sy + dr); ctx.lineTo(b.sx, botY + dr); ctx.closePath(); ctx.fill(); }
         const ln = lvl(gx, gy + 1), dl = (L - (ln < 0 ? 0 : ln)) * STACK_H;
         if (ln < L && dl > 0) { ctx.fillStyle = shade(theme.floor, 0.42); ctx.beginPath(); ctx.moveTo(b.sx, botY); ctx.lineTo(lX, b.sy); ctx.lineTo(lX, b.sy + dl); ctx.lineTo(b.sx, botY + dl); ctx.closePath(); ctx.fill(); }
-        // top face — water tiles render as a sunken animated pool, else solid floor
+        // top face — pool (sunken water + marble coping), material floor, or plain room floor
         if (waterRef.current[gy * GRID + gx] === 1) {
-          diamond(b.sx, b.sy + 5, TW, TH); ctx.fillStyle = '#05202c'; ctx.fill();                      // sunken basin shadow
-          diamond(b.sx, b.sy + 2, TW, TH); ctx.fillStyle = hexA('#127a99', 0.92); ctx.fill();          // water body
-          const ph = Math.sin((gx * 0.7 + gy * 0.5) + t * 0.05) * 0.5 + 0.5;                            // moving caustics
-          ctx.fillStyle = hexA('#8fe6ff', 0.10 + ph * 0.16); ctx.fill();
-          ctx.strokeStyle = hexA('#bff2ff', 0.22); ctx.lineWidth = 1; ctx.stroke();
+          const wAt = (x: number, y: number) => x >= 0 && y >= 0 && x < GRID && y < GRID && waterRef.current[y * GRID + x] === 1;
+          const topY = b.sy - TH, botY = b.sy + TH, rX = b.sx + TW, lX = b.sx - TW, dp = 6;
+          // far interior basin walls (back edges that border non-water) → reads as a recessed pool
+          const wall = (ax: number, ay: number, bx: number, by: number, c: string) => { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(bx, by + dp); ctx.lineTo(ax, ay + dp); ctx.closePath(); ctx.fill(); };
+          if (!wAt(gx, gy - 1)) wall(b.sx, topY, rX, b.sy, '#d3d8e0');
+          if (!wAt(gx - 1, gy)) wall(b.sx, topY, lX, b.sy, '#c2c8d2');
+          diamond(b.sx, b.sy + dp, TW * 0.99, TH * 0.99); ctx.fillStyle = '#0c5e78'; ctx.fill();        // recessed water body
+          const ph = Math.sin((gx * 0.7 + gy * 0.5) + t * 0.05) * 0.5 + 0.5;
+          ctx.fillStyle = hexA('#7fdcff', 0.12 + ph * 0.16); diamond(b.sx, b.sy + dp, TW * 0.99, TH * 0.99); ctx.fill();
+          ctx.save(); ctx.globalAlpha = 0.22 + 0.13 * Math.sin(t * 0.08 + gx); ctx.strokeStyle = '#cdf3ff'; ctx.lineWidth = 1; diamond(b.sx, b.sy + dp, TW * 0.58, TH * 0.58); ctx.stroke(); ctx.restore();
+          // marble coping cap (raised lip) on every edge that borders non-water
+          const cap = (ax: number, ay: number, bx: number, by: number) => { ctx.fillStyle = '#e9ecf2'; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(bx, by - 3); ctx.lineTo(ax, ay - 3); ctx.closePath(); ctx.fill(); };
+          if (!wAt(gx, gy - 1)) cap(b.sx, topY, rX, b.sy);
+          if (!wAt(gx - 1, gy)) cap(b.sx, topY, lX, b.sy);
+          if (!wAt(gx + 1, gy)) cap(b.sx, botY, rX, b.sy);
+          if (!wAt(gx, gy + 1)) cap(b.sx, botY, lX, b.sy);
         } else {
-          diamond(b.sx, b.sy, TW, TH); ctx.fillStyle = theme.floor; ctx.fill();
-          ctx.fillStyle = (gx + gy) % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill();
-          ctx.strokeStyle = hexA(theme.accent, 0.10); ctx.lineWidth = 1; ctx.stroke();
+          const mat = matRef.current[gy * GRID + gx]; const odd = (gx + gy) % 2 === 1;
+          diamond(b.sx, b.sy, TW, TH);
+          if (mat === 1) { ctx.fillStyle = odd ? '#e9e4d8' : '#bdb6a6'; ctx.fill(); }                     // marble checker
+          else if (mat === 2) { ctx.fillStyle = odd ? '#3f9d49' : '#358540'; ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fill(); }   // grass
+          else if (mat === 3) { ctx.fillStyle = '#9c1f29'; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)'; ctx.fill(); }   // carpet
+          else if (mat === 4) { ctx.fillStyle = odd ? '#33333f' : '#1d1d27'; ctx.fill(); }                 // dark check
+          else { ctx.fillStyle = theme.floor; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill(); }
+          if (mat === 3) { ctx.strokeStyle = hexA('#e8c66a', 0.5); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW * 0.84, TH * 0.84); ctx.stroke(); }   // carpet gold trim
+          else if (mat === 2) { ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2c6e34'; for (let q = 0; q < 5; q++) { const gxp = b.sx + (q - 2) * 6, gyp = b.sy + ((q % 2) - 0.5) * 6; ctx.beginPath(); ctx.moveTo(gxp, gyp + 3); ctx.lineTo(gxp, gyp - 4); ctx.stroke(); } ctx.restore(); }   // grass blades
+          ctx.strokeStyle = hexA(mat === 1 ? '#8a8475' : theme.accent, mat ? 0.16 : 0.10); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW, TH); ctx.stroke();
         }
       }
       const hv = hoverRef.current, ui = uiRef.current;

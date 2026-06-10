@@ -8,8 +8,10 @@
 // camera scales the footprint to fit the stage, so bigger plans just zoom out.
 export const PLAN_GRID = 40;
 
-// Cell chars: 'x'/' '/'.' = void · '0'–'9' = floor at that base level · 'w' = water/pool (walkable, sunken).
+// Cell chars: 'x'/' '/'.' = void · '0'–'9' = floor at that base level · 'w' = water/pool (walkable,
+// sunken) · material floors at ground level: 'm' marble-checker, 'g' grass, 'c' carpet, 'k' dark-check.
 export type RoomPlan = { id: string; name: string; rows: string[]; spawn?: [number, number] };
+const MATERIALS: Record<string, number> = { m: 1, g: 2, c: 3, k: 4 };   // 0 = default room floor
 
 const F = '00000000000';
 // Generators for the bigger rooms (kept terse so the shapes stay readable).
@@ -21,12 +23,13 @@ const octa = (n: number, k: number) => Array.from({ length: n }, (_, y) =>
 // reflecting pool. Curated (mods-only), ~34×34 so the camera zooms right out like a Habbo Club lobby.
 const clube = (): string[] => {
   const n = 34, k = 9; const g: string[][] = [];
-  for (let y = 0; y < n; y++) { const row: string[] = []; for (let x = 0; x < n; x++) { const corner = (x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k); row.push(corner ? 'x' : '0'); } g.push(row); }
-  const fill = (x0: number, x1: number, y0: number, y1: number, ch: string) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (g[y] && g[y][x] === '0') g[y][x] = ch; };
-  fill(13, 20, 13, 20, '1');   // central raised dais
-  fill(4, 9, 12, 21, 'w');     // left pool
-  fill(24, 29, 12, 21, 'w');   // right pool
-  fill(14, 19, 25, 29, 'w');   // front reflecting pool
+  for (let y = 0; y < n; y++) { const row: string[] = []; for (let x = 0; x < n; x++) { const corner = (x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k); row.push(corner ? 'x' : 'm'); } g.push(row); }   // base = marble
+  const fill = (x0: number, x1: number, y0: number, y1: number, ch: string) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (g[y] && g[y][x] !== 'x') g[y][x] = ch; };
+  fill(11, 22, 4, 8, '1');     // raised STAGE across the back
+  fill(5, 9, 10, 12, 'g'); fill(24, 28, 10, 12, 'g');   // grass beds flanking the stage
+  fill(4, 8, 14, 24, 'w'); fill(25, 29, 14, 24, 'w');   // two long side pools
+  fill(16, 18, 9, 31, 'c');    // red carpet runway: entrance → stage
+  fill(5, 10, 27, 31, 'g'); fill(23, 28, 27, 31, 'g');  // grass beds at the entrance corners
   return g.map(r => r.join(''));
 };
 
@@ -135,8 +138,18 @@ export const planLevelAt = (plan: RoomPlan, gx: number, gy: number): number => {
   if (gx < 0 || gy < 0 || gx >= PLAN_GRID || gy >= PLAN_GRID) return -1;
   const row = plan.rows[gy]; if (!row) return -1;
   const ch = row[gx]; if (!ch || ch === 'x' || ch === 'X' || ch === ' ' || ch === '.') return -1;
-  if (ch === 'w' || ch === 'W') return 0;
+  if (ch === 'w' || ch === 'W' || ch in MATERIALS) return 0;   // water + material floors are ground level
   const n = ch.charCodeAt(0) - 48; return n >= 0 && n <= 9 ? n : -1;
+};
+
+// Floor material code at a cell (0 default · 1 marble · 2 grass · 3 carpet · 4 dark-check).
+export const planMaterialAt = (plan: RoomPlan, gx: number, gy: number): number => {
+  const row = plan.rows[gy]; const ch = row && row[gx]; return ch ? (MATERIALS[ch] ?? 0) : 0;
+};
+export const planMaterialMask = (plan: RoomPlan): Uint8Array => {
+  const m = new Uint8Array(PLAN_GRID * PLAN_GRID);
+  for (let gy = 0; gy < PLAN_GRID; gy++) for (let gx = 0; gx < PLAN_GRID; gx++) m[gy * PLAN_GRID + gx] = planMaterialAt(plan, gx, gy);
+  return m;
 };
 
 // Is this cell a pool/water tile?

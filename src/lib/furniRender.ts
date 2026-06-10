@@ -351,6 +351,41 @@ const drawReception = (ctx: CanvasRenderingContext2D, sx: number, sy: number, ac
   });
 };
 
+// PA speaker tower: a tall 3-high cabinet with two woofer cones + a tweeter on the camera-facing
+// front, an accent power LED and pulsing cone glow. Front turns with dir; plain cabinet when away.
+const drawPA = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  const showFront = dir < 2, mir = dir === 1;
+  const top = boxAt(ctx, sx, sy, 0.6, 0.42, 3, base, accent);
+  if (!showFront) return;
+  ctx.save(); if (mir) { ctx.translate(sx, 0); ctx.scale(-1, 1); ctx.translate(-sx, 0); }
+  const cone = (cy: number, r: number) => {
+    const g = ctx.createRadialGradient(sx - r * 0.3, cy - r * 0.3, 1, sx, cy, r);
+    g.addColorStop(0, shade(base, 1.7)); g.addColorStop(0.55, shade(base, 0.7)); g.addColorStop(1, shade(base, 0.35));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, r, r * 0.92, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hexA(accent, 0.35 + Math.abs(Math.sin(t * 0.12)) * 0.4); ctx.beginPath(); ctx.ellipse(sx, cy, r * 0.34, r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hexA('#000', 0.4); ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, cy, r, r * 0.92, 0, 0, Math.PI * 2); ctx.stroke();
+  };
+  cone(top + STACK_H * 2.0, TW * 0.34); cone(top + STACK_H * 0.95, TW * 0.34);   // two woofers
+  ctx.fillStyle = '#cdd2dc'; ctx.beginPath(); ctx.ellipse(sx, top + STACK_H * 0.34, TW * 0.13, TW * 0.12, 0, 0, Math.PI * 2); ctx.fill();   // tweeter
+  ctx.fillStyle = hexA(accent, 0.9); ctx.beginPath(); ctx.arc(sx + TW * 0.4, top + 8, 2, 0, Math.PI * 2); ctx.fill();   // power LED
+  ctx.restore();
+};
+
+// Pool handrail / ladder: two chrome posts with a curved grab-rail arcing over the pool edge + rungs.
+const drawLadder = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _base: string, dir: number) => {
+  void _a; void _base;
+  const P = (u: number, v: number, z: number): number[] => { const [ru, rv] = rotUV(u, v, dir, 0, 0); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H]; };
+  const chrome = ctx.createLinearGradient(sx - 10, 0, sx + 10, 0); chrome.addColorStop(0, '#8b93a3'); chrome.addColorStop(0.5, '#eef2f8'); chrome.addColorStop(1, '#8b93a3');
+  const rail = (uu: number) => {
+    const a = P(uu, -0.26, 1.2), b = P(uu, -0.02, 1.2), c = P(uu, 0.16, 0.0);   // top-back → top-front → down into pool
+    ctx.strokeStyle = chrome; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.quadraticCurveTo(b[0], b[1] - 8, c[0], c[1]); ctx.stroke();
+  };
+  rail(-0.22); rail(0.22);
+  ctx.strokeStyle = '#cfd6e2'; ctx.lineWidth = 2.5;   // rungs
+  for (const z of [0.85, 0.5, 0.18]) { const l = P(-0.22, 0.08, z), r = P(0.22, 0.08, z); ctx.beginPath(); ctx.moveTo(l[0], l[1]); ctx.lineTo(r[0], r[1]); ctx.stroke(); }
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -376,6 +411,8 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'palm': drawPalm(ctx, sx, sy, accent, d.color); break;
     case 'bench': drawBench(ctx, sx, sy, accent, d.color, dir); break;
     case 'reception': drawReception(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pa': drawPA(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'ladder': drawLadder(ctx, sx, sy, accent, d.color, dir); break;
     case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
     case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
     case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;
