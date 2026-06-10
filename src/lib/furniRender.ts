@@ -40,7 +40,6 @@ const drawCouch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent
     poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l);
     poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t);
   };
-  ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; const sc = P(0.5, 0, 0); ctx.beginPath(); ctx.ellipse(sc[0], sc[1] + TH * 0.4, TILE_W * 1.05, TILE_H * 1.05, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   for (const [u, v] of [[-0.28, -0.28], [1.28, -0.28], [-0.28, 0.28], [1.28, 0.28]] as [number, number][]) span(u - 0.06, u + 0.06, v - 0.06, v + 0.06, 0, 0.16, '#3a2616', '#2a1c10', '#1f140a');
   span(-0.4, 1.4, -0.42, -0.16, 0.5, 1.5, cT, cR, cL);
   span(-0.42, -0.12, -0.42, 0.4, 0.5, 1.04, cT, cR, cL);
@@ -63,22 +62,29 @@ const drawCouch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent
 const drawArmchair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _accent: string, base: string) => {
   void _accent;
   const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
-  const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.7), hi = shade(base, 1.55);
+  const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.64), hi = shade(base, 1.62);
   const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly(ctx, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
-  ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; const sc = P(0, 0, 0); ctx.beginPath(); ctx.ellipse(sc[0], sc[1] + TH * 0.4, TILE_W * 0.62, TILE_H * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-  for (const [u, v] of [[-0.28, -0.28], [0.28, -0.28], [-0.28, 0.28], [0.28, 0.28]] as [number, number][]) span(u - 0.06, u + 0.06, v - 0.06, v + 0.06, 0, 0.16, '#3a2616', '#2a1c10', '#1f140a');
-  span(-0.4, 0.4, -0.42, -0.14, 0.5, 1.45, cT, cR, cL);
-  span(-0.42, -0.12, -0.42, 0.4, 0.5, 1.0, cT, cR, cL);
-  span(-0.3, 0.3, -0.14, 0.36, 0.18, 0.52, cT, cR, cL);
-  { const u0 = -0.28, u1 = 0.28; span(u0, u1, -0.26, 0.34, 0.52, 0.78, shade(base, 1.24), cR, cL); const c = P(0, 0.04, 0.78); const g = ctx.createRadialGradient(c[0], c[1], 2, c[0], c[1], 22); g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill(); poly(ctx, [P(u0, -0.26, 0.78), P(u1, -0.26, 0.78), P(u1, 0.34, 0.78), P(u0, 0.34, 0.78)], undefined, hexA(hi, 0.5), 1); }
-  span(0.12, 0.42, -0.42, 0.4, 0.5, 1.0, cT, cR, cL);
+  // legs
+  for (const [u, v] of [[-0.34, -0.3], [0.34, -0.3], [-0.34, 0.34], [0.34, 0.34]] as [number, number][]) span(u - 0.05, u + 0.05, v - 0.05, v + 0.05, 0, 0.16, '#3a2616', '#2a1c10', '#1f140a');
+  // rolled side arm (thin, at a u-extreme so the seat stays clear)
+  const arm = (uc: number) => {
+    span(uc - 0.08, uc + 0.08, -0.44, 0.4, 0.3, 0.92, cT, cR, cL);
+    const a = P(uc, -0.02, 0.92); const g = ctx.createRadialGradient(a[0] - 2, a[1] - 3, 1, a[0], a[1], TW * 0.34); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR);
+    ctx.save(); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.3, TH * 0.52, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  };
+  span(-0.42, 0.42, -0.46, -0.26, 0.3, 1.4, cT, cR, cL);                  // back rest (full width)
+  arm(-0.4);                                                             // left arm (behind)
+  span(-0.32, 0.32, -0.24, -0.06, 0.44, 1.04, shade(base, 1.16), cR, cL); // back cushion
+  span(-0.34, 0.34, -0.24, 0.4, 0.16, 0.46, cT, cR, cL);                 // seat base
+  span(-0.3, 0.3, -0.2, 0.38, 0.46, 0.72, shade(base, 1.24), cR, cL);    // seat cushion (real sitting space)
+  { const c = P(0, 0.08, 0.72); const g = ctx.createRadialGradient(c[0], c[1] - 3, 2, c[0], c[1], 24); g.addColorStop(0, hexA(hi, 0.5)); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.5, TH * 0.54, 0, 0, Math.PI * 2); ctx.fill(); poly(ctx, [P(-0.3, -0.2, 0.72), P(0.3, -0.2, 0.72), P(0.3, 0.38, 0.72), P(-0.3, 0.38, 0.72)], undefined, hexA(hi, 0.45), 1); }
+  arm(0.4);                                                             // right arm (front, occludes)
 };
 
 const drawCoffee = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
   const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
   const cT = shade(base, 1.3), cR = shade(base, 0.95), cL = shade(base, 0.65);
   const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly(ctx, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
-  ctx.save(); ctx.globalAlpha = 0.3; ctx.fillStyle = '#000'; const sc = P(0, 0, 0); ctx.beginPath(); ctx.ellipse(sc[0], sc[1] + TH * 0.3, TILE_W * 0.6, TILE_H * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   for (const [u, v] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]] as [number, number][]) span(u - 0.05, u + 0.05, v - 0.05, v + 0.05, 0, 0.42, cT, shade(base, 0.8), cL);
   span(-0.36, 0.36, -0.36, 0.36, 0.42, 0.56, cT, cR, cL);
   const z = 0.62; ctx.save(); ctx.globalAlpha = 0.34; ctx.fillStyle = '#bfe6ee'; poly(ctx, [P(-0.34, -0.34, z), P(0.34, -0.34, z), P(0.34, 0.34, z), P(-0.34, 0.34, z)]); ctx.fill();
@@ -98,15 +104,10 @@ const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
   const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly(ctx, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
   const cT = shade(base, 1.34), cR = shade(base, 1.0), cL = shade(base, 0.62), cD = shade(base, 0.38), hi = shade(base, 1.8);
   const brass = '#c9a44f';
-  // layered soft contact shadow
-  ctx.save(); ctx.fillStyle = '#000';
-  for (const [a, fw, fh] of [[0.13, 1.32, 1.32], [0.15, 1.08, 1.08], [0.17, 0.84, 0.84]] as [number, number, number][]) { ctx.globalAlpha = a; const c = P(0.5, 0.06, 0); ctx.beginPath(); ctx.ellipse(c[0], c[1] + TH * 0.55, TILE_W * fw, TILE_H * fh, 0, 0, Math.PI * 2); ctx.fill(); }
-  ctx.restore();
   // brass tapered feet
   for (const [u, v] of [[-0.28, -0.26], [1.28, -0.26], [-0.28, 0.32], [1.28, 0.32]] as [number, number][]) span(u - 0.045, u + 0.045, v - 0.045, v + 0.045, 0, 0.2, shade(brass, 1.2), shade(brass, 0.85), shade(brass, 0.55));
-  // back rest (tall) + rolled-top highlight
+  // back rest (tall)
   span(-0.42, 1.42, -0.48, -0.18, 0.42, 1.5, cT, cR, cL);
-  { const a = P(0.5, -0.33, 1.5); ctx.save(); ctx.globalAlpha = 0.5; const g = ctx.createLinearGradient(a[0], a[1] - 9, a[0], a[1] + 7); g.addColorStop(0, hi); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TILE_W * 0.96, TH * 1.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
   // diamond button tufting on the back's front face
   ctx.save();
   const rows = [0.66, 0.95, 1.24];
@@ -140,7 +141,6 @@ const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
 const drawPlantHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _accent: string, base: string) => {
   void _accent;
   const cx = sx;
-  ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, sy + TH * 0.5, TILE_W * 0.55, TILE_H * 0.58, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   // pot (tapered, glossy charcoal-terracotta)
   const pot = '#b5572f', ptw = TW * 0.52, pbw = TW * 0.36, ph = STACK_H * 1.0, topY = sy - ph + TH * 0.4;
   const g = ctx.createLinearGradient(cx - ptw, 0, cx + ptw, 0); g.addColorStop(0, shade(pot, 0.55)); g.addColorStop(0.5, shade(pot, 1.12)); g.addColorStop(1, shade(pot, 0.66));
@@ -169,7 +169,6 @@ const drawPlantHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _acc
 // Marble column: stepped plinth, fluted round shaft (gradient + flutes + veining), flared capital.
 const drawColumnHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
   const cx = sx, m = base;
-  ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, sy + TH * 0.4, TW * 0.62, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   const totalH = 3 * STACK_H, baseH = STACK_H * 0.5, capH = STACK_H * 0.5, shaftW = TW * 0.42;
   const shaftBottom = sy - baseH, shaftTop = sy - (totalH - capH);
   // plinth
@@ -202,10 +201,6 @@ const drawBallHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   // chain + mount
   ctx.strokeStyle = 'rgba(200,210,235,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy - R - STACK_H * 1.5); ctx.stroke();
   ctx.fillStyle = '#2c303c'; ctx.fillRect(cx - 4, cy - R - STACK_H * 1.5 - 4, 8, 6);
-  // rotating light beams (behind)
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + t * 0.02; const len = R * 2.7; const c2 = Math.cos(a), s2 = Math.sin(a); ctx.fillStyle = `hsla(${(i * 30 + t * 2) % 360},90%,60%,0.10)`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + c2 * len - s2 * 7, cy + s2 * len + c2 * 7); ctx.lineTo(cx + c2 * len + s2 * 7, cy + s2 * len - c2 * 7); ctx.closePath(); ctx.fill(); }
-  ctx.restore();
   // faceted sphere (clipped to circle)
   ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
   const cols = 12, rows = 10, fw = (2 * R) / cols, fh = (2 * R) / rows;
@@ -224,10 +219,6 @@ const drawBallHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   // rim + specular hotspot
   ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; const hg = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.45, 0, cx - R * 0.4, cy - R * 0.45, R * 0.55); hg.addColorStop(0, 'rgba(255,255,255,0.9)'); hg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(cx - R * 0.4, cy - R * 0.45, R * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-  // floating sparkles
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 - t * 0.03; const rr = R * (1.4 + 0.15 * Math.sin(t * 0.07 + i)); const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr * 0.7; const tw = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.1 + i * 1.7)); ctx.fillStyle = `hsla(${(i * 45 + t * 3) % 360},90%,70%,${tw})`; ctx.beginPath(); ctx.arc(px, py, 1.6 + tw * 1.4, 0, Math.PI * 2); ctx.fill(); }
-  ctx.restore();
 };
 
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
