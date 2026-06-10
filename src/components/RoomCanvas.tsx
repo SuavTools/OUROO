@@ -8,7 +8,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase, supabaseReady } from '@/lib/supabase';
 import { getLocalPlayer } from '@/lib/leaderboard';
-import { getAuthIdentity } from '@/lib/auth';
+import { getAuthIdentity, useUser, signInWithDiscord } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
@@ -133,6 +133,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const locked = !canBuild;
   const [invOpen, setInvOpen] = useState(false);
   const wallet = useWallet();
+  // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in.
+  const { user } = useUser();
+  const signedIn = !!user;
+  const signedInRef = useRef(false);
+  useEffect(() => { signedInRef.current = signedIn; }, [signedIn]);
+  const requireAccount = (): boolean => { if (signedInRef.current) return true; flashHint('Cria conta para construir 🛸'); signInWithDiscord(); return false; };
 
   // Equip a skin or custom icon on the live avatar and broadcast it to the room.
   const equipAppearance = (id: string) => {
@@ -156,6 +162,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner });
   const doCreateRoom = async () => {
+    if (!requireAccount()) return;
     const res = await createRoom(newRoomName);
     if (!res.ok) { flashHint(res.error || 'Erro ao criar sala'); return; }
     setNewRoomName(''); switchRoom(roomDefOf(res.room));
@@ -216,6 +223,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
+    if (!requireAccount()) return;
     const def = roomMetaRef.current; const canB = modRef.current || (def.owner ? def.owner === ownerIdRef.current : !def.locked);
     if (!canB) { flashHint('Sala bloqueada'); return; }
     // Inventory: non-mods need stock (free basics are unlimited). Mods build freely (creative mode).
@@ -492,7 +500,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
         <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Salas</button>
         <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>
-        {!locked && <button onClick={() => { setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorar</button>}
+        {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorar</button>}
       </div>
 
       {(hint || placingKind || removeMode) && (
