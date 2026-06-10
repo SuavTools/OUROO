@@ -191,6 +191,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
   const stateRef = useRef({
     player: { x: 140, y: 300, width: PW, height: PH, vy: 0, isGrounded: false, jumpCount: 0, stretch: 1 } as Player,
+    chargeTrail:  [] as Array<{ x: number; y: number }>,  // player-centre history; the blaster-charge tail samples it
+    chargeTrailPop: 0,   // brief flash when a charge is gained/spent so the tail "pops"
+    chargePrev:    0,    // last-seen blasterCharges, to detect gains from any source
     platforms:    [] as Platform[],
     crystals:     [] as Crystal[],
     aliens:       [] as Alien[],
@@ -360,6 +363,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
     state.blasterCharges--;
     setBlasterCharges(state.blasterCharges);
+    state.chargeTrailPop = 8;   // tail flashes as the crystal is spent
 
     if (tier === 0 || effectiveCharge < 0.4) {
       // STANDARD
@@ -1092,6 +1096,12 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       p.y += p.vy;
       p.stretch += (1 - p.stretch) * 0.15;
       if (!p.isGrounded && Math.abs(p.vy) > 2) p.stretch = 1 + Math.abs(p.vy) * 0.025;
+
+      // Record the player's centre so the blaster-charge tail can lag behind it (newest at end).
+      const ct = state.chargeTrail;
+      ct.push({ x: p.x + PW / 2, y: p.y + PH / 2 });
+      if (ct.length > 140) ct.shift();
+      if (state.chargeTrailPop > 0) state.chargeTrailPop--;
 
       let onGround = false;
       for (const pl of state.platforms) {
@@ -1881,6 +1891,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       // added, so no hoarding a stockpile to mash-fire through the late game. Egg modes (temporary) stack higher.
       const chargeCap = state.easterEggMode ? 12 : MAX_BLASTER_CHARGES;
       if (state.blasterCharges > chargeCap) { state.blasterCharges = chargeCap; setBlasterCharges(chargeCap); }
+      if (state.blasterCharges > state.chargePrev) state.chargeTrailPop = 8;   // a charge arrived (any source) — pop the tail
+      state.chargePrev = state.blasterCharges;
     };
 
     // ---- DRAW ----
@@ -2300,6 +2312,31 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
       sd.particles.forEach(pt => { ctx.globalAlpha=pt.alpha; ctx.fillStyle=pt.color; ctx.fillRect(pt.x,pt.y,pt.size,pt.size); });
       ctx.globalAlpha = 1; ctx.restore();
 
+      // Blaster-charge tail — one crystal per stored charge, trailing behind the player as a live
+      // ammo gauge: it grows when you charge up, shrinks the instant you fire, and whips around on jumps.
+      {
+        const pl = sd.player; const cx = pl.x + PW / 2, cy = pl.y + PH / 2;
+        const trail = sd.chargeTrail; const tl = trail.length;
+        const BASE = 20, GAP = 15, LAG = 5;   // px behind body, px between crystals, history ticks per crystal
+        const pop = sd.chargeTrailPop / 8;     // 0..1 fade after a gain/spend
+        ctx.save();
+        for (let i = sd.blasterCharges - 1; i >= 0; i--) {   // far → near, so nearer crystals overlap on top
+          const h = trail[tl - 1 - (i + 1) * LAG];
+          const ty = h ? h.y : cy;
+          const tx = cx - BASE - i * GAP;
+          const ph = sd.gameTicks * 0.12 + i * 0.7;
+          const s = (i === 0 ? 9 : 7.5) + Math.sin(ph) * 1.1 + (i === sd.blasterCharges - 1 ? pop * 4 : 0);
+          ctx.globalAlpha = Math.max(0.5, 0.92 - i * 0.03);
+          ctx.save(); ctx.translate(tx, ty); ctx.rotate(ph * 0.5);
+          ctx.fillStyle = '#ffe65c'; ctx.shadowColor = '#ffe65c'; ctx.shadowBlur = 12 + pop * 14;
+          ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s * 0.7, 0); ctx.lineTo(0, s); ctx.lineTo(-s * 0.7, 0); ctx.closePath(); ctx.fill();
+          ctx.shadowBlur = 0; ctx.globalAlpha *= 0.65; ctx.fillStyle = '#fffbe0';
+          ctx.beginPath(); ctx.moveTo(0, -s * 0.42); ctx.lineTo(s * 0.3, 0); ctx.lineTo(0, s * 0.42); ctx.lineTo(-s * 0.3, 0); ctx.closePath(); ctx.fill();
+          ctx.restore();
+        }
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0; ctx.restore();
+      }
+
       // Player
       const p2=sd.player; const th=p2.height*p2.stretch; const tw=p2.width/(p2.stretch*0.85);
       ctx.save(); ctx.translate(p2.x+p2.width/2, p2.y+(p2.height-th)+th/2);
@@ -2449,6 +2486,7 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     refreshSkin();   // apply the player's chosen skin at the start of every run
     const e = stateRef.current;
     e.player.x=140; e.player.y=300; e.player.vy=0; e.player.jumpCount=0; e.player.stretch=1;
+    e.chargeTrail.length=0; e.chargeTrailPop=0; e.chargePrev=0;
     e.gameTicks=0; e.milesTraveled=0; e.coyoteCounter=0; e.jumpBufferCounter=0;
     e.coreStability=100; e.crystalsTotal=0; e.crystalsSinceCharge=0; e.blasterCharges=0;
     e.comboCount=0; e.killCombo=0; e.comboTimer=0; e.shieldActive=false; e.speedBoostTicks=0;
