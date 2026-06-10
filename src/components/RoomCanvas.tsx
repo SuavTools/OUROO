@@ -20,7 +20,7 @@ import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
-import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planSpawn } from '@/lib/roomPlans';
+import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planSpawn } from '@/lib/roomPlans';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -46,19 +46,23 @@ const ROOMS: RoomDef[] = [
   { slug: 'telhado', name: 'Telhado',   accent: '#1ED760', floor: '#121e18', plan: 'palco' },
   { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
   { slug: 'atrio',   name: 'Átrio',     accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
+  { slug: 'clube',   name: 'Clube',     accent: '#00cfff', floor: '#10202c', locked: true, plan: 'clube' },
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Tiny preview of a floor plan: a grid sized to the plan's footprint where present tiles glow
 // (brighter = higher level). Bigger plans read as denser thumbnails.
 const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent }) => {
-  const h = plan.rows.length, w = plan.rows.reduce((m, r) => Math.max(m, r.length), 0);
+  const rh = plan.rows.length, rw = plan.rows.reduce((m, r) => Math.max(m, r.length), 0);
+  const step = Math.max(1, Math.ceil(Math.max(rw, rh) / 24));   // downsample big plans so the DOM stays light
+  const w = Math.ceil(rw / step), h = Math.ceil(rh / step);
   return (
     <div className="grid gap-px" style={{ gridTemplateColumns: `repeat(${w}, 1fr)`, width: 40, height: 40 * (h / w) }}>
       {Array.from({ length: w * h }, (_, i) => {
-        const gx = i % w, gy = (i / w) | 0; const ch = (plan.rows[gy] || '')[gx];
-        const on = !!ch && ch !== 'x' && ch !== ' ' && ch !== '.'; const lv = on ? ch.charCodeAt(0) - 48 : -1;
-        return <span key={i} style={{ background: on ? hexA(accent, 0.35 + Math.min(lv, 3) * 0.2) : 'transparent', borderRadius: 1 }} />;
+        const ch = (plan.rows[(i / w | 0) * step] || '')[(i % w) * step];
+        const water = ch === 'w' || ch === 'W'; const on = !!ch && ch !== 'x' && ch !== ' ' && ch !== '.'; const lv = on && !water ? ch.charCodeAt(0) - 48 : 0;
+        const bg = water ? 'rgba(120,220,255,0.6)' : on ? hexA(accent, 0.35 + Math.min(lv, 3) * 0.2) : 'transparent';
+        return <span key={i} style={{ background: bg, borderRadius: 1 }} />;
       })}
     </div>
   );
@@ -122,7 +126,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
   const planRef = useRef<Int8Array>(planMask(planById('salao')));          // base floor level per tile (-1 = void)
+  const waterRef = useRef<Uint8Array>(planWaterMask(planById('salao')));    // 1 = pool/water tile
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
+  const isWater = (gx: number, gy: number) => gx >= 0 && gy >= 0 && gx < GRID && gy < GRID && waterRef.current[gy * GRID + gx] === 1;
   const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
   const framesRef = useRef(0);
@@ -287,6 +293,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => {
     const plan = planById(roomMeta.plan);
     planRef.current = planMask(plan);
+    waterRef.current = planWaterMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
@@ -488,9 +495,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // Furni sprites are drawn by the shared renderer in @/lib/furniRender (drawFurniSprite).
 
     const drawAvatar = (a: Avatar, isSelf: boolean) => {
-      const { sx, sy } = iso(a.fx, a.fy, a.z);
+      const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;   // sink + ripple when standing in a pool
+      const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
       const col = a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
+      if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const bob = moving ? Math.sin(a.af * 0.3) * 3 : 0;
@@ -538,10 +547,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (rn < L && dr > 0) { ctx.fillStyle = shade(theme.floor, 0.6); ctx.beginPath(); ctx.moveTo(b.sx, botY); ctx.lineTo(rX, b.sy); ctx.lineTo(rX, b.sy + dr); ctx.lineTo(b.sx, botY + dr); ctx.closePath(); ctx.fill(); }
         const ln = lvl(gx, gy + 1), dl = (L - (ln < 0 ? 0 : ln)) * STACK_H;
         if (ln < L && dl > 0) { ctx.fillStyle = shade(theme.floor, 0.42); ctx.beginPath(); ctx.moveTo(b.sx, botY); ctx.lineTo(lX, b.sy); ctx.lineTo(lX, b.sy + dl); ctx.lineTo(b.sx, botY + dl); ctx.closePath(); ctx.fill(); }
-        // top face
-        diamond(b.sx, b.sy, TW, TH); ctx.fillStyle = theme.floor; ctx.fill();
-        ctx.fillStyle = (gx + gy) % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill();
-        ctx.strokeStyle = hexA(theme.accent, 0.10); ctx.lineWidth = 1; ctx.stroke();
+        // top face — water tiles render as a sunken animated pool, else solid floor
+        if (waterRef.current[gy * GRID + gx] === 1) {
+          diamond(b.sx, b.sy + 5, TW, TH); ctx.fillStyle = '#05202c'; ctx.fill();                      // sunken basin shadow
+          diamond(b.sx, b.sy + 2, TW, TH); ctx.fillStyle = hexA('#127a99', 0.92); ctx.fill();          // water body
+          const ph = Math.sin((gx * 0.7 + gy * 0.5) + t * 0.05) * 0.5 + 0.5;                            // moving caustics
+          ctx.fillStyle = hexA('#8fe6ff', 0.10 + ph * 0.16); ctx.fill();
+          ctx.strokeStyle = hexA('#bff2ff', 0.22); ctx.lineWidth = 1; ctx.stroke();
+        } else {
+          diamond(b.sx, b.sy, TW, TH); ctx.fillStyle = theme.floor; ctx.fill();
+          ctx.fillStyle = (gx + gy) % 2 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill();
+          ctx.strokeStyle = hexA(theme.accent, 0.10); ctx.lineWidth = 1; ctx.stroke();
+        }
       }
       const hv = hoverRef.current, ui = uiRef.current;
       if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }

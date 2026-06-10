@@ -6,8 +6,9 @@
 
 // Max grid the engine supports (array stride + bounds). Plans can be any size up to this; the room
 // camera scales the footprint to fit the stage, so bigger plans just zoom out.
-export const PLAN_GRID = 20;
+export const PLAN_GRID = 40;
 
+// Cell chars: 'x'/' '/'.' = void · '0'–'9' = floor at that base level · 'w' = water/pool (walkable, sunken).
 export type RoomPlan = { id: string; name: string; rows: string[]; spawn?: [number, number] };
 
 const F = '00000000000';
@@ -15,6 +16,19 @@ const F = '00000000000';
 const full = (n: number) => Array.from({ length: n }, () => '0'.repeat(n));
 const octa = (n: number, k: number) => Array.from({ length: n }, (_, y) =>
   Array.from({ length: n }, (_, x) => ((x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k)) ? 'x' : '0').join(''));
+
+// The grand CLUBE lobby — a big octagonal hall with a raised central dais, two side pools and a front
+// reflecting pool. Curated (mods-only), ~34×34 so the camera zooms right out like a Habbo Club lobby.
+const clube = (): string[] => {
+  const n = 34, k = 9; const g: string[][] = [];
+  for (let y = 0; y < n; y++) { const row: string[] = []; for (let x = 0; x < n; x++) { const corner = (x + y < k) || (x + (n - 1 - y) < k) || ((n - 1 - x) + y < k) || ((n - 1 - x) + (n - 1 - y) < k); row.push(corner ? 'x' : '0'); } g.push(row); }
+  const fill = (x0: number, x1: number, y0: number, y1: number, ch: string) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (g[y] && g[y][x] === '0') g[y][x] = ch; };
+  fill(13, 20, 13, 20, '1');   // central raised dais
+  fill(4, 9, 12, 21, 'w');     // left pool
+  fill(24, 29, 12, 21, 'w');   // right pool
+  fill(14, 19, 25, 29, 'w');   // front reflecting pool
+  return g.map(r => r.join(''));
+};
 
 export const ROOM_PLANS: RoomPlan[] = [
   { id: 'salao', name: 'Salão', rows: [F, F, F, F, F, F, F, F, F, F, F] },
@@ -111,16 +125,30 @@ export const ROOM_PLANS: RoomPlan[] = [
   { id: 'grande', name: 'Grande', rows: full(14) },
   { id: 'enorme', name: 'Enorme', rows: full(18) },
   { id: 'pista', name: 'Pista', rows: octa(16, 5), spawn: [8, 8] },
+  { id: 'clube', name: 'Clube', rows: clube(), spawn: [17, 31] },
 ];
 
 export const planById = (id?: string): RoomPlan => ROOM_PLANS.find(p => p.id === id) ?? ROOM_PLANS[0];
 
-// Base level of a cell, or -1 for void / out of bounds.
+// Base level of a cell, or -1 for void / out of bounds. Water ('w') is walkable floor at ground level.
 export const planLevelAt = (plan: RoomPlan, gx: number, gy: number): number => {
   if (gx < 0 || gy < 0 || gx >= PLAN_GRID || gy >= PLAN_GRID) return -1;
   const row = plan.rows[gy]; if (!row) return -1;
   const ch = row[gx]; if (!ch || ch === 'x' || ch === 'X' || ch === ' ' || ch === '.') return -1;
+  if (ch === 'w' || ch === 'W') return 0;
   const n = ch.charCodeAt(0) - 48; return n >= 0 && n <= 9 ? n : -1;
+};
+
+// Is this cell a pool/water tile?
+export const planIsWaterAt = (plan: RoomPlan, gx: number, gy: number): boolean => {
+  const row = plan.rows[gy]; const ch = row && row[gx]; return ch === 'w' || ch === 'W';
+};
+
+// Flat mask of water tiles (1 = water), indexed gy*PLAN_GRID + gx.
+export const planWaterMask = (plan: RoomPlan): Uint8Array => {
+  const m = new Uint8Array(PLAN_GRID * PLAN_GRID);
+  for (let gy = 0; gy < PLAN_GRID; gy++) for (let gx = 0; gx < PLAN_GRID; gx++) if (planIsWaterAt(plan, gx, gy)) m[gy * PLAN_GRID + gx] = 1;
+  return m;
 };
 
 // Flat Int8Array of base levels (-1 = void), indexed gy*PLAN_GRID + gx.
