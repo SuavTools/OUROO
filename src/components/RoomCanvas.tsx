@@ -100,6 +100,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const placeElevRef = useRef(0);
   useEffect(() => { placeElevRef.current = placeElev; }, [placeElev]);
   const [decorOpen, setDecorOpen] = useState(false);
+  const [entered, setEntered] = useState(false);   // lobby gate — connect to the room only on deliberate entry
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -234,7 +235,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; });
     amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
-    if (!supabase) return;
+    if (!supabase || !entered) return;   // wait for the lobby "Entrar" so the join is deliberate + clean
     const me = selfRef.current;
     remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false);
     const ch = supabase.channel(`room:${room}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
@@ -252,15 +253,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
       setPopulation(remotesRef.current.size + 1);
+      // roster changed → announce my position+name so everyone (incl. fresh joiners) renders me live
+      channelRef.current?.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } });
     };
 
     ch.on('presence', { event: 'sync' }, rebuild)
       .on('broadcast', { event: 'pos' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return;
         const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
-        const lvl = Number(pl.lvl) || 0; let r = remotesRef.current.get(id);
-        if (!r) { r = { handle: '…', skinId: 'diamond-gold', fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
-        else { r.tx = fx; r.ty = fy; r.lvl = lvl; }
+        const lvl = Number(pl.lvl) || 0; const h = pl.h != null ? String(pl.h) : null; const s = pl.s != null ? String(pl.s) : null; const ic = parseIcon(pl.icon);
+        let r = remotesRef.current.get(id);
+        // Movement carries name/skin too, so a moving player is fully visible even if presence is flaky.
+        if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
+        else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; }
       })
       .on('broadcast', { event: 'say' }, ({ payload }) => {
         const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
@@ -275,7 +280,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       .subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           setConnected(true);
+          const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;   // ensure the real name is tracked, not a race-stale placeholder
           await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl });
+          ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: me.fx, fy: me.fy, lvl: me.lvl } });
           const { data } = await supabase!.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
           if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
         }
@@ -287,7 +294,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const onLeave = () => { try { channelRef.current?.untrack(); } catch { /* ignore */ } };
     document.addEventListener('visibilitychange', onResume); window.addEventListener('focus', onResume); window.addEventListener('online', onResume); window.addEventListener('pagehide', onLeave);
     return () => { setConnected(false); document.removeEventListener('visibilitychange', onResume); window.removeEventListener('focus', onResume); window.removeEventListener('online', onResume); window.removeEventListener('pagehide', onLeave); supabase?.removeChannel(ch); channelRef.current = null; };
-  }, [room]);
+  }, [room, entered]);
 
   // ---- main loop ----
   useEffect(() => {
@@ -309,11 +316,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (me.bubbleLife > 0) me.bubbleLife--;
       const ch = channelRef.current;
       if (ch) {
-        if (moving && ++posAccum.current >= 7) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } }); }
-        if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl }); }
+        const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
+        if (moving && ++posAccum.current >= 5) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
+        if (wasMovingRef.current && !moving) { ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl }); }
       }
       wasMovingRef.current = moving;
-      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.2; r.fy += (r.ty - r.fy) * 0.2; r.z += (r.lvl - r.z) * 0.25; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
+      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
     };
 
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
@@ -409,6 +417,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <canvas ref={canvasRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} className="absolute inset-0 block w-full h-full" />
         </div>
       </div>
+
+      {!entered && (
+        <div className="absolute inset-0 z-[60] bg-black/92 backdrop-blur-sm flex items-center justify-center px-6">
+          <div className="w-full max-w-md text-center">
+            <p className="text-[11px] uppercase tracking-[0.4em] text-white/40 mb-2">Sala Social · Beta</p>
+            <h2 className="font-helvetica font-black text-5xl text-white leading-none mb-4">PRAÇA<span style={{ color: roomOf(room).accent }}>.</span></h2>
+            <p className="text-white/60 text-sm leading-relaxed mb-3">Um espaço isométrico em tempo real. Entra com a tua skin, passeia pelos tiles e vê toda a gente ao vivo — fala com balões por cima da cabeça e decora a sala.</p>
+            <ul className="text-white/45 text-[12px] leading-relaxed mb-6 space-y-0.5 inline-block text-left">
+              <li>· Toca num tile para andar — senta-te em sofás e cadeiras</li>
+              <li>· <span className="text-brandYellow">✦ Decorar</span> — móveis, alturas, pontes e túneis</li>
+              <li>· <span className="text-white/70">☻ Personagem</span> — troca a skin ou o teu ícone</li>
+            </ul>
+            <button onClick={() => setEntered(true)} className="w-full bg-[#00cfff] text-black font-bold uppercase tracking-[0.2em] text-sm py-3.5 hover:bg-white transition-colors active:scale-[0.99]">Entrar na Praça ▸</button>
+            {onExit && <button onClick={onExit} className="mt-3 text-[11px] uppercase tracking-[0.2em] text-white/40 hover:text-white transition-colors">← Voltar</button>}
+          </div>
+        </div>
+      )}
 
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomOf(room).name}</p>
