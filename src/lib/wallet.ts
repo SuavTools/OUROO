@@ -11,22 +11,27 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { getAuthIdentity } from './auth';
-import { getLocalPlayer, getLifetimePoints } from './leaderboard';
+import { getLocalPlayer, getCristalScoreBasis } from './leaderboard';
 import { type CustomIcon, type IconSpec } from './icons';
 import { isFurniPremium, furniPrice } from './furni';
 
 export const CURRENCY = 'Cristais';
 export const CURRENCY_SYMBOL = '✦';
-export const ICON_PRICE = 250;             // Cristais to mint one custom icon
-export const POINTS_PER_CRISTAL = 1000;    // 1 ✦ for every 1000 lifetime points scored
+export const ICON_PRICE = 1200;            // Cristais to mint one custom icon
+export const POINTS_PER_CRISTAL = 1000;    // 1 ✦ per 1000 points of your BEST score in each game
 
-// `scoreCredited` is a high-water mark: the most Cristais ever GRANTED from lifetime score. Spending
+// Bump when the earn formula changes so stale balances recompute. v2 = peak-score basis (was the
+// grindy lifetime-sum). Migration keeps owned cosmetics but resets balance + scoreCredited so the
+// new formula re-grants cleanly.
+const WALLET_VERSION = 2;
+
+// `scoreCredited` is a high-water mark: the most Cristais ever GRANTED from your score basis. Spending
 // lowers `balance` but not this, so spent Cristais are never re-earned and reconnecting never double-
-// counts. The balance is fed by your whole history across every game — not just future runs.
-export type WalletData = { balance: number; skins: string[]; furni: string[]; icons: CustomIcon[]; scoreCredited: number };
+// counts. The basis = sum of your BEST score per game (skill, not grind) — see getCristalScoreBasis.
+export type WalletData = { balance: number; skins: string[]; furni: string[]; icons: CustomIcon[]; scoreCredited: number; version: number };
 
 const LS_KEY = 'ouroo_wallet';
-const empty = (): WalletData => ({ balance: 0, skins: [], furni: [], icons: [], scoreCredited: 0 });
+const empty = (): WalletData => ({ balance: 0, skins: [], furni: [], icons: [], scoreCredited: 0, version: WALLET_VERSION });
 
 // ---- pub/sub so the UI (and the PRAÇA balance chip) refresh after any change ----
 const listeners = new Set<() => void>();
@@ -40,12 +45,16 @@ export function getWallet(): WalletData {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return empty();
     const w = JSON.parse(raw) as Partial<WalletData>;
+    const skins = Array.isArray(w.skins) ? w.skins.map(String) : [];
+    const furni = Array.isArray(w.furni) ? w.furni.map(String) : [];
+    const icons = Array.isArray(w.icons) ? (w.icons as CustomIcon[]) : [];
+    // Earn-formula migration: keep what you OWN, but reset money so the new basis re-grants cleanly.
+    if (Number(w.version) !== WALLET_VERSION) return { balance: 0, skins, furni, icons, scoreCredited: 0, version: WALLET_VERSION };
     return {
       balance: Math.max(0, Math.floor(Number(w.balance) || 0)),
-      skins: Array.isArray(w.skins) ? w.skins.map(String) : [],
-      furni: Array.isArray(w.furni) ? w.furni.map(String) : [],
-      icons: Array.isArray(w.icons) ? (w.icons as CustomIcon[]) : [],
+      skins, furni, icons,
       scoreCredited: Math.max(0, Math.floor(Number(w.scoreCredited) || 0)),
+      version: WALLET_VERSION,
     };
   } catch { return empty(); }
 }
@@ -72,12 +81,12 @@ export function reconcileFromScores(lifetimePoints: number): number {
   const delta = target - w.scoreCredited;
   w.balance += delta; w.scoreCredited = target; save(w); return delta;
 }
-// Fetch lifetime points for this device and reconcile. Returns the Cristais just granted (0 if none).
+// Fetch the peak-score basis for this device and reconcile. Returns the Cristais just granted.
 export async function reconcileNow(): Promise<number> {
   const device = await deviceToken();
   if (!device) return 0;
-  const pts = await getLifetimePoints(device);
-  return reconcileFromScores(pts);
+  const basis = await getCristalScoreBasis(device);
+  return reconcileFromScores(basis);
 }
 
 // ---- skins (currency-bought; default/score/code unlocks are tracked elsewhere) ----
@@ -134,7 +143,7 @@ async function pushWallet(w: WalletData) {
     try {
       const device = await deviceToken();
       if (!device) return;
-      await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons, scoreCredited: w.scoreCredited } }, { onConflict: 'device_token' });
+      await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons, scoreCredited: w.scoreCredited, version: WALLET_VERSION } }, { onConflict: 'device_token' });
     } catch { /* table may not exist yet — ignore */ }
   }, 600);
 }
@@ -150,12 +159,14 @@ export async function refreshWalletFromCloud(): Promise<void> {
     const local = getWallet();
     if (!isFresh(local)) return;
     const d = (data.data ?? {}) as Partial<WalletData>;
+    if (Number(d.version) !== WALLET_VERSION) return;   // ignore stale (pre-v2) cloud snapshots
     save({
       balance: Math.max(0, Math.floor(Number(data.balance) || 0)),
       skins: Array.isArray(d.skins) ? d.skins.map(String) : [],
       furni: Array.isArray(d.furni) ? d.furni.map(String) : [],
       icons: Array.isArray(d.icons) ? (d.icons as CustomIcon[]) : [],
       scoreCredited: Math.max(0, Math.floor(Number(d.scoreCredited) || 0)),
+      version: WALLET_VERSION,
     });
   } catch { /* ignore */ }
 }

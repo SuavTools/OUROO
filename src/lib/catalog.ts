@@ -27,7 +27,7 @@ export function resolveAppearance(id: string): Appearance {
 // default skins are free; code skins stay secret (never buyable).
 export function skinPrice(skin: Skin): number | null {
   if (skin.unlock.type === 'default') return 0;
-  if (skin.unlock.type === 'score') return Math.max(50, Math.round(skin.unlock.need / 500));
+  if (skin.unlock.type === 'score') return Math.max(200, Math.round(skin.unlock.need / 200));
   return null;
 }
 

@@ -53,15 +53,18 @@ export async function getBestAcrossGames(device: string): Promise<number> {
   return rows?.[0]?.score ?? 0;
 }
 
-// Lifetime points: the sum of every run this player has ever submitted, across ALL games. This is
-// the basis for the Cristais wallet — one global balance fed by the whole site. Degrades to 0.
-export async function getLifetimePoints(device: string): Promise<number> {
+// Cristais earn basis: the sum of your BEST score in each game (peak performance, NOT total runs).
+// This is deliberately grind-proof — replaying for the same score adds nothing; you only grow the
+// basis by beating a personal record. One global number fed by the whole site. Degrades to 0.
+export async function getCristalScoreBasis(device: string): Promise<number> {
   if (!supabase || !device) return 0;
   const { data: player } = await supabase.from('players').select('id').eq('device_token', device).maybeSingle();
   if (!player) return 0;
-  const { data } = await supabase.from('scores').select('score').eq('player_id', player.id).limit(5000);
+  const { data } = await supabase.from('scores').select('game_id, score').eq('player_id', player.id).limit(5000);
   if (!data) return 0;
-  return data.reduce((sum, r) => sum + (Number(r.score) || 0), 0);
+  const best = new Map<string, number>();
+  for (const r of data) { const g = String(r.game_id); const s = Number(r.score) || 0; if (s > (best.get(g) ?? 0)) best.set(g, s); }
+  let sum = 0; for (const v of best.values()) sum += v; return sum;
 }
 
 // ---- local identity (anonymous device id; Discord can claim it later) ----

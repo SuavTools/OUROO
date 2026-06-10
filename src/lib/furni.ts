@@ -27,7 +27,7 @@ export const CATS: FurniCat[] = [
 
 // Per-item Cristais price for premium collections (0 / absent = free basic furni).
 export const CAT_PRICE: Record<string, number> = {
-  tier1: 300,
+  tier1: 1500,
 };
 
 export const FURNI: FurniDef[] = [
