@@ -35,6 +35,10 @@ export const FURNI: FurniDef[] = [
   { kind: 'lounge_couch', name: 'Sofá Lounge', emoji: '🛋️', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
   { kind: 'lounge_chair', name: 'Poltrona',    emoji: '💺', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'armchair' },
   { kind: 'lounge_table', name: 'Mesa Centro', emoji: '🪵', cat: 'tier1', color: '#4a3120', h: 1, walk: false, foot: 1, special: 'coffee' },
+  { kind: 'hc_sofa',   name: 'Sofá HC',      emoji: '🛋️', cat: 'tier1', color: '#7b2d3a', h: 1, walk: false, foot: 1,    special: 'couch_hc', span: [2, 1] },
+  { kind: 'hc_plant',  name: 'Planta HC',    emoji: '🪴', cat: 'tier1', color: '#1f7a3a', h: 2, walk: false, foot: 0.8,  special: 'plant_hc' },
+  { kind: 'hc_column', name: 'Coluna HC',    emoji: '🏛️', cat: 'tier1', color: '#dfe2ea', h: 3, walk: false, foot: 0.5,  special: 'column_hc' },
+  { kind: 'hc_ball',   name: 'Bola Espelho', emoji: '🪩', cat: 'tier1', color: '#cfe0ff', h: 0, walk: true,  foot: 1,    special: 'ball_hc' },
   // construção (walkable build pieces + solid walls)
   { kind: 'bloco',      name: 'Bloco',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
   { kind: 'meio',       name: 'Cubo',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },

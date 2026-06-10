@@ -88,6 +88,148 @@ const drawCoffee = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
   { const m = P(0.16, -0.05, z); ctx.fillStyle = '#e8e8ee'; ctx.beginPath(); ctx.ellipse(m[0], m[1], 5, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(m[0] - 5, m[1] - 7, 10, 7); ctx.fillStyle = '#5a3a22'; ctx.beginPath(); ctx.ellipse(m[0], m[1] - 7, 5, 2.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#e8e8ee'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(m[0] + 6, m[1] - 4, 3, -1, 1.4); ctx.stroke(); }
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// ★ HI-FI tier — highest-fidelity pieces (layered shadows, tufting, gradients, specular).
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// Tufted Chesterfield-style sofa (2 tiles): diamond button tufting, rolled arms, brass feet + nailheads.
+const drawCouchHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  const P = (u: number, v: number, z = 0): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+  const span = (u0: number, u1: number, v0: number, v1: number, z0: number, z1: number, t: string, r: string, l: string) => { poly(ctx, [P(u1, v0, z1), P(u1, v1, z1), P(u1, v1, z0), P(u1, v0, z0)], r); poly(ctx, [P(u0, v1, z1), P(u1, v1, z1), P(u1, v1, z0), P(u0, v1, z0)], l); poly(ctx, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)], t); };
+  const cT = shade(base, 1.34), cR = shade(base, 1.0), cL = shade(base, 0.62), cD = shade(base, 0.38), hi = shade(base, 1.8);
+  const brass = '#c9a44f';
+  // layered soft contact shadow
+  ctx.save(); ctx.fillStyle = '#000';
+  for (const [a, fw, fh] of [[0.13, 1.32, 1.32], [0.15, 1.08, 1.08], [0.17, 0.84, 0.84]] as [number, number, number][]) { ctx.globalAlpha = a; const c = P(0.5, 0.06, 0); ctx.beginPath(); ctx.ellipse(c[0], c[1] + TH * 0.55, TILE_W * fw, TILE_H * fh, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+  // brass tapered feet
+  for (const [u, v] of [[-0.28, -0.26], [1.28, -0.26], [-0.28, 0.32], [1.28, 0.32]] as [number, number][]) span(u - 0.045, u + 0.045, v - 0.045, v + 0.045, 0, 0.2, shade(brass, 1.2), shade(brass, 0.85), shade(brass, 0.55));
+  // back rest (tall) + rolled-top highlight
+  span(-0.42, 1.42, -0.48, -0.18, 0.42, 1.5, cT, cR, cL);
+  { const a = P(0.5, -0.33, 1.5); ctx.save(); ctx.globalAlpha = 0.5; const g = ctx.createLinearGradient(a[0], a[1] - 9, a[0], a[1] + 7); g.addColorStop(0, hi); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TILE_W * 0.96, TH * 1.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  // diamond button tufting on the back's front face
+  ctx.save();
+  const rows = [0.66, 0.95, 1.24];
+  for (let zi = 0; zi < rows.length; zi++) {
+    const z = rows[zi], offset = zi % 2 ? 0.18 : 0;
+    for (let u = -0.2; u <= 1.32; u += 0.36) {
+      const b = P(u + offset, -0.2, z);
+      const g = ctx.createRadialGradient(b[0], b[1] + 1, 0, b[0], b[1], 6); g.addColorStop(0, cD); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.85; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(b[0], b[1], 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.fillStyle = cD; ctx.beginPath(); ctx.arc(b[0], b[1], 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = hexA(hi, 0.7); ctx.beginPath(); ctx.arc(b[0] - 0.6, b[1] - 0.8, 0.9, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+  const arm = (uc: number) => {
+    span(uc - 0.16, uc + 0.16, -0.46, 0.42, 0.42, 1.06, cT, cR, cL);
+    const a = P(uc, -0.02, 1.06); ctx.save(); const g = ctx.createRadialGradient(a[0] - 3, a[1] - 4, 1, a[0], a[1], TILE_W * 0.5); g.addColorStop(0, hi); g.addColorStop(0.6, cT); g.addColorStop(1, cR); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(a[0], a[1], TW * 0.5, TH * 0.8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    for (let v = -0.4; v <= 0.38; v += 0.16) { const n = P(uc + 0.16, v, 0.5); ctx.fillStyle = brass; ctx.beginPath(); ctx.arc(n[0], n[1], 1.3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = hexA('#fff', 0.6); ctx.beginPath(); ctx.arc(n[0] - 0.4, n[1] - 0.4, 0.5, 0, Math.PI * 2); ctx.fill(); }
+  };
+  arm(-0.26);
+  span(-0.34, 1.34, -0.18, 0.4, 0.16, 0.5, cT, cR, cL);   // seat base
+  for (const [u0, u1] of [[-0.3, 0.5], [0.5, 1.3]] as [number, number][]) {
+    span(u0 + 0.03, u1 - 0.03, -0.32, 0.36, 0.5, 0.8, shade(base, 1.22), cR, cL);
+    const c = P((u0 + u1) / 2, 0.02, 0.8); const g = ctx.createRadialGradient(c[0], c[1] - 3, 2, c[0], c[1], 30); g.addColorStop(0, hexA(hi, 0.55)); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], TW * 0.6, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+    poly(ctx, [P(u0 + 0.03, -0.32, 0.8), P(u1 - 0.03, -0.32, 0.8), P(u1 - 0.03, 0.36, 0.8), P(u0 + 0.03, 0.36, 0.8)], undefined, hexA(hi, 0.5), 1);
+  }
+  arm(1.26);
+};
+
+// Habbo-club style plant: glossy pot, soil, layered monstera leaves with veins + gradients.
+const drawPlantHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _accent: string, base: string) => {
+  void _accent;
+  const cx = sx;
+  ctx.save(); ctx.globalAlpha = 0.32; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, sy + TH * 0.5, TILE_W * 0.55, TILE_H * 0.58, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  // pot (tapered, glossy charcoal-terracotta)
+  const pot = '#b5572f', ptw = TW * 0.52, pbw = TW * 0.36, ph = STACK_H * 1.0, topY = sy - ph + TH * 0.4;
+  const g = ctx.createLinearGradient(cx - ptw, 0, cx + ptw, 0); g.addColorStop(0, shade(pot, 0.55)); g.addColorStop(0.5, shade(pot, 1.12)); g.addColorStop(1, shade(pot, 0.66));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(cx - pbw, sy); ctx.lineTo(cx + pbw, sy); ctx.lineTo(cx + ptw, topY); ctx.lineTo(cx - ptw, topY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(pot, 1.2); ctx.beginPath(); ctx.ellipse(cx, topY, ptw, TH * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#33241a'; ctx.beginPath(); ctx.ellipse(cx, topY, ptw * 0.82, TH * 0.44, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA('#fff', 0.28); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(cx, topY, ptw, TH * 0.55, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+  // leaves
+  const cyL = topY - TH * 0.2;
+  const greens = ['#1f7a3a', '#176b32', '#27904a', '#155f2c'];
+  const leaf = (ang: number, len: number, wid: number, col: string) => {
+    ctx.save(); ctx.translate(cx, cyL); ctx.rotate(ang);
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.moveTo(2, 2); ctx.bezierCurveTo(-wid + 2, -len * 0.45, -wid * 0.5 + 2, -len * 0.9, 2, -len + 2); ctx.bezierCurveTo(wid * 0.5 + 2, -len * 0.9, wid + 2, -len * 0.45, 2, 2); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    const lg = ctx.createLinearGradient(0, 0, 0, -len); lg.addColorStop(0, shade(col, 0.58)); lg.addColorStop(1, shade(col, 1.3));
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-wid, -len * 0.45, -wid * 0.5, -len * 0.9, 0, -len); ctx.bezierCurveTo(wid * 0.5, -len * 0.9, wid, -len * 0.45, 0, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA(shade(col, 1.55), 0.55); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(0, -len * 0.93); ctx.stroke();
+    ctx.strokeStyle = hexA(shade(col, 1.35), 0.35); ctx.lineWidth = 0.8;
+    for (let s = 1; s <= 4; s++) { const ly = -len * (0.18 + s * 0.17), lw = wid * (0.66 - s * 0.12); ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(-lw, ly - lw * 0.5); ctx.moveTo(0, ly); ctx.lineTo(lw, ly - lw * 0.5); ctx.stroke(); }
+    ctx.restore();
+  };
+  const set: [number, number][] = [[-1.05, 1.0], [-0.52, 1.2], [0, 1.3], [0.52, 1.2], [1.05, 1.0], [-0.8, 0.72], [0.8, 0.72]];
+  set.sort((a, b) => a[1] - b[1]);
+  set.forEach((s, i) => leaf(s[0], STACK_H * 1.7 * s[1], TW * 0.36, greens[i % greens.length]));
+};
+
+// Marble column: stepped plinth, fluted round shaft (gradient + flutes + veining), flared capital.
+const drawColumnHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  const cx = sx, m = base;
+  ctx.save(); ctx.globalAlpha = 0.28; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, sy + TH * 0.4, TW * 0.62, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const totalH = 3 * STACK_H, baseH = STACK_H * 0.5, capH = STACK_H * 0.5, shaftW = TW * 0.42;
+  const shaftBottom = sy - baseH, shaftTop = sy - (totalH - capH);
+  // plinth
+  boxAt(ctx, cx, sy, 0.52, 0.52, baseH / STACK_H, shade(m, 0.82), accent);
+  boxAt(ctx, cx, sy - baseH * 0.45, 0.42, 0.42, baseH * 0.55 / STACK_H, shade(m, 0.95), accent);
+  // shaft body (round via horizontal gradient)
+  const g = ctx.createLinearGradient(cx - shaftW, 0, cx + shaftW, 0);
+  g.addColorStop(0, shade(m, 0.55)); g.addColorStop(0.28, shade(m, 1.05)); g.addColorStop(0.5, shade(m, 1.28)); g.addColorStop(0.72, shade(m, 1.0)); g.addColorStop(1, shade(m, 0.5));
+  ctx.fillStyle = g; ctx.fillRect(cx - shaftW, shaftTop, shaftW * 2, shaftBottom - shaftTop);
+  ctx.beginPath(); ctx.ellipse(cx, shaftBottom, shaftW, TH * 0.42, 0, 0, Math.PI); ctx.fill();
+  // flutes
+  ctx.save();
+  for (let i = -3; i <= 3; i++) { const x = cx + i * shaftW * 0.26; ctx.strokeStyle = hexA('#000', 0.13); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, shaftTop + 2); ctx.lineTo(x, shaftBottom); ctx.stroke(); ctx.strokeStyle = hexA('#fff', 0.13); ctx.beginPath(); ctx.moveTo(x + 1.4, shaftTop + 2); ctx.lineTo(x + 1.4, shaftBottom); ctx.stroke(); }
+  ctx.restore();
+  // marble veining (clipped) + specular streak
+  ctx.save(); ctx.beginPath(); ctx.rect(cx - shaftW, shaftTop, shaftW * 2, shaftBottom - shaftTop); ctx.clip();
+  ctx.strokeStyle = hexA('#9aa3b5', 0.3); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - shaftW, shaftTop + 18); ctx.bezierCurveTo(cx, shaftTop + 28, cx - 5, shaftTop + 52, cx + shaftW, shaftTop + 46); ctx.stroke();
+  const sg = ctx.createLinearGradient(cx - shaftW * 0.6, 0, cx - shaftW * 0.05, 0); sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,255,255,0.5)'); sg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = sg; ctx.fillRect(cx - shaftW * 0.6, shaftTop, shaftW * 0.55, shaftBottom - shaftTop); ctx.restore();
+  // top of shaft
+  ctx.fillStyle = shade(m, 1.32); ctx.beginPath(); ctx.ellipse(cx, shaftTop, shaftW, TH * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  // capital (flared) + abacus slab
+  boxAt(ctx, cx, shaftTop + TH * 0.4, 0.5, 0.5, capH * 0.7 / STACK_H, shade(m, 1.1), accent);
+  boxAt(ctx, cx, shaftTop - capH * 0.3, 0.6, 0.6, 0.22, shade(m, 1.0), accent);
+};
+
+// Crystal mirror ball: hanging, faceted shimmering sphere with specular, rim light, beams + sparkles.
+const drawBallHC = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, _base: string, t: number) => {
+  void _base;
+  const cx = sx, cy = sy - 2.0 * STACK_H, R = TW * 0.66;
+  // chain + mount
+  ctx.strokeStyle = 'rgba(200,210,235,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy - R - STACK_H * 1.5); ctx.stroke();
+  ctx.fillStyle = '#2c303c'; ctx.fillRect(cx - 4, cy - R - STACK_H * 1.5 - 4, 8, 6);
+  // rotating light beams (behind)
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + t * 0.02; const len = R * 2.7; const c2 = Math.cos(a), s2 = Math.sin(a); ctx.fillStyle = `hsla(${(i * 30 + t * 2) % 360},90%,60%,0.10)`; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + c2 * len - s2 * 7, cy + s2 * len + c2 * 7); ctx.lineTo(cx + c2 * len + s2 * 7, cy + s2 * len - c2 * 7); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  // faceted sphere (clipped to circle)
+  ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+  const cols = 12, rows = 10, fw = (2 * R) / cols, fh = (2 * R) / rows;
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const fx = cx - R + (i + 0.5) * fw, fy = cy - R + (j + 0.5) * fh;
+    const b = 0.5 + 0.42 * Math.sin(i * 0.9 + j * 0.5 + t * 0.06) * Math.cos(i * 0.5 - t * 0.045);
+    const lum = Math.max(0.12, Math.min(1, b));
+    if ((i * 3 + j * 5) % 7 === 0) ctx.fillStyle = `hsla(${(i * 40 + j * 30 + t * 2.5) % 360},75%,${38 + lum * 42}%,1)`;
+    else ctx.fillStyle = `rgb(${Math.round(205 * lum + 25)},${Math.round(214 * lum + 26)},${Math.round(235 * lum + 28)})`;
+    ctx.fillRect(fx - fw / 2, fy - fh / 2, fw + 0.7, fh + 0.7);
+  }
+  // sphere volume + edge AO
+  const rg = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R * 1.05); rg.addColorStop(0, 'rgba(255,255,255,0.5)'); rg.addColorStop(0.5, 'rgba(255,255,255,0)'); rg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = rg; ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+  ctx.restore();
+  // rim + specular hotspot
+  ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const hg = ctx.createRadialGradient(cx - R * 0.4, cy - R * 0.45, 0, cx - R * 0.4, cy - R * 0.45, R * 0.55); hg.addColorStop(0, 'rgba(255,255,255,0.9)'); hg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(cx - R * 0.4, cy - R * 0.45, R * 0.55, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  // floating sparkles
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2 - t * 0.03; const rr = R * (1.4 + 0.15 * Math.sin(t * 0.07 + i)); const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr * 0.7; const tw = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.1 + i * 1.7)); ctx.fillStyle = `hsla(${(i * 45 + t * 3) % 360},90%,70%,${tw})`; ctx.beginPath(); ctx.arc(px, py, 1.6 + tw * 1.4, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number) {
   const d = defOf(kind);
@@ -95,6 +237,10 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'couch': drawCouch(ctx, sx, sy, accent, d.color); break;
     case 'armchair': drawArmchair(ctx, sx, sy, accent, d.color); break;
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
+    case 'couch_hc': drawCouchHC(ctx, sx, sy, accent, d.color); break;
+    case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
+    case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
+    case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;
     case 'rug': { const hw = TW * 0.92, hh = TH * 0.92, top = block(ctx, sx, sy, 1, d.color, '#fff', 1); ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; for (let i = 1; i < 4; i++) { const f = i / 4; diamond(ctx, sx, top, hw * f, hh * f); ctx.stroke(); } ctx.restore(); break; }
     case 'water': { const top = block(ctx, sx, sy, 1, d.color, accent, 1); ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(t * 0.1) * 0.2; ctx.fillStyle = '#fff'; diamond(ctx, sx, top, TW * 0.5, TH * 0.5); ctx.fill(); ctx.restore(); break; }
     case 'stair': { const top = block(ctx, sx, sy, 1, d.color, accent, 1); ctx.strokeStyle = hexA(accent, 0.6); ctx.lineWidth = 1.5; for (let i = 1; i < 3; i++) { ctx.beginPath(); ctx.moveTo(sx - TW * 0.7, top + i * 5); ctx.lineTo(sx, top + i * 5 + TH * 0.7); ctx.stroke(); } break; }
