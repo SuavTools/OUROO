@@ -19,6 +19,7 @@ import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
+import { type RoomRow, fetchRooms, createRoom } from '@/lib/rooms';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = 11;
@@ -30,7 +31,7 @@ const WALK = 0.09;          // tiles per 60Hz step
 const BUBBLE_FRAMES = 60 * 6;
 const MAX_ITEMS = 200, PLACE_CAP = 20;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string };
 const ROOMS: RoomDef[] = [
   { slug: 'praca',   name: 'Praça',     accent: '#00cfff', floor: '#161628' },
   { slug: 'disco',   name: 'Discoteca', accent: '#ff44aa', floor: '#1e1226' },
@@ -90,9 +91,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [feed, setFeed] = useState<{ id: number; handle: string; text: string }[]>([]);
   const feedId = useRef(0);
   const [room, setRoom] = useState('praca');
+  const [roomMeta, setRoomMeta] = useState<RoomDef>(roomOf('praca'));   // current room's def (official or personal)
+  const roomMetaRef = useRef<RoomDef>(roomMeta);
   const [showRooms, setShowRooms] = useState(false);
-  const themeRef = useRef<RoomDef>(roomOf('praca'));
-  useEffect(() => { themeRef.current = roomOf(room); }, [room]);
+  const [personalRooms, setPersonalRooms] = useState<RoomRow[]>([]);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [myOwnerId, setMyOwnerId] = useState('');
+  const ownerIdRef = useRef('');
+  const themeRef = useRef<RoomDef>(roomMeta);
+  useEffect(() => { themeRef.current = roomMeta; roomMetaRef.current = roomMeta; }, [roomMeta]);
+  useEffect(() => { if (showRooms) fetchRooms().then(setPersonalRooms); }, [showRooms]);
   // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
   useEffect(() => {
     const el = outerRef.current; if (!el) return;
@@ -120,7 +128,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [myCount, setMyCount] = useState(0);
   const [hint, setHint] = useState('');
   const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
-  const locked = roomOf(room).locked && !isMod;
+  // You can build if: you're a mod, OR it's your personal room, OR it's an open official room.
+  const canBuild = isMod || (roomMeta.owner ? roomMeta.owner === myOwnerId : !roomMeta.locked);
+  const locked = !canBuild;
   const [invOpen, setInvOpen] = useState(false);
   const wallet = useWallet();
 
@@ -138,11 +148,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     channelRef.current?.send({ type: 'broadcast', event: 'say', payload: { id: me.id, text } });
     pushFeed(me.handle, text); setMsg('');
   };
-  const switchRoom = (slug: string) => {
-    setShowRooms(false); if (slug === room) return;
+  const switchRoom = (def: RoomDef) => {
+    setShowRooms(false); if (def.slug === room) return;
     const me = selfRef.current; me.fx = 5; me.fy = 5; me.tx = 5; me.ty = 5; me.z = 0; me.lvl = 0; me.path = []; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
-    setRoom(slug);
+    setRoomMeta(def); setRoom(def.slug);
+  };
+  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner });
+  const doCreateRoom = async () => {
+    const res = await createRoom(newRoomName);
+    if (!res.ok) { flashHint(res.error || 'Erro ao criar sala'); return; }
+    setNewRoomName(''); switchRoom(roomDefOf(res.room));
   };
 
   // recompute the heightmap (walkable height + solid mask) from items
@@ -200,7 +216,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
-    if (roomOf(room).locked && !modRef.current) { flashHint('Sala bloqueada'); return; }
+    const def = roomMetaRef.current; const canB = modRef.current || (def.owner ? def.owner === ownerIdRef.current : !def.locked);
+    if (!canB) { flashHint('Sala bloqueada'); return; }
     // Inventory: non-mods need stock (free basics are unlimited). Mods build freely (creative mode).
     if (!modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Indisponível' : 'Sem stock — compra mais ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
@@ -253,7 +270,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const ap0 = getSelectedSkinId(); selfRef.current.skinId = ap0;
     const r0 = resolveAppearance(ap0); selfRef.current.icon = r0.kind === 'icon' ? r0.spec : null;
     refreshWalletFromCloud();
-    getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; });
+    setMyOwnerId(deviceRef.current); ownerIdRef.current = deviceRef.current;
+    getAuthIdentity().then(a => { if (a?.handle) selfRef.current.handle = a.handle; if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
     amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
     if (!supabase || !entered) return;   // wait for the lobby "Entrar" so the join is deliberate + clean
@@ -388,7 +406,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H); bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610');
       ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
       ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore();
-      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(roomOf(room).locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· SALA PESSOAL ·' : theme.locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
       // walls
       const bc = iso(-0.5, -0.5), rEnd = iso(GRID - 0.5, -0.5), lEnd = iso(-0.5, GRID - 0.5), wh = WALL_H * STACK_H;
@@ -453,7 +471,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <div className="absolute inset-0 z-[60] bg-black/92 backdrop-blur-sm flex items-center justify-center px-6">
           <div className="w-full max-w-md text-center">
             <p className="text-[11px] uppercase tracking-[0.4em] text-white/40 mb-2">Sala Social · Beta</p>
-            <h2 className="font-helvetica font-black text-5xl text-white leading-none mb-4">PRAÇA<span style={{ color: roomOf(room).accent }}>.</span></h2>
+            <h2 className="font-helvetica font-black text-5xl text-white leading-none mb-4">PRAÇA<span style={{ color: roomMeta.accent }}>.</span></h2>
             <p className="text-white/60 text-sm leading-relaxed mb-3">Um espaço isométrico em tempo real. Entra com a tua skin, passeia pelos tiles e vê toda a gente ao vivo — fala com balões por cima da cabeça e decora a sala.</p>
             <ul className="text-white/45 text-[12px] leading-relaxed mb-6 space-y-0.5 inline-block text-left">
               <li>· Toca num tile para andar — senta-te em sofás e cadeiras</li>
@@ -467,7 +485,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
 
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
-        <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomOf(room).name}</p>
+        <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{supabaseReady ? (connected ? `${population} ${population === 1 ? 'pessoa' : 'pessoas'}` : 'a ligar…') : 'offline'}</p>
       </div>
 
@@ -541,7 +559,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                       if (!canPlace) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca para colocar' : (r.error || 'Sem Cristais')); return; }
                       setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false);
                     }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : canPlace ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
-                      <FurniSprite kind={f.kind} size={38} accent={roomOf(room).accent} />
+                      <FurniSprite kind={f.kind} size={38} accent={roomMeta.accent} />
                       <span className="text-[7px] uppercase tracking-wide leading-none text-center text-white/65 truncate w-full px-0.5">{f.name}</span>
                       {!free && Number.isFinite(n) && n > 0 && <span className="absolute top-0.5 right-0.5 text-[8px] font-bold text-white bg-black/75 px-1 rounded tabular-nums">×{n}</span>}
                       {!canPlace && <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-brandYellow bg-black/75 px-1 rounded">{CURRENCY_SYMBOL}{furniPrice(f.kind)}</span>}
@@ -555,23 +573,44 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </div>
       )}
 
-      {showRooms && (
-        <div className="absolute inset-0 z-50 bg-black/70 flex items-center justify-center px-6" onClick={() => setShowRooms(false)}>
-          <div className="w-full max-w-xs bg-black border border-white/15 p-5" onClick={e => e.stopPropagation()}>
-            <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-3">Escolhe uma sala</p>
-            <div className="flex flex-col gap-2">
-              {ROOMS.map(r => (
-                <button key={r.slug} onClick={() => switchRoom(r.slug)} className={`flex items-center gap-3 p-3 border transition-colors ${r.slug === room ? 'border-white bg-white/5' : 'border-white/15 hover:border-white/40'}`}>
-                  <span className="w-4 h-4 rounded-full shrink-0" style={{ background: r.accent, boxShadow: `0 0 10px ${r.accent}` }} />
-                  <span className="font-bold text-white">{r.name}</span>
-                  {r.locked && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒</span>}
-                  {r.slug === room && <span className="ml-auto text-[10px] uppercase tracking-widest text-white/40">aqui</span>}
-                </button>
-              ))}
+      {showRooms && (() => {
+        const mine = personalRooms.filter(r => r.owner === myOwnerId);
+        const community = personalRooms.filter(r => r.owner !== myOwnerId);
+        const roomBtn = (d: RoomDef, tag?: string) => (
+          <button key={d.slug} onClick={() => switchRoom(d)} className={`flex items-center gap-3 p-3 border transition-colors ${d.slug === room ? 'border-white bg-white/5' : 'border-white/15 hover:border-white/40'}`}>
+            <span className="w-4 h-4 rounded-full shrink-0" style={{ background: d.accent, boxShadow: `0 0 10px ${d.accent}` }} />
+            <span className="font-bold text-white truncate">{d.name}</span>
+            {d.locked && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒</span>}
+            <span className="ml-auto text-[10px] uppercase tracking-widest text-white/40">{d.slug === room ? 'aqui' : tag || ''}</span>
+          </button>
+        );
+        return (
+          <div className="absolute inset-0 z-50 bg-black/80 flex justify-center overflow-y-auto px-6 py-10" onClick={() => setShowRooms(false)}>
+            <div className="w-full max-w-sm bg-black border border-white/15 p-5 h-fit" onClick={e => e.stopPropagation()}>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Salas oficiais</p>
+              <div className="flex flex-col gap-2">{ROOMS.map(r => roomBtn(r))}</div>
+
+              {mine.length > 0 && (<>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">As tuas salas</p>
+                <div className="flex flex-col gap-2">{mine.map(r => roomBtn(roomDefOf(r), 'tua'))}</div>
+              </>)}
+
+              {community.length > 0 && (<>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Salas da comunidade</p>
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{community.map(r => roomBtn(roomDefOf(r)))}</div>
+              </>)}
+
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Cria a tua sala</p>
+              <div className="flex gap-2">
+                <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} maxLength={24} placeholder="Nome da sala"
+                  className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff]" />
+                <button onClick={doCreateRoom} className="bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Criar</button>
+              </div>
+              <p className="text-[10px] text-white/35 mt-2">A tua sala é tua para decorar. Outros podem visitar mas só tu (e mods) constroem nela.</p>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="absolute left-3 z-40 pointer-events-none flex flex-col gap-1 max-w-[60%] sm:max-w-md" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 56px)' }}>
         {feed.map(m => (<p key={m.id} className="text-sm leading-tight" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95)' }}><span className="text-brandYellow font-bold">{m.handle}</span><span className="text-white/90">: {m.text}</span></p>))}
