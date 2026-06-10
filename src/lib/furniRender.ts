@@ -466,6 +466,65 @@ const drawBar = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: 
   });
 };
 
+// DJ booth (2 tiles): angular console, two spinning turntables on the deck, glowing front panel with
+// animated EQ bars. Rotates 4 ways.
+const drawBooth = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  const parts: IsoPart[] = [{ u0: -0.92, u1: 0.92, v0: -0.16, v1: 0.3, z0: 0, z1: 1.3, t: shade(base, 1.25), r: shade(base, 0.92), l: shade(base, 0.56) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 1.3;
+    poly(ctx, [P(-0.96, -0.22, z), P(0.96, -0.22, z), P(0.96, 0.34, z), P(-0.96, 0.34, z)], shade(base, 1.45));   // top deck
+    for (const u of [-0.45, 0.45]) { const c = P(u, 0.04, z); ctx.fillStyle = '#0c0c12'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 10, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#2a2a36'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 7, 4.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.save(); ctx.translate(c[0], c[1]); ctx.rotate(t * 0.12); ctx.strokeStyle = hexA(accent, 0.85); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(5, 2.6); ctx.stroke(); ctx.restore(); ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(c[0], c[1], 1.6, 0, Math.PI * 2); ctx.fill(); }
+    if (faceVisible(0, 1, dir)) {
+      poly(ctx, [P(-0.86, 0.3, 1.12), P(0.86, 0.3, 1.12), P(0.86, 0.3, 0.18), P(-0.86, 0.3, 0.18)], hexA(accent, 0.22));
+      for (let i = 0; i < 11; i++) { const u = -0.78 + i * 0.156, h = 0.18 + Math.abs(Math.sin(t * 0.16 + i * 0.7)) * 0.7, a = P(u, 0.3, 0.22), b = P(u, 0.3, 0.22 + h * 0.78); ctx.strokeStyle = `hsl(${(t * 3 + i * 30) % 360},90%,60%)`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    }
+  });
+};
+
+// Beach parasol: timber pole + a domed scalloped canopy in two-tone segments with a brass finial.
+const drawParasol = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string) => {
+  void _a; const cx = sx, poleH = STACK_H * 2.0;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, sy, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, sy); ctx.lineTo(cx, sy - poleH); ctx.stroke();
+  const top = sy - poleH, rw = TW * 0.98, rh = TH * 0.74, segs = 10;
+  for (let i = 0; i < segs; i++) { const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2, am = (a0 + a1) / 2; ctx.fillStyle = i % 2 ? base : shade(base, 1.3); ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx + Math.cos(a0) * rw, top + 9 + Math.sin(a0) * rh); ctx.lineTo(cx + Math.cos(am) * rw * 1.07, top + 12 + Math.sin(am) * rh * 1.07); ctx.lineTo(cx + Math.cos(a1) * rw, top + 9 + Math.sin(a1) * rh); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle = shade(base, 1.5); ctx.beginPath(); ctx.ellipse(cx, top + 2, rw * 0.3, rh * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.arc(cx, top - 3, 3, 0, Math.PI * 2); ctx.fill();
+};
+
+// Sun lounger / daybed (2 tiles): chrome frame + legs, striped cushion and a raised backrest at one
+// end. Sittable. Rotates 4 ways.
+const drawLounger = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const cu = shade(base, 1.2), cuR = shade(base, 0.9), cuL = shade(base, 0.6), m = '#9aa2af';
+  const parts: IsoPart[] = [
+    ...legs([[-0.8, -0.24], [0.8, -0.24], [-0.8, 0.3], [0.8, 0.3]], 0.18).map(p => ({ ...p, t: m, r: shade(m, 0.8), l: shade(m, 0.55) })),
+    { u0: -0.9, u1: 0.92, v0: -0.3, v1: 0.34, z0: 0.18, z1: 0.34, t: cu, r: cuR, l: cuL },          // mattress base
+    { u0: -0.86, u1: 0.88, v0: -0.28, v1: 0.32, z0: 0.34, z1: 0.5, t: shade(base, 1.3), r: cuR, l: cuL }, // cushion
+    { u0: -0.92, u1: -0.62, v0: -0.3, v1: 0.34, z0: 0.34, z1: 1.02, t: shade(base, 1.3), r: cuR, l: cuL }]; // raised backrest (one end)
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (let i = 0; i < 5; i++) { const u = -0.55 + i * 0.28; poly(ctx, [P(u - 0.06, -0.28, 0.5), P(u + 0.06, -0.28, 0.5), P(u + 0.06, 0.32, 0.5), P(u - 0.06, 0.32, 0.5)], hexA(accent, 0.16)); }   // cushion stripes
+  });
+};
+
+// Topiary: glazed planter + a stack of three trimmed, gradient-shaded green spheres with leaf speckle.
+const drawTopiary = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  const top = boxAt(ctx, sx, sy, 0.4, 0.4, 0.55, '#b5572f', accent);
+  ctx.fillStyle = '#33241a'; ctx.beginPath(); ctx.ellipse(sx, top, TW * 0.36, TH * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  const ball = (cy: number, r: number) => { const g = ctx.createRadialGradient(sx - r * 0.3, cy - r * 0.35, 1, sx, cy, r); g.addColorStop(0, shade(base, 1.4)); g.addColorStop(0.65, base); g.addColorStop(1, shade(base, 0.66)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#bdf0a0'; for (let i = 0; i < 6; i++) { const a = i * 2.4; ctx.beginPath(); ctx.arc(sx + Math.cos(a) * r * 0.6, cy + Math.sin(a) * r * 0.6, 1.4, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); };
+  ball(top - TW * 0.36, TW * 0.42); ball(top - TW * 0.36 - STACK_H * 0.7, TW * 0.33); ball(top - TW * 0.36 - STACK_H * 1.25, TW * 0.24);
+};
+
+// Hanging banner: ceiling bar, a two-tone draped cloth with a swallow-tail hem and an accent emblem.
+const drawBanner = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
+  const topY = sy - 3.4 * STACK_H, w = 17, h = 46;
+  ctx.fillStyle = '#8a6a3a'; ctx.fillRect(sx - w / 2 - 3, topY - 4, w + 6, 4);
+  const g = ctx.createLinearGradient(sx, topY, sx, topY + h); g.addColorStop(0, shade(base, 1.15)); g.addColorStop(1, shade(base, 0.7));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - w / 2, topY); ctx.lineTo(sx + w / 2, topY); ctx.lineTo(sx + w / 2, topY + h); ctx.lineTo(sx, topY + h - 7); ctx.lineTo(sx - w / 2, topY + h); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA('#000', 0.18); ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = hexA(accent, 0.92); ctx.beginPath(); ctx.arc(sx, topY + 17, 6.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '900 9px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('C', sx, topY + 17);
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -494,6 +553,11 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     case 'pa': drawPA(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'ladder': drawLadder(ctx, sx, sy, accent, d.color, dir); break;
     case 'rope': drawRope(ctx, sx, sy, accent, d.color, dir); break;
+    case 'booth': drawBooth(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'parasol': drawParasol(ctx, sx, sy, accent, d.color); break;
+    case 'lounger': drawLounger(ctx, sx, sy, accent, d.color, dir); break;
+    case 'topiary': drawTopiary(ctx, sx, sy, accent, d.color); break;
+    case 'banner': drawBanner(ctx, sx, sy, accent, d.color); break;
     case 'chandelier': drawChandelier(ctx, sx, sy, accent, d.color, t); break;
     case 'float': drawFloat(ctx, sx, sy, accent, d.color, t); break;
     case 'fountain': drawFountain(ctx, sx, sy, accent, d.color, t); break;

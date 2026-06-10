@@ -52,7 +52,7 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
-type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[] };
+type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number };
 const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
   clube: [
     // stage (back, raised): PA towers + a big screen
@@ -84,6 +84,14 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?][]> = {
     ['fonte', 12, 28, 0], ['fonte', 21, 28, 0],
     // extra greenery
     ['planta', 8, 13, 0], ['planta', 25, 13, 0], ['planta', 13, 24, 0], ['planta', 20, 24, 0],
+    // DJ booth on the stage + disco balls over the floor
+    ['booth', 15, 6, 0], ['disco', 13, 10, 0], ['disco', 20, 10, 0],
+    // poolside cabanas (sun loungers + parasols)
+    ['espreguic', 11, 16, 1], ['parasol', 12, 16, 0], ['espreguic', 22, 16, 1], ['parasol', 21, 16, 0],
+    ['espreguic', 11, 20, 1], ['parasol', 12, 21, 0], ['espreguic', 22, 20, 1], ['parasol', 21, 21, 0],
+    // topiaries + stage banners
+    ['topiary', 8, 25, 0], ['topiary', 25, 25, 0], ['topiary', 14, 29, 0], ['topiary', 19, 29, 0],
+    ['banner', 12, 4, 0], ['banner', 21, 4, 0],
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
@@ -91,9 +99,9 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
     { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, lines: ['Bora dançar! 🎶', 'Som no máximo!', 'Esta é pra vocês!', 'Quem é que tá com tudo?!'] },
     { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, lines: ['Bem-vindo ao Clube!', 'Precisas de ajuda?', 'Diverte-te! ✦', 'A piscina é por ali 🏊'] },
     { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24, lines: ['Bom dia! ☀️', 'Já viste o palco?', 'Fica à vontade.'] },
-    { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28, lines: ['Entra, entra!', 'Segue o tapete vermelho 🟥', 'Bem-vindo ao Clube!'] },
-    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, lines: ['Adoro esta música! 💃', 'Não paro de dançar!', 'Que vibe!'] },
-    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, lines: ['Isto é que é! 🕺', 'O DJ tá on fire!', 'Bora!'] },
+    { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28, roam: 2.5, lines: ['Entra, entra!', 'Segue o tapete vermelho 🟥', 'Bem-vindo ao Clube!'] },
+    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, roam: 1.6, lines: ['Adoro esta música! 💃', 'Não paro de dançar!', 'Que vibe!'] },
+    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['Isto é que é! 🕺', 'O DJ tá on fire!', 'Bora!'] },
     { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, lines: ['A água está óptima 🌊', 'Vou mergulhar!', 'Que calor hoje 😎'] },
     { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20, lines: ['Que vista 😎', 'Relax total.', 'Só a curtir.'] },
     { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['O que vais querer? 🍹', 'Um sumo fresquinho?', 'Casa cheia hoje!', 'A próxima é por minha conta 😉'] },
@@ -172,7 +180,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { lines?: string[] })[]>([]);   // curated static NPCs (with chatter lines)
+  const npcsRef = useRef<(Avatar & { lines?: string[]; hx?: number; hy?: number; roam?: number })[]>([]);   // curated NPCs (chatter + optional roaming)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -350,7 +358,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     matRef.current = planMaterialMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: 0, createdBy: 'curated' }));
-    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines }));
+    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -545,7 +553,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       wasMovingRef.current = moving;
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
-      for (const n of npcsRef.current) { n.af += 0.5; if (n.bubbleLife > 0) n.bubbleLife--; }   // idle life for NPCs
+      for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
+        if (n.roam && n.hx != null && n.hy != null) {
+          n.fx += (n.tx - n.fx) * 0.06; n.fy += (n.ty - n.fy) * 0.06;
+          const moving = Math.hypot(n.tx - n.fx, n.ty - n.fy) > 0.06; n.af += moving ? 1 : 0.4;
+          if (!moving && Math.random() < 0.012) { const ang = Math.random() * 6.283, r = Math.random() * n.roam, nx = Math.round(n.hx + Math.cos(ang) * r), ny = Math.round(n.hy + Math.sin(ang) * r); if (planLvl(nx, ny) >= 0 && !isWater(nx, ny) && !solidRef.current[ny * GRID + nx]) { n.tx = nx; n.ty = ny; } }
+        } else n.af += 0.5;
+        if (n.bubbleLife > 0) n.bubbleLife--;
+      }
       // NPC chatter: every so often a random NPC pipes up with one of its lines
       if (npcsRef.current.length && framesRef.current % 70 === 0) { const sp = npcsRef.current[Math.floor(Math.random() * npcsRef.current.length)]; if (sp && sp.bubbleLife <= 0 && sp.lines && sp.lines.length) { sp.bubble = sp.lines[Math.floor(Math.random() * sp.lines.length)]; sp.bubbleLife = 210; } }
     };
@@ -644,10 +659,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           ctx.strokeStyle = hexA(mat === 1 ? '#8a8475' : theme.accent, mat ? 0.16 : 0.10); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW, TH); ctx.stroke();
         }
       }
-      // stage light show — animated coloured spotlights sweeping the dancefloor (Clube)
+      // stage light show — volumetric beams from the rig + animated spotlights on the dancefloor (Clube)
       if (theme.slug === 'clube') {
         ctx.save(); ctx.globalCompositeOperation = 'lighter';
-        for (let i = 0; i < 5; i++) { const ph = t * 0.022 + i * 1.4; const sgx = 16 + Math.sin(ph) * (3 + i * 0.9), sgy = 10.5 + Math.cos(ph * 0.7) * 1.6; const p = iso(sgx, sgy, 0); const hue = (t * 2 + i * 72) % 360; const rg = ctx.createRadialGradient(p.sx, p.sy, 2, p.sx, p.sy, 50); rg.addColorStop(0, `hsla(${hue},92%,62%,0.5)`); rg.addColorStop(1, `hsla(${hue},92%,62%,0)`); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(p.sx, p.sy, 50, 26, 0, 0, Math.PI * 2); ctx.fill(); }
+        for (let i = 0; i < 4; i++) { const ph = t * 0.018 + i * 1.6; const apex = iso(11 + (i % 2) * 10, 6, 3.4); const foot = iso(13 + Math.sin(ph) * 4 + i * 1.5, 11 + Math.cos(ph * 0.8) * 1.2, 0); const hue = (t * 2 + i * 80) % 360; ctx.fillStyle = `hsla(${hue},90%,62%,0.09)`; ctx.beginPath(); ctx.moveTo(apex.sx - 3, apex.sy); ctx.lineTo(foot.sx - 28, foot.sy); ctx.lineTo(foot.sx + 28, foot.sy); ctx.lineTo(apex.sx + 3, apex.sy); ctx.closePath(); ctx.fill(); }   // beams
+        for (let i = 0; i < 5; i++) { const ph = t * 0.022 + i * 1.4; const sgx = 16 + Math.sin(ph) * (3 + i * 0.9), sgy = 10.5 + Math.cos(ph * 0.7) * 1.6; const p = iso(sgx, sgy, 0); const hue = (t * 2 + i * 72) % 360; const rg = ctx.createRadialGradient(p.sx, p.sy, 2, p.sx, p.sy, 50); rg.addColorStop(0, `hsla(${hue},92%,62%,0.5)`); rg.addColorStop(1, `hsla(${hue},92%,62%,0)`); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(p.sx, p.sy, 50, 26, 0, 0, Math.PI * 2); ctx.fill(); }   // floor pools
         ctx.restore();
       }
       const hv = hoverRef.current, ui = uiRef.current;
