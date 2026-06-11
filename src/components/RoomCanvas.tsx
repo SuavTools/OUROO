@@ -272,6 +272,25 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const placeElevRef = useRef(0);
   useEffect(() => { placeElevRef.current = placeElev; }, [placeElev]);
   const [decorOpen, setDecorOpen] = useState(false);
+  const [decorMin, setDecorMin] = useState(false);                       // collapse the decorate panel to its title bar
+  const [decorPos, setDecorPos] = useState<{ x: number; y: number } | null>(null);   // null = default (docked bottom-centre); set once dragged
+  const decorPanelRef = useRef<HTMLDivElement>(null);
+  // Drag the decorate panel anywhere (so it doesn't sit on top of the spot you want to build). Works on
+  // touch + mouse via pointer events; clamps to the viewport. Grabs from the title bar only (not buttons).
+  const startDecorDrag = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    const el = decorPanelRef.current; if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const offX = e.clientX - rect.left, offY = e.clientY - rect.top;
+    const move = (ev: PointerEvent) => {
+      const x = Math.max(4, Math.min(window.innerWidth - el.offsetWidth - 4, ev.clientX - offX));
+      const y = Math.max(4, Math.min(window.innerHeight - el.offsetHeight - 4, ev.clientY - offY));
+      setDecorPos({ x, y });
+    };
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); };
   const [entered, setEntered] = useState(false);   // lobby gate — connect to the room only on deliberate entry
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
@@ -800,7 +819,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
         <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>
         <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>
-        {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
+        {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
 
       {(hint || placingKind || removeMode) && (
@@ -810,8 +829,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
 
       {decorOpen && !locked && (
-        <div className="absolute z-40 left-1/2 -translate-x-1/2 w-full max-w-2xl px-2 sm:px-3" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 52px)' }}>
-          <div className="bg-black/85 backdrop-blur-md border border-white/15 rounded-xl overflow-hidden shadow-2xl">
+        <div
+          ref={decorPanelRef}
+          className="absolute z-40 w-[min(42rem,calc(100vw-1rem))] bg-black/85 backdrop-blur-md border border-white/15 rounded-xl overflow-hidden shadow-2xl"
+          style={decorPos
+            ? { left: decorPos.x, top: decorPos.y }
+            : { left: '50%', transform: 'translateX(-50%)', bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 52px)' }}
+        >
+          {/* draggable title bar — move the panel off the map; minimise / close right here (no trip back to the top) */}
+          <div onPointerDown={startDecorDrag} className="flex items-center justify-between px-2.5 py-1 border-b border-white/10 cursor-move select-none touch-none">
+            <span className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-white/45"><span className="text-white/30 text-xs leading-none">⠿</span> Decorate</span>
+            <span className="flex items-center gap-0.5">
+              <button onClick={() => setDecorMin(m => !m)} title={decorMin ? 'Expand' : 'Minimise'} className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 rounded leading-none">{decorMin ? '▢' : '–'}</button>
+              <button onClick={closeDecor} title="Close" className="w-6 h-6 flex items-center justify-center text-white/50 hover:text-brandRed hover:bg-white/10 rounded text-sm leading-none">✕</button>
+            </span>
+          </div>
+          {!decorMin && (<>
             {/* header: count + altura (for floating decks) + balance */}
             <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
               <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderator' : `objects ${myCount}/${PLACE_CAP}`}</span>
@@ -877,7 +910,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 })}
               </div>
             )}
-          </div>
+          </>)}
         </div>
       )}
 
