@@ -53,7 +53,9 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
-type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number };
+// `beats` = ordered lore lines delivered ONE AT A TIME as the player approaches (per-player memory in
+// localStorage); `lines` = ambient idle chatter. `id` keys the saved progress.
+type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; id?: string };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
   clube: [
     // stage (back, raised): PA towers + a big screen
@@ -119,6 +121,25 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
+  praca: [
+    { handle: 'WARDEN', skinId: 'diamond-cyan', gx: 16, gy: 16, roam: 1.5, id: 'warden',
+      beats: [
+        'You’re new signal. The Loop felt you arrive.',
+        'This is OUROO — what’s left after the people logged off. The machines kept it running.',
+        'Everything you see, someone like you gave it shape. Empty rooms forget themselves.',
+        'Mine crystals against the dark. Spend them making this place real again.',
+        'There are doors here that won’t open for me. Maybe they’ll open for you. Listen for the codes.',
+        'Stay a while. The Loop runs warmer when someone’s watching.',
+      ],
+      lines: ['Signal stable.', 'The Loop turns.', 'Welcome back.'] },
+    { handle: 'a stray', skinId: 'star-cadente', gx: 23, gy: 21, roam: 2, id: 'stray',
+      beats: [
+        '…is someone there? I can never tell anymore.',
+        'I’ve been here since before the Quiet. I forget which login was mine.',
+        'If you ever find the Archive… see if my name’s still in it. I think it started with a J.',
+      ],
+      lines: ['…', 'so quiet.', 'don’t go yet.'] },
+  ],
   clube: [
     { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, lines: ['Let\'s dance! 🎶', 'Crank it up!', 'This one\'s for you!', 'Who\'s bringing the energy?!'] },
     { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, lines: ['Welcome to the Club!', 'Need a hand?', 'Have fun! ✦', 'The pool\'s that way 🏊'] },
@@ -131,8 +152,21 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
     { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['What can I get you? 🍹', 'A fresh juice?', 'Packed house today!', 'Next round\'s on me 😉'] },
   ],
   jardim: [
-    { handle: 'Mei', skinId: 'heart-rosa', gx: 9, gy: 6, roam: 2, lines: ['Konnichiwa! 🌸', 'Check out the koi 🐟', 'The cherry blossoms are in bloom', 'Take a deep breath 🌿'] },
-    { handle: 'Gardener', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, lines: ['Welcome to the garden', 'Peace and quiet...', 'Mind the flowers 🌷'] },
+    { handle: 'Gardener', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, id: 'gardener',
+      beats: [
+        'This is the memory garden. Everything OUROO deletes, I try to regrow here.',
+        'Plant something. Give the world a thing to remember — it holds on tighter than you’d think.',
+        'The koi are old logs, swimming in circles. Don’t ask whose. They don’t remember either.',
+        'Some nights a code blooms in the blossoms. The Curator pretends not to notice. So do I.',
+      ],
+      lines: ['Mind the flowers 🌷', 'Peace and quiet…', 'Let it grow.'] },
+    { handle: 'Mei', skinId: 'heart-rosa', gx: 9, gy: 6, roam: 2, id: 'mei',
+      beats: [
+        'Konnichiwa 🌸 I stopped trying to leave. It’s nicer once you stop.',
+        'The blossoms fall the same every loop. I find that comforting now.',
+        'If the garden ever goes really quiet — that’s it forgetting. Talk to it.',
+      ],
+      lines: ['🌸', 'Breathe in.', 'The koi say hi.'] },
   ],
 };
 
@@ -208,7 +242,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { lines?: string[]; hx?: number; hy?: number; roam?: number })[]>([]);   // curated NPCs (chatter + optional roaming)
+  const npcsRef = useRef<(Avatar & { lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; nid?: string; near?: boolean; cool?: number })[]>([]);   // curated NPCs (lore beats + chatter + optional roaming)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -405,7 +439,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     matRef.current = planMaterialMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' }));
-    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam }));
+    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, nid: n.id ?? n.handle, near: false, cool: 0 }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -601,6 +635,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       wasMovingRef.current = moving;
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
+      const sf = selfRef.current;
       for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
         if (n.roam && n.hx != null && n.hy != null) {
           n.fx += (n.tx - n.fx) * 0.06; n.fy += (n.ty - n.fy) * 0.06;
@@ -608,9 +643,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (!moving && Math.random() < 0.012) { const ang = Math.random() * 6.283, r = Math.random() * n.roam, nx = Math.round(n.hx + Math.cos(ang) * r), ny = Math.round(n.hy + Math.sin(ang) * r); if (planLvl(nx, ny) >= 0 && !isWater(nx, ny) && !solidRef.current[ny * GRID + nx]) { n.tx = nx; n.ty = ny; } }
         } else n.af += 0.5;
         if (n.bubbleLife > 0) n.bubbleLife--;
+        if (n.cool && n.cool > 0) n.cool--;
+        // ── Lore beats on approach ── when the player steps within range, deliver the next unseen beat
+        // (per-player memory in localStorage); once the beats run out, drop ambient flavour instead.
+        const near = Math.hypot(n.fx - sf.fx, n.fy - sf.fy) < 2.4;
+        if (near && !n.near && n.bubbleLife <= 0 && (n.cool ?? 0) <= 0) {
+          let said = false;
+          if (n.beats && n.beats.length) {
+            const k = `ouroo_lore_${roomMeta.slug}_${n.nid ?? n.handle}`;
+            let p = 0; try { p = Number(localStorage.getItem(k) || 0); } catch { /* ignore */ }
+            if (p < n.beats.length) { n.bubble = n.beats[p]; try { localStorage.setItem(k, String(p + 1)); } catch { /* ignore */ } said = true; }
+          }
+          if (!said && n.lines && n.lines.length) { n.bubble = n.lines[Math.floor(Math.random() * n.lines.length)]; said = true; }
+          if (said) { n.bubbleLife = 280; n.cool = 260; }
+        }
+        n.near = near;
       }
-      // NPC chatter: every so often a random NPC pipes up with one of its lines
-      if (npcsRef.current.length && framesRef.current % 70 === 0) { const sp = npcsRef.current[Math.floor(Math.random() * npcsRef.current.length)]; if (sp && sp.bubbleLife <= 0 && sp.lines && sp.lines.length) { sp.bubble = sp.lines[Math.floor(Math.random() * sp.lines.length)]; sp.bubbleLife = 210; } }
+      // Ambient chatter — only NPCs WITHOUT lore beats (so a beat is never talked over).
+      if (npcsRef.current.length && framesRef.current % 80 === 0) { const pool = npcsRef.current.filter(s => (!s.beats || !s.beats.length) && s.lines && s.lines.length); const sp = pool[Math.floor(Math.random() * pool.length)]; if (sp && sp.bubbleLife <= 0) { sp.bubble = sp.lines![Math.floor(Math.random() * sp.lines!.length)]; sp.bubbleLife = 210; } }
     };
 
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
