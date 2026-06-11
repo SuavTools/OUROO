@@ -48,7 +48,6 @@ export const CAT_PRICE: Record<string, number> = {
 export const FURNI: FurniDef[] = [
   // ★ HI-FI — 1st-tier hand-drawn lounge set (couch spans 2 tiles)
   { kind: 'lounge_couch', name: 'Lounge Couch', emoji: '🛋️', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
-  { kind: 'couch_px',     name: 'Pixel Couch',  emoji: '🛋️', cat: 'tier1', color: '#e07b1f', h: 1, walk: false, foot: 1, special: 'couch', span: [2, 1] },
   { kind: 'lounge_chair', name: 'Armchair',    emoji: '💺', cat: 'tier1', color: '#a9713f', h: 1, walk: false, foot: 1, special: 'armchair' },
   { kind: 'lounge_table', name: 'Coffee Table', emoji: '🪵', cat: 'tier1', color: '#4a3120', h: 1, walk: false, foot: 1, special: 'coffee' },
   { kind: 'hc_sofa',   name: 'HC Couch',     emoji: '🛋️', cat: 'tier1', color: '#7b2d3a', h: 1, walk: false, foot: 1,    special: 'couch_hc', span: [2, 1] },
@@ -93,6 +92,11 @@ export const FURNI: FurniDef[] = [
   { kind: 'trono',    name: 'Throne',   emoji: '👑', cat: 'assentos', color: '#7a1aaa', h: 2, walk: false, foot: 0.8, special: 'throne' },
   { kind: 'puff',     name: 'Pouffe',   emoji: '🟢', cat: 'assentos', color: '#1ED760', h: 1, walk: false, foot: 0.7, special: 'puff' },
   { kind: 'banco_jd', name: 'Garden Bench', emoji: '🪑', cat: 'assentos', color: '#5a6e44', h: 1, walk: false, foot: 1, special: 'bench', span: [2, 1] },
+  { kind: 'banco_red', name: 'Park Bench (Red)', emoji: '🪑', cat: 'assentos', color: '#8a2e2e', h: 1, walk: false, foot: 1, special: 'bench', span: [2, 1] },
+  { kind: 'banco_wht', name: 'Park Bench (White)', emoji: '🪑', cat: 'assentos', color: '#dfe3ea', h: 1, walk: false, foot: 1, special: 'bench', span: [2, 1] },
+  { kind: 'woodbench', name: 'Wooden Bench', emoji: '🪑', cat: 'assentos', color: '#7a5230', h: 1, walk: false, foot: 1, special: 'woodbench', span: [2, 1] },
+  { kind: 'stonebench',name: 'Stone Bench', emoji: '🪑', cat: 'assentos', color: '#8a8a92', h: 1, walk: false, foot: 1, special: 'stonebench', span: [2, 1] },
+  { kind: 'modernbench',name:'Modern Bench', emoji: '🪑', cat: 'assentos', color: '#3a4450', h: 1, walk: false, foot: 1, special: 'modernbench', span: [2, 1] },
   { kind: 'espreguic',name: 'Sun Lounger', emoji: '🏖️', cat: 'assentos', color: '#e6ebf2', h: 1, walk: false, foot: 1, special: 'lounger', span: [2, 1] },
   { kind: 'cama_dossel', name: 'Canopy Bed', emoji: '🛏️', cat: 'assentos', color: '#6a3a52', h: 2, walk: false, foot: 1, special: 'canopy', span: [2, 1] },
   { kind: 'ovo',      name: 'Egg Chair', emoji: '🥚', cat: 'assentos', color: '#eef0f4', h: 2, walk: false, foot: 0.7, special: 'eggchair' },
@@ -100,6 +104,13 @@ export const FURNI: FurniDef[] = [
   { kind: 'mesa',     name: 'Table',     emoji: '🟫', cat: 'mesas', color: '#7a542a', h: 1, walk: false, foot: 0.9, special: 'table' },
   { kind: 'mesajant', name: 'Dining',    emoji: '🍽️', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'table' },
   { kind: 'mesacafe', name: 'Coffee',    emoji: '☕', cat: 'mesas', color: '#4a3a2a', h: 1, walk: false, foot: 0.8, special: 'table' },
+  { kind: 'mesa_wht', name: 'White Table',emoji: '⬜', cat: 'mesas', color: '#dfe3ea', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'mesa_blk', name: 'Black Table',emoji: '⬛', cat: 'mesas', color: '#26282e', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'mesa_red', name: 'Red Table',  emoji: '🟥', cat: 'mesas', color: '#8a2e2e', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'mesa_teal',name: 'Teal Table', emoji: '🟦', cat: 'mesas', color: '#2e6e6a', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'mesa_gold',name: 'Gold Table', emoji: '🟨', cat: 'mesas', color: '#b89030', h: 1, walk: false, foot: 0.9, special: 'table' },
+  { kind: 'roundtable',name:'Round Table', emoji: '🟤', cat: 'mesas', color: '#6a441a', h: 1, walk: false, foot: 1,   special: 'roundtable' },
+  { kind: 'glasstable',name:'Glass Table', emoji: '🪟', cat: 'mesas', color: '#9aa0ac', h: 1, walk: false, foot: 1,   special: 'glasstable', span: [2, 1] },
   { kind: 'bar',      name: 'Bar',       emoji: '🍹', cat: 'mesas', color: '#3a2c34', h: 2, walk: false, foot: 1,   special: 'bartop', span: [2, 1] },
   { kind: 'rececao',  name: 'Reception', emoji: '🛎️', cat: 'mesas', color: '#6b4a2c', h: 2, walk: false, foot: 1,   special: 'reception', span: [3, 1] },
   { kind: 'prat',     name: 'Shelf',     emoji: '📚', cat: 'mesas', color: '#4a3420', h: 2, walk: false, foot: 0.6, special: 'shelf' },
@@ -122,6 +133,13 @@ export const FURNI: FurniDef[] = [
   { kind: 'tocha',    name: 'Torch',    emoji: '🔥', cat: 'luzes', color: '#ff8800', h: 1, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'lanterna', name: 'Lantern',  emoji: '🏮', cat: 'luzes', color: '#ffcf7a', h: 1, walk: false, foot: 0.3, special: 'lantern' },
   { kind: 'lustre',   name: 'Chandelier', emoji: '🛋️', cat: 'luzes', color: '#ffd98a', h: 0, walk: true, foot: 0.5, special: 'chandelier' },
+  { kind: 'lamp_cyan',name: 'Cyan Lamp',  emoji: '🔵', cat: 'luzes', color: '#00cfff', h: 2, walk: false, foot: 0.4, special: 'lamp' },
+  { kind: 'lamp_grn', name: 'Green Lamp', emoji: '🟢', cat: 'luzes', color: '#1ED760', h: 2, walk: false, foot: 0.4, special: 'lamp' },
+  { kind: 'neon_blue',name: 'Blue Neon',  emoji: '🟦', cat: 'luzes', color: '#3a7bd0', h: 1, walk: false, foot: 0.8, special: 'lamp' },
+  { kind: 'neon_grn', name: 'Green Neon', emoji: '🟩', cat: 'luzes', color: '#1ED760', h: 1, walk: false, foot: 0.8, special: 'lamp' },
+  { kind: 'floorlamp',name: 'Floor Lamp', emoji: '🛋️', cat: 'luzes', color: '#f0d890', h: 3, walk: false, foot: 0.5, special: 'floorlamp' },
+  { kind: 'candle',   name: 'Candles',    emoji: '🕯️', cat: 'luzes', color: '#f0e6d2', h: 1, walk: false, foot: 0.4, special: 'candle' },
+  { kind: 'firepit',  name: 'Fire Pit',   emoji: '🔥', cat: 'luzes', color: '#6a6a72', h: 1, walk: false, foot: 0.9, special: 'firepit' },
   // eletrónica
   { kind: 'tv',       name: 'TV',       emoji: '📺', cat: 'electro', color: '#15151f', h: 1, walk: false, foot: 1, special: 'tv' },
   { kind: 'coluna',   name: 'Speaker',  emoji: '🔈', cat: 'electro', color: '#23232f', h: 2, walk: false, foot: 0.7, special: 'speaker' },
@@ -272,7 +290,7 @@ const CAT_INDEX: Record<string, number> = (() => {
 
 // Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
 // keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
-const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5, peacock: 0.7, cloud: 0.55, pit: 0.42, officechair: 0.66, dinerbooth: 0.5, swingbench: 0.85 };
+const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5, peacock: 0.7, cloud: 0.55, pit: 0.42, officechair: 0.66, dinerbooth: 0.5, swingbench: 0.85, woodbench: 0.5, stonebench: 0.56, modernbench: 0.5 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
@@ -293,7 +311,9 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest',
   // café / sci-fi / beach / garage / festive — the directional ones (round decorations stay symmetric)
   'pastrycase', 'winerack', 'kegtap', 'cocktailcart', 'coffeebar', 'neonarch', 'console', 'cryopod',
-  'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights']);
+  'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights',
+  // more benches + glass table
+  'woodbench', 'stonebench', 'modernbench', 'glasstable']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

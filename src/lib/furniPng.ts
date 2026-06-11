@@ -7,9 +7,7 @@ export type PngDef = { w: number; h: number; ax: number; ay: number };
 
 // Keyed by furni `kind`. (ax,ay) must match the procedural sprite's tile origin (OX,OY) so a PNG piece
 // lands on the exact same tile spot as its drawn counterpart.
-export const PNG_FURNI: Record<string, PngDef> = {
-  couch_px: { w: 240, h: 300, ax: 120, ay: 224 },
-};
+export const PNG_FURNI: Record<string, PngDef> = {};
 
 export const hasPng = (kind: string): boolean => kind in PNG_FURNI;
 

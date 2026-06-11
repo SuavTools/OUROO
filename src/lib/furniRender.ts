@@ -1874,6 +1874,97 @@ const drawStringLights = (ctx: CanvasRenderingContext2D, sx: number, sy: number,
   });
 };
 
+// ═══════════ MORE BENCHES ═══════════
+// All-timber slatted bench: wood legs + gapped seat slats + a two-rail back. Rotates, sittable.
+const drawWoodBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.25), cR = shade(wood, 0.92), cL = shade(wood, 0.58);
+  const parts: IsoPart[] = [
+    ...legs([[-0.8, -0.18], [0.8, -0.18], [-0.8, 0.28], [0.8, 0.28]], 0.42).map(p => ({ ...p, t: cR, r: shade(wood, 0.78), l: shade(wood, 0.5) })),
+    { u0: -0.9, u1: 0.9, v0: -0.22, v1: -0.08, z0: 0.42, z1: 0.5, t: cT, r: cR, l: cL },
+    { u0: -0.9, u1: 0.9, v0: -0.04, v1: 0.1, z0: 0.42, z1: 0.5, t: cT, r: cR, l: cL },
+    { u0: -0.9, u1: 0.9, v0: 0.14, v1: 0.28, z0: 0.42, z1: 0.5, t: cT, r: cR, l: cL },
+    { u0: -0.9, u1: 0.9, v0: -0.28, v1: -0.22, z0: 0.5, z1: 0.74, t: cT, r: cR, l: cL },
+    { u0: -0.9, u1: 0.9, v0: -0.28, v1: -0.22, z0: 0.84, z1: 1.08, t: cT, r: cR, l: cL },
+    { u0: -0.9, u1: -0.78, v0: -0.28, v1: -0.2, z0: 0.42, z1: 1.08, t: cR, r: shade(wood, 0.78), l: cL },
+    { u0: 0.78, u1: 0.9, v0: -0.28, v1: -0.2, z0: 0.42, z1: 1.08, t: cR, r: shade(wood, 0.78), l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts);
+};
+// Solid stone bench: two block legs + a chunky slab seat with weathered speckle.
+const drawStoneBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const st = base, cT = shade(st, 1.15), cR = shade(st, 0.9), cL = shade(st, 0.62);
+  const parts: IsoPart[] = [
+    { u0: -0.7, u1: -0.45, v0: -0.22, v1: 0.28, z0: 0, z1: 0.42, t: shade(st, 0.95), r: cR, l: cL },
+    { u0: 0.45, u1: 0.7, v0: -0.22, v1: 0.28, z0: 0, z1: 0.42, t: shade(st, 0.95), r: cR, l: cL },
+    { u0: -0.88, u1: 0.88, v0: -0.26, v1: 0.32, z0: 0.42, z1: 0.56, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.fillStyle = hexA('#000', 0.08); for (let i = 0; i < 10; i++) { const c = P(-0.7 + ((i * 13) % 8) * 0.18, -0.1 + ((i * 7) % 4) * 0.1, 0.56); ctx.beginPath(); ctx.arc(c[0], c[1], 1.5, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+// Minimalist floating-slab bench on a single central plinth + an accent edge strip.
+const drawModernBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.25), cR = shade(m, 0.95), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [
+    { u0: -0.3, u1: 0.3, v0: -0.12, v1: 0.18, z0: 0, z1: 0.34, t: '#2a2e36', r: '#22252c', l: '#15171b' },
+    { u0: -0.9, u1: 0.9, v0: -0.22, v1: 0.28, z0: 0.34, z1: 0.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.9, 0.28, 0.42), P(0.9, 0.28, 0.42), P(0.9, 0.28, 0.36), P(-0.9, 0.28, 0.36)], hexA(accent, 0.7));
+  });
+};
+
+// ═══════════ MORE TABLES ═══════════
+// Round pedestal dining table — splayed feet, column, big round top. Symmetric.
+const drawRoundTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const m = base, legH = STACK_H * 0.7, top = sy - legH;
+  ctx.strokeStyle = shade(m, 0.7); ctx.lineWidth = 4; ctx.lineCap = 'round'; for (const [dx, dy] of [[-12, 3], [12, 3], [0, 7], [0, -3]] as [number, number][]) { ctx.beginPath(); ctx.moveTo(sx, top + 2); ctx.lineTo(sx + dx, sy + dy); ctx.stroke(); }
+  ctx.fillStyle = shade(m, 0.85); ctx.fillRect(sx - 3, top, 6, legH);
+  ctx.fillStyle = shade(m, 0.6); ctx.beginPath(); ctx.ellipse(sx, top + 4, TW * 0.72, TH * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade(m, 1.22); ctx.beginPath(); ctx.ellipse(sx, top, TW * 0.72, TH * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA('#fff', 0.12); ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, top, TW * 0.72, TH * 0.72, 0, 0, Math.PI * 2); ctx.stroke();
+};
+// Glass table — chrome legs + a translucent top with an edge highlight and an accent vase.
+const drawGlassTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void base; const m = '#9aa0ac';
+  const parts: IsoPart[] = [...legs([[-0.7, -0.2], [0.7, -0.2], [-0.7, 0.28], [0.7, 0.28]], 0.6).map(p => ({ ...p, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }))];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.6;
+    poly(ctx, [P(-0.82, -0.3, z), P(0.82, -0.3, z), P(0.82, 0.34, z), P(-0.82, 0.34, z)], 'rgba(190,220,235,0.22)');
+    poly(ctx, [P(-0.82, -0.3, z), P(0.82, -0.3, z), P(0.82, 0.34, z), P(-0.82, 0.34, z)], undefined, hexA('#dff4f8', 0.5), 1.5);
+    poly(ctx, [P(-0.5, -0.1, z), P(-0.2, -0.1, z), P(0.0, 0.2, z), P(-0.3, 0.2, z)], 'rgba(255,255,255,0.12)');
+    const vz = P(0.3, 0.05, z); ctx.fillStyle = hexA(accent, 0.8); ctx.beginPath(); ctx.moveTo(vz[0] - 4, vz[1]); ctx.quadraticCurveTo(vz[0] - 6, vz[1] - 12, vz[0], vz[1] - 16); ctx.quadraticCurveTo(vz[0] + 6, vz[1] - 12, vz[0] + 4, vz[1]); ctx.closePath(); ctx.fill();
+  });
+};
+
+// ═══════════ MORE LIGHTS ═══════════
+// Floor lamp — slim pole + a glowing fabric shade casting warm light. Symmetric.
+const drawFloorLamp = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const m = '#3a3e46', sc = base, ty = sy - STACK_H * 2.4;
+  ctx.fillStyle = m; ctx.beginPath(); ctx.ellipse(sx, sy, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade(m, 1.1); ctx.fillRect(sx - 1.5, ty, 3, STACK_H * 2.4);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const g = ctx.createRadialGradient(sx, ty - 2, 2, sx, ty - 2, 20); g.addColorStop(0, hexA(sc, 0.5)); g.addColorStop(1, hexA(sc, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, ty - 2, 20, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const sg = ctx.createLinearGradient(sx - 14, 0, sx + 14, 0); sg.addColorStop(0, shade(sc, 0.8)); sg.addColorStop(0.5, shade(sc, 1.2)); sg.addColorStop(1, shade(sc, 0.8));
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.moveTo(sx - 9, ty - 14); ctx.lineTo(sx + 9, ty - 14); ctx.lineTo(sx + 14, ty); ctx.lineTo(sx - 14, ty); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = hexA('#fff', 0.4); ctx.beginPath(); ctx.ellipse(sx, ty, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
+};
+// Candle cluster — a brass holder with three candles + flickering flames. Symmetric, animated.
+const drawCandle = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void accent; void dir; const wax = base;
+  ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.ellipse(sx, sy - 2, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+  for (const [ox, h] of [[-6, 14], [0, 20], [6, 12]] as [number, number][]) { const cx = sx + ox, b2 = sy - 4, top = b2 - h; ctx.fillStyle = wax; ctx.fillRect(cx - 2.5, top, 5, h); ctx.fillStyle = shade(wax, 0.85); ctx.fillRect(cx + 1, top, 1.5, h);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; const fl = 0.7 + 0.3 * Math.sin(t * 0.3 + ox); ctx.fillStyle = `rgba(255,200,90,${fl})`; ctx.beginPath(); ctx.ellipse(cx, top - 3, 2, 4.5, Math.sin(t * 0.2 + ox) * 0.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = `rgba(255,255,200,${fl})`; ctx.beginPath(); ctx.ellipse(cx, top - 2, 1, 2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.strokeStyle = '#1a1a1f'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx, top + 2); ctx.stroke(); }
+};
+// Fire pit — a ring of stones around logs with a live flame + ember glow. Symmetric, animated.
+const drawFirePit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void accent; void dir; const st = base;
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, rx = sx + Math.cos(a) * TW * 0.55, ry = sy + Math.sin(a) * TH * 0.55; ctx.fillStyle = i % 2 ? shade(st, 1.1) : shade(st, 0.85); ctx.beginPath(); ctx.ellipse(rx, ry, 5, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#1a120a'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.42, TH * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a2414'; ctx.fillRect(sx - 10, sy - 1, 20, 3); ctx.save(); ctx.translate(sx, sy); ctx.rotate(0.5); ctx.fillRect(-9, -1, 18, 3); ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const flame = (ox: number, h: number, c: string, ph: number) => { const fl = h * (0.8 + 0.2 * Math.sin(t * 0.3 + ph)); ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(sx + ox - 5, sy - 2); ctx.quadraticCurveTo(sx + ox - 3, sy - 2 - fl * 0.6, sx + ox + Math.sin(t * 0.2 + ph) * 3, sy - 2 - fl); ctx.quadraticCurveTo(sx + ox + 3, sy - 2 - fl * 0.6, sx + ox + 5, sy - 2); ctx.closePath(); ctx.fill(); };
+  flame(-5, 18, 'rgba(255,90,20,0.8)', 0); flame(5, 16, 'rgba(255,90,20,0.8)', 1.5); flame(0, 24, 'rgba(255,150,30,0.85)', 0.7); flame(0, 13, 'rgba(255,232,120,0.9)', 2.2);
+  const g = ctx.createRadialGradient(sx, sy - 4, 1, sx, sy - 4, 24); g.addColorStop(0, 'rgba(255,140,40,0.5)'); g.addColorStop(1, 'rgba(255,140,40,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy - 4, 24, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+};
+
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
 function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
@@ -2036,6 +2127,14 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pumpkin': drawPumpkin(ctx, sx, sy, accent, d.color, dir); break;
     case 'menorah': drawMenorah(ctx, sx, sy, accent, d.color, dir); break;
     case 'stringlights': drawStringLights(ctx, sx, sy, accent, d.color, dir); break;
+    case 'woodbench': drawWoodBench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'stonebench': drawStoneBench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'modernbench': drawModernBench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'roundtable': drawRoundTable(ctx, sx, sy, accent, d.color, dir); break;
+    case 'glasstable': drawGlassTable(ctx, sx, sy, accent, d.color, dir); break;
+    case 'floorlamp': drawFloorLamp(ctx, sx, sy, accent, d.color, dir); break;
+    case 'candle': drawCandle(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'firepit': drawFirePit(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -2107,7 +2206,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
