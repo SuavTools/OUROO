@@ -6,9 +6,9 @@ import { getAdminStats, getRecentAccounts, type AdminStats, type AdminAccount } 
 function when(iso: string): string {
   const d = new Date(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return 'agora';
-  if (diff < 3600) return `há ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `há ${Math.floor(diff / 3600)}h`;
+  if (diff < 60) return 'now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' });
 }
 
@@ -41,18 +41,18 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
           <h2 className="font-helvetica font-black text-2xl text-white">📊 Admin</h2>
           <button onClick={onClose} className="text-white/40 hover:text-white text-2xl leading-none">✕</button>
         </div>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-white/40 mb-5">Só tu vês isto · o espaço a crescer</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-white/40 mb-5">Only you see this · the space growing</p>
 
         <div className="grid grid-cols-2 gap-3 mb-6">
-          <Stat label="Contas" value={stats?.accounts ?? 0} sub={stats ? `${stats.discordAccounts} com Discord` : undefined} />
-          <Stat label="Salas" value={stats?.rooms ?? 0} />
-          <Stat label="Corridas" value={stats?.runs ?? 0} sub={stats ? `${stats.runsToday} hoje` : undefined} />
-          <Stat label="Mensagens" value={stats?.messages ?? 0} sub={stats ? `${stats.messagesToday} hoje` : undefined} />
+          <Stat label="Accounts" value={stats?.accounts ?? 0} sub={stats ? `${stats.discordAccounts} with Discord` : undefined} />
+          <Stat label="Rooms" value={stats?.rooms ?? 0} />
+          <Stat label="Runs" value={stats?.runs ?? 0} sub={stats ? `${stats.runsToday} today` : undefined} />
+          <Stat label="Messages" value={stats?.messages ?? 0} sub={stats ? `${stats.messagesToday} today` : undefined} />
         </div>
 
-        <h3 className="font-helvetica font-black text-lg text-white mb-2">Contas recentes</h3>
-        {accounts === null && <p className="text-white/40 text-sm">A carregar…</p>}
-        {accounts?.length === 0 && <p className="text-white/40 text-sm">Ainda ninguém. 👀</p>}
+        <h3 className="font-helvetica font-black text-lg text-white mb-2">Recent accounts</h3>
+        {accounts === null && <p className="text-white/40 text-sm">Loading…</p>}
+        {accounts?.length === 0 && <p className="text-white/40 text-sm">Nobody yet. 👀</p>}
         <ol className="divide-y divide-white/10">
           {accounts?.map((a, i) => (
             <li key={i} className="flex items-center justify-between py-2.5 gap-3">
@@ -65,7 +65,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
           ))}
         </ol>
 
-        <p className="text-[11px] text-white/30 mt-5">Tráfego e geografia (visitas, de onde vêm) ficam no Vercel Analytics — liga no painel da Vercel.</p>
+        <p className="text-[11px] text-white/30 mt-5">Traffic and geography (visits, where they come from) live in Vercel Analytics — check the Vercel dashboard.</p>
       </div>
     </div>
   );

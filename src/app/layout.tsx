@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { AgeGate } from "@/components/AgeGate";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,8 +28,8 @@ const startupImage = [
 ];
 
 export const metadata: Metadata = {
-  title: "SUAV",
-  description: "SUAV — site oficial. Música nova, datas ao vivo e OUROO: o arcade.",
+  title: "OUROO",
+  description: "OUROO — the loop that pays in crystals. Mine crystals, outlast the swarm, and build your corner of the Plaza. A lo-fi arcade world.",
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -56,10 +57,10 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="pt-PT"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}<Analytics /></body>
+      <body className="min-h-full flex flex-col">{children}<AgeGate /><Analytics /></body>
     </html>
   );
 }

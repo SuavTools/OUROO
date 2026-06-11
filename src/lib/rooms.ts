@@ -48,11 +48,11 @@ export async function createRoom(name: string, isPublic = true, plan = 'salao'):
   if (!supabase) return { ok: false, error: 'Offline.' };
   const oid = await ownerId();
   const rnd = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}${Math.random()}`).replace(/[^a-z0-9]/gi, '').slice(0, 12);
-  const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'A Minha Sala', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic, code: newCode(), build_all: false, rights: [], plan };
+  const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'My Room', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic, code: newCode(), build_all: false, rights: [], plan };
   const { error } = await supabase.from('rooms').insert(room);
   if (error) {
     const m = error.message || '';
-    if (/schema cache|does not exist|not find the table|relation .* does not exist|column .* does not exist/i.test(m)) return { ok: false, error: 'Salas ainda não ativadas no servidor 🛠️' };
+    if (/schema cache|does not exist|not find the table|relation .* does not exist|column .* does not exist/i.test(m)) return { ok: false, error: 'Rooms aren’t enabled on the server yet 🛠️' };
     return { ok: false, error: m };
   }
   return { ok: true, room };

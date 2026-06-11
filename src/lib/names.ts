@@ -44,36 +44,28 @@ export function normalizeText(s: string): string { return normalize(s); }
 
 export const MSG_MAX = 300;
 
-// Only music links are allowed in chat — every other URL is rejected (anti-spam / anti-phishing).
+// No links in chat — every URL is rejected (anti-spam / anti-phishing, and safer for a young audience).
 const URL_RE = /https?:\/\/[^\s]+/gi;
-const ALLOWED_LINK_DOMAINS = ['youtube.com', 'youtu.be', 'spotify.com', 'soundcloud.com'];
-export function isAllowedLink(u: string): boolean {
-  try {
-    const h = new URL(u).hostname.toLowerCase();
-    return ALLOWED_LINK_DOMAINS.some(b => h === b || h.endsWith('.' + b));
-  } catch { return false; }
-}
 
 export type MsgCheck = { ok: true; value: string } | { ok: false; error: string };
 
-// Chat message filter: length + slur/hate blocklist + link allowlist.
+// Chat message filter: length + slur/hate blocklist + no-links rule.
 export function validateMessage(raw: string): MsgCheck {
   const value = (raw ?? '').replace(/\s+/g, ' ').trim();
-  if (value.length < 1) return { ok: false, error: 'Mensagem vazia.' };
-  if (value.length > MSG_MAX) return { ok: false, error: `Máximo ${MSG_MAX} caracteres.` };
+  if (value.length < 1) return { ok: false, error: 'Message is empty.' };
+  if (value.length > MSG_MAX) return { ok: false, error: `Max ${MSG_MAX} characters.` };
   const norm = normalize(value);
-  if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Mensagem bloqueada 🙃' };
-  const urls = value.match(URL_RE) || [];
-  if (urls.some(u => !isAllowedLink(u))) return { ok: false, error: 'Só links do YouTube, Spotify ou SoundCloud.' };
+  if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Message blocked 🙃' };
+  if ((value.match(URL_RE) || []).length > 0) return { ok: false, error: 'Links aren’t allowed in chat.' };
   return { ok: true, value };
 }
 
 export function validateHandle(raw: string): HandleCheck {
   const value = (raw ?? '').trim().replace(/\s+/g, ' ');
-  if (value.length < HANDLE_MIN) return { ok: false, error: `Mínimo ${HANDLE_MIN} caracteres.` };
-  if (value.length > HANDLE_MAX) return { ok: false, error: `Máximo ${HANDLE_MAX} caracteres.` };
-  if (!ALLOWED.test(value)) return { ok: false, error: 'Só letras, números e espaços.' };
+  if (value.length < HANDLE_MIN) return { ok: false, error: `Min ${HANDLE_MIN} characters.` };
+  if (value.length > HANDLE_MAX) return { ok: false, error: `Max ${HANDLE_MAX} characters.` };
+  if (!ALLOWED.test(value)) return { ok: false, error: 'Letters, numbers and spaces only.' };
   const norm = normalize(value);
-  if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Escolhe outro nome 🙃' };
+  if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Pick another name 🙃' };
   return { ok: true, value };
 }

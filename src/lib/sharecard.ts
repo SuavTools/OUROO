@@ -60,7 +60,7 @@ export async function shareStatsCard(opts: { name: string; avatar?: string | nul
     ctx.fillText(`#${opts.rank}`, cx, y + 180);
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = '700 30px "Helvetica Neue", Arial, sans-serif';
-    ctx.fillText('NO RANKING GLOBAL', cx, y + 240);
+    ctx.fillText('IN THE GLOBAL RANKING', cx, y + 240);
     y += 320;
   }
 
@@ -70,7 +70,7 @@ export async function shareStatsCard(opts: { name: string; avatar?: string | nul
   ctx.fillText(opts.best.toLocaleString('pt-PT'), cx, y + 70);
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = '700 28px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('MELHOR PONTUAÇÃO', cx, y + 115);
+  ctx.fillText('BEST SCORE', cx, y + 115);
 
   // Footer URL
   ctx.fillStyle = '#ff4e3e';
@@ -81,8 +81,8 @@ export async function shareStatsCard(opts: { name: string; avatar?: string | nul
   if (!blob) return;
   const file = new File([blob], 'ouroo-ranking.png', { type: 'image/png' });
   const text = opts.rank != null
-    ? `Estou em #${opts.rank} no ranking OUROO de SUAV 🎮`
-    : `O meu recorde no OUROO de SUAV: ${opts.best.toLocaleString('pt-PT')} 🎮`;
+    ? `I'm #${opts.rank} in the SUAV OUROO ranking 🎮`
+    : `My SUAV OUROO record: ${opts.best.toLocaleString('pt-PT')} 🎮`;
 
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (nav.canShare?.({ files: [file] })) {

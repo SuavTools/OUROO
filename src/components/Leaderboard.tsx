@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { fetchLeaderboard, type LbEntry, type LbPeriod, GAME_ID } from '@/lib/leaderboard';
 
 // Unified leaderboard list. game prop lets future games reuse it; highlight marks the current player.
-// showToggle adds a Global / Hoje (daily) switch — the daily board is the "desafio diário".
+// showToggle adds a Global / Today (daily) switch — the daily board is the "daily challenge".
 export function Leaderboard({
   game = GAME_ID,
   limit = 10,
@@ -35,17 +35,17 @@ export function Leaderboard({
       {(['all', 'today'] as LbPeriod[]).map(p => (
         <button key={p} onClick={() => setPeriod(p)}
           className={`px-3 py-1.5 font-bold transition-colors ${period === p ? 'bg-brandRed text-black' : 'text-white/40 hover:text-white border border-white/15'}`}>
-          {p === 'all' ? 'Global' : 'Hoje'}
+          {p === 'all' ? 'Global' : 'Today'}
         </button>
       ))}
     </div>
   ) : null;
 
   if (rows === null) {
-    return <>{toggle}<p className={`text-white/40 ${compact ? 'text-xs' : 'text-sm'}`}>A carregar ranking…</p></>;
+    return <>{toggle}<p className={`text-white/40 ${compact ? 'text-xs' : 'text-sm'}`}>Loading ranking…</p></>;
   }
   if (rows.length === 0) {
-    return <>{toggle}<p className={`text-white/40 ${compact ? 'text-xs' : 'text-sm'}`}>{period === 'today' ? 'Ainda ninguém jogou hoje — abre o desafio. 🏁' : 'Ainda sem pontuações — sê o primeiro. 👑'}</p></>;
+    return <>{toggle}<p className={`text-white/40 ${compact ? 'text-xs' : 'text-sm'}`}>{period === 'today' ? 'Nobody has played today — open the challenge. 🏁' : 'No scores yet — be the first. 👑'}</p></>;
   }
 
   return (

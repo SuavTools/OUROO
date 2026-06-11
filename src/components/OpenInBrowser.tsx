@@ -49,19 +49,19 @@ export function OpenInBrowser() {
   return (
     <div className="relative z-50 bg-brandRed text-black px-4 py-3" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.6rem)' }}>
       <button onClick={close} className="absolute top-2 right-3 text-black/50 hover:text-black text-lg leading-none" style={{ top: 'calc(env(safe-area-inset-top) + 0.3rem)' }}>✕</button>
-      <p className="font-bold text-sm leading-snug pr-6">Estás no navegador do {env.name} — o ecrã não roda e não dá para instalar a app. 🚫</p>
+      <p className="font-bold text-sm leading-snug pr-6">You're in {env.name}'s in-app browser — the screen won't rotate and you can't install the app. 🚫</p>
       {env.ios ? (
         <p className="text-[13px] mt-1 leading-snug">
-          Toca nos <b>três pontos (⋯)</b> no canto e escolhe <b>“Abrir no navegador”</b>.
-          {' '}Ou <button onClick={copy} className="underline font-bold">copia o link</button> e abre no Safari.
+          Tap the <b>three dots (⋯)</b> in the corner and choose <b>“Open in browser”</b>.
+          {' '}Or <button onClick={copy} className="underline font-bold">copy the link</button> and open it in Safari.
         </p>
       ) : (
         <div className="mt-2 flex items-center gap-2">
-          <button onClick={openExternal} className="bg-black text-white font-bold uppercase text-xs tracking-widest px-4 py-2 active:scale-95">Abrir no Chrome →</button>
-          <button onClick={copy} className="border border-black/40 font-bold uppercase text-xs tracking-widest px-3 py-2 active:scale-95">Copiar link</button>
+          <button onClick={openExternal} className="bg-black text-white font-bold uppercase text-xs tracking-widest px-4 py-2 active:scale-95">Open in Chrome →</button>
+          <button onClick={copy} className="border border-black/40 font-bold uppercase text-xs tracking-widest px-3 py-2 active:scale-95">Copy link</button>
         </div>
       )}
-      {copied && <p className="text-[12px] font-bold mt-1">✓ Link copiado — cola no teu navegador.</p>}
+      {copied && <p className="text-[12px] font-bold mt-1">✓ Link copied — paste it in your browser.</p>}
     </div>
   );
 }

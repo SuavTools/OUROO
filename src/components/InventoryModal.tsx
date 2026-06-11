@@ -18,7 +18,7 @@ type Tab = 'skins' | 'furni' | 'icons';
 
 // The cosmetics hub: balance, owned counts, buy/equip across skins · furni · custom icons.
 // Mounted on the landing AND inside PRAÇA — pass `onEquip` so equipping updates a live avatar.
-export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }: {
+export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: {
   open: boolean; onClose: () => void; onEquip?: (appearanceId: string) => void; title?: string;
 }) {
   const { user } = useUser();
@@ -48,9 +48,9 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
 
   if (!open) return null;
 
-  const equip = (id: string) => { setSelectedSkinId(id); setSelected(id); onEquip?.(id); flash(true, 'Equipado'); };
-  const doBuySkin = (id: string) => { const sk = skinById(id); const p = skinPrice(sk); if (p == null) return; const r = buySkin(id, p); r.ok ? flash(true, `${sk.name} comprado`) : flash(false, r.error || 'Erro'); };
-  const doBuyFurni = (kind: string) => { const r = buyFurni(kind); r.ok ? flash(true, 'Comprado') : flash(false, r.error || 'Erro'); };
+  const equip = (id: string) => { setSelectedSkinId(id); setSelected(id); onEquip?.(id); flash(true, 'Equipped'); };
+  const doBuySkin = (id: string) => { const sk = skinById(id); const p = skinPrice(sk); if (p == null) return; const r = buySkin(id, p); r.ok ? flash(true, `${sk.name} purchased`) : flash(false, r.error || 'Error'); };
+  const doBuyFurni = (kind: string) => { const r = buyFurni(kind); r.ok ? flash(true, 'Purchased') : flash(false, r.error || 'Error'); };
 
   const ownedSkins = SKINS.filter(s => isSkinOwned(s, best, codeUnlocks, isMod)).length;
   const paidFurni = FURNI.filter(f => !isFurniFree(f.kind));
@@ -58,8 +58,8 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
 
   const TABS: { id: Tab; label: string; badge: string }[] = [
     { id: 'skins', label: 'Skins', badge: `${ownedSkins}/${SKINS.length}` },
-    { id: 'furni', label: 'Móveis', badge: `${ownedPaidFurni}/${paidFurni.length}` },
-    { id: 'icons', label: 'Ícones', badge: `${wallet.icons.length}` },
+    { id: 'furni', label: 'Furniture', badge: `${ownedPaidFurni}/${paidFurni.length}` },
+    { id: 'icons', label: 'Icons', badge: `${wallet.icons.length}` },
   ];
 
   const cur = resolveAppearance(selected);
@@ -77,13 +77,13 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
             </div>
             <div className="min-w-0">
               <p className="font-helvetica font-black text-xl text-white leading-none">{title}</p>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-white/40 mt-1">Equipado</p>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-white/40 mt-1">Equipped</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <p className="font-helvetica font-black text-2xl text-brandYellow tabular-nums leading-none">{CURRENCY_SYMBOL} {wallet.balance.toLocaleString('pt-PT')}</p>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-1">Cristais</p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-white/40 mt-1">Crystals</p>
             </div>
             <button onClick={onClose} className="text-white/40 hover:text-white text-2xl leading-none">✕</button>
           </div>
@@ -115,10 +115,10 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
                   {owned ? (
                     <button onClick={() => equip(s.id)} disabled={isSel}
                       className="absolute inset-x-0 bottom-0 text-[8px] uppercase tracking-wide py-1 bg-white/5 hover:bg-white/15 text-white/80 disabled:text-[#1ED760] disabled:bg-transparent">
-                      {isSel ? 'EQUIPADO' : 'Equipar'}
+                      {isSel ? 'EQUIPPED' : 'Equip'}
                     </button>
                   ) : price == null ? (
-                    <span className="absolute inset-x-0 bottom-0 text-[8px] text-center py-1 text-white/40">🔒 código</span>
+                    <span className="absolute inset-x-0 bottom-0 text-[8px] text-center py-1 text-white/40">🔒 code</span>
                   ) : (
                     <button onClick={() => doBuySkin(s.id)} disabled={wallet.balance < price}
                       className="absolute inset-x-0 bottom-0 text-[8px] uppercase tracking-wide py-1 bg-brandYellow/15 hover:bg-brandYellow/30 text-brandYellow disabled:opacity-40">
@@ -158,7 +158,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
                     {!free && n > 0 && <span className="absolute top-1 right-1 text-[9px] font-bold text-white bg-white/10 px-1 rounded tabular-nums">×{n}</span>}
                     <span className="text-[9px] uppercase tracking-wide text-white/70 text-center leading-tight">{f.name}</span>
                     {free ? (
-                      <span className="text-[8px] uppercase tracking-widest text-white/35">incluído</span>
+                      <span className="text-[8px] uppercase tracking-widest text-white/35">included</span>
                     ) : (
                       <button onClick={() => doBuyFurni(f.kind)} disabled={wallet.balance < price}
                         className="text-[8px] uppercase tracking-wide px-2 py-0.5 bg-brandYellow/15 hover:bg-brandYellow/30 text-brandYellow disabled:opacity-40">
@@ -169,7 +169,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
                 );
               })}
             </div>
-            <p className="text-[11px] text-white/40 mt-3">Tens 2 de cada categoria de graça. Os restantes são baratos — compra-os e coloca-os na Praça em <b className="text-white/60">Decorar</b>. Coleções <span className="text-brandYellow">✦ Hi-Fi</span> são premium.</p>
+            <p className="text-[11px] text-white/40 mt-3">You get 2 of each category for free. The rest are cheap — buy them and place them in the Praça under <b className="text-white/60">Decorate</b>. <span className="text-brandYellow">✦ Hi-Fi</span> collections are premium.</p>
           </div>
         )}
 
@@ -178,10 +178,10 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
           <div>
             <button onClick={() => setEditorOpen(true)}
               className="w-full mb-4 border border-dashed border-brandYellow/40 text-brandYellow py-3 text-sm font-bold uppercase tracking-widest hover:bg-brandYellow/10 transition-colors">
-              ✦ Criar novo ícone
+              ✦ Create new icon
             </button>
             {wallet.icons.length === 0 ? (
-              <p className="text-[12px] text-white/40 text-center py-6">Ainda não tens ícones. Cria o teu — formas e cores, sem emojis. 🛸</p>
+              <p className="text-[12px] text-white/40 text-center py-6">No icons yet. Make your own — shapes and colors, no emojis. 🛸</p>
             ) : (
               <div className="grid grid-cols-4 gap-2">
                 {wallet.icons.map(ic => {
@@ -191,17 +191,17 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventário' }
                     <div key={ic.id} className={`relative aspect-square border flex flex-col items-center justify-center ${isSel ? 'border-white' : 'border-white/10'}`}>
                       <IconPreview spec={ic.spec} size={40} animate={isSel} />
                       {isSel && <span className="absolute top-1 right-1 text-[10px] text-[#1ED760]">✓</span>}
-                      <button onClick={() => removeIcon(ic.id)} title="apagar" className="absolute top-0.5 left-1 text-[10px] text-white/30 hover:text-brandRed">✕</button>
+                      <button onClick={() => removeIcon(ic.id)} title="delete" className="absolute top-0.5 left-1 text-[10px] text-white/30 hover:text-brandRed">✕</button>
                       <button onClick={() => equip(aid)} disabled={isSel}
                         className="absolute inset-x-0 bottom-0 text-[8px] uppercase tracking-wide py-1 bg-white/5 hover:bg-white/15 text-white/80 disabled:text-[#1ED760] disabled:bg-transparent">
-                        {isSel ? 'EQUIPADO' : 'Equipar'}
+                        {isSel ? 'EQUIPPED' : 'Equip'}
                       </button>
                     </div>
                   );
                 })}
               </div>
             )}
-            <p className="text-[11px] text-white/40 mt-3">Os ícones aparecem como o teu personagem na <b className="text-white/60">Praça</b>.</p>
+            <p className="text-[11px] text-white/40 mt-3">Icons show up as your character in the <b className="text-white/60">Praça</b>.</p>
           </div>
         )}
       </div>

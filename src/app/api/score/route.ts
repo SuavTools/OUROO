@@ -10,17 +10,17 @@ export async function POST(request: Request) {
   if (!supabase) return NextResponse.json({ ok: false, error: 'Leaderboard offline.' }, { status: 503 });
 
   let body: { gameId?: string; score?: number; device?: string; handle?: string };
-  try { body = await request.json(); } catch { return NextResponse.json({ ok: false, error: 'Pedido inválido.' }, { status: 400 }); }
+  try { body = await request.json(); } catch { return NextResponse.json({ ok: false, error: 'Invalid request.' }, { status: 400 }); }
 
   const gameId = String(body.gameId || 'ouroo');
-  if (!ALLOWED_GAMES.has(gameId)) return NextResponse.json({ ok: false, error: 'Jogo desconhecido.' }, { status: 400 });
+  if (!ALLOWED_GAMES.has(gameId)) return NextResponse.json({ ok: false, error: 'Unknown game.' }, { status: 400 });
 
   const score = Math.floor(Number(body.score));
   if (!Number.isFinite(score) || score < 0 || score > 100_000_000)
-    return NextResponse.json({ ok: false, error: 'Pontuação inválida.' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'Invalid score.' }, { status: 400 });
 
   const device = String(body.device || '').slice(0, 100);
-  if (!device) return NextResponse.json({ ok: false, error: 'Sem identificação de dispositivo.' }, { status: 400 });
+  if (!device) return NextResponse.json({ ok: false, error: 'No device identifier.' }, { status: 400 });
 
   // Server-side name enforcement — this is the real gate, not the client.
   const check = validateHandle(String(body.handle || ''));

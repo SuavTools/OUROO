@@ -35,9 +35,9 @@ const clube = (): string[] => {
 };
 
 export const ROOM_PLANS: RoomPlan[] = [
-  { id: 'salao', name: 'Salão', rows: [F, F, F, F, F, F, F, F, F, F, F] },
+  { id: 'salao', name: 'Hall', rows: [F, F, F, F, F, F, F, F, F, F, F] },
   {
-    id: 'quadrado', name: 'Quadrado', rows: [
+    id: 'quadrado', name: 'Square', rows: [
       'xxxxxxxxxxx',
       'x000000000x',
       'x000000000x',
@@ -67,7 +67,7 @@ export const ROOM_PLANS: RoomPlan[] = [
     ], spawn: [1, 9],
   },
   {
-    id: 'cruz', name: 'Cruz', rows: [
+    id: 'cruz', name: 'Cross', rows: [
       'xxxx000xxxx',
       'xxxx000xxxx',
       'xxxx000xxxx',
@@ -82,7 +82,7 @@ export const ROOM_PLANS: RoomPlan[] = [
     ], spawn: [5, 5],
   },
   {
-    id: 'octo', name: 'Octógono', rows: [
+    id: 'octo', name: 'Octagon', rows: [
       'xxx00000xxx',
       'xx0000000xx',
       'x000000000x',
@@ -97,7 +97,7 @@ export const ROOM_PLANS: RoomPlan[] = [
     ], spawn: [5, 5],
   },
   {
-    id: 'palco', name: 'Palco', rows: [
+    id: 'palco', name: 'Stage', rows: [
       '11111111111',
       '11111111111',
       '00000000000',
@@ -112,7 +112,7 @@ export const ROOM_PLANS: RoomPlan[] = [
     ], spawn: [5, 8],
   },
   {
-    id: 'patio', name: 'Pátio', rows: [
+    id: 'patio', name: 'Courtyard', rows: [
       '00000000000',
       '00000000000',
       '00xxxxxxx00',
@@ -126,11 +126,11 @@ export const ROOM_PLANS: RoomPlan[] = [
       '00000000000',
     ], spawn: [5, 0],
   },
-  { id: 'grande', name: 'Grande', rows: full(14) },
-  { id: 'enorme', name: 'Enorme', rows: full(18) },
-  { id: 'pista', name: 'Pista', rows: octa(16, 5), spawn: [8, 8] },
-  { id: 'clube', name: 'Clube', rows: clube(), spawn: [17, 31] },
-  { id: 'jardim', name: 'Jardim', rows: jardim(), spawn: [11, 19] },
+  { id: 'grande', name: 'Large', rows: full(14) },
+  { id: 'enorme', name: 'Huge', rows: full(18) },
+  { id: 'pista', name: 'Dancefloor', rows: octa(16, 5), spawn: [8, 8] },
+  { id: 'clube', name: 'Club', rows: clube(), spawn: [17, 31] },
+  { id: 'jardim', name: 'Garden', rows: jardim(), spawn: [11, 19] },
 ];
 
 // Jardim Imperial — a Japanese garden: octagonal grass with a central koi pond and stone paths.

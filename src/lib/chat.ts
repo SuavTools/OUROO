@@ -22,7 +22,7 @@ export async function fetchChannels(): Promise<Channel[]> {
 }
 
 function slugify(name: string): string {
-  return normalizeText(name).slice(0, 24) || 'sala';
+  return normalizeText(name).slice(0, 24) || 'room';
 }
 
 export async function createChannel(name: string): Promise<{ ok: true; channel: Channel } | { ok: false; error: string }> {
@@ -31,14 +31,14 @@ export async function createChannel(name: string): Promise<{ ok: true; channel: 
   const v = validateHandle(name);   // reuse: 3–16 chars, no slurs
   if (!v.ok) return { ok: false, error: v.error };
   const { data: { user } } = await sb.auth.getUser();
-  if (!user) return { ok: false, error: 'Liga o Discord para criar salas.' };
+  if (!user) return { ok: false, error: 'Connect Discord to create rooms.' };
   const { data, error } = await sb
     .from('channels')
     .insert({ slug: slugify(v.value), name: v.value, kind: 'chat', is_system: false, created_by: user.id })
     .select('id,slug,name,kind,is_system,created_by,pinned').single();
   if (error) {
-    if (error.code === '23505') return { ok: false, error: 'Já existe uma sala com esse nome.' };
-    if (error.message?.includes('channel_limit_reached')) return { ok: false, error: 'Atingiste o limite de 3 salas. Apaga uma para criar outra.' };
+    if (error.code === '23505') return { ok: false, error: 'A room with that name already exists.' };
+    if (error.message?.includes('channel_limit_reached')) return { ok: false, error: 'You’ve hit the 3-room limit. Delete one to make another.' };
     return { ok: false, error: error.message };
   }
   return { ok: true, channel: data as Channel };
@@ -122,11 +122,11 @@ export function subscribeMessages(
 export async function sendMessage(channelId: string, body: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const sb = supabase;
   if (!sb) return { ok: false, error: 'Chat offline.' };
-  if (!channelId) return { ok: false, error: 'Sala inválida.' };
+  if (!channelId) return { ok: false, error: 'Invalid room.' };
   const check = validateMessage(body);
   if (!check.ok) return { ok: false, error: check.error };
   const { data: { user } } = await sb.auth.getUser();
-  if (!user) return { ok: false, error: 'Liga o Discord para falar.' };
+  if (!user) return { ok: false, error: 'Connect Discord to chat.' };
   const m = user.user_metadata || {};
   const handle = String(m.full_name || m.name || m.preferred_username || 'Discord').slice(0, 32);
   const avatar = (m.avatar_url as string) || null;

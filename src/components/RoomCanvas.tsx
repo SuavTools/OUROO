@@ -40,14 +40,14 @@ const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean)
   return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
 };
 const ROOMS: RoomDef[] = [
-  { slug: 'praca',   name: 'Praça',     accent: '#00cfff', floor: '#161628', plan: 'salao' },
-  { slug: 'disco',   name: 'Discoteca', accent: '#ff44aa', floor: '#1e1226', plan: 'octo' },
+  { slug: 'praca',   name: 'Plaza',     accent: '#00cfff', floor: '#161628', plan: 'salao' },
+  { slug: 'disco',   name: 'Disco',     accent: '#ff44aa', floor: '#1e1226', plan: 'octo' },
   { slug: 'lounge',  name: 'Lounge',    accent: '#ffd23a', floor: '#1e1a12', plan: 'quadrado' },
-  { slug: 'telhado', name: 'Telhado',   accent: '#1ED760', floor: '#121e18', plan: 'palco' },
-  { slug: 'cave',    name: 'Cave',      accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
-  { slug: 'atrio',   name: 'Átrio',     accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
-  { slug: 'clube',   name: 'Clube',     accent: '#1aa3d8', floor: '#2c4a5e', locked: true, plan: 'clube', day: true, veranda: true },
-  { slug: 'jardim',  name: 'Jardim',    accent: '#e8628f', floor: '#1d3a24', locked: true, plan: 'jardim', day: true },
+  { slug: 'telhado', name: 'Rooftop',   accent: '#1ED760', floor: '#121e18', plan: 'palco' },
+  { slug: 'cave',    name: 'Cellar',    accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
+  { slug: 'atrio',   name: 'Atrium',    accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
+  { slug: 'clube',   name: 'Club',      accent: '#1aa3d8', floor: '#2c4a5e', locked: true, plan: 'clube', day: true, veranda: true },
+  { slug: 'jardim',  name: 'Garden',    accent: '#e8628f', floor: '#1d3a24', locked: true, plan: 'jardim', day: true },
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
@@ -120,19 +120,19 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
   clube: [
-    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, lines: ['Bora dançar! 🎶', 'Som no máximo!', 'Esta é pra vocês!', 'Quem é que tá com tudo?!'] },
-    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, lines: ['Bem-vindo ao Clube!', 'Precisas de ajuda?', 'Diverte-te! ✦', 'A piscina é por ali 🏊'] },
-    { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24, lines: ['Bom dia! ☀️', 'Já viste o palco?', 'Fica à vontade.'] },
-    { handle: 'Guia', skinId: 'diamond-cyan', gx: 17, gy: 28, roam: 2.5, lines: ['Entra, entra!', 'Segue o tapete vermelho 🟥', 'Bem-vindo ao Clube!'] },
-    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, roam: 1.6, lines: ['Adoro esta música! 💃', 'Não paro de dançar!', 'Que vibe!'] },
-    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['Isto é que é! 🕺', 'O DJ tá on fire!', 'Bora!'] },
-    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, lines: ['A água está óptima 🌊', 'Vou mergulhar!', 'Que calor hoje 😎'] },
-    { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20, lines: ['Que vista 😎', 'Relax total.', 'Só a curtir.'] },
-    { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['O que vais querer? 🍹', 'Um sumo fresquinho?', 'Casa cheia hoje!', 'A próxima é por minha conta 😉'] },
+    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, lines: ['Let\'s dance! 🎶', 'Crank it up!', 'This one\'s for you!', 'Who\'s bringing the energy?!'] },
+    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, lines: ['Welcome to the Club!', 'Need a hand?', 'Have fun! ✦', 'The pool\'s that way 🏊'] },
+    { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24, lines: ['Morning! ☀️', 'Seen the stage yet?', 'Make yourself at home.'] },
+    { handle: 'Guide', skinId: 'diamond-cyan', gx: 17, gy: 28, roam: 2.5, lines: ['Come on in!', 'Follow the red carpet 🟥', 'Welcome to the Club!'] },
+    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, roam: 1.6, lines: ['Love this track! 💃', 'I can\'t stop dancing!', 'What a vibe!'] },
+    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['This is it! 🕺', 'The DJ\'s on fire!', 'Let\'s go!'] },
+    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, lines: ['The water\'s perfect 🌊', 'Going for a dip!', 'So hot today 😎'] },
+    { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20, lines: ['What a view 😎', 'Total relax.', 'Just chilling.'] },
+    { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['What can I get you? 🍹', 'A fresh juice?', 'Packed house today!', 'Next round\'s on me 😉'] },
   ],
   jardim: [
-    { handle: 'Mei', skinId: 'heart-rosa', gx: 9, gy: 6, roam: 2, lines: ['Konnichiwa! 🌸', 'Vê os koi 🐟', 'As sakuras estão a florir', 'Respira fundo 🌿'] },
-    { handle: 'Jardineiro', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, lines: ['Bem-vindo ao jardim', 'Silêncio e paz...', 'Cuidado com as flores 🌷'] },
+    { handle: 'Mei', skinId: 'heart-rosa', gx: 9, gy: 6, roam: 2, lines: ['Konnichiwa! 🌸', 'Check out the koi 🐟', 'The cherry blossoms are in bloom', 'Take a deep breath 🌿'] },
+    { handle: 'Gardener', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, lines: ['Welcome to the garden', 'Peace and quiet...', 'Mind the flowers 🌷'] },
   ],
 };
 
@@ -204,7 +204,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const rafRef = useRef(0);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const joinedRef = useRef(false);   // true only while the channel is actually SUBSCRIBED — never send otherwise (avoids REST-fallback floods)
-  const selfRef = useRef<Self>({ id: '', handle: 'Convidado', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, lvl: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
+  const selfRef = useRef<Self>({ id: '', handle: 'Guest', skinId: getSelectedSkinId(), fx: 5, fy: 5, tx: 5, ty: 5, z: 0, lvl: 0, bubble: '', bubbleLife: 0, af: 0, path: [] });
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
@@ -247,8 +247,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [permsHandle, setPermsHandle] = useState('');
   const [myOwnerId, setMyOwnerId] = useState('');
   const ownerIdRef = useRef('');
-  const [myHandle, setMyHandle] = useState('Convidado');
-  const myHandleRef = useRef('Convidado');
+  const [myHandle, setMyHandle] = useState('Guest');
+  const myHandleRef = useRef('Guest');
   const themeRef = useRef<RoomDef>(roomMeta);
   useEffect(() => { themeRef.current = roomMeta; roomMetaRef.current = roomMeta; }, [roomMeta]);
   const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); };
@@ -292,7 +292,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const signedIn = !!user;
   const signedInRef = useRef(false);
   useEffect(() => { signedInRef.current = signedIn; }, [signedIn]);
-  const requireAccount = (): boolean => { if (signedInRef.current) return true; flashHint('Cria conta para construir 🛸'); signInWithDiscord(); return false; };
+  const requireAccount = (): boolean => { if (signedInRef.current) return true; flashHint('Create an account to build 🛸'); signInWithDiscord(); return false; };
 
   // Equip a skin or custom icon on the live avatar and broadcast it to the room.
   const equipAppearance = (id: string) => {
@@ -319,18 +319,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
     const res = await createRoom(newRoomName, !newRoomPrivate, newRoomPlan);
-    if (!res.ok) { flashHint(res.error || 'Erro ao criar sala'); return; }
-    setNewRoomName(''); flashHint(`Sala criada · código ${res.room.code}`); switchRoom(roomDefOf(res.room));
+    if (!res.ok) { flashHint(res.error || 'Failed to create room'); return; }
+    setNewRoomName(''); flashHint(`Room created · code ${res.room.code}`); switchRoom(roomDefOf(res.room));
   };
   const doJoinByCode = async () => {
     const r = await roomByCode(joinCode);
-    if (!r) { flashHint('Sala não encontrada'); return; }
+    if (!r) { flashHint('Room not found'); return; }
     setJoinCode(''); switchRoom(roomDefOf(r));
   };
   const doDeleteRoom = async (r: RoomRow) => {
-    if (!confirm(`Apagar "${r.name}"? Os móveis dela vão-se.`)) return;
+    if (!confirm(`Delete "${r.name}"? Its furniture will be gone.`)) return;
     const ok = await deleteRoom(r.slug);
-    if (!ok) { flashHint('Erro ao apagar'); return; }
+    if (!ok) { flashHint('Failed to delete'); return; }
     if (room === r.slug) switchRoom(roomOf('praca'));
     refreshRoomLists();
   };
@@ -344,11 +344,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!permsRoom) return;
     const list = Array.from(new Set(permsList.map(h => h.trim()).filter(Boolean)));
     const ok = await updateRoomPerms(permsRoom.slug, permsAll, list);
-    if (!ok) { flashHint('Erro ao guardar permissões'); return; }
+    if (!ok) { flashHint('Failed to save permissions'); return; }
     // Reflect immediately in local lists + the live room if it's the one open.
     setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list } : r));
     if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list }));
-    setPermsRoom(null); flashHint('Permissões guardadas ✓');
+    setPermsRoom(null); flashHint('Permissions saved ✓');
   };
 
   // recompute the heightmap (walkable height + solid mask) from items
@@ -425,17 +425,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- furniture ----
   const placeItem = (kind: string, gx: number, gy: number) => {
     if (!requireAccount()) return;
-    if (!canBuildHere()) { flashHint('Sem permissão para construir aqui'); return; }
+    if (!canBuildHere()) { flashHint('No permission to build here'); return; }
     // Inventory: non-mods need stock (free basics are unlimited). Mods build freely (creative mode).
-    if (!modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Indisponível' : 'Sem stock — compra mais ✦'); return; }
-    if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Sala cheia'); return; }
+    if (!modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Unavailable' : 'Out of stock — buy more ✦'); return; }
+    if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Room is full'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === deviceRef.current).length;
-    if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Máximo ${PLACE_CAP} por pessoa`); return; }
+    if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Max ${PLACE_CAP} per person`); return; }
     const dir = isRotatable(kind) ? placeDirRef.current : 0;
     const elev = placeElevRef.current;   // any piece can be lifted — stack decks, mount decor on tables, build tall
     const [sw, sh] = effSpan(kind, dir);
-    if (gx + sw > GRID || gy + sh > GRID) { flashHint('Não cabe aqui'); return; }
-    for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) if (planLvl(gx + du, gy + dv) < 0) { flashHint('Não cabe aqui'); return; }
+    if (gx + sw > GRID || gy + sh > GRID) { flashHint('Doesn\'t fit here'); return; }
+    for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) if (planLvl(gx + du, gy + dv) < 0) { flashHint('Doesn\'t fit here'); return; }
     if (!modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
     const item: Item = { id, kind, gx, gy, dir, elev, createdBy: deviceRef.current };
@@ -447,7 +447,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const rotateAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
     if (!hit) return;
-    if (!isRotatable(hit.kind)) { flashHint('Este objeto não roda'); return; }
+    if (!isRotatable(hit.kind)) { flashHint('This object doesn\'t rotate'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
     channelRef.current?.send({ type: 'broadcast', event: 'rotate', payload: { id: hit.id, dir: hit.dir } });
     supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
@@ -475,7 +475,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     // Presence/broadcast id is UNIQUE per session so two tabs/accounts never collide; ownership uses the stable device.
     selfRef.current.id = `${deviceRef.current}::${sessionRef.current}`;
-    selfRef.current.handle = lp.handle || 'Convidado';
+    selfRef.current.handle = lp.handle || 'Guest';
     myHandleRef.current = selfRef.current.handle; setMyHandle(selfRef.current.handle);
     const ap0 = getSelectedSkinId(); selfRef.current.skinId = ap0;
     const r0 = resolveAppearance(ap0); selfRef.current.icon = r0.kind === 'icon' ? r0.spec : null;
@@ -484,7 +484,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     getAuthIdentity().then(a => { if (a?.handle) { selfRef.current.handle = a.handle; myHandleRef.current = a.handle; setMyHandle(a.handle); } if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
     amIModerator().then(m => { modRef.current = m; setIsMod(m); });
 
-    if (!supabase || !entered) return;   // wait for the lobby "Entrar" so the join is deliberate + clean
+    if (!supabase || !entered) return;   // wait for the lobby "Enter" so the join is deliberate + clean
     const sb = supabase;
     const me = selfRef.current;
     remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false);
@@ -635,7 +635,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 5; i++) { const cx = ((i * 320 + t * 0.25) % (STAGE_W + 240)) - 120, cy = 60 + (i % 3) * 46; ctx.beginPath(); ctx.ellipse(cx, cy, 60, 17, 0, 0, Math.PI * 2); ctx.ellipse(cx + 40, cy + 6, 44, 14, 0, 0, Math.PI * 2); ctx.ellipse(cx - 36, cy + 7, 38, 12, 0, 0, Math.PI * 2); ctx.fill(); }
         ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,248,214,0.05)'; for (const bx of [STAGE_W * 0.34, STAGE_W * 0.62]) { ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx + 110, 0); ctx.lineTo(bx + 300, STAGE_H); ctx.lineTo(bx + 150, STAGE_H); ctx.closePath(); ctx.fill(); } ctx.restore();   // god-rays
       } else { ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore(); }
-      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· SALA PESSOAL ·' : theme.locked ? '· CURADA ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
+      ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· PERSONAL ROOM ·' : theme.locked ? '· CURATED ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
       // camera: scale + position the whole room so its footprint fits the stage (bigger rooms zoom out)
       const cam = camRef.current; ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.s, cam.s);
@@ -778,34 +778,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {!entered && (
         <div className="absolute inset-0 z-[60] bg-black/92 backdrop-blur-sm flex items-center justify-center px-6">
           <div className="w-full max-w-md text-center">
-            <p className="text-[11px] uppercase tracking-[0.4em] text-white/40 mb-2">Sala Social · Beta</p>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-white/40 mb-2">Social Room · Beta</p>
             <h2 className="font-helvetica font-black text-5xl text-white leading-none mb-4">PRAÇA<span style={{ color: roomMeta.accent }}>.</span></h2>
-            <p className="text-white/60 text-sm leading-relaxed mb-3">Um espaço isométrico em tempo real. Entra com a tua skin, passeia pelos tiles e vê toda a gente ao vivo — fala com balões por cima da cabeça e decora a sala.</p>
+            <p className="text-white/60 text-sm leading-relaxed mb-3">A real-time isometric space. Drop in with your skin, wander the tiles and see everyone live — chat in bubbles over your head and decorate the room.</p>
             <ul className="text-white/45 text-[12px] leading-relaxed mb-6 space-y-0.5 inline-block text-left">
-              <li>· Toca num tile para andar — senta-te em sofás e cadeiras</li>
-              <li>· <span className="text-brandYellow">✦ Decorar</span> — móveis, alturas, pontes e túneis</li>
-              <li>· <span className="text-white/70">☻ Personagem</span> — troca a skin ou o teu ícone</li>
+              <li>· Tap a tile to walk — sit down on sofas and chairs</li>
+              <li>· <span className="text-brandYellow">✦ Decorate</span> — furniture, heights, bridges and tunnels</li>
+              <li>· <span className="text-white/70">☻ Character</span> — switch your skin or your icon</li>
             </ul>
-            <button onClick={() => setEntered(true)} className="w-full bg-[#00cfff] text-black font-bold uppercase tracking-[0.2em] text-sm py-3.5 hover:bg-white transition-colors active:scale-[0.99]">Entrar na Praça ▸</button>
-            {onExit && <button onClick={onExit} className="mt-3 text-[11px] uppercase tracking-[0.2em] text-white/40 hover:text-white transition-colors">← Voltar</button>}
+            <button onClick={() => setEntered(true)} className="w-full bg-[#00cfff] text-black font-bold uppercase tracking-[0.2em] text-sm py-3.5 hover:bg-white transition-colors active:scale-[0.99]">Enter the Plaza ▸</button>
+            {onExit && <button onClick={onExit} className="mt-3 text-[11px] uppercase tracking-[0.2em] text-white/40 hover:text-white transition-colors">← Back</button>}
           </div>
         </div>
       )}
 
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{supabaseReady ? (connected ? `${population} ${population === 1 ? 'pessoa' : 'pessoas'}` : 'a ligar…') : 'offline'}</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
-        <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Salas</button>
+        <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>
         <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>
-        {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorar</button>}
+        {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
 
       {(hint || placingKind || removeMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
-          {hint || (placingKind ? 'toca num tile · clica de novo para empilhar' : 'toca para apanhar (volta ao teu inventário)')}
+          {hint || (placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
         </div>
       )}
 
@@ -814,10 +814,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <div className="bg-black/85 backdrop-blur-md border border-white/15 rounded-xl overflow-hidden shadow-2xl">
             {/* header: count + altura (for floating decks) + balance */}
             <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderador' : `objetos ${myCount}/${PLACE_CAP}`}</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderator' : `objects ${myCount}/${PLACE_CAP}`}</span>
               {placingKind && (
                 <span className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[#00cfff]">
-                  Altura
+                  Height
                   <button onClick={() => setPlaceElev(e => Math.max(0, e - 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▼</button>
                   <span className="w-4 text-center text-white tabular-nums">{placeElev}</span>
                   <button onClick={() => setPlaceElev(e => Math.min(16, e + 1))} className="w-5 h-5 border border-[#00cfff]/40 leading-none hover:bg-[#00cfff]/15">▲</button>
@@ -838,23 +838,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 );
               })}
               {(() => { const spin = !!(placingKind && isRotatable(placingKind)); const on = rotateMode || spin; return (
-                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); } }} title="Rodar"
+                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); } }} title="Rotate"
                   className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${on ? 'bg-[#00cfff]/15' : 'hover:bg-white/5'}`}>
                   <CatIcon catId="rotate" size={22} color={on ? '#00cfff' : '#cfd2dc'} />
-                  <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Virar ${placeDir + 1}/4` : 'Rodar'}</span>
+                  <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Turn ${placeDir + 1}/4` : 'Rotate'}</span>
                 </button>
               ); })()}
-              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); }} title="Apanhar"
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); }} title="Pick up"
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
-                <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Apanhar</span>
+                <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Pick up</span>
               </button>
             </div>
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
             {removeMode ? (
-              <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Toca num objeto para o apanhar — volta ao teu inventário.</p>
+              <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Tap an object to pick it up — it returns to your inventory.</p>
             ) : rotateMode ? (
-              <p className="text-[11px] text-center text-[#00cfff]/90 py-4 px-3">Toca num objeto para o rodar (assentos, TV, bar, frigorífico, máquinas…).</p>
+              <p className="text-[11px] text-center text-[#00cfff]/90 py-4 px-3">Tap an object to rotate it (seats, TV, bar, fridge, machines…).</p>
             ) : (
               <div className="grid grid-rows-2 grid-flow-col auto-cols-max gap-1.5 overflow-x-auto p-2" style={{ maxHeight: '9.5rem' }}>
                 {FURNI.filter(f => f.cat === cat).map(f => {
@@ -864,7 +864,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   const sel = placingKind === f.kind;
                   return (
                     <button key={f.kind} onClick={() => {
-                      if (!canPlace) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Comprado ✦ — toca para colocar' : (r.error || 'Sem Cristais')); return; }
+                      if (!canPlace) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Bought ✦ — tap to place' : (r.error || 'Not enough Crystals')); return; }
                       setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false);
                     }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : canPlace ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
                       <FurniSprite kind={f.kind} size={38} accent={roomMeta.accent} />
@@ -889,47 +889,47 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <span className="w-4 h-4 rounded-full shrink-0" style={{ background: d.accent, boxShadow: `0 0 10px ${d.accent}` }} />
             <span className="font-bold text-white truncate">{d.name}</span>
             {d.locked && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒</span>}
-            <span className="ml-auto text-[10px] uppercase tracking-widest text-white/40">{d.slug === room ? 'aqui' : tag || ''}</span>
+            <span className="ml-auto text-[10px] uppercase tracking-widest text-white/40">{d.slug === room ? 'here' : tag || ''}</span>
           </button>
         );
-        const copyCode = (c: string) => { try { navigator.clipboard?.writeText(c); flashHint(`Código ${c} copiado`); } catch { /* ignore */ } };
+        const copyCode = (c: string) => { try { navigator.clipboard?.writeText(c); flashHint(`Code ${c} copied`); } catch { /* ignore */ } };
         return (
           <div className="absolute inset-0 z-50 bg-black/80 flex justify-center overflow-y-auto px-6 py-10" onClick={() => setShowRooms(false)}>
             <div className="w-full max-w-sm bg-black border border-white/15 p-5 h-fit" onClick={e => e.stopPropagation()}>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Salas oficiais</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Official rooms</p>
               <div className="flex flex-col gap-2">{ROOMS.map(r => roomBtn(r))}</div>
 
               {myRooms.length > 0 && (<>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">As tuas salas</p>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Your rooms</p>
                 <div className="flex flex-col gap-2">{myRooms.map(r => (
                   <div key={r.slug} className={`flex items-center gap-2 p-3 border ${r.slug === room ? 'border-white bg-white/5' : 'border-white/15'}`}>
                     <button onClick={() => switchRoom(roomDefOf(r))} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                       <span className="w-4 h-4 rounded-full shrink-0" style={{ background: r.accent, boxShadow: `0 0 10px ${r.accent}` }} />
                       <span className="font-bold text-white truncate">{r.name}</span>
-                      {!r.public && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒 privada</span>}
+                      {!r.public && <span className="text-[10px] uppercase tracking-widest text-white/40">🔒 private</span>}
                     </button>
-                    {(r.build_all || (r.rights ?? []).length > 0) && <span title={r.build_all ? 'Todos podem construir' : `${r.rights.length} com permissão`} className="text-[10px] text-[#1ED760] shrink-0">{r.build_all ? '✦ aberta' : `+${r.rights.length}`}</span>}
-                    {r.code && <button onClick={() => copyCode(r.code)} title="Copiar código de convite" className="text-[11px] font-mono tracking-widest text-[#00cfff] border border-[#00cfff]/30 px-2 py-1 hover:bg-[#00cfff]/10">{r.code}</button>}
-                    <button onClick={() => openPerms(r)} title="Permissões" className="text-white/40 hover:text-white text-base leading-none px-1">⚙</button>
-                    <button onClick={() => doDeleteRoom(r)} title="Apagar sala" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
+                    {(r.build_all || (r.rights ?? []).length > 0) && <span title={r.build_all ? 'Everyone can build' : `${r.rights.length} with permission`} className="text-[10px] text-[#1ED760] shrink-0">{r.build_all ? '✦ open' : `+${r.rights.length}`}</span>}
+                    {r.code && <button onClick={() => copyCode(r.code)} title="Copy invite code" className="text-[11px] font-mono tracking-widest text-[#00cfff] border border-[#00cfff]/30 px-2 py-1 hover:bg-[#00cfff]/10">{r.code}</button>}
+                    <button onClick={() => openPerms(r)} title="Permissions" className="text-white/40 hover:text-white text-base leading-none px-1">⚙</button>
+                    <button onClick={() => doDeleteRoom(r)} title="Delete room" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
                   </div>
                 ))}</div>
               </>)}
 
               {community.length > 0 && (<>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Salas da comunidade</p>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Community rooms</p>
                 <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{community.map(r => roomBtn(roomDefOf(r)))}</div>
               </>)}
 
-              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Entrar com código</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Join with a code</p>
               <div className="flex gap-2">
-                <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="CÓDIGO" onKeyDown={e => { if (e.key === 'Enter') doJoinByCode(); }}
+                <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6} placeholder="CODE" onKeyDown={e => { if (e.key === 'Enter') doJoinByCode(); }}
                   className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm tracking-[0.3em] font-mono outline-none focus:border-[#00cfff]" />
-                <button onClick={doJoinByCode} className="bg-white/10 text-white font-bold uppercase text-xs tracking-widest px-4 hover:bg-white hover:text-black transition-colors active:scale-95">Entrar</button>
+                <button onClick={doJoinByCode} className="bg-white/10 text-white font-bold uppercase text-xs tracking-widest px-4 hover:bg-white hover:text-black transition-colors active:scale-95">Enter</button>
               </div>
 
-              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Cria a tua sala</p>
-              <p className="text-[10px] uppercase tracking-widest text-white/35 mb-1.5">Forma da sala</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Create your room</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/35 mb-1.5">Room shape</p>
               <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
                 {ROOM_PLANS.map(p => (
                   <button key={p.id} onClick={() => setNewRoomPlan(p.id)} title={p.name}
@@ -940,15 +940,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 ))}
               </div>
               <div className="flex gap-2">
-                <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} maxLength={24} placeholder="Nome da sala"
+                <input value={newRoomName} onChange={e => setNewRoomName(e.target.value)} maxLength={24} placeholder="Room name"
                   className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff]" />
-                <button onClick={doCreateRoom} className="bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Criar</button>
+                <button onClick={doCreateRoom} className="bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Create</button>
               </div>
               <label className="flex items-center gap-2 mt-2 text-[11px] text-white/55 cursor-pointer">
                 <input type="checkbox" checked={newRoomPrivate} onChange={e => setNewRoomPrivate(e.target.checked)} className="accent-[#00cfff]" />
-                Privada — só por código (não aparece na lista)
+                Private — code only (won't show in the list)
               </label>
-              <p className="text-[10px] text-white/35 mt-2">A tua sala é tua para decorar. Partilha o <span className="text-[#00cfff]">código</span> para convidar e dá permissão (⚙) a quem quiseres. Nas salas oficiais só os moderadores constroem.</p>
+              <p className="text-[10px] text-white/35 mt-2">Your room is yours to decorate. Share the <span className="text-[#00cfff]">code</span> to invite people and grant permission (⚙) to whoever you like. In official rooms only moderators build.</p>
             </div>
           </div>
         );
@@ -958,34 +958,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <div className="absolute inset-0 z-[60] bg-black/85 flex justify-center overflow-y-auto px-6 py-10" onClick={() => setPermsRoom(null)}>
           <div className="w-full max-w-sm bg-black border border-white/15 p-5 h-fit" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">Permissões</p>
+              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40">Permissions</p>
               <button onClick={() => setPermsRoom(null)} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
             </div>
             <p className="font-bold text-white truncate mb-4">{permsRoom.name}</p>
 
             <label className="flex items-center gap-3 p-3 border border-white/15 cursor-pointer hover:border-white/35">
               <input type="checkbox" checked={permsAll} onChange={e => setPermsAll(e.target.checked)} className="accent-[#1ED760] w-4 h-4" />
-              <span className="text-sm text-white">Todos podem construir<br /><span className="text-[11px] text-white/45">Qualquer visitante pode largar e apanhar móveis.</span></span>
+              <span className="text-sm text-white">Everyone can build<br /><span className="text-[11px] text-white/45">Any visitor can drop and pick up furniture.</span></span>
             </label>
 
-            <p className={`text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2 ${permsAll ? 'opacity-40' : ''}`}>Pessoas com permissão</p>
+            <p className={`text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2 ${permsAll ? 'opacity-40' : ''}`}>People with permission</p>
             <div className={`flex flex-col gap-2 ${permsAll ? 'opacity-40 pointer-events-none' : ''}`}>
-              {permsList.length === 0 && <p className="text-[11px] text-white/35">Ninguém ainda. Adiciona pelo handle.</p>}
+              {permsList.length === 0 && <p className="text-[11px] text-white/35">No one yet. Add someone by handle.</p>}
               {permsList.map(h => (
                 <div key={h} className="flex items-center gap-2 px-3 py-2 border border-white/12 bg-white/[0.03]">
                   <span className="flex-1 min-w-0 truncate text-sm text-white">{h}</span>
-                  <button onClick={() => setPermsList(l => l.filter(x => x !== h))} title="Remover" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
+                  <button onClick={() => setPermsList(l => l.filter(x => x !== h))} title="Remove" className="text-white/30 hover:text-brandRed text-lg leading-none px-1">✕</button>
                 </div>
               ))}
               <div className="flex gap-2">
-                <input value={permsHandle} onChange={e => setPermsHandle(e.target.value)} maxLength={32} placeholder="Handle da pessoa" onKeyDown={e => { if (e.key === 'Enter') addPermHandle(); }}
+                <input value={permsHandle} onChange={e => setPermsHandle(e.target.value)} maxLength={32} placeholder="Person's handle" onKeyDown={e => { if (e.key === 'Enter') addPermHandle(); }}
                   className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#1ED760]" />
                 <button onClick={addPermHandle} className="bg-white/10 text-white font-bold uppercase text-xs tracking-widest px-4 hover:bg-white hover:text-black transition-colors active:scale-95">Add</button>
               </div>
             </div>
-            <p className="text-[10px] text-white/35 mt-2">O handle tem de bater certo com o nome da conta da pessoa. Construir inclui apanhar/tirar móveis.</p>
+            <p className="text-[10px] text-white/35 mt-2">The handle must match the person's account name exactly. Building includes picking up / removing furniture.</p>
 
-            <button onClick={savePerms} className="w-full mt-4 bg-[#1ED760] text-black font-bold uppercase text-xs tracking-widest py-2.5 hover:bg-white transition-colors active:scale-95">Guardar</button>
+            <button onClick={savePerms} className="w-full mt-4 bg-[#1ED760] text-black font-bold uppercase text-xs tracking-widest py-2.5 hover:bg-white transition-colors active:scale-95">Save</button>
           </div>
         </div>
       )}
@@ -996,14 +996,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <form onSubmit={e => { e.preventDefault(); say(msg); }} className="absolute bottom-0 inset-x-0 z-40 p-3 flex justify-center" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
         <div className="flex gap-2 w-full max-w-md">
-          <input value={msg} onChange={e => setMsg(e.target.value)} maxLength={120} placeholder="diz algo…" className="flex-1 min-w-0 bg-black/60 border border-white/20 text-white px-3 py-2 text-sm outline-none focus:border-brandYellow rounded" />
-          <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 rounded active:scale-95 hover:bg-white transition-colors">Dizer</button>
+          <input value={msg} onChange={e => setMsg(e.target.value)} maxLength={120} placeholder="say something…" className="flex-1 min-w-0 bg-black/60 border border-white/20 text-white px-3 py-2 text-sm outline-none focus:border-brandYellow rounded" />
+          <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 rounded active:scale-95 hover:bg-white transition-colors">Say</button>
         </div>
       </form>
 
-      {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ SAIR ]</button>}
+      {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ EXIT ]</button>}
 
-      <InventoryModal open={invOpen} onClose={() => setInvOpen(false)} onEquip={equipAppearance} title="Personagem" />
+      <InventoryModal open={invOpen} onClose={() => setInvOpen(false)} onEquip={equipAppearance} title="Character" />
     </div>
   );
 };

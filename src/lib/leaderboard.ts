@@ -115,10 +115,10 @@ export async function submitScore(score: number, handle?: string, gameId: string
       }),
     });
     const json = await res.json();
-    if (!res.ok || !json.ok) return { ok: false, error: json.error || 'Erro ao enviar.' };
+    if (!res.ok || !json.ok) return { ok: false, error: json.error || 'Submission failed.' };
     saveLocalPlayer(json.playerId, json.handle);
     return { ok: true, rank: json.rank, handle: json.handle, playerId: json.playerId };
   } catch {
-    return { ok: false, error: 'Sem ligação.' };
+    return { ok: false, error: 'No connection.' };
   }
 }

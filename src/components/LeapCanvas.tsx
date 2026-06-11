@@ -328,7 +328,7 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             st.level++;
             st.worldSpeed = Math.min(MAX_SPEED, BASE_SPEED + (st.level - 1) * 0.2);
             st.bonus += 250 * st.level;
-            st.bannerText = `NÍVEL ${st.level}`;
+            st.bannerText = `LEVEL ${st.level}`;
             st.bannerLife = 95;
             synthRef.current?.playCombo(Math.min(st.level, 6));
             spawnBurst(st.particles, p.x + PW / 2, pl.top, accentColor(st.level, st.gameTicks), { count: 16, speed: 4, angle: -Math.PI / 2, spread: Math.PI, life: 30 });
@@ -443,18 +443,18 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.fillText(String(st.curScore), 28, 24);
       ctx.font = '700 13px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillText('PONTOS', 30, 72);
+      ctx.fillText('SCORE', 30, 72);
       // Chain + multiplier — the juicy bit: a long clean chain pumps the multiplier.
       if (st.combo > 1) {
         const mult = 1 + Math.floor(st.combo / 5);
         ctx.fillStyle = '#ffe65c'; ctx.font = '900 20px Helvetica, Arial, sans-serif';
-        ctx.fillText(`CADEIA ${st.combo}`, 30, 94);
-        if (mult > 1) { ctx.fillStyle = accent; ctx.fillText(`×${mult}`, 30 + ctx.measureText(`CADEIA ${st.combo} `).width, 94); }
+        ctx.fillText(`CHAIN ${st.combo}`, 30, 94);
+        if (mult > 1) { ctx.fillStyle = accent; ctx.fillText(`×${mult}`, 30 + ctx.measureText(`CHAIN ${st.combo} `).width, 94); }
       }
       ctx.textAlign = 'right'; ctx.fillStyle = accent; ctx.font = '900 22px Helvetica, Arial, sans-serif';
-      ctx.fillText(`NÍVEL ${st.level}`, w - 28, 26);
+      ctx.fillText(`LEVEL ${st.level}`, w - 28, 26);
       ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = '700 12px monospace';
-      ctx.fillText(`RECORDE ${Math.max(best, st.curScore)}`, w - 28, 56);
+      ctx.fillText(`BEST ${Math.max(best, st.curScore)}`, w - 28, 56);
       ctx.restore();
 
       // Level banner.
@@ -533,17 +533,17 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <p className="text-[11px] uppercase tracking-[0.4em] text-brandYellow mb-2">OUROO ARCADE</p>
           <h1 className="font-helvetica font-black text-5xl sm:text-7xl tracking-tighter text-white leading-none">LEAP<span className="text-brandYellow">.</span></h1>
           <p className="mt-4 max-w-sm text-white/65 text-sm leading-relaxed">
-            Começas numa plataforma. Salta a <b className="text-white/85">escadaria de cristais</b> —
-            apanhar um cristal no ar devolve-te o salto, por isso encadeias de cristal em cristal
-            até aterrar na próxima plataforma. Cada plataforma sobe um nível.
+            You start on a platform. Leap the <b className="text-white/85">crystal staircase</b> —
+            grabbing a crystal mid-air gives your jump back, so you chain crystal to crystal
+            until you land on the next platform. Each platform climbs a level.
           </p>
-          <p className="mt-3 text-[12px] text-white/45 font-mono">ESPAÇO / TOCA para saltar &middot; apanha cristais no ar para saltar outra vez</p>
+          <p className="mt-3 text-[12px] text-white/45 font-mono">SPACE / TAP to jump &middot; grab crystals in the air to jump again</p>
           <button onClick={startGame}
             className="mt-7 bg-brandYellow text-black font-bold uppercase tracking-[0.2em] text-sm px-8 py-3.5 hover:bg-white transition-colors active:scale-[0.98]">
-            ▶ Saltar
+            ▶ Leap
           </button>
           {onExit && (
-            <button onClick={onExit} className="mt-4 text-[11px] font-mono text-white/40 hover:text-white">[ trocar de jogo ]</button>
+            <button onClick={onExit} className="mt-4 text-[11px] font-mono text-white/40 hover:text-white">[ switch game ]</button>
           )}
         </div>
       )}
@@ -551,27 +551,27 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {/* GAME OVER */}
       {gameOver && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-start overflow-y-auto bg-black/85 backdrop-blur-sm px-5 py-8">
-          <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-1">Caíste</p>
+          <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-1">You fell</p>
           <h2 className="font-helvetica font-black text-5xl tracking-tighter text-white leading-none">{finalScore}</h2>
-          <p className="text-[12px] text-white/50 mt-1">nível {hudLevel} {finalScore >= best ? '· novo recorde 🏆' : `· recorde ${best}`}</p>
+          <p className="text-[12px] text-white/50 mt-1">level {hudLevel} {finalScore >= best ? '· new best 🏆' : `· best ${best}`}</p>
 
           {/* Submit / handle */}
           <div className="w-full max-w-sm mt-5">
             {lbState === 'need-handle' && (
               <form onSubmit={(e) => { e.preventDefault(); const v = validateHandle(lbHandle); if (!v.ok) { setLbError(v.error); return; } doSubmit(v.value); }}
                 className="flex flex-col gap-2">
-                <p className="text-[12px] text-white/55 text-center">Escolhe um nome para o ranking LEAP:</p>
+                <p className="text-[12px] text-white/55 text-center">Pick a name for the LEAP ranking:</p>
                 <div className="flex gap-2">
-                  <input value={lbHandle} onChange={(e) => { setLbHandle(e.target.value); setLbError(''); }} placeholder="O TEU NOME" autoFocus
+                  <input value={lbHandle} onChange={(e) => { setLbHandle(e.target.value); setLbError(''); }} placeholder="YOUR NAME" autoFocus
                     className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2.5 text-sm uppercase tracking-widest outline-none focus:border-brandYellow" />
-                  <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Enviar</button>
+                  <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Submit</button>
                 </div>
                 {lbError && <p className="text-[11px] text-brandRed text-center">{lbError}</p>}
               </form>
             )}
-            {lbState === 'submitting' && <p className="text-center text-white/50 text-sm">A enviar…</p>}
-            {lbState === 'done' && <p className="text-center text-[#1ED760] text-sm font-bold">No ranking{lbRank ? ` · #${lbRank}` : ''} ✓</p>}
-            {lbState === 'error' && <p className="text-center text-brandRed text-sm">{lbError || 'Erro ao enviar.'}</p>}
+            {lbState === 'submitting' && <p className="text-center text-white/50 text-sm">Submitting…</p>}
+            {lbState === 'done' && <p className="text-center text-[#1ED760] text-sm font-bold">On the board{lbRank ? ` · #${lbRank}` : ''} ✓</p>}
+            {lbState === 'error' && <p className="text-center text-brandRed text-sm">{lbError || 'Submission failed.'}</p>}
             {lbState === 'idle' && !supabaseReady && <p className="text-center text-white/40 text-[12px]">Ranking offline.</p>}
           </div>
 
@@ -587,12 +587,12 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <div className="flex gap-3 mt-6">
             <button onClick={playAgain}
               className="bg-brandYellow text-black font-bold uppercase tracking-[0.2em] text-sm px-7 py-3 hover:bg-white transition-colors active:scale-[0.98]">
-              ↺ Outra vez
+              ↺ Again
             </button>
             {onExit && (
               <button onClick={onExit}
                 className="border border-white/20 text-white/70 font-bold uppercase tracking-[0.2em] text-sm px-6 py-3 hover:bg-white hover:text-black transition-colors">
-                Trocar
+                Switch
               </button>
             )}
           </div>

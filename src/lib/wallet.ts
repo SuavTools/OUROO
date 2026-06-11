@@ -138,14 +138,14 @@ const newIconId = (): string => (typeof crypto !== 'undefined' && crypto.randomU
 // Add an icon to the wallet WITHOUT charging — for moderators (who get cosmetics free).
 export function mintIcon(name: string, spec: IconSpec): CustomIcon {
   const w = getWallet();
-  const icon: CustomIcon = { id: newIconId(), name: name.slice(0, 24) || 'Ícone', spec };
+  const icon: CustomIcon = { id: newIconId(), name: name.slice(0, 24) || 'Icon', spec };
   w.icons.push(icon); save(w); return icon;
 }
 // Mint a new icon (costs ICON_PRICE). Returns the created icon, or an error.
 export function buyIcon(name: string, spec: IconSpec): { ok: boolean; icon?: CustomIcon; error?: string } {
   const w = getWallet();
-  if (w.balance < ICON_PRICE) return { ok: false, error: 'Cristais insuficientes' };
-  const icon: CustomIcon = { id: newIconId(), name: name.slice(0, 24) || 'Ícone', spec };
+  if (w.balance < ICON_PRICE) return { ok: false, error: 'Not enough Crystals' };
+  const icon: CustomIcon = { id: newIconId(), name: name.slice(0, 24) || 'Icon', spec };
   w.balance -= ICON_PRICE; w.icons.push(icon); save(w); return { ok: true, icon };
 }
 export function removeIcon(id: string) { const w = getWallet(); w.icons = w.icons.filter(i => i.id !== id); save(w); }

@@ -16,19 +16,6 @@ import { OpenInBrowser } from '@/components/OpenInBrowser';
 
 type View = 'landing' | 'arcade' | 'leap' | 'lobby';
 
-// --- Artist content (edit here) ---------------------------------------------
-const VIDEO_ID = 's5dhOrRjs7Q';                       // latest clip (YouTube)
-const SPOTIFY_ARTIST = '4JNKjNlt3rtcIl84NiK4Lr';      // Spotify artist id
-const SPOTIFY_URL = `https://open.spotify.com/artist/${SPOTIFY_ARTIST}`;
-const INSTAGRAM_URL = 'https://www.instagram.com/suav.wav/';
-const BOOKING = { name: 'João Dinis', agency: 'Primeira Linha', url: 'https://www.primeiralinha.pt/' };
-
-// Upcoming shows — add entries here. Empty array shows the "announced soon" state.
-const SHOWS: { date: string; city: string; venue: string; ticket?: string }[] = [
-  // { date: '12 JUL', city: 'Lisboa', venue: 'TBA', ticket: '#' },
-];
-// ----------------------------------------------------------------------------
-
 export default function Home() {
   const [view, setView] = useState<View>('landing');
   const [isZooming, setIsZooming] = useState(false);
@@ -119,7 +106,7 @@ export default function Home() {
           style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           className="absolute left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
         >
-          [ SAIR PARA SUAV ]
+          [ EXIT ]
         </button>
       </main>
     );
@@ -138,7 +125,7 @@ export default function Home() {
           style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           className="absolute left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
         >
-          [ SAIR PARA SUAV ]
+          [ EXIT ]
         </button>
       </main>
     );
@@ -157,7 +144,7 @@ export default function Home() {
   }
 
   // ==========================================================================
-  // SUAV — ARTIST LANDING
+  // OUROO — GAME LANDING
   // ==========================================================================
   return (
     <main className="relative min-h-[100dvh] w-full bg-black text-white overflow-x-hidden">
@@ -169,29 +156,28 @@ export default function Home() {
         {/* ---- NAV ---- (safe-area top so it clears the iOS status bar / notch in installed-app mode) */}
         <header className="sticky top-0 z-40 backdrop-blur-md bg-black/70 border-b border-white/10" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
           <nav className="mx-auto max-w-5xl px-5 sm:px-8 h-14 flex items-center justify-between">
-            <a href="#top" className="font-helvetica font-black text-xl tracking-tight">SUAV</a>
+            <a href="#top" className="font-helvetica font-black text-xl tracking-tight">OUROO<span className="text-brandRed">.</span></a>
             <div className="flex items-center gap-4 sm:gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">
-              <a href="#listen" className="hidden sm:inline hover:text-white transition-colors">Ouvir</a>
-              <a href="#live" className="hidden sm:inline hover:text-white transition-colors">Concertos</a>
+              <button onClick={enterLobby} className="hidden sm:inline hover:text-white transition-colors">Plaza</button>
               <button onClick={() => setChatOpen(true)} className="hover:text-white transition-colors">Chat</button>
-              <button onClick={() => setInventoryOpen(true)} className="hover:text-white transition-colors">Inventário</button>
+              <button onClick={() => setInventoryOpen(true)} className="hover:text-white transition-colors">Inventory</button>
               {isSuper && <button onClick={() => setAdminOpen(true)} title="Admin" className="text-brandYellow hover:text-white transition-colors">📊</button>}
               {supabaseReady && (user
                 ? (
-                  <button onClick={() => setProfileOpen(true)} title="O meu perfil" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                  <button onClick={() => setProfileOpen(true)} title="My profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {user.avatar && <img src={user.avatar} alt="" className="w-6 h-6 rounded-full border border-white/20" />}
                     <span className="hidden sm:inline normal-case tracking-normal text-white/80 max-w-[120px] truncate">{user.name}</span>
                   </button>
                 )
-                : <button onClick={() => signInWithDiscord()} className="text-[#5865F2] hover:text-white transition-colors"><span className="sm:hidden">Discord</span><span className="hidden sm:inline">Ligar Discord</span></button>
+                : <button onClick={() => signInWithDiscord()} className="text-[#5865F2] hover:text-white transition-colors"><span className="sm:hidden">Discord</span><span className="hidden sm:inline">Sign in with Discord</span></button>
               )}
               {installable && (
-                <button onClick={handleInstall} title="Instalar como app" className="flex items-center gap-1 font-bold text-brandYellow hover:text-white transition-colors animate-pulse">
+                <button onClick={handleInstall} title="Install as app" className="flex items-center gap-1 font-bold text-brandYellow hover:text-white transition-colors animate-pulse">
                   📲<span className="hidden sm:inline">&nbsp;App</span>
                 </button>
               )}
-              <button onClick={enterArcade} className="font-bold text-black bg-brandRed px-4 py-1.5 tracking-[0.2em] hover:bg-white transition-colors">Jogar ▸</button>
+              <button onClick={enterArcade} className="font-bold text-black bg-brandRed px-4 py-1.5 tracking-[0.2em] hover:bg-white transition-colors">Play ▸</button>
             </div>
           </nav>
         </header>
@@ -202,10 +188,10 @@ export default function Home() {
             <div className="relative border border-brandYellow/40 bg-brandYellow/[0.06] p-4 flex items-center gap-3">
               <span className="text-2xl">📲</span>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm text-white">Instala a OUROO no telemóvel</p>
-                <p className="text-[12px] text-white/55 leading-snug">Joga em ecrã inteiro, sem barras do navegador — abre direto do ícone como uma app.</p>
+                <p className="font-bold text-sm text-white">Install OUROO on your phone</p>
+                <p className="text-[12px] text-white/55 leading-snug">Play full-screen, no browser bars — launch straight from the icon like a real app.</p>
               </div>
-              <button onClick={handleInstall} className="shrink-0 bg-brandYellow text-black font-bold uppercase text-[11px] tracking-widest px-3 py-2 active:scale-95">Instalar</button>
+              <button onClick={handleInstall} className="shrink-0 bg-brandYellow text-black font-bold uppercase text-[11px] tracking-widest px-3 py-2 active:scale-95">Install</button>
               <button onClick={dismissInstallBanner} className="shrink-0 text-white/30 hover:text-white text-lg leading-none">✕</button>
             </div>
           </div>
@@ -213,87 +199,35 @@ export default function Home() {
 
         {/* ---- HERO ---- */}
         <section id="top" className="mx-auto max-w-5xl px-5 sm:px-8 pt-10 sm:pt-16 pb-10">
-          <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Último Lançamento</p>
-          <h1 className="font-helvetica font-black tracking-tighter leading-[0.92] text-6xl sm:text-8xl">SUAV</h1>
+          <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">The loop that pays in crystals</p>
+          <h1 className="font-helvetica font-black tracking-tighter leading-[0.92] text-6xl sm:text-8xl">OUROO<span className="text-brandRed">.</span></h1>
           <p className="mt-4 max-w-xl text-white/60 text-sm sm:text-base leading-relaxed">
-            Novos visuais, som e o arcade OUROO — tudo num só lugar. Carrega play.
+            A world that eats its own tail. Mine crystals in the arcade, outlast the swarm, then spend every last one making your corner of the Plaza yours. Many games, one wallet, one world. Press play.
           </p>
 
-          {/* Featured clip — autoplays muted */}
-          <div className="mt-8 relative w-full aspect-video bg-white/5 border border-white/10 overflow-hidden">
-            <iframe
-              className="absolute inset-0 w-full h-full"
-              src={`https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&mute=1&loop=1&playlist=${VIDEO_ID}&rel=0&modestbranding=1&playsinline=1`}
-              title="SUAV — latest video"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              referrerPolicy="strict-origin-when-cross-origin"
-              allowFullScreen
-            />
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <button onClick={enterArcade} className="inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandRed px-6 py-3 hover:bg-white transition-colors">
+              ▶ Enter the Arcade
+            </button>
+            <button onClick={enterLobby} className="inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-white border border-[#00cfff]/50 px-6 py-3 hover:bg-[#00cfff] hover:text-black transition-colors">
+              Walk into the Plaza
+            </button>
           </div>
         </section>
 
-        {/* ---- LISTEN ---- */}
-        <section id="listen" className="mx-auto max-w-5xl px-5 sm:px-8 py-10 border-t border-white/10">
-          <div className="flex items-end justify-between mb-5">
-            <h2 className="font-helvetica font-black text-3xl sm:text-4xl tracking-tight">Ouvir</h2>
-            <a href={SPOTIFY_URL} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] text-white/60 hover:text-brandRed transition-colors">Abrir no Spotify →</a>
-          </div>
-          <div className="w-full overflow-hidden border border-white/10 bg-white/5">
-            <iframe
-              className="w-full"
-              style={{ height: 352 }}
-              src={`https://open.spotify.com/embed/artist/${SPOTIFY_ARTIST}?utm_source=generator&theme=0`}
-              title="SUAV on Spotify"
-              loading="lazy"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            />
-          </div>
-        </section>
-
-        {/* ---- LIVE ---- */}
-        <section id="live" className="mx-auto max-w-5xl px-5 sm:px-8 py-10 border-t border-white/10">
-          <h2 className="font-helvetica font-black text-3xl sm:text-4xl tracking-tight mb-5">Concertos</h2>
-          {SHOWS.length > 0 ? (
-            <ul className="divide-y divide-white/10">
-              {SHOWS.map((s, i) => (
-                <li key={i} className="flex items-center justify-between py-4 gap-4">
-                  <div className="flex items-baseline gap-4 min-w-0">
-                    <span className="font-helvetica font-black text-brandRed w-16 shrink-0">{s.date}</span>
-                    <span className="truncate"><span className="font-bold">{s.city}</span><span className="text-white/50"> · {s.venue}</span></span>
-                  </div>
-                  {s.ticket
-                    ? <a href={s.ticket} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors shrink-0">Bilhetes</a>
-                    : <span className="text-[11px] uppercase tracking-[0.2em] text-white/40 shrink-0">Em breve</span>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-white/50 text-sm leading-relaxed">Novas datas em breve. Para contratações, fala connosco abaixo.</p>
-          )}
-
-          {/* Bookings */}
-          <div className="mt-8 border border-white/10 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-brandRed mb-1">Contratações</p>
-              <p className="text-sm"><span className="font-bold">{BOOKING.name}</span><span className="text-white/50"> — {BOOKING.agency}</span></p>
-            </div>
-            <a href={BOOKING.url} target="_blank" rel="noopener noreferrer" className="text-[11px] uppercase tracking-[0.2em] font-bold border border-white/20 px-5 py-2.5 hover:bg-white hover:text-black transition-colors text-center">Primeira Linha →</a>
-          </div>
-        </section>
-
-        {/* ---- THE ARCADE (featured) ---- */}
+        {/* ---- THE WORLDS ---- */}
         <section className="mx-auto max-w-5xl px-5 sm:px-8 py-10 border-t border-white/10">
           <button
             onClick={enterArcade}
             className="group relative w-full overflow-hidden border border-brandRed/40 bg-gradient-to-br from-brandRed/10 to-transparent p-8 sm:p-12 text-left transition-all hover:border-brandRed"
           >
-            <p className="text-[11px] uppercase tracking-[0.4em] text-brandYellow mb-3">A Jogar Agora</p>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandYellow mb-3">Now Playing</p>
             <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">OUROO<span className="text-brandRed">.</span></h2>
             <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
-              Arcade de entropia infinita. Apanha cristais, sobrevive à horda, sobe no ranking. Melhor no telemóvel, na horizontal.
+              An arcade of infinite entropy. Harvest crystals, survive the swarm, climb the board. Best on a phone, held sideways.
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandRed px-6 py-3 group-hover:bg-white transition-colors">
-              ▶ Entrar no Arcade
+              ▶ Enter the Arcade
             </span>
           </button>
 
@@ -302,13 +236,13 @@ export default function Home() {
             onClick={enterLeap}
             className="group relative w-full overflow-hidden border border-brandYellow/40 bg-gradient-to-br from-brandYellow/10 to-transparent p-8 sm:p-12 text-left transition-all hover:border-brandYellow mt-5"
           >
-            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Novo Modo</p>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">New Mode</p>
             <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">LEAP<span className="text-brandYellow">.</span></h2>
             <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
-              Salta a escadaria de cristais de plataforma em plataforma — apanha um cristal no ar e o salto volta. Cada plataforma sobe um nível. Mesma skin, novo ranking.
+              Climb the crystal staircase, platform to platform — snag a crystal mid-air and your jump comes back. Every platform is another rung. Same skin, new board.
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-brandYellow px-6 py-3 group-hover:bg-white transition-colors">
-              ▶ Saltar
+              ▶ Leap
             </span>
           </button>
 
@@ -317,20 +251,20 @@ export default function Home() {
             onClick={enterLobby}
             className="group relative w-full overflow-hidden border border-[#00cfff]/40 bg-gradient-to-br from-[#00cfff]/10 to-transparent p-8 sm:p-12 text-left transition-all hover:border-[#00cfff] mt-5"
           >
-            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">Sala Social · Beta</p>
+            <p className="text-[11px] uppercase tracking-[0.4em] text-brandRed mb-3">The Plaza · Beta</p>
             <h2 className="font-helvetica font-black text-4xl sm:text-6xl tracking-tighter leading-none">PRAÇA<span className="text-[#00cfff]">.</span></h2>
             <p className="mt-3 max-w-md text-white/60 text-sm leading-relaxed">
-              Entra com a tua skin e passeia. Vê quem está online ao vivo e fala com balões por cima da cabeça. Tudo em tempo real.
+              Walk in with your skin and hang out. See who's online live, talk in bubbles over your head, and furnish the place with everything you mined. All in real time.
             </p>
             <span className="mt-6 inline-flex items-center gap-3 font-bold uppercase tracking-[0.2em] text-sm text-black bg-[#00cfff] px-6 py-3 group-hover:bg-white transition-colors">
-              ▶ Entrar
+              ▶ Enter
             </span>
           </button>
 
           {/* Unified leaderboard — built multi-game; OUROO for now, more games slot in later. */}
           <div className="mt-8 border border-white/10 p-5 sm:p-8">
             <div className="flex items-end justify-between mb-4">
-              <h3 className="font-helvetica font-black text-2xl sm:text-3xl tracking-tight">Ranking</h3>
+              <h3 className="font-helvetica font-black text-2xl sm:text-3xl tracking-tight">Leaderboard</h3>
               <span className="text-[11px] uppercase tracking-[0.2em] text-white/40">OUROO</span>
             </div>
             <Leaderboard limit={10} showToggle />
@@ -339,18 +273,16 @@ export default function Home() {
 
         {/* ---- FOOTER ---- */}
         <footer className="mx-auto max-w-5xl px-5 sm:px-8 py-10 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-          <div className="flex items-center gap-5 text-[11px] uppercase tracking-[0.2em] text-white/60">
-            <a href={SPOTIFY_URL} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Spotify</a>
-            <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Instagram</a>
-            <a href={`https://www.youtube.com/watch?v=${VIDEO_ID}`} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">YouTube</a>
-          </div>
+          <p className="text-[11px] uppercase tracking-[0.2em] text-white/40 leading-relaxed max-w-sm">
+            One world. One wallet. Mine it, spend it, show it off. The signal running through all of it is SUAV.
+          </p>
           <div className="flex items-center gap-4">
             {(canInstall || iosInstall) && (
               <button onClick={handleInstall} className="text-[11px] uppercase tracking-[0.2em] border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors">
-                📲 Instalar App
+                📲 Install App
               </button>
             )}
-            <span className="font-helvetica font-black text-sm tracking-tight">SUAV</span>
+            <span className="font-helvetica font-black text-sm tracking-tight">OUROO<span className="text-brandRed">.</span></span>
           </div>
         </footer>
       </div>
@@ -359,10 +291,10 @@ export default function Home() {
       {showIosSheet && (
         <div className="fixed inset-0 z-[60] bg-black/85 flex items-center justify-center p-6" onClick={() => setShowIosSheet(false)}>
           <div className="max-w-sm w-full border border-white/20 bg-black p-6 text-center space-y-4" onClick={(e) => e.stopPropagation()}>
-            <p className="font-helvetica font-black uppercase tracking-widest text-lg">Instalar no iPhone</p>
-            <p className="text-white/70 text-sm leading-relaxed">1. Toca no botão <span className="text-brandRed font-bold">Partilhar</span> no fundo do Safari</p>
-            <p className="text-white/70 text-sm leading-relaxed">2. Desce e toca em <span className="text-brandRed font-bold">&quot;Adicionar ao Ecrã Principal&quot;</span></p>
-            <button onClick={() => setShowIosSheet(false)} className="mt-2 text-xs font-bold uppercase tracking-widest text-black bg-brandRed px-5 py-2 active:scale-95">Entendido</button>
+            <p className="font-helvetica font-black uppercase tracking-widest text-lg">Install on iPhone</p>
+            <p className="text-white/70 text-sm leading-relaxed">1. Tap the <span className="text-brandRed font-bold">Share</span> button at the bottom of Safari</p>
+            <p className="text-white/70 text-sm leading-relaxed">2. Scroll down and tap <span className="text-brandRed font-bold">&quot;Add to Home Screen&quot;</span></p>
+            <button onClick={() => setShowIosSheet(false)} className="mt-2 text-xs font-bold uppercase tracking-widest text-black bg-brandRed px-5 py-2 active:scale-95">Got it</button>
           </div>
         </div>
       )}
