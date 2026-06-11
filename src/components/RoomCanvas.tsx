@@ -473,6 +473,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (portalCode.trim().toUpperCase() !== p.code.toUpperCase()) { flashHint('The door stays shut.'); setPortalCode(''); return; }
     const def = SECRET_ROOMS[p.to]; setPortalPrompt(null); setPortalCode('');
     if (!def) return;
+    musicRef.current?.portal();   // threshold-crossing shimmer
     switchRoom(def);
     try {
       const fk = `ouroo_secret_${def.slug}`;

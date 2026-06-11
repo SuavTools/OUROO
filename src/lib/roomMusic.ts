@@ -78,10 +78,26 @@ export class RoomMusic {
       const f = 523.25 * Math.pow(2, semi / 12);   // C5 base
       [1, 2].forEach((mult, j) => {                 // fundamental + soft octave shimmer
         const o = this.ctx!.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
-        const g = this.ctx!.createGain(); const peak = (j === 0 ? 0.06 : 0.02);
-        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+        const g = this.ctx!.createGain(); const peak = (j === 0 ? 0.025 : 0.008);
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
         o.connect(g); g.connect(lp); o.start(t); o.stop(t + 0.75);
       });
+    });
+  }
+
+  // Stepping through a portal: a soft rising sweep that blooms and fades — crossing the threshold.
+  portal() {
+    this.ensure(); if (!this.ctx || !this.sfx) return;
+    const t = this.ctx.currentTime;
+    const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(500, t); lp.frequency.exponentialRampToValueAtTime(2400, t + 0.5); lp.frequency.exponentialRampToValueAtTime(700, t + 1.1);
+    lp.Q.value = 0.6; lp.connect(this.sfx);
+    [220, 330, 440].forEach((f, i) => {   // a quiet rising triad shimmer
+      const o = this.ctx!.createOscillator(); o.type = 'triangle';
+      o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 1.5, t + 0.9);
+      const g = this.ctx!.createGain(); const peak = 0.05 - i * 0.012;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.18); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t + 1.15);
     });
   }
 
