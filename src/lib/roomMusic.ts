@@ -18,6 +18,7 @@ const MOODS: Record<string, Mood> = {
 export class RoomMusic {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private sfx: GainNode | null = null;          // SFX bus — crisp, bypasses the music lowpass
   private filter: BiquadFilterNode | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private step = 0;
@@ -35,11 +36,34 @@ export class RoomMusic {
     this.filter = this.ctx.createBiquadFilter();
     this.filter.type = 'lowpass'; this.filter.frequency.value = this.mood.cutoff; this.filter.Q.value = 0.6;
     this.filter.connect(this.master); this.master.connect(this.ctx.destination);
+    this.sfx = this.ctx.createGain(); this.sfx.gain.value = this.muted ? 0 : 0.5; this.sfx.connect(this.ctx.destination);
   }
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.master && this.ctx) this.master.gain.linearRampToValueAtTime(m ? 0 : this.mood.gain * 0.12, this.ctx.currentTime + 0.25);
+    if (this.ctx) {
+      if (this.master) this.master.gain.linearRampToValueAtTime(m ? 0 : this.mood.gain * 0.12, this.ctx.currentTime + 0.25);
+      if (this.sfx) this.sfx.gain.linearRampToValueAtTime(m ? 0 : 0.5, this.ctx.currentTime + 0.05);
+    }
+  }
+
+  // A soft footstep: a short pitch-dropping thud + a faint scuff. Call once per stride.
+  footstep() {
+    this.ensure(); if (!this.ctx || !this.sfx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(150 + Math.random() * 40, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.08);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.11, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    o.connect(g); g.connect(this.sfx); o.start(t); o.stop(t + 0.15);
+    // brief highpassed noise scuff for texture
+    const len = Math.floor(this.ctx.sampleRate * 0.05);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const ns = this.ctx.createBufferSource(); ns.buffer = buf;
+    const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    const ng = this.ctx.createGain(); ng.gain.value = 0.05;
+    ns.connect(hp); hp.connect(ng); ng.connect(this.sfx); ns.start(t);
   }
   isMuted() { return this.muted; }
 

@@ -326,6 +326,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const framesRef = useRef(0);
   const posAccum = useRef(0);
   const wasMovingRef = useRef(false);
+  const strideRef = useRef(0);   // distance walked since the last footstep sound
   const modRef = useRef(false);
 
   const [msg, setMsg] = useState('');
@@ -724,9 +725,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
         if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
-        else { const s = Math.min(WALK, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; }
+        else { const s = Math.min(WALK, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; strideRef.current += s; }
       }
-      if (!moving) me.af += 0.3;
+      if (moving) { if (!wasMovingRef.current || strideRef.current >= 1.05) { strideRef.current = 0; musicRef.current?.footstep(); } }
+      else { me.af += 0.3; strideRef.current = 1.05; }   // primed so the next walk's first step sounds at once
       const targetZ = me.path.length ? me.path[0].z : me.lvl;   // climb toward the next surface as we walk
       me.z += (targetZ - me.z) * 0.25;
       if (me.bubbleLife > 0) me.bubbleLife--;
