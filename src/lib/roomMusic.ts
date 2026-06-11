@@ -6,13 +6,14 @@
 type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number };
 
 // scale = semitone offsets; root = base frequency (Hz). Tuned per sector's vibe.
+// cutoff is deliberately low — a muffled, behind-the-glass lo-fi bed that sits UNDER the room.
 const MOODS: Record<string, Mood> = {
-  praca:   { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 900,  wave: 'triangle', cutoff: 1400, bass: false, gain: 0.5 },  // calm, hopeful
-  jardim:  { scale: [0, 2, 4, 7, 9],  root: 196, beatMs: 1100, wave: 'sine',     cutoff: 1050, bass: false, gain: 0.46 }, // serene, koto-ish
-  clube:   { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 1900, bass: true,  gain: 0.4 },  // loudest signal — a pulse
-  archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 780,  bass: false, gain: 0.42 }, // sparse, melancholy
-  foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 980,  bass: true,  gain: 0.42 }, // warm, industrial drone
-  default: { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 950,  wave: 'triangle', cutoff: 1300, bass: false, gain: 0.44 },
+  praca:   { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 900,  wave: 'triangle', cutoff: 760, bass: false, gain: 0.5 },  // calm, hopeful
+  jardim:  { scale: [0, 2, 4, 7, 9],  root: 196, beatMs: 1100, wave: 'sine',     cutoff: 640, bass: false, gain: 0.46 }, // serene, koto-ish
+  clube:   { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 980, bass: true,  gain: 0.4 },  // loudest signal — a pulse
+  archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 520, bass: false, gain: 0.42 }, // sparse, melancholy
+  foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 620, bass: true,  gain: 0.42 }, // warm, industrial drone
+  default: { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 950,  wave: 'triangle', cutoff: 700, bass: false, gain: 0.44 },
 };
 
 export class RoomMusic {
@@ -32,7 +33,7 @@ export class RoomMusic {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : this.mood.gain * 0.12;   // ambient: kept low
+    this.master.gain.value = this.muted ? 0 : this.mood.gain * 0.055;   // ambient: kept low
     this.filter = this.ctx.createBiquadFilter();
     this.filter.type = 'lowpass'; this.filter.frequency.value = this.mood.cutoff; this.filter.Q.value = 0.6;
     this.filter.connect(this.master); this.master.connect(this.ctx.destination);
@@ -42,7 +43,7 @@ export class RoomMusic {
   setMuted(m: boolean) {
     this.muted = m;
     if (this.ctx) {
-      if (this.master) this.master.gain.linearRampToValueAtTime(m ? 0 : this.mood.gain * 0.12, this.ctx.currentTime + 0.25);
+      if (this.master) this.master.gain.linearRampToValueAtTime(m ? 0 : this.mood.gain * 0.055, this.ctx.currentTime + 0.25);
       if (this.sfx) this.sfx.gain.linearRampToValueAtTime(m ? 0 : 0.5, this.ctx.currentTime + 0.05);
     }
   }
@@ -54,23 +55,40 @@ export class RoomMusic {
     const o = this.ctx.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(150 + Math.random() * 40, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.08);
     const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.11, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.05, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
     o.connect(g); g.connect(this.sfx); o.start(t); o.stop(t + 0.15);
-    // brief highpassed noise scuff for texture
+    // brief noise scuff for texture — bandlimited so it's a soft "tuf", not a click
     const len = Math.floor(this.ctx.sampleRate * 0.05);
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
     const ns = this.ctx.createBufferSource(); ns.buffer = buf;
-    const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
-    const ng = this.ctx.createGain(); ng.gain.value = 0.05;
-    ns.connect(hp); hp.connect(ng); ng.connect(this.sfx); ns.start(t);
+    const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+    const ng = this.ctx.createGain(); ng.gain.value = 0.02;
+    ns.connect(bp); bp.connect(ng); ng.connect(this.sfx); ns.start(t);
   }
   isMuted() { return this.muted; }
+
+  // Approaching an NPC: a soft two-note "signal recognises you" chime — ethereal, lowpassed bell.
+  chime() {
+    this.ensure(); if (!this.ctx || !this.sfx) return;
+    const t0 = this.ctx.currentTime;
+    const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1600; lp.Q.value = 0.5; lp.connect(this.sfx);
+    [0, 7].forEach((semi, i) => {   // root then a fifth up, a beat apart
+      const t = t0 + i * 0.13;
+      const f = 523.25 * Math.pow(2, semi / 12);   // C5 base
+      [1, 2].forEach((mult, j) => {                 // fundamental + soft octave shimmer
+        const o = this.ctx!.createOscillator(); o.type = 'sine'; o.frequency.value = f * mult;
+        const g = this.ctx!.createGain(); const peak = (j === 0 ? 0.06 : 0.02);
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+        o.connect(g); g.connect(lp); o.start(t); o.stop(t + 0.75);
+      });
+    });
+  }
 
   setRoom(slug: string) {
     this.mood = MOODS[slug] ?? MOODS.default; this.step = 0;
     if (this.filter) this.filter.frequency.linearRampToValueAtTime(this.mood.cutoff, (this.ctx?.currentTime ?? 0) + 0.4);
-    if (this.master && this.ctx && !this.muted) this.master.gain.linearRampToValueAtTime(this.mood.gain * 0.12, this.ctx.currentTime + 0.4);
+    if (this.master && this.ctx && !this.muted) this.master.gain.linearRampToValueAtTime(this.mood.gain * 0.055, this.ctx.currentTime + 0.4);
     if (this.running && this.timer) { clearTimeout(this.timer); this.loop(); }
   }
 

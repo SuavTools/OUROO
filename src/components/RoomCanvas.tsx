@@ -752,6 +752,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         // ── Speech on approach ── while the player is near, the NPC talks on a cadence (repeats while you
         // linger). Priority: hints (cycle forever — the clues/codes) → unseen lore beats (once) → ambient.
         const near = Math.hypot(n.fx - sf.fx, n.fy - sf.fy) < 2.4;
+        if (near && !n.near) musicRef.current?.chime();   // soft chime the moment you enter an NPC's range
         if (near && n.bubbleLife <= 0 && (n.cool ?? 0) <= 0) {
           let said = false;
           if (n.hints && n.hints.length) { n.bubble = n.hints[(n.hintIdx ?? 0) % n.hints.length]; n.hintIdx = (n.hintIdx ?? 0) + 1; said = true; }
