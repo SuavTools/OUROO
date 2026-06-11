@@ -39,13 +39,11 @@ const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean)
   if (!def.owner) return false;   // official/public rooms — only moderators build or take
   return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
 };
+// The official rooms — only the curated, lore-bearing sectors. The Plaza is where you spawn; the Garden
+// and Club are the other open Surface sectors. (Filler rooms were retired to keep the flow clean; the
+// Deep/secret rooms get added behind portals + lore codes — see /LORE.md.)
 const ROOMS: RoomDef[] = [
   { slug: 'praca',   name: 'Plaza',     accent: '#00cfff', floor: '#161628', plan: 'salao' },
-  { slug: 'disco',   name: 'Disco',     accent: '#ff44aa', floor: '#1e1226', plan: 'octo' },
-  { slug: 'lounge',  name: 'Lounge',    accent: '#ffd23a', floor: '#1e1a12', plan: 'quadrado' },
-  { slug: 'telhado', name: 'Rooftop',   accent: '#1ED760', floor: '#121e18', plan: 'palco' },
-  { slug: 'cave',    name: 'Cellar',    accent: '#cc44ff', floor: '#181226', plan: 'cruz' },
-  { slug: 'atrio',   name: 'Atrium',    accent: '#ffffff', floor: '#191921', locked: true, plan: 'patio' },
   { slug: 'clube',   name: 'Club',      accent: '#1aa3d8', floor: '#2c4a5e', locked: true, plan: 'clube', day: true, veranda: true },
   { slug: 'jardim',  name: 'Garden',    accent: '#e8628f', floor: '#1d3a24', locked: true, plan: 'jardim', day: true },
 ];
@@ -141,15 +139,23 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
       lines: ['…', 'so quiet.', 'don’t go yet.'] },
   ],
   clube: [
-    { handle: 'DJ Nuno', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, lines: ['Let\'s dance! 🎶', 'Crank it up!', 'This one\'s for you!', 'Who\'s bringing the energy?!'] },
-    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, lines: ['Welcome to the Club!', 'Need a hand?', 'Have fun! ✦', 'The pool\'s that way 🏊'] },
-    { handle: 'Tó', skinId: 'nave-verde', gx: 12, gy: 24, lines: ['Morning! ☀️', 'Seen the stage yet?', 'Make yourself at home.'] },
-    { handle: 'Guide', skinId: 'diamond-cyan', gx: 17, gy: 28, roam: 2.5, lines: ['Come on in!', 'Follow the red carpet 🟥', 'Welcome to the Club!'] },
-    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, roam: 1.6, lines: ['Love this track! 💃', 'I can\'t stop dancing!', 'What a vibe!'] },
-    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['This is it! 🕺', 'The DJ\'s on fire!', 'Let\'s go!'] },
-    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, lines: ['The water\'s perfect 🌊', 'Going for a dip!', 'So hot today 😎'] },
-    { handle: 'Rui', skinId: 'diamond-azul', gx: 24, gy: 20, lines: ['What a view 😎', 'Total relax.', 'Just chilling.'] },
-    { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['What can I get you? 🍹', 'A fresh juice?', 'Packed house today!', 'Next round\'s on me 😉'] },
+    { handle: 'the DJ', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, id: 'dj',
+      beats: [
+        'You feel that? That’s SUAV — the carrier wave. The only thing holding the Loop together.',
+        'When the floor’s full, the signal’s strong, and OUROO forgets it’s dying. So dance. I mean it.',
+        'Some nights the bass spells something. A code, maybe. I never catch it sober. Stay till close.',
+      ],
+      lines: ['Crank it up! 🎶', 'This one’s for you!', 'Feel the signal!'] },
+    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, roam: 1.8, id: 'rita',
+      beats: [
+        'Welcome to the Club ✦ Loudest signal in OUROO. Down here the Curator can’t hear us over the bass.',
+        'They say if you dance long enough you start remembering things that aren’t yours. Fun, right?',
+      ],
+      lines: ['Have fun! ✦', 'Nothing costs anything down here.', 'Don’t log off yet.'] },
+    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, roam: 1.6, lines: ['Love this track! 💃', 'I can’t stop dancing!', 'What a vibe!'] },
+    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['This is it! 🕺', 'The signal’s peaking!', 'Let’s go!'] },
+    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, roam: 1.4, lines: ['The water’s perfect 🌊', 'So warm tonight 😎', 'Stay a while.'] },
+    { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['What can I get you? 🍹', 'Packed house — good. Means the Loop’s awake.', 'Next round’s on the house 😉'] },
   ],
   jardim: [
     { handle: 'Gardener', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, id: 'gardener',
@@ -325,7 +331,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
   const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); };
-  const [entered, setEntered] = useState(false);   // lobby gate — connect to the room only on deliberate entry
+  const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -855,23 +861,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <canvas ref={canvasRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} className="absolute inset-0 block w-full h-full" />
         </div>
       </div>
-
-      {!entered && (
-        <div className="absolute inset-0 z-[60] bg-black/92 backdrop-blur-sm flex items-center justify-center px-6">
-          <div className="w-full max-w-md text-center">
-            <p className="text-[11px] uppercase tracking-[0.4em] text-white/40 mb-2">Social Room · Beta</p>
-            <h2 className="font-helvetica font-black text-5xl text-white leading-none mb-4">PRAÇA<span style={{ color: roomMeta.accent }}>.</span></h2>
-            <p className="text-white/60 text-sm leading-relaxed mb-3">A real-time isometric space. Drop in with your skin, wander the tiles and see everyone live — chat in bubbles over your head and decorate the room.</p>
-            <ul className="text-white/45 text-[12px] leading-relaxed mb-6 space-y-0.5 inline-block text-left">
-              <li>· Tap a tile to walk — sit down on sofas and chairs</li>
-              <li>· <span className="text-brandYellow">✦ Decorate</span> — furniture, heights, bridges and tunnels</li>
-              <li>· <span className="text-white/70">☻ Character</span> — switch your skin or your icon</li>
-            </ul>
-            <button onClick={() => setEntered(true)} className="w-full bg-[#00cfff] text-black font-bold uppercase tracking-[0.2em] text-sm py-3.5 hover:bg-white transition-colors active:scale-[0.99]">Enter the Plaza ▸</button>
-            {onExit && <button onClick={onExit} className="mt-3 text-[11px] uppercase tracking-[0.2em] text-white/40 hover:text-white transition-colors">← Back</button>}
-          </div>
-        </div>
-      )}
 
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
