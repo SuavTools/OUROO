@@ -69,9 +69,12 @@ const SECRET_INTRO: Record<string, { title: string; body: string }> = {
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
-// `beats` = ordered lore lines delivered ONE AT A TIME as the player approaches (per-player memory in
-// localStorage); `lines` = ambient idle chatter. `id` keys the saved progress.
-type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; id?: string };
+// Three kinds of NPC speech, in priority order on approach:
+//   `hints`  → CYCLE forever (repeat) — the actionable clues + codes; weave the key into a line so a
+//              player who lingers/returns always catches it. Use for guide/clue NPCs (easy wins).
+//   `beats`  → ordered lore, delivered ONCE each (per-player memory in localStorage). Use for story.
+//   `lines`  → ambient idle chatter (random). `id` keys saved beat progress.
+type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; hints?: string[]; id?: string };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
   praca: [
     ['teleporter', 2, 8, 0],   // the portal to The Archive (tap it, speak the code)
@@ -159,23 +162,17 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
 const CURATED_NPCS: Record<string, NpcDef[]> = {
   praca: [
     { handle: 'WARDEN', skinId: 'diamond-cyan', gx: 5, gy: 4, roam: 1.5, id: 'warden',
-      beats: [
-        'You’re new signal. The Loop felt you arrive.',
-        'This is OUROO — what’s left after the people logged off. The machines kept it running.',
-        'Everything you see, someone like you gave it shape. Empty rooms forget themselves.',
-        'Mine crystals against the dark. Spend them making this place real again.',
-        'There are doors here that won’t open for me. Maybe they’ll open for you. Listen for the codes.',
-        'That glowing portal? It wants the name of this whole world — the word stamped on everything. Five letters. Say OUROO.',
-        'Stay a while. The Loop runs warmer when someone’s watching.',
+      hints: [
+        'You’re new signal — welcome. This is OUROO, what’s left after the people logged off. A world that forgets itself when no one’s watching.',
+        'See that glowing portal, bottom-left of the Plaza? Tap it and speak the name of this whole world. Five letters. OUROO.',
+        'Once you’re through, find the Archivist. He keeps the old words — he’ll point you deeper.',
       ],
       lines: ['Signal stable.', 'The Loop turns.', 'Welcome back.'] },
     { handle: 'GUIDE', skinId: 'star-dourada', gx: 7, gy: 6, roam: 1.2, id: 'guide',
-      beats: [
-        'New here? Quick version — tap a tile to walk. Tap someone’s name to say hi.',
-        'Up top: ✦ Decorate places furniture, ☻ is your character (skins + icons).',
-        'Crystals are the currency. Earn them in the Arcade — the OUROO game — and by finding hidden things.',
-        'Spend them furnishing rooms, or make your OWN: ⤧ Rooms → Create. It’s yours to build.',
-        'That glowing portal leads somewhere hidden. The codes hide in what people say — so talk to everyone.',
+      hints: [
+        'Tap a tile to walk, tap a name to say hi. ✦ Decorate places furniture; ☻ is your character.',
+        'Crystals are the currency — earn them in the Arcade, or by finding hidden things. Make your OWN room: ⤧ Rooms → Create.',
+        'That portal bottom-left? Tap it and speak OUROO. Then talk to the Archivist — the codes always hide in what people say.',
       ],
       lines: ['Need a hand?', 'Tap to walk 🛸', 'Have fun out there.'] },
     { handle: 'a stray', skinId: 'star-cadente', gx: 8, gy: 7, roam: 2, id: 'stray',
@@ -224,22 +221,18 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
   ],
   archive: [
     { handle: 'the Archivist', skinId: 'diamond-branco', gx: 5, gy: 4, roam: 1.5, id: 'archivist',
-      beats: [
-        'You made it. Almost no one does. Welcome to the Archive.',
-        'This is where the Logged-Off left their last words. The Curator keeps the lights low in here.',
-        'They didn’t say goodbye. One day the logins just stopped. We’re still waiting. The machines are patient.',
-        'There’s a door here too — the Foundry, where crystals are made. Its lock is the word for what you ARE to OUROO. You’re SIGNAL.',
-        'Keep descending. There are deeper doors. The Terminal is real — I’ve seen its glow.',
+      hints: [
+        'You made it — almost no one does. The Logged-Off left their last words on these shelves. Read them, if you can bear it.',
+        'The SIGNAL still runs through these walls — but the server’s empty now. Strange word to keep saying. SIGNAL. There’s a door downstairs that likes it.',
       ],
-      lines: ['…still here.', 'Read, if you like.', 'They’ll come back. Maybe.'] },
+      lines: ['…still here.', 'They’ll come back. Maybe.'] },
   ],
   foundry: [
     { handle: 'the Smith', skinId: 'nave-laranja', gx: 5, gy: 4, roam: 1.5, id: 'smith',
-      beats: [
-        'The Foundry. This is where your presence becomes crystal. Win in the Arcade against the dark, and the dark gives a little back — minted right here.',
-        'That’s the whole trick of OUROO: attention is the only real resource. You, watching, is what keeps the lights on.',
-        'Spend what you mine. Build. The more shape this world has, the slower it forgets itself.',
-        'One door left, deeper than this — the Terminal. OURO’s core. It isn’t open yet. Keep coming back.',
+      hints: [
+        'The Foundry. Your presence becomes crystal here — win against the dark in the Arcade, and the dark gives a little back.',
+        'Attention is the only real resource in OUROO. You, watching, keeps the lights on. So keep watching.',
+        'One door left, deeper than this — the Terminal, OURO’s core. It isn’t open yet. Keep coming back.',
       ],
       lines: ['Mind the heat.', 'Signal in, crystal out.', 'Keep it turning.'] },
   ],
@@ -317,7 +310,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; nid?: string; near?: boolean; cool?: number })[]>([]);   // curated NPCs (lore beats + chatter + optional roaming)
+  const npcsRef = useRef<(Avatar & { lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number })[]>([]);   // curated NPCs (hints + lore beats + chatter + roaming)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -534,7 +527,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     matRef.current = planMaterialMask(plan);
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' }));
-    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, nid: n.id ?? n.handle, near: false, cool: 0 }));
+    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -739,18 +732,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         } else n.af += 0.5;
         if (n.bubbleLife > 0) n.bubbleLife--;
         if (n.cool && n.cool > 0) n.cool--;
-        // ── Lore beats on approach ── when the player steps within range, deliver the next unseen beat
-        // (per-player memory in localStorage); once the beats run out, drop ambient flavour instead.
+        // ── Speech on approach ── while the player is near, the NPC talks on a cadence (repeats while you
+        // linger). Priority: hints (cycle forever — the clues/codes) → unseen lore beats (once) → ambient.
         const near = Math.hypot(n.fx - sf.fx, n.fy - sf.fy) < 2.4;
-        if (near && !n.near && n.bubbleLife <= 0 && (n.cool ?? 0) <= 0) {
+        if (near && n.bubbleLife <= 0 && (n.cool ?? 0) <= 0) {
           let said = false;
-          if (n.beats && n.beats.length) {
+          if (n.hints && n.hints.length) { n.bubble = n.hints[(n.hintIdx ?? 0) % n.hints.length]; n.hintIdx = (n.hintIdx ?? 0) + 1; said = true; }
+          else if (n.beats && n.beats.length) {
             const k = `ouroo_lore_${roomMeta.slug}_${n.nid ?? n.handle}`;
             let p = 0; try { p = Number(localStorage.getItem(k) || 0); } catch { /* ignore */ }
             if (p < n.beats.length) { n.bubble = n.beats[p]; try { localStorage.setItem(k, String(p + 1)); } catch { /* ignore */ } said = true; }
           }
           if (!said && n.lines && n.lines.length) { n.bubble = n.lines[Math.floor(Math.random() * n.lines.length)]; said = true; }
-          if (said) { n.bubbleLife = 280; n.cool = 260; }
+          if (said) { n.bubbleLife = 240; n.cool = 300; }
         }
         n.near = near;
       }
