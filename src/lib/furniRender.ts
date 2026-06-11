@@ -1317,6 +1317,301 @@ const drawMailbox = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
   });
 };
 
+// ═══════════ STUDIO ═══════════
+const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const sh = base;
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.1, v1: 0.4, z0: 0, z1: 0.7, t: shade(sh, 1.1), r: shade(sh, 0.85), l: shade(sh, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) { const c = P(0, 0.4, 0.35); ctx.fillStyle = '#efe9dd'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 16, 22, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = hexA(accent, 0.8); ctx.lineWidth = 2; ctx.stroke(); }
+    for (const u of [-0.18, 0.18]) { const c = P(u, 0.1, 0.7); ctx.fillStyle = shade(sh, 1.2); ctx.beginPath(); ctx.ellipse(c[0], c[1] - 4, 8, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#efe9dd'; ctx.beginPath(); ctx.ellipse(c[0], c[1] - 7, 8, 3.5, 0, 0, Math.PI * 2); ctx.fill(); }
+    const sn = P(0.4, 0.3, 0.45); ctx.fillStyle = shade(sh, 1.1); ctx.beginPath(); ctx.ellipse(sn[0], sn[1], 9, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#e8e8ee'; ctx.beginPath(); ctx.ellipse(sn[0], sn[1] - 4, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
+    for (const [u, z] of [[-0.5, 1.1], [0.5, 1.0]] as [number, number][]) { const cy2 = P(u, -0.1, z), base2 = P(u, -0.1, 0); ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(base2[0], base2[1]); ctx.lineTo(cy2[0], cy2[1]); ctx.stroke(); ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.ellipse(cy2[0], cy2[1], 12, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+const drawAmpStack = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.15), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.3, v1: 0.3, z0: 0, z1: 1.3, t: cT, r: cR, l: cL }, { u0: -0.4, u1: 0.4, v0: -0.3, v1: 0.3, z0: 1.3, z1: 2.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    for (const [z0, z1] of [[0.15, 1.1], [1.45, 2.3]] as [number, number][]) { poly(ctx, [P(-0.34, 0.3, z1), P(0.34, 0.3, z1), P(0.34, 0.3, z0), P(-0.34, 0.3, z0)], '#1a140e'); ctx.fillStyle = hexA('#3a2a1a', 0.5); for (let gx = 0; gx < 5; gx++) for (let gz = 0; gz < 4; gz++) { const c = P(-0.28 + gx * 0.14, 0.3, z0 + 0.12 + gz * 0.22); ctx.beginPath(); ctx.arc(c[0], c[1], 1, 0, Math.PI * 2); ctx.fill(); } }
+    const c = P(0, 0.3, 2.4); ctx.fillStyle = '#caa24a'; ctx.font = '900 7px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('AMP', c[0], c[1]);
+  });
+};
+const drawMixer = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.85, u1: 0.85, v0: -0.25, v1: 0.3, z0: 0, z1: 0.55, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.55; poly(ctx, [P(-0.85, -0.25, z), P(0.85, -0.25, z), P(0.85, 0.3, z), P(-0.85, 0.3, z)], shade(m, 1.35));
+    for (let i = 0; i < 10; i++) { const u = -0.7 + i * 0.155, a = P(u, 0.18, z), b = P(u, -0.05, z); ctx.strokeStyle = hexA('#000', 0.4); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); const kn = P(u, 0.05 + ((i * 3) % 4) * 0.05, z); ctx.fillStyle = hexA(accent, 0.8); ctx.fillRect(kn[0] - 2, kn[1] - 3, 4, 5); const k = P(u, -0.15, z); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(k[0], k[1], 2.5, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+const drawMicStand = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [{ u0: -0.18, u1: 0.18, v0: -0.18, v1: 0.18, z0: 0, z1: 0.1, t: shade(m, 1.0), r: shade(m, 0.8), l: shade(m, 0.5) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const base2 = P(0, 0, 0.1), top = P(0, 0, 2.0), boom = P(0, -0.4, 1.95);
+    ctx.strokeStyle = shade(m, 1.1); ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(base2[0], base2[1]); ctx.lineTo(top[0], top[1]); ctx.lineTo(boom[0], boom[1]); ctx.stroke();
+    ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.ellipse(boom[0], boom[1] + 4, 4, 7, 0.3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#3a3a44'; ctx.beginPath(); ctx.ellipse(boom[0] - 1, boom[1] + 1, 3, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = shade(m, 0.9); ctx.lineWidth = 2; for (const [u, v] of [[-0.16, -0.08], [0.16, -0.08], [0, 0.16]] as [number, number][]) { const f = P(u, v, 0); ctx.beginPath(); ctx.moveTo(base2[0], base2[1]); ctx.lineTo(f[0], f[1]); ctx.stroke(); }
+  });
+};
+const drawSynth = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [
+    { u0: -0.6, u1: -0.5, v0: -0.1, v1: 0.1, z0: 0, z1: 0.5, t: '#2a2e36', r: '#22252c', l: '#15171b' },
+    { u0: 0.5, u1: 0.6, v0: -0.1, v1: 0.1, z0: 0, z1: 0.5, t: '#2a2e36', r: '#22252c', l: '#15171b' },
+    { u0: -0.7, u1: 0.7, v0: -0.16, v1: 0.2, z0: 0.5, z1: 0.62, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.62; poly(ctx, [P(-0.66, -0.14, z), P(0.66, -0.14, z), P(0.66, 0.0, z), P(-0.66, 0.0, z)], shade(m, 1.35));
+    for (let i = 0; i < 8; i++) { const u = -0.55 + i * 0.155, k = P(u, -0.07, z); ctx.fillStyle = hexA(accent, 0.8); ctx.beginPath(); ctx.arc(k[0], k[1], 1.8, 0, Math.PI * 2); ctx.fill(); }
+    poly(ctx, [P(-0.66, 0.0, z), P(0.66, 0.0, z), P(0.66, 0.18, z), P(-0.66, 0.18, z)], '#f0ede6');
+    ctx.strokeStyle = '#999'; ctx.lineWidth = 0.6; for (let i = 1; i < 16; i++) { const u = -0.66 + i * 0.0825, a = P(u, 0.0, z), b = P(u, 0.18, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    ctx.fillStyle = '#1a1a1f'; for (let i = 0; i < 15; i++) { if (i % 7 === 2 || i % 7 === 6) continue; const u = -0.62 + i * 0.0825, c = P(u, 0.05, z); ctx.fillRect(c[0] - 1.5, c[1] - 4, 3, 6); }
+  });
+};
+const drawVinyl = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.45, u1: 0.45, v0: -0.3, v1: 0.3, z0: 0, z1: 0.4, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.4; poly(ctx, [P(-0.45, -0.3, z), P(0.45, -0.3, z), P(0.45, 0.3, z), P(-0.45, 0.3, z)], shade(m, 1.3));
+    const c = P(-0.08, 0.0, z); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 15, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = hexA('#555', 0.8); ctx.lineWidth = 0.6; for (const rr of [12, 9, 6]) { ctx.beginPath(); ctx.ellipse(c[0], c[1], rr, rr * 0.6, 0, 0, Math.PI * 2); ctx.stroke(); } ctx.fillStyle = accent; ctx.beginPath(); ctx.ellipse(c[0], c[1], 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    const piv = P(0.32, -0.18, z); ctx.strokeStyle = '#cfd6e2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(piv[0], piv[1]); ctx.lineTo(c[0] + 6, c[1]); ctx.stroke(); ctx.fillStyle = '#888f9e'; ctx.beginPath(); ctx.arc(piv[0], piv[1], 3, 0, Math.PI * 2); ctx.fill();
+  });
+};
+
+// ═══════════ DINER ═══════════
+const drawDinerBooth = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const pad = base, cT = shade(pad, 1.25), cR = shade(pad, 0.95), cL = shade(pad, 0.6);
+  const parts: IsoPart[] = [{ u0: -0.85, u1: 0.85, v0: -0.1, v1: 0.4, z0: 0, z1: 0.5, t: cT, r: cR, l: cL }, { u0: -0.85, u1: 0.85, v0: -0.3, v1: -0.1, z0: 0, z1: 1.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) { ctx.strokeStyle = hexA('#000', 0.2); ctx.lineWidth = 1; for (let i = 0; i < 4; i++) { const z = 0.6 + i * 0.22, a = P(-0.8, -0.1, z), b = P(0.8, -0.1, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); } }
+    poly(ctx, [P(-0.8, -0.05, 0.5), P(0.8, -0.05, 0.5), P(0.8, 0.35, 0.5), P(-0.8, 0.35, 0.5)], hexA(shade(pad, 1.4), 0.5));
+  });
+};
+const drawSodaFount = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.15), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.35, u1: 0.35, v0: -0.25, v1: 0.25, z0: 0, z1: 1.4, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    for (const [u, c] of [[-0.2, '#b3242e'], [0, '#caa24a'], [0.2, '#3a7bd0']] as [number, string][]) poly(ctx, [P(u - 0.09, 0.25, 1.25), P(u + 0.09, 0.25, 1.25), P(u + 0.09, 0.25, 0.7), P(u - 0.09, 0.25, 0.7)], c);
+    for (const u of [-0.2, 0, 0.2]) { const n = P(u, 0.25, 0.62); ctx.fillStyle = '#888f9e'; ctx.fillRect(n[0] - 1.5, n[1] - 4, 3, 6); }
+    poly(ctx, [P(-0.32, 0.25, 0.58), P(0.32, 0.25, 0.58), P(0.32, 0.25, 0.5), P(-0.32, 0.25, 0.5)], '#3a3a44');
+  });
+};
+const drawPopcorn = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [...legs([[-0.3, -0.2], [0.3, -0.2], [-0.3, 0.2], [0.3, 0.2]], 0.4).map(p => ({ ...p, t: '#caa24a', r: shade('#caa24a', 0.8), l: shade('#caa24a', 0.5) })), { u0: -0.36, u1: 0.36, v0: -0.28, v1: 0.28, z0: 0.4, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) { ctx.fillStyle = '#fff'; for (let i = 0; i < 4; i++) { const a = P(-0.3 + i * 0.18, 0.28, 0.5); ctx.fillRect(a[0] - 3, a[1] - 8, 6, 16); } }
+    poly(ctx, [P(-0.34, 0.28, 1.5), P(0.34, 0.28, 1.5), P(0.34, 0.28, 0.72), P(-0.34, 0.28, 0.72)], 'rgba(200,220,235,0.16)');
+    ctx.fillStyle = '#f4e3a0'; for (let i = 0; i < 22; i++) { const c = P(-0.3 + ((i * 7) % 7) * 0.09, 0.1, 0.8 + ((i * 5) % 4) * 0.06); ctx.beginPath(); ctx.arc(c[0], c[1], 3, 0, Math.PI * 2); ctx.fill(); }
+    poly(ctx, [P(-0.4, 0.0, 1.7), P(0.0, -0.34, 1.7), P(0.4, 0.0, 1.7), P(0.0, 0.34, 1.7)], shade(m, 1.1));
+  });
+};
+const drawIcecream = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.7, u1: 0.7, v0: -0.3, v1: 0.3, z0: 0, z1: 0.75, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.75; poly(ctx, [P(-0.66, -0.26, z), P(0.66, -0.26, z), P(0.66, 0.26, z), P(-0.66, 0.26, z)], 'rgba(180,215,235,0.45)');
+    const cols = ['#f4b8d0', '#a9713f', '#f3ead6', '#7fe39a']; for (let i = 0; i < 4; i++) { const c = P(-0.45 + i * 0.3, 0.0, z - 0.04); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.ellipse(c[0], c[1], 9, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; const a = P(0, -0.26, z), b = P(0, 0.26, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    if (faceVisible(0, 1, dir)) { const s = P(0, 0.3, 0.5); ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.moveTo(s[0], s[1] + 6); ctx.lineTo(s[0] - 5, s[1] - 4); ctx.lineTo(s[0] + 5, s[1] - 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#f4b8d0'; ctx.beginPath(); ctx.arc(s[0], s[1] - 6, 5, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+const drawRegister = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.2, v1: 0.25, z0: 0, z1: 0.4, t: cT, r: cR, l: cL }, { u0: -0.24, u1: 0.02, v0: -0.18, v1: 0.05, z0: 0.4, z1: 0.78, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const scr = P(-0.11, 0.05, 0.8); ctx.fillStyle = '#10202a'; ctx.fillRect(scr[0] - 7, scr[1] - 7, 14, 8); ctx.fillStyle = hexA(accent, 0.7); ctx.fillRect(scr[0] - 5, scr[1] - 6, 10, 5);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { const k = P(-0.1 + c * 0.1, 0.1 + r * 0.05, 0.4); ctx.fillStyle = hexA('#000', 0.4); ctx.fillRect(k[0] - 2, k[1] - 1.5, 4, 3); }
+  });
+};
+const drawShakeBar = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.2, v1: 0.2, z0: 0, z1: 0.3, t: cT, r: cR, l: cL }, { u0: -0.28, u1: -0.18, v0: -0.18, v1: -0.08, z0: 0.3, z1: 1.4, t: cT, r: cR, l: cL }, { u0: -0.28, u1: 0.28, v0: -0.18, v1: -0.08, z0: 1.3, z1: 1.4, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (const u of [-0.1, 0.1]) { const top = P(u, -0.13, 1.3), bot = P(u, -0.13, 0.7); ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(bot[0], bot[1]); ctx.stroke(); const cup = P(u, 0.0, 0.3); ctx.fillStyle = '#e8e8ee'; ctx.beginPath(); ctx.moveTo(cup[0] - 4, cup[1]); ctx.lineTo(cup[0] + 4, cup[1]); ctx.lineTo(cup[0] + 3, cup[1] - 12); ctx.lineTo(cup[0] - 3, cup[1] - 12); ctx.closePath(); ctx.fill(); ctx.fillStyle = hexA('#f4b8d0', 0.9); ctx.fillRect(cup[0] - 3, cup[1] - 11, 6, 3); }
+  });
+};
+
+// ═══════════ BATHROOM ═══════════
+const drawToilet = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const en = base, cT = shade(en, 1.12), cR = shade(en, 0.9), cL = shade(en, 0.74);
+  const parts: IsoPart[] = [{ u0: -0.22, u1: 0.22, v0: -0.1, v1: 0.3, z0: 0, z1: 0.55, t: cT, r: cR, l: cL }, { u0: -0.28, u1: 0.28, v0: -0.32, v1: -0.12, z0: 0, z1: 1.0, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const c = P(0, 0.12, 0.55); ctx.fillStyle = cT; ctx.beginPath(); ctx.ellipse(c[0], c[1], 13, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(en, 0.7); ctx.beginPath(); ctx.ellipse(c[0], c[1], 8, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(150,200,220,0.5)'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    const lid = P(0, -0.22, 1.0); ctx.fillStyle = shade(en, 1.2); ctx.beginPath(); ctx.ellipse(lid[0], lid[1], 14, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#cfd6e2'; ctx.beginPath(); ctx.arc(lid[0], lid[1], 2.5, 0, Math.PI * 2); ctx.fill();
+  });
+};
+const drawVanity = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.56), top = '#d8dce4';
+  const parts: IsoPart[] = [{ u0: -0.6, u1: 0.6, v0: -0.2, v1: 0.28, z0: 0, z1: 0.95, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.95; poly(ctx, [P(-0.64, -0.26, z), P(0.64, -0.26, z), P(0.64, 0.34, z), P(-0.64, 0.34, z)], shade(top, 1.2)); poly(ctx, [P(-0.64, 0.34, z), P(0.64, 0.34, z), P(0.64, 0.34, z - 0.08), P(-0.64, 0.34, z - 0.08)], shade(top, 0.8));
+    const s = P(0, 0.05, z); ctx.fillStyle = '#9aa0aa'; ctx.beginPath(); ctx.ellipse(s[0], s[1], 12, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#dfe6ee'; ctx.beginPath(); ctx.ellipse(s[0], s[1], 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+    const tp = P(0, -0.1, z); ctx.strokeStyle = '#cfd6e2'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(tp[0], tp[1]); ctx.lineTo(tp[0], tp[1] - 9); ctx.lineTo(tp[0] + 5, tp[1] - 9); ctx.stroke();
+    if (faceVisible(0, 1, dir)) for (const u of [-0.3, 0.3]) { poly(ctx, [P(u - 0.24, 0.28, 0.85), P(u + 0.24, 0.28, 0.85), P(u + 0.24, 0.28, 0.12), P(u - 0.24, 0.28, 0.12)], undefined, hexA('#000', 0.2), 1); const h = P(u + (u < 0 ? 0.18 : -0.18), 0.28, 0.5); ctx.fillStyle = '#cfd6e2'; ctx.fillRect(h[0] - 1, h[1] - 4, 2.5, 8); }
+  });
+};
+const drawShower = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const tray = base;
+  const parts: IsoPart[] = [{ u0: -0.42, u1: 0.42, v0: -0.42, v1: 0.42, z0: 0, z1: 0.12, t: shade(tray, 1.1), r: shade(tray, 0.9), l: shade(tray, 0.7) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.42, -0.42, 2.4), P(-0.42, 0.42, 2.4), P(-0.42, 0.42, 0.12), P(-0.42, -0.42, 0.12)], 'rgba(150,165,180,0.55)');
+    poly(ctx, [P(-0.42, -0.42, 2.4), P(0.42, -0.42, 2.4), P(0.42, -0.42, 0.12), P(-0.42, -0.42, 0.12)], 'rgba(170,185,200,0.5)');
+    poly(ctx, [P(0.42, -0.42, 2.2), P(0.42, 0.42, 2.2), P(0.42, 0.42, 0.12), P(0.42, -0.42, 0.12)], 'rgba(200,225,240,0.16)');
+    poly(ctx, [P(-0.42, 0.42, 2.2), P(0.42, 0.42, 2.2), P(0.42, 0.42, 0.12), P(-0.42, 0.42, 0.12)], 'rgba(200,225,240,0.16)');
+    const arm = P(-0.36, -0.36, 2.1), head = P(-0.18, -0.18, 2.0); ctx.strokeStyle = '#cfd6e2'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(arm[0], arm[1]); ctx.lineTo(head[0], head[1]); ctx.stroke(); ctx.fillStyle = '#cfd6e2'; ctx.beginPath(); ctx.ellipse(head[0], head[1] + 2, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(180,220,240,0.4)'; ctx.lineWidth = 1; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(head[0] - 3 + i * 2, head[1] + 4); ctx.lineTo(head[0] - 3 + i * 2, head[1] + 18); ctx.stroke(); }
+  });
+};
+const drawTowelRail = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [{ u0: -0.3, u1: -0.24, v0: -0.05, v1: 0.05, z0: 0, z1: 1.4, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }, { u0: 0.24, u1: 0.3, v0: -0.05, v1: 0.05, z0: 0, z1: 1.4, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.strokeStyle = shade(m, 1.1); ctx.lineWidth = 2.5; ctx.lineCap = 'round'; for (const z of [0.3, 0.6, 0.9, 1.2]) { const a = P(-0.27, 0, z), b = P(0.27, 0, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    if (faceVisible(0, 1, dir)) poly(ctx, [P(-0.18, 0.06, 1.2), P(0.18, 0.06, 1.2), P(0.18, 0.06, 0.55), P(-0.18, 0.06, 0.55)], '#7fbfe0');
+  });
+};
+const drawWasher = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.12), cR = shade(m, 0.92), cL = shade(m, 0.62);
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.3, v1: 0.3, z0: 0, z1: 1.2, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    poly(ctx, [P(-0.36, 0.3, 1.1), P(0.36, 0.3, 1.1), P(0.36, 0.3, 0.92), P(-0.36, 0.3, 0.92)], shade(m, 0.85)); const dial = P(0.24, 0.3, 1.0); ctx.fillStyle = '#2a2e36'; ctx.beginPath(); ctx.arc(dial[0], dial[1], 4, 0, Math.PI * 2); ctx.fill();
+    const c = P(0, 0.3, 0.5); ctx.fillStyle = '#2a2e36'; ctx.beginPath(); ctx.arc(c[0], c[1], 13, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(c[0], c[1], 10, 0, Math.PI * 2); ctx.clip(); ctx.fillStyle = 'rgba(120,190,220,0.6)'; ctx.fillRect(c[0] - 10, c[1] - 10, 20, 20); ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2; for (let i = 0; i < 3; i++) { const a = t * 0.15 + i * 2.1; ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.lineTo(c[0] + Math.cos(a) * 10, c[1] + Math.sin(a) * 10); ctx.stroke(); } ctx.restore();
+    ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c[0], c[1], 13, 0, Math.PI * 2); ctx.stroke();
+  });
+};
+const drawMirror = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [
+    { u0: -0.22, u1: -0.14, v0: 0.0, v1: 0.3, z0: 0, z1: 0.1, t: shade(m, 1.0), r: shade(m, 0.8), l: shade(m, 0.5) },
+    { u0: 0.14, u1: 0.22, v0: 0.0, v1: 0.3, z0: 0, z1: 0.1, t: shade(m, 1.0), r: shade(m, 0.8), l: shade(m, 0.5) },
+    { u0: -0.26, u1: -0.18, v0: 0.08, v1: 0.14, z0: 0, z1: 2.2, t: shade(m, 1.15), r: shade(m, 0.9), l: shade(m, 0.6) },
+    { u0: 0.18, u1: 0.26, v0: 0.08, v1: 0.14, z0: 0, z1: 2.2, t: shade(m, 1.15), r: shade(m, 0.9), l: shade(m, 0.6) },
+    { u0: -0.26, u1: 0.26, v0: 0.08, v1: 0.14, z0: 2.1, z1: 2.2, t: shade(m, 1.15), r: shade(m, 0.9), l: shade(m, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.2, 0.12, 2.05), P(0.2, 0.12, 2.05), P(0.2, 0.12, 0.15), P(-0.2, 0.12, 0.15)], 'rgba(150,180,200,0.4)'); poly(ctx, [P(-0.14, 0.12, 1.8), P(-0.04, 0.12, 1.8), P(0.06, 0.12, 0.4), P(-0.04, 0.12, 0.4)], 'rgba(255,255,255,0.18)'); }
+    else poly(ctx, [P(-0.2, 0.12, 2.05), P(0.2, 0.12, 2.05), P(0.2, 0.12, 0.15), P(-0.2, 0.12, 0.15)], shade(m, 0.7));
+  });
+};
+
+// ═══════════ OFFICE ═══════════
+const drawOfficeChair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cu = shade(m, 1.2), cuR = shade(m, 0.92), cuL = shade(m, 0.6), met = '#3a3e46';
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.28, v1: 0.3, z0: 0.5, z1: 0.66, t: cu, r: cuR, l: cuL }, { u0: -0.28, u1: 0.28, v0: -0.34, v1: -0.24, z0: 0.5, z1: 1.5, t: cu, r: cuR, l: cuL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const top = P(0, 0.0, 0.5), bot = P(0, 0.0, 0.12); ctx.strokeStyle = met; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(bot[0], bot[1]); ctx.stroke();
+    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, w = P(Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0.05); ctx.strokeStyle = met; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bot[0], bot[1]); ctx.lineTo(w[0], w[1]); ctx.stroke(); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(w[0], w[1] + 2, 3, 0, Math.PI * 2); ctx.fill(); }
+    for (const u of [-0.32, 0.32]) { const a = P(u, 0.0, 0.66), b = P(u, 0.0, 0.85); ctx.strokeStyle = met; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+  });
+};
+const drawFileCab = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.16), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.32, u1: 0.32, v0: -0.3, v1: 0.3, z0: 0, z1: 2.0, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    for (let r = 0; r < 4; r++) { const z0 = 0.1 + r * 0.46, z1 = z0 + 0.4; poly(ctx, [P(-0.3, 0.3, z1), P(0.3, 0.3, z1), P(0.3, 0.3, z0), P(-0.3, 0.3, z0)], undefined, hexA('#000', 0.25), 1); const lab = P(0, 0.3, z0 + 0.28); ctx.fillStyle = hexA('#fff', 0.5); ctx.fillRect(lab[0] - 8, lab[1] - 2, 16, 4); const h = P(0, 0.3, z0 + 0.1); ctx.fillStyle = '#cfd6e2'; ctx.fillRect(h[0] - 6, h[1] - 1.5, 12, 3); }
+  });
+};
+const drawCopier = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.16), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.32, v1: 0.32, z0: 0, z1: 0.9, t: cT, r: cR, l: cL }, { u0: -0.4, u1: 0.4, v0: -0.32, v1: 0.32, z0: 0.9, z1: 1.15, t: shade(m, 1.0), r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.3, 0.32, 0.5), P(0.3, 0.32, 0.5), P(0.3, 0.32, 0.35), P(-0.3, 0.32, 0.35)], shade(m, 0.7)); const cp = P(0.2, 0.32, 0.78); ctx.fillStyle = '#10202a'; ctx.fillRect(cp[0] - 7, cp[1] - 5, 14, 8); ctx.fillStyle = hexA(accent, 0.7); ctx.fillRect(cp[0] - 5, cp[1] - 4, 10, 5); const pp = P(-0.1, 0.32, 0.55); ctx.fillStyle = '#fff'; ctx.fillRect(pp[0] - 6, pp[1] - 2, 12, 3); }
+    const sl = P(0, 0.0, 0.9); ctx.save(); ctx.globalAlpha = 0.3; ctx.fillStyle = hexA(accent, 0.6); ctx.fillRect(sl[0] - 15, sl[1] - 1, 30, 2); ctx.restore();
+  });
+};
+const drawWaterCooler = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.15), cR = shade(m, 0.9), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.22, u1: 0.22, v0: -0.18, v1: 0.22, z0: 0, z1: 1.0, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const c = P(0, 0.0, 1.0); ctx.fillStyle = 'rgba(120,190,220,0.6)'; ctx.beginPath(); ctx.moveTo(c[0] - 11, c[1]); ctx.quadraticCurveTo(c[0] - 13, c[1] - 22, c[0], c[1] - 30); ctx.quadraticCurveTo(c[0] + 13, c[1] - 22, c[0] + 11, c[1]); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(c[0] - 7, c[1] - 26, 4, 22);
+    if (faceVisible(0, 1, dir)) for (const [u, col] of [[-0.08, '#3a7bd0'], [0.08, '#b3242e']] as [number, string][]) { const tp = P(u, 0.22, 0.55); ctx.fillStyle = col; ctx.fillRect(tp[0] - 2, tp[1] - 4, 4, 4); ctx.fillStyle = '#888f9e'; ctx.fillRect(tp[0] - 1, tp[1], 2, 4); }
+  });
+};
+const drawWhiteboard = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; const m = '#3a3e46';
+  const parts: IsoPart[] = [{ u0: -0.7, u1: -0.6, v0: 0.0, v1: 0.1, z0: 0, z1: 1.0, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }, { u0: 0.6, u1: 0.7, v0: 0.0, v1: 0.1, z0: 0, z1: 1.0, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.8, 0.08, 2.0), P(0.8, 0.08, 2.0), P(0.8, 0.08, 1.0), P(-0.8, 0.08, 1.0)], faceVisible(0, 1, dir) ? '#f4f4f0' : '#cfd2d8');
+    if (faceVisible(0, 1, dir)) { ctx.strokeStyle = hexA('#b3242e', 0.8); ctx.lineWidth = 2; const a = P(-0.5, 0.08, 1.7); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(a[0] + 20, a[1] - 8); ctx.lineTo(a[0] + 40, a[1] + 4); ctx.stroke(); ctx.strokeStyle = hexA('#3a7bd0', 0.8); const b = P(-0.4, 0.08, 1.4); ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] + 50, b[1]); ctx.stroke(); const tr = P(0, 0.1, 1.0); ctx.fillStyle = m; ctx.fillRect(tr[0] - 30, tr[1] - 2, 60, 3); }
+  });
+};
+const drawServerRack = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.4), cR = shade(m, 1.0), cL = shade(m, 0.6);
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.26, v1: 0.26, z0: 0, z1: 2.6, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    poly(ctx, [P(-0.27, 0.26, 2.5), P(0.27, 0.26, 2.5), P(0.27, 0.26, 0.1), P(-0.27, 0.26, 0.1)], '#0e0f14');
+    for (let r = 0; r < 10; r++) { const z = 0.25 + r * 0.22; poly(ctx, [P(-0.24, 0.26, z + 0.16), P(0.24, 0.26, z + 0.16), P(0.24, 0.26, z), P(-0.24, 0.26, z)], '#22252c'); for (let i = 0; i < 5; i++) { const l = P(-0.18 + i * 0.09, 0.26, z + 0.08), on = ((r * 7 + i * 3 + (i % 2)) % 3) === 0; ctx.fillStyle = on ? (i % 2 ? '#1ED760' : accent) : '#2a3a2a'; ctx.beginPath(); ctx.arc(l[0], l[1], 1.3, 0, Math.PI * 2); ctx.fill(); } }
+  });
+};
+
+// ═══════════ ARCADE / GAMES ═══════════
+const drawPoolTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.2), cR = shade(wood, 0.9), cL = shade(wood, 0.56);
+  const parts: IsoPart[] = [...legs([[-0.75, -0.4], [0.75, -0.4], [-0.75, 0.4], [0.75, 0.4]], 0.5).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.92, u1: 0.92, v0: -0.55, v1: 0.55, z0: 0.5, z1: 0.66, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.66; poly(ctx, [P(-0.82, -0.46, z), P(0.82, -0.46, z), P(0.82, 0.46, z), P(-0.82, 0.46, z)], '#1f7a44');
+    ctx.fillStyle = '#0a0a0a'; for (const [u, v] of [[-0.82, -0.46], [0, -0.46], [0.82, -0.46], [-0.82, 0.46], [0, 0.46], [0.82, 0.46]] as [number, number][]) { const c = P(u, v, z); ctx.beginPath(); ctx.arc(c[0], c[1], 4, 0, Math.PI * 2); ctx.fill(); }
+    const cols = ['#caa24a', '#b3242e', '#3a7bd0', '#2e7d4a', '#7a4ba0', '#e07b1f', '#fff', '#1a1a1f']; for (let i = 0; i < 8; i++) { const c = P(0.2 + (i % 3) * 0.1, -0.2 + Math.floor(i / 3) * 0.14, z); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.arc(c[0], c[1], 3, 0, Math.PI * 2); ctx.fill(); }
+    const cb = P(-0.4, 0.1, z); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cb[0], cb[1], 3, 0, Math.PI * 2); ctx.fill(); const cue1 = P(-0.7, 0.3, z), cue2 = P(-0.3, 0.05, z); ctx.strokeStyle = '#caa24a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cue1[0], cue1[1]); ctx.lineTo(cue2[0], cue2[1]); ctx.stroke();
+  });
+};
+const drawFoosball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.2), cR = shade(wood, 0.9), cL = shade(wood, 0.56);
+  const parts: IsoPart[] = [...legs([[-0.7, -0.3], [0.7, -0.3], [-0.7, 0.3], [0.7, 0.3]], 0.6).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.85, u1: 0.85, v0: -0.4, v1: 0.4, z0: 0.6, z1: 0.74, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.74; poly(ctx, [P(-0.78, -0.34, z), P(0.78, -0.34, z), P(0.78, 0.34, z), P(-0.78, 0.34, z)], '#2e7d44');
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; const a = P(0, -0.34, z), b = P(0, 0.34, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    for (let i = 0; i < 4; i++) { const u = -0.55 + i * 0.37, r1 = P(u, -0.45, z + 0.08), r2 = P(u, 0.45, z + 0.08); ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r1[0], r1[1]); ctx.lineTo(r2[0], r2[1]); ctx.stroke(); const col = i < 2 ? '#b3242e' : '#3a7bd0'; for (const v of [-0.15, 0.15]) { const p = P(u, v, z + 0.02); ctx.fillStyle = col; ctx.fillRect(p[0] - 2, p[1] - 7, 4, 7); } }
+  });
+};
+const drawClawMachine = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.3, v1: 0.3, z0: 0, z1: 0.9, t: cT, r: cR, l: cL }, { u0: -0.4, u1: 0.4, v0: -0.3, v1: 0.3, z0: 2.4, z1: 2.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.36, 0.3, 2.4), P(0.36, 0.3, 2.4), P(0.36, 0.3, 0.9), P(-0.36, 0.3, 0.9)], 'rgba(190,215,235,0.16)');
+    poly(ctx, [P(0.4, -0.3, 2.4), P(0.4, 0.3, 2.4), P(0.4, 0.3, 0.9), P(0.4, -0.3, 0.9)], 'rgba(160,190,215,0.14)');
+    const cols = ['#f4b8d0', '#7fe39a', '#caa24a', '#3a7bd0', '#e07b1f']; for (let i = 0; i < 7; i++) { const c = P(-0.3 + ((i * 7) % 5) * 0.14, 0.0 + ((i * 3) % 3 - 1) * 0.12, 1.05); ctx.fillStyle = cols[i % 5]; ctx.beginPath(); ctx.arc(c[0], c[1], 4, 0, Math.PI * 2); ctx.fill(); }
+    const rail = P(0, -0.2, 2.3), claw = P(0.0, -0.1, 1.7); ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(claw[0], claw[1]); ctx.lineTo(claw[0], rail[1]); ctx.stroke(); ctx.fillStyle = '#cfd6e2'; ctx.beginPath(); ctx.moveTo(claw[0] - 5, claw[1]); ctx.lineTo(claw[0], claw[1] + 8); ctx.lineTo(claw[0] + 5, claw[1]); ctx.closePath(); ctx.fill();
+    if (faceVisible(0, 1, dir)) { const mq = P(0, 0.3, 2.55); ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = hexA(accent, 0.8); ctx.fillRect(mq[0] - 22, mq[1] - 6, 44, 12); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '900 7px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('PRIZES', mq[0], mq[1]); }
+  });
+};
+const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [...legs([[-0.3, -0.5], [0.3, -0.5], [-0.3, 0.5], [0.3, 0.5]], 0.55).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.36, u1: 0.36, v0: -0.6, v1: 0.6, z0: 0.55, z1: 0.72, t: cT, r: cR, l: cL }, { u0: -0.36, u1: 0.36, v0: -0.66, v1: -0.5, z0: 0.72, z1: 1.8, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.72; poly(ctx, [P(-0.32, -0.55, z), P(0.32, -0.55, z), P(0.32, 0.55, z), P(-0.32, 0.55, z)], shade(m, 1.5));
+    ctx.fillStyle = hexA(accent, 0.85); for (const [u, v] of [[-0.12, -0.2], [0.14, -0.1], [0, 0.0]] as [number, number][]) { const c = P(u, v, z); ctx.beginPath(); ctx.arc(c[0], c[1], 4, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#fff'; for (const u of [-0.12, 0.12]) { const c = P(u, 0.42, z); ctx.fillRect(c[0] - 5, c[1] - 1.5, 10, 3); }
+    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.32, -0.5, 1.75), P(0.32, -0.5, 1.75), P(0.32, -0.5, 0.8), P(-0.32, -0.5, 0.8)], hexA(accent, 0.5)); const c = P(0, -0.5, 1.3); ctx.fillStyle = '#fff'; ctx.font = '900 8px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('OUROO', c[0], c[1]); }
+  });
+};
+const drawAirHockey = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [...legs([[-0.7, -0.3], [0.7, -0.3], [-0.7, 0.3], [0.7, 0.3]], 0.55).map(p => ({ ...p, t: '#2a2e36', r: '#22252c', l: '#15171b' })), { u0: -0.85, u1: 0.85, v0: -0.4, v1: 0.4, z0: 0.55, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.7; poly(ctx, [P(-0.78, -0.34, z), P(0.78, -0.34, z), P(0.78, 0.34, z), P(-0.78, 0.34, z)], '#e8f0f6');
+    ctx.strokeStyle = hexA(m, 0.8); ctx.lineWidth = 1.5; const a = P(0, -0.34, z), b = P(0, 0.34, z); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); const cc = P(0, 0, z); ctx.beginPath(); ctx.arc(cc[0], cc[1], 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#1a1a1f'; for (const u of [-0.78, 0.78]) { const g = P(u, 0, z); ctx.fillRect(g[0] - 2, g[1] - 8, 4, 16); }
+    const puck = P(0.2, 0.05, z); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(puck[0], puck[1], 2.5, 0, Math.PI * 2); ctx.fill();
+    for (const [u, col] of [[-0.5, '#b3242e'], [0.5, '#caa24a']] as [number, string][]) { const mp = P(u, -0.1, z); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(mp[0], mp[1], 5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(col, 1.4); ctx.beginPath(); ctx.arc(mp[0], mp[1], 2, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+const drawToyChest = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.2), cR = shade(wood, 0.9), cL = shade(wood, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.45, u1: 0.45, v0: -0.3, v1: 0.3, z0: 0, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.7; poly(ctx, [P(-0.45, -0.3, z), P(0.45, -0.3, z), P(0.45, 0.3, z), P(-0.45, 0.3, z)], shade(wood, 1.3));
+    const cols = ['#b3242e', '#caa24a', '#3a7bd0', '#2e7d4a']; for (let i = 0; i < 4; i++) { const c = P(-0.3 + i * 0.2, 0.0, z + 0.05); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.arc(c[0], c[1], 5, 0, Math.PI * 2); ctx.fill(); }
+    if (faceVisible(0, 1, dir)) { const l = P(0, 0.3, 0.4); ctx.fillStyle = '#caa24a'; ctx.fillRect(l[0] - 4, l[1] - 4, 8, 8); const f = P(0, 0.3, 0.5); ctx.fillStyle = hexA('#fff', 0.85); ctx.font = '900 9px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('TOYS', f[0], f[1]); }
+  });
+};
+
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
 function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
@@ -1419,6 +1714,36 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'swingbench': drawSwingBench(ctx, sx, sy, accent, d.color, dir); break;
     case 'streetlamp': drawStreetLamp(ctx, sx, sy, accent, d.color, dir); break;
     case 'mailbox': drawMailbox(ctx, sx, sy, accent, d.color, dir); break;
+    case 'drumkit': drawDrumkit(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ampstack': drawAmpStack(ctx, sx, sy, accent, d.color, dir); break;
+    case 'mixer': drawMixer(ctx, sx, sy, accent, d.color, dir); break;
+    case 'micstand': drawMicStand(ctx, sx, sy, accent, d.color, dir); break;
+    case 'synth': drawSynth(ctx, sx, sy, accent, d.color, dir); break;
+    case 'vinyl': drawVinyl(ctx, sx, sy, accent, d.color, dir); break;
+    case 'dinerbooth': drawDinerBooth(ctx, sx, sy, accent, d.color, dir); break;
+    case 'sodafount': drawSodaFount(ctx, sx, sy, accent, d.color, dir); break;
+    case 'popcorn': drawPopcorn(ctx, sx, sy, accent, d.color, dir); break;
+    case 'icecream': drawIcecream(ctx, sx, sy, accent, d.color, dir); break;
+    case 'register': drawRegister(ctx, sx, sy, accent, d.color, dir); break;
+    case 'shakebar': drawShakeBar(ctx, sx, sy, accent, d.color, dir); break;
+    case 'toilet': drawToilet(ctx, sx, sy, accent, d.color, dir); break;
+    case 'vanity': drawVanity(ctx, sx, sy, accent, d.color, dir); break;
+    case 'shower': drawShower(ctx, sx, sy, accent, d.color, dir); break;
+    case 'towelrail': drawTowelRail(ctx, sx, sy, accent, d.color, dir); break;
+    case 'washer': drawWasher(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'mirror': drawMirror(ctx, sx, sy, accent, d.color, dir); break;
+    case 'officechair': drawOfficeChair(ctx, sx, sy, accent, d.color, dir); break;
+    case 'filecab': drawFileCab(ctx, sx, sy, accent, d.color, dir); break;
+    case 'copier': drawCopier(ctx, sx, sy, accent, d.color, dir); break;
+    case 'watercooler': drawWaterCooler(ctx, sx, sy, accent, d.color, dir); break;
+    case 'whiteboard': drawWhiteboard(ctx, sx, sy, accent, d.color, dir); break;
+    case 'serverrack': drawServerRack(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pooltable': drawPoolTable(ctx, sx, sy, accent, d.color, dir); break;
+    case 'foosball': drawFoosball(ctx, sx, sy, accent, d.color, dir); break;
+    case 'clawmachine': drawClawMachine(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pinball': drawPinball(ctx, sx, sy, accent, d.color, dir); break;
+    case 'airhockey': drawAirHockey(ctx, sx, sy, accent, d.color, dir); break;
+    case 'toychest': drawToyChest(ctx, sx, sy, accent, d.color, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -1490,7 +1815,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };

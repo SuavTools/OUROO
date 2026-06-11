@@ -19,6 +19,11 @@ export const CATS: FurniCat[] = [
   { id: 'home',     name: 'Home' },
   { id: 'gym',      name: 'Gym' },
   { id: 'outdoor',  name: 'Outdoor' },
+  { id: 'studio',   name: 'Studio' },
+  { id: 'diner',    name: 'Diner' },
+  { id: 'bath',     name: 'Bathroom' },
+  { id: 'office',   name: 'Office' },
+  { id: 'games',    name: 'Arcade' },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -172,6 +177,41 @@ export const FURNI: FurniDef[] = [
   { kind: 'swingbench', name: 'Porch Swing',     emoji: '🪑', cat: 'outdoor', color: '#7a5230', h: 2, walk: false, foot: 1,   special: 'swingbench', span: [2, 1] },
   { kind: 'streetlamp', name: 'Street Lamp',     emoji: '💡', cat: 'outdoor', color: '#2a2e36', h: 4, walk: false, foot: 0.3, special: 'streetlamp' },
   { kind: 'mailbox',    name: 'Mailbox',         emoji: '📫', cat: 'outdoor', color: '#3f6b8a', h: 1, walk: false, foot: 0.3, special: 'mailbox' },
+  // Studio — music gear
+  { kind: 'drumkit',  name: 'Drum Kit',     emoji: '🥁', cat: 'studio', color: '#b3242e', h: 1, walk: false, foot: 1,   special: 'drumkit', span: [2, 1] },
+  { kind: 'ampstack', name: 'Amp Stack',    emoji: '🔊', cat: 'studio', color: '#1b1b22', h: 2, walk: false, foot: 0.6, special: 'ampstack' },
+  { kind: 'mixer',    name: 'Mixing Desk',  emoji: '🎛️', cat: 'studio', color: '#23232f', h: 1, walk: false, foot: 1,   special: 'mixer', span: [2, 1] },
+  { kind: 'micstand', name: 'Mic Stand',    emoji: '🎤', cat: 'studio', color: '#2a2e36', h: 2, walk: false, foot: 0.4, special: 'micstand' },
+  { kind: 'synth',    name: 'Synth',        emoji: '🎹', cat: 'studio', color: '#2a2e36', h: 1, walk: false, foot: 1,   special: 'synth', span: [2, 1] },
+  { kind: 'vinyl',    name: 'Turntable',    emoji: '🎶', cat: 'studio', color: '#23232f', h: 1, walk: false, foot: 0.7, special: 'vinyl' },
+  // Diner — retro food spot
+  { kind: 'dinerbooth', name: 'Diner Booth',emoji: '🍽️', cat: 'diner', color: '#b3242e', h: 1, walk: false, foot: 1,   special: 'dinerbooth', span: [2, 1] },
+  { kind: 'sodafount',  name: 'Soda Fountain',emoji: '🥤', cat: 'diner', color: '#c8ccd4', h: 2, walk: false, foot: 0.6, special: 'sodafount' },
+  { kind: 'popcorn',    name: 'Popcorn Cart',emoji: '🍿', cat: 'diner', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'popcorn' },
+  { kind: 'icecream',   name: 'Ice Cream Freezer',emoji: '🍦', cat: 'diner', color: '#c8ccd4', h: 1, walk: false, foot: 1, special: 'icecream', span: [2, 1] },
+  { kind: 'register',   name: 'Cash Register',emoji: '🧾', cat: 'diner', color: '#3a4450', h: 1, walk: false, foot: 0.5, special: 'register' },
+  { kind: 'shakebar',   name: 'Shake Machine',emoji: '🥛', cat: 'diner', color: '#c8ccd4', h: 1, walk: false, foot: 0.5, special: 'shakebar' },
+  // Bathroom
+  { kind: 'toilet',   name: 'Toilet',       emoji: '🚽', cat: 'bath', color: '#eef1f6', h: 1, walk: false, foot: 0.5, special: 'toilet' },
+  { kind: 'vanity',   name: 'Vanity Sink',  emoji: '🚰', cat: 'bath', color: '#3a4450', h: 1, walk: false, foot: 1,   special: 'vanity', span: [2, 1] },
+  { kind: 'shower',   name: 'Shower',       emoji: '🚿', cat: 'bath', color: '#dfe3ea', h: 2, walk: false, foot: 1,   special: 'shower' },
+  { kind: 'towelrail',name: 'Towel Rail',   emoji: '🧖', cat: 'bath', color: '#cfd6e2', h: 1, walk: false, foot: 0.5, special: 'towelrail' },
+  { kind: 'washer',   name: 'Washing Machine',emoji: '🧺', cat: 'bath', color: '#dfe3ea', h: 1, walk: false, foot: 0.7, special: 'washer' },
+  { kind: 'mirror',   name: 'Cheval Mirror',emoji: '🪞', cat: 'bath', color: '#6a4a2c', h: 2, walk: false, foot: 0.4, special: 'mirror' },
+  // Office
+  { kind: 'officechair',name: 'Office Chair',emoji: '🪑', cat: 'office', color: '#2a2e36', h: 1, walk: false, foot: 0.7, special: 'officechair' },
+  { kind: 'filecab',  name: 'Filing Cabinet',emoji: '🗄️', cat: 'office', color: '#3a4450', h: 2, walk: false, foot: 0.6, special: 'filecab' },
+  { kind: 'copier',   name: 'Photocopier',  emoji: '🖨️', cat: 'office', color: '#cfd2d8', h: 1, walk: false, foot: 0.8, special: 'copier' },
+  { kind: 'watercooler',name: 'Water Cooler',emoji: '💧', cat: 'office', color: '#dfe3ea', h: 1, walk: false, foot: 0.4, special: 'watercooler' },
+  { kind: 'whiteboard',name: 'Whiteboard',  emoji: '📋', cat: 'office', color: '#3a3e46', h: 2, walk: false, foot: 1,   special: 'whiteboard', span: [2, 1] },
+  { kind: 'serverrack',name: 'Server Rack', emoji: '🖥️', cat: 'office', color: '#1a1c22', h: 2, walk: false, foot: 0.5, special: 'serverrack' },
+  // Arcade / games
+  { kind: 'pooltable',  name: 'Pool Table',  emoji: '🎱', cat: 'games', color: '#5a3f28', h: 1, walk: false, foot: 1,   special: 'pooltable', span: [2, 2] },
+  { kind: 'foosball',   name: 'Foosball',    emoji: '⚽', cat: 'games', color: '#6a4a2e', h: 1, walk: false, foot: 1,   special: 'foosball', span: [2, 1] },
+  { kind: 'clawmachine',name: 'Claw Machine',emoji: '🕹️', cat: 'games', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'clawmachine' },
+  { kind: 'pinball',    name: 'Pinball',     emoji: '🔴', cat: 'games', color: '#1b1b26', h: 1, walk: false, foot: 1,   special: 'pinball', span: [1, 2] },
+  { kind: 'airhockey',  name: 'Air Hockey',  emoji: '🏒', cat: 'games', color: '#3a7bd0', h: 1, walk: false, foot: 1,   special: 'airhockey', span: [2, 1] },
+  { kind: 'toychest',   name: 'Toy Chest',   emoji: '🧸', cat: 'games', color: '#6a4a2e', h: 1, walk: false, foot: 0.8, special: 'toychest' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
@@ -192,7 +232,7 @@ const CAT_INDEX: Record<string, number> = (() => {
 
 // Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
 // keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
-const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5, peacock: 0.7, cloud: 0.55, pit: 0.42 };
+const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5, peacock: 0.7, cloud: 0.55, pit: 0.42, officechair: 0.66, dinerbooth: 0.5, swingbench: 0.85 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
@@ -204,7 +244,13 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'bed', 'wardrobe', 'bookcase', 'desk', 'kitchen', 'bathtub', 'clock', 'dresser',
   // gym + outdoor — all directional iso
   'treadmill', 'weightbench', 'heavybag', 'dumbbells', 'exbike', 'locker',
-  'bbq', 'picnictable', 'hottub', 'swingbench', 'streetlamp', 'mailbox']);
+  'bbq', 'picnictable', 'hottub', 'swingbench', 'streetlamp', 'mailbox',
+  // studio / diner / bathroom / office / arcade — all directional iso
+  'drumkit', 'ampstack', 'mixer', 'micstand', 'synth', 'vinyl',
+  'dinerbooth', 'sodafount', 'popcorn', 'icecream', 'register', 'shakebar',
+  'toilet', 'vanity', 'shower', 'towelrail', 'washer', 'mirror',
+  'officechair', 'filecab', 'copier', 'watercooler', 'whiteboard', 'serverrack',
+  'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

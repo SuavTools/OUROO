@@ -37,6 +37,29 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * u * 0.55, Math.sin(a) * u * 0.55); ctx.lineTo(Math.cos(a) * u * 0.78, Math.sin(a) * u * 0.78); ctx.stroke(); }
       break;
     }
+    case 'studio': {  // music note
+      ctx.beginPath(); ctx.ellipse(-u * 0.3, u * 0.45, u * 0.22, u * 0.16, -0.3, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-u * 0.1, u * 0.4); ctx.lineTo(-u * 0.1, -u * 0.55); ctx.lineTo(u * 0.5, -u * 0.7); ctx.lineTo(u * 0.5, -u * 0.2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(u * 0.32, -u * 0.1, u * 0.2, u * 0.15, -0.3, 0, Math.PI * 2); ctx.stroke(); break;
+    }
+    case 'diner': {  // cup + straw
+      ctx.beginPath(); ctx.moveTo(-u * 0.42, -u * 0.2); ctx.lineTo(u * 0.42, -u * 0.2); ctx.lineTo(u * 0.3, u * 0.6); ctx.lineTo(-u * 0.3, u * 0.6); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(u * 0.1, -u * 0.2); ctx.lineTo(u * 0.32, -u * 0.7); ctx.stroke(); break;
+    }
+    case 'bath': {  // shower head + drops
+      ctx.beginPath(); ctx.arc(0, -u * 0.5, u * 0.32, 0.1, Math.PI - 0.1); ctx.stroke();
+      for (const dx of [-u * 0.3, 0, u * 0.3]) { ctx.beginPath(); ctx.moveTo(dx, -u * 0.1); ctx.lineTo(dx, u * 0.5); ctx.stroke(); } break;
+    }
+    case 'office': {  // briefcase
+      ctx.strokeRect(-u * 0.6, -u * 0.25, u * 1.2, u * 0.85);
+      ctx.beginPath(); ctx.moveTo(-u * 0.22, -u * 0.25); ctx.lineTo(-u * 0.22, -u * 0.55); ctx.lineTo(u * 0.22, -u * 0.55); ctx.lineTo(u * 0.22, -u * 0.25); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-u * 0.6, u * 0.15); ctx.lineTo(u * 0.6, u * 0.15); ctx.stroke(); break;
+    }
+    case 'games': {  // joystick
+      ctx.beginPath(); ctx.moveTo(-u * 0.45, u * 0.55); ctx.lineTo(u * 0.45, u * 0.55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, u * 0.55); ctx.lineTo(0, -u * 0.3); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, -u * 0.45, u * 0.2, 0, Math.PI * 2); ctx.stroke(); break;
+    }
     case 'constr': { diamond(u * 0.42, u * 0.72, u * 0.36); ctx.stroke(); diamond(-u * 0.12, u * 0.72, u * 0.36); ctx.stroke(); break; }  // stacked blocks
     case 'tapetes': { diamond(0, u, u * 0.62); ctx.stroke(); diamond(0, u * 0.5, u * 0.3); ctx.stroke(); break; }            // rug w/ inner
     case 'assentos': {  // chair
