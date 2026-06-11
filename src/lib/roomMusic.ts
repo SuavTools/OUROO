@@ -33,7 +33,7 @@ export class RoomMusic {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : this.mood.gain * 0.055;   // ambient: kept low
+    this.master.gain.value = this.muted ? 0 : this.mood.gain * 0.14;   // ambient: kept low
     this.filter = this.ctx.createBiquadFilter();
     this.filter.type = 'lowpass'; this.filter.frequency.value = this.mood.cutoff; this.filter.Q.value = 0.6;
     this.filter.connect(this.master); this.master.connect(this.ctx.destination);
@@ -43,7 +43,7 @@ export class RoomMusic {
   setMuted(m: boolean) {
     this.muted = m;
     if (this.ctx) {
-      if (this.master) this.master.gain.linearRampToValueAtTime(m ? 0 : this.mood.gain * 0.055, this.ctx.currentTime + 0.25);
+      if (this.master) this.master.gain.linearRampToValueAtTime(m ? 0 : this.mood.gain * 0.14, this.ctx.currentTime + 0.25);
       if (this.sfx) this.sfx.gain.linearRampToValueAtTime(m ? 0 : 0.5, this.ctx.currentTime + 0.05);
     }
   }
@@ -88,7 +88,7 @@ export class RoomMusic {
   setRoom(slug: string) {
     this.mood = MOODS[slug] ?? MOODS.default; this.step = 0;
     if (this.filter) this.filter.frequency.linearRampToValueAtTime(this.mood.cutoff, (this.ctx?.currentTime ?? 0) + 0.4);
-    if (this.master && this.ctx && !this.muted) this.master.gain.linearRampToValueAtTime(this.mood.gain * 0.055, this.ctx.currentTime + 0.4);
+    if (this.master && this.ctx && !this.muted) this.master.gain.linearRampToValueAtTime(this.mood.gain * 0.14, this.ctx.currentTime + 0.4);
     if (this.running && this.timer) { clearTimeout(this.timer); this.loop(); }
   }
 
