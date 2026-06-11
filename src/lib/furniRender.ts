@@ -1612,6 +1612,268 @@ const drawToyChest = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acc
   });
 };
 
+// ═══════════ CAFÉ / BAR ═══════════
+const drawPastryCase = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.7, u1: 0.7, v0: -0.28, v1: 0.28, z0: 0, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.66, -0.24, 0.85), P(0.66, -0.24, 0.85), P(0.66, 0.24, 0.85), P(-0.66, 0.24, 0.85)], shade(m, 1.3));
+    const cols = ['#f4b8d0', '#a9713f', '#caa24a', '#f3ead6']; for (let i = 0; i < 4; i++) { const c = P(-0.45 + i * 0.3, 0.0, 0.85); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.ellipse(c[0], c[1] - 3, 9, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(cols[i], 1.3); ctx.beginPath(); ctx.ellipse(c[0], c[1] - 6, 9, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+    poly(ctx, [P(-0.66, 0.26, 1.25), P(0.66, 0.26, 1.25), P(0.66, 0.26, 0.72), P(-0.66, 0.26, 0.72)], 'rgba(200,225,240,0.16)');
+    poly(ctx, [P(-0.66, -0.26, 1.25), P(0.66, -0.26, 1.25), P(0.66, 0.26, 1.25), P(-0.66, 0.26, 1.25)], 'rgba(220,235,245,0.1)');
+  });
+};
+const drawWineRack = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.18), cR = shade(wood, 0.92), cL = shade(wood, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.25, v1: 0.25, z0: 0, z1: 1.6, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    const wc = ['#5a1020', '#3a2410', '#2a3a1a']; for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) { const e = P(-0.28 + c * 0.185, 0.25, 0.25 + r * 0.34); ctx.fillStyle = hexA('#000', 0.4); ctx.beginPath(); ctx.arc(e[0], e[1], 6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = wc[(r + c) % 3]; ctx.beginPath(); ctx.arc(e[0], e[1], 4.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.arc(e[0], e[1], 1.5, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+const drawKegTap = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.25, v1: 0.25, z0: 0, z1: 0.7, t: shade(m, 1.0), r: shade(m, 0.85), l: shade(m, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const top = P(0, 0, 0.7); ctx.fillStyle = shade(m, 1.25); ctx.beginPath(); ctx.ellipse(top[0], top[1], TW * 0.3, TH * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    const tw = P(0, 0, 1.3), tb = P(0, 0, 0.7); ctx.fillStyle = '#cfd6e2'; ctx.fillRect(tb[0] - 3, tw[1], 6, tb[1] - tw[1]);
+    if (faceVisible(0, 1, dir)) for (const u of [-0.06, 0.06]) { const h = P(u, 0.1, 1.05); ctx.fillStyle = '#b3242e'; ctx.fillRect(h[0] - 2, h[1] - 8, 4, 8); const sp = P(u, 0.16, 0.88); ctx.fillStyle = '#888f9e'; ctx.fillRect(sp[0] - 1.5, sp[1], 3, 5); }
+  });
+};
+const drawCocktailCart = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [
+    ...legs([[-0.5, -0.18], [0.5, -0.18], [-0.5, 0.18], [0.5, 0.18]], 0.7).map(p => ({ ...p, t: shade(m, 1.0), r: shade(m, 0.8), l: shade(m, 0.5) })),
+    { u0: -0.55, u1: 0.55, v0: -0.22, v1: 0.22, z0: 0.32, z1: 0.4, t: shade(m, 1.2), r: shade(m, 0.9), l: shade(m, 0.6) },
+    { u0: -0.55, u1: 0.55, v0: -0.22, v1: 0.22, z0: 0.7, z1: 0.78, t: shade(m, 1.2), r: shade(m, 0.9), l: shade(m, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const cols = ['#2e7d4a', '#b3242e', '#caa24a', '#3a7bd0']; for (let i = 0; i < 4; i++) { const c = P(-0.4 + i * 0.22, 0.0, 0.78); ctx.fillStyle = cols[i]; ctx.fillRect(c[0] - 2, c[1] - 13, 4, 13); ctx.fillStyle = '#caa24a'; ctx.fillRect(c[0] - 1, c[1] - 16, 2, 3); }
+    for (let i = 0; i < 3; i++) { const c = P(-0.3 + i * 0.3, 0.0, 0.4); ctx.strokeStyle = 'rgba(220,235,245,0.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(c[0] - 3, c[1] - 8); ctx.lineTo(c[0] - 2, c[1]); ctx.lineTo(c[0] + 2, c[1]); ctx.lineTo(c[0] + 3, c[1] - 8); ctx.stroke(); }
+    for (const u of [-0.5, 0.5]) { const w = P(u, 0.18, 0); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(w[0], w[1] + 2, 3, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+const drawCoffeeBar = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.56), top = '#3a2a1a';
+  const parts: IsoPart[] = [{ u0: -0.85, u1: 0.85, v0: -0.2, v1: 0.34, z0: 0, z1: 1.0, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 1.0; poly(ctx, [P(-0.9, -0.26, z), P(0.9, -0.26, z), P(0.9, 0.4, z), P(-0.9, 0.4, z)], shade(top, 1.3)); poly(ctx, [P(-0.9, 0.4, z), P(0.9, 0.4, z), P(0.9, 0.4, z - 0.1), P(-0.9, 0.4, z - 0.1)], shade(top, 0.8));
+    const e = P(-0.4, 0.0, z); ctx.fillStyle = '#c8ccd4'; ctx.fillRect(e[0] - 14, e[1] - 22, 28, 22); ctx.fillStyle = hexA(accent, 0.7); ctx.fillRect(e[0] - 12, e[1] - 20, 24, 3); ctx.fillStyle = '#2a2a30'; ctx.fillRect(e[0] - 3, e[1] - 8, 6, 8);
+    for (let i = 0; i < 3; i++) { const c = P(0.3, 0.05, z); ctx.fillStyle = '#efe9dd'; ctx.fillRect(c[0] - 5, c[1] - 4 - i * 4, 10, 4); }
+    if (faceVisible(0, 1, dir)) { const s = P(0, 0.4, 0.6); ctx.fillStyle = '#1a1a14'; ctx.fillRect(s[0] - 18, s[1] - 14, 36, 24); ctx.fillStyle = hexA('#fff', 0.7); ctx.font = '900 6px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('COFFEE', s[0], s[1] - 2); }
+  });
+};
+const drawBistro = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const m = base, legH = STACK_H * 0.85, top = sy - legH;
+  ctx.strokeStyle = shade(m, 0.8); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, top); ctx.stroke();
+  ctx.fillStyle = shade(m, 0.7); ctx.beginPath(); ctx.ellipse(sx, sy, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade(m, 0.6); ctx.beginPath(); ctx.ellipse(sx, top + 3, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shade(m, 1.2); ctx.beginPath(); ctx.ellipse(sx, top, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = hexA('#fff', 0.15); ctx.lineWidth = 1; ctx.stroke();
+};
+
+// ═══════════ SCI-FI / NEON ═══════════
+const drawHoloPod = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void base; void dir; const c = accent;
+  ctx.fillStyle = '#2a2e36'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(sx, sy - 2, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+  for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 + t * 0.02; ctx.fillStyle = hexA(c, 0.9); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * TW * 0.4, sy - 2 + Math.sin(a) * TH * 0.4, 2, 0, Math.PI * 2); ctx.fill(); }
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const g = ctx.createLinearGradient(sx, sy, sx, sy - STACK_H * 2); g.addColorStop(0, hexA(c, 0.3)); g.addColorStop(1, hexA(c, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - TW * 0.35, sy - 2); ctx.lineTo(sx - 10, sy - STACK_H * 2); ctx.lineTo(sx + 10, sy - STACK_H * 2); ctx.lineTo(sx + TW * 0.35, sy - 2); ctx.closePath(); ctx.fill();
+  const hy = sy - STACK_H * 1.5; ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, hy, 12, 0, Math.PI * 2); ctx.stroke(); for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.ellipse(sx, hy, 12, 12 * Math.abs(Math.cos(i * 0.6 + t * 0.04)), 0, 0, Math.PI * 2); ctx.stroke(); } ctx.restore();
+};
+const drawTeleporter = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void base; void dir; const c = accent;
+  ctx.fillStyle = '#1a1c22'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.85, TH * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 4; i++) { const ph = (t * 0.04 + i * 0.25) % 1; ctx.strokeStyle = hexA(c, (1 - ph) * 0.8); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.8 * ph, TH * 0.8 * ph, 0, 0, Math.PI * 2); ctx.stroke(); }
+  const g = ctx.createRadialGradient(sx, sy, 1, sx, sy, TW * 0.5); g.addColorStop(0, hexA(c, 0.7)); g.addColorStop(1, hexA(c, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  const bg = ctx.createLinearGradient(sx, sy, sx, sy - STACK_H * 3); bg.addColorStop(0, hexA(c, 0.4)); bg.addColorStop(1, hexA(c, 0)); ctx.fillStyle = bg; ctx.fillRect(sx - TW * 0.3, sy - STACK_H * 3, TW * 0.6, STACK_H * 3); ctx.restore();
+};
+const drawNeonArch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void base; const P = proj(sx, sy, dir), c = accent;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+  for (const u of [-1.1, 1.1]) { const b = P(u, 0, 0), top = P(u, 0, 2.6); ctx.shadowColor = c; ctx.shadowBlur = 10; ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(top[0], top[1]); ctx.stroke(); }
+  const lt = P(-1.1, 0, 2.6), rt = P(1.1, 0, 2.6), ap = P(0, 0, 3.4); ctx.shadowColor = c; ctx.shadowBlur = 12; ctx.strokeStyle = c; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(lt[0], lt[1]); ctx.quadraticCurveTo(ap[0], ap[1] - 10, rt[0], rt[1]); ctx.stroke(); ctx.restore();
+  ctx.strokeStyle = hexA('#fff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lt[0], lt[1]); ctx.quadraticCurveTo(ap[0], ap[1] - 10, rt[0], rt[1]); ctx.stroke();
+};
+const drawPlasmaLamp = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void base; void dir; const c = accent;
+  ctx.fillStyle = '#2a2e36'; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#3a3e46'; ctx.fillRect(sx - 8, sy - 10, 16, 8);
+  const cy = sy - STACK_H * 1.2, R = 16; ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(sx, cy, 1, sx, cy, R); g.addColorStop(0, hexA(c, 0.5)); g.addColorStop(1, hexA(c, 0.05)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, cy, R, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA(c, 0.9); ctx.lineWidth = 1.2; for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 + t * 0.03, ex = sx + Math.cos(a) * R, ey = cy + Math.sin(a) * R; ctx.beginPath(); ctx.moveTo(sx, cy); ctx.quadraticCurveTo(sx + Math.cos(a + 0.5) * R * 0.5, cy + Math.sin(a + 0.5) * R * 0.5, ex, ey); ctx.stroke(); }
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx, cy, 3, 0, Math.PI * 2); ctx.fill(); ctx.restore(); ctx.strokeStyle = hexA('#fff', 0.2); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, cy, R, 0, Math.PI * 2); ctx.stroke();
+};
+const drawConsole = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.3), cR = shade(m, 0.95), cL = shade(m, 0.6);
+  const parts: IsoPart[] = [{ u0: -0.7, u1: 0.7, v0: -0.2, v1: 0.3, z0: 0, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.7; poly(ctx, [P(-0.7, -0.2, z), P(0.7, -0.2, z), P(0.7, 0.3, z), P(-0.7, 0.3, z)], shade(m, 1.5));
+    for (let i = 0; i < 8; i++) { const b = P(-0.55 + i * 0.155, 0.15, z); ctx.fillStyle = hexA(accent, 0.8); ctx.beginPath(); ctx.arc(b[0], b[1], 2.5, 0, Math.PI * 2); ctx.fill(); }
+    poly(ctx, [P(-0.6, -0.18, 1.5), P(0.6, -0.18, 1.5), P(0.6, -0.18, 0.7), P(-0.6, -0.18, 0.7)], '#0a1420'); poly(ctx, [P(-0.55, -0.18, 1.42), P(0.55, -0.18, 1.42), P(0.55, -0.18, 0.78), P(-0.55, -0.18, 0.78)], hexA(accent, 0.5));
+    ctx.strokeStyle = hexA('#fff', 0.6); ctx.lineWidth = 1; const wy = P(0, -0.18, 1.1); ctx.beginPath(); for (let i = 0; i < 20; i++) { const x = wy[0] - 30 + i * 3, y = wy[1] + Math.sin(i * 0.8) * 5; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
+  });
+};
+const drawCryoPod = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.22, v1: 0.22, z0: 0, z1: 2.2, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    poly(ctx, [P(-0.24, 0.22, 2.0), P(0.24, 0.22, 2.0), P(0.24, 0.22, 0.3), P(-0.24, 0.22, 0.3)], 'rgba(120,200,230,0.3)');
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; const c = P(0, 0.22, 1.1), g = ctx.createRadialGradient(c[0], c[1], 2, c[0], c[1], 22); g.addColorStop(0, hexA(accent, 0.4)); g.addColorStop(1, hexA(accent, 0)); ctx.fillStyle = g; ctx.fillRect(c[0] - 22, c[1] - 30, 44, 60); ctx.restore();
+    const sl = P(0, 0.22, 0.4); ctx.fillStyle = hexA(accent, 0.9); ctx.beginPath(); ctx.arc(sl[0], sl[1], 2, 0, Math.PI * 2); ctx.fill();
+  });
+};
+
+// ═══════════ BEACH / POOL ═══════════
+const drawTikiBar = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const bamb = base, cT = shade(bamb, 1.2), cR = shade(bamb, 0.9), cL = shade(bamb, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.85, u1: 0.85, v0: -0.16, v1: 0.34, z0: 0, z1: 1.2, t: cT, r: cR, l: cL }, { u0: -0.85, u1: -0.78, v0: -0.2, v1: -0.13, z0: 1.2, z1: 2.0, t: shade(bamb, 0.9), r: cR, l: cL }, { u0: 0.78, u1: 0.85, v0: -0.2, v1: -0.13, z0: 1.2, z1: 2.0, t: shade(bamb, 0.9), r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) { ctx.strokeStyle = hexA('#000', 0.2); ctx.lineWidth = 1; for (let i = 0; i < 8; i++) { const u = -0.78 + i * 0.22, a = P(u, 0.34, 1.1), b = P(u, 0.34, 0.1); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); } }
+    ctx.fillStyle = '#8a6a2a'; ctx.beginPath(); ctx.moveTo(P(-1.0, 0, 2.0)[0], P(-1.0, 0, 2.0)[1]); ctx.lineTo(P(0, -0.5, 2.0)[0], P(0, -0.5, 2.0)[1]); ctx.lineTo(P(1.0, 0, 2.0)[0], P(1.0, 0, 2.0)[1]); ctx.lineTo(P(0, 0.5, 2.0)[0], P(0, 0.5, 2.0)[1]); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#a07a30'; ctx.beginPath(); ctx.moveTo(P(-1.0, 0, 2.0)[0], P(-1.0, 0, 2.0)[1]); ctx.lineTo(P(0, 0, 2.5)[0], P(0, 0, 2.5)[1]); ctx.lineTo(P(1.0, 0, 2.0)[0], P(1.0, 0, 2.0)[1]); ctx.lineTo(P(0, 0.5, 2.0)[0], P(0, 0.5, 2.0)[1]); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA('#5a3f18', 0.4); ctx.lineWidth = 1; for (let i = 0; i < 10; i++) { const u = -0.9 + i * 0.2, a = P(u, 0.3, 2.0), b = P(u, 0, 2.4); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+  });
+};
+const drawSurfRack = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cols = ['#3a7bd0', '#e07b1f', '#2e7d4a'];
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.08, v1: 0.08, z0: 0, z1: 0.2, t: shade(m, 1.1), r: shade(m, 0.9), l: shade(m, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (let i = 0; i < 3; i++) { const u = -0.28 + i * 0.28, bot = P(u, 0.05, 0.2), top = P(u, -0.12, 2.0), mx = (bot[0] + top[0]) / 2, my = (bot[1] + top[1]) / 2, ang = Math.atan2(top[1] - bot[1], top[0] - bot[0]), len = Math.hypot(top[0] - bot[0], top[1] - bot[1]); ctx.save(); ctx.translate(mx, my); ctx.rotate(ang); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.ellipse(0, 0, len / 2, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = hexA('#fff', 0.25); ctx.fillRect(-len / 2, -1, len, 1.5); ctx.restore(); }
+  });
+};
+const drawLifeguard = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.34, u1: -0.26, v0: -0.05, v1: 0.05, z0: 0, z1: 1.6, t: cT, r: cR, l: cL }, { u0: 0.26, u1: 0.34, v0: -0.05, v1: 0.05, z0: 0, z1: 1.6, t: cT, r: cR, l: cL }, { u0: -0.4, u1: 0.4, v0: -0.2, v1: 0.2, z0: 1.6, z1: 1.78, t: cT, r: cR, l: cL }, { u0: -0.4, u1: 0.4, v0: -0.22, v1: -0.14, z0: 1.78, z1: 2.4, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const a = P(-0.3, 0, 0.2), b = P(0.3, 0, 1.0); ctx.strokeStyle = cL; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    const fp = P(0.4, -0.18, 2.4), ft = P(0.4, -0.18, 3.0); ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(fp[0], fp[1]); ctx.lineTo(ft[0], ft[1]); ctx.stroke(); ctx.fillStyle = '#b3242e'; ctx.beginPath(); ctx.moveTo(ft[0], ft[1]); ctx.lineTo(ft[0] + 12, ft[1] + 3); ctx.lineTo(ft[0], ft[1] + 8); ctx.closePath(); ctx.fill();
+  });
+};
+const drawBeachBall = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; void dir; const R = 16, cy = sy - R * 0.6, cols = ['#fff', '#b3242e', '#caa24a', '#3a7bd0', '#2e7d4a', '#fff'];
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, R * 0.8, R * 0.4, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  for (let i = 0; i < 6; i++) { ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.moveTo(sx, cy); ctx.arc(sx, cy, R, (i / 6) * Math.PI * 2, ((i + 1) / 6) * Math.PI * 2); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.beginPath(); ctx.arc(sx - 5, cy - 5, 4, 0, Math.PI * 2); ctx.fill();
+};
+const drawHammock = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const cloth = base, m = '#6a4a2c';
+  const parts: IsoPart[] = [{ u0: -0.85, u1: -0.76, v0: -0.05, v1: 0.05, z0: 0, z1: 1.2, t: shade(m, 1.1), r: shade(m, 0.9), l: shade(m, 0.6) }, { u0: 0.76, u1: 0.85, v0: -0.05, v1: 0.05, z0: 0, z1: 1.2, t: shade(m, 1.1), r: shade(m, 0.9), l: shade(m, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const l = P(-0.8, 0, 1.1), r = P(0.8, 0, 1.1), mid = P(0, 0.05, 0.5);
+    ctx.fillStyle = cloth; ctx.beginPath(); ctx.moveTo(l[0], l[1]); ctx.quadraticCurveTo(mid[0], mid[1] + 14, r[0], r[1]); ctx.quadraticCurveTo(mid[0], mid[1] + 22, l[0], l[1]); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA('#fff', 0.3); ctx.lineWidth = 1.5; for (let i = 1; i < 6; i++) { const a = P(-0.8 + i * 0.27, 0.05, 0.5); ctx.beginPath(); ctx.moveTo(a[0], a[1] + 4); ctx.lineTo(a[0], a[1] + 16); ctx.stroke(); }
+  });
+};
+const drawCooler = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.4, u1: 0.4, v0: -0.28, v1: 0.28, z0: 0, z1: 0.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.4, -0.28, 0.5), P(0.4, -0.28, 0.5), P(0.4, 0.0, 0.5), P(-0.4, 0.0, 0.5)], '#dfe6ee');
+    poly(ctx, [P(-0.36, 0.0, 0.5), P(0.36, 0.0, 0.5), P(0.36, 0.24, 0.5), P(-0.36, 0.24, 0.5)], '#cfe6f0');
+    const cols = ['#b3242e', '#caa24a', '#2e7d4a', '#fff']; for (let i = 0; i < 4; i++) { const c = P(-0.25 + i * 0.16, 0.1, 0.5); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.ellipse(c[0], c[1] - 3, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(cols[i], 0.7); ctx.fillRect(c[0] - 4, c[1] - 3, 8, 3); }
+    if (faceVisible(0, 1, dir)) { const h = P(0, 0.28, 0.3); ctx.strokeStyle = '#1a1a1f'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(h[0] - 8, h[1]); ctx.lineTo(h[0] + 8, h[1]); ctx.stroke(); }
+  });
+};
+
+// ═══════════ GARAGE / WORKSHOP ═══════════
+const drawWorkbench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.2), cR = shade(wood, 0.92), cL = shade(wood, 0.56);
+  const parts: IsoPart[] = [...legs([[-0.78, -0.22], [0.78, -0.22], [-0.78, 0.3], [0.78, 0.3]], 0.7).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.88, u1: 0.88, v0: -0.28, v1: 0.34, z0: 0.7, z1: 0.84, t: cT, r: cR, l: cL }, { u0: -0.88, u1: 0.88, v0: -0.32, v1: -0.26, z0: 0.84, z1: 1.7, t: shade(wood, 0.8), r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const vz = P(0.6, 0.32, 0.84); ctx.fillStyle = '#3a3e46'; ctx.fillRect(vz[0] - 6, vz[1] - 8, 12, 8);
+    const hm = P(0.1, 0.1, 0.84); ctx.fillStyle = '#5a3a22'; ctx.fillRect(hm[0] - 1, hm[1] - 1, 12, 2); ctx.fillStyle = '#3a3e46'; ctx.fillRect(hm[0] + 9, hm[1] - 3, 4, 6);
+    if (faceVisible(0, 1, dir)) { ctx.fillStyle = hexA('#000', 0.2); for (let i = 0; i < 6; i++) { const p = P(-0.6 + i * 0.24, 0.34, 1.3); ctx.fillRect(p[0] - 1, p[1] - 8, 2, 8); } const w = P(-0.4, 0.34, 1.4); ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(w[0], w[1]); ctx.lineTo(w[0], w[1] + 12); ctx.stroke(); }
+  });
+};
+const drawToolCab = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.36, u1: 0.36, v0: -0.28, v1: 0.28, z0: 0.12, z1: 1.5, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (const [u, v] of [[-0.3, 0.28], [0.3, 0.28]] as [number, number][]) { const w = P(u, v, 0); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(w[0], w[1] + 2, 4, 0, Math.PI * 2); ctx.fill(); }
+    if (!faceVisible(0, 1, dir)) return;
+    for (let r = 0; r < 5; r++) { const z0 = 0.2 + r * 0.25, z1 = z0 + 0.2; poly(ctx, [P(-0.34, 0.28, z1), P(0.34, 0.28, z1), P(0.34, 0.28, z0), P(-0.34, 0.28, z0)], undefined, hexA('#000', 0.3), 1); const h = P(0, 0.28, (z0 + z1) / 2); ctx.fillStyle = '#cfd6e2'; ctx.fillRect(h[0] - 9, h[1] - 1.5, 18, 3); }
+  });
+};
+const drawTireStack = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; void dir;
+  for (let i = 0; i < 4; i++) { const cy = sy - 2 - i * 9; ctx.fillStyle = i % 2 ? '#2a2a30' : '#22222a'; ctx.beginPath(); ctx.ellipse(sx, cy, TW * 0.55, TH * 0.55, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#15151a'; ctx.beginPath(); ctx.ellipse(sx, cy - 2, TW * 0.3, TH * 0.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#3a3a44'; ctx.beginPath(); ctx.ellipse(sx, cy - 2, TW * 0.18, TH * 0.18, 0, 0, Math.PI * 2); ctx.fill(); }
+};
+const drawGasPump = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.26, u1: 0.26, v0: -0.2, v1: 0.2, z0: 0, z1: 1.8, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const s = P(0, 0.2, 1.75); ctx.fillStyle = '#caa24a'; ctx.fillRect(s[0] - 12, s[1] - 6, 24, 8);
+    if (!faceVisible(0, 1, dir)) return;
+    const d = P(0, 0.2, 1.4); ctx.fillStyle = '#0a1420'; ctx.fillRect(d[0] - 12, d[1] - 10, 24, 14); ctx.fillStyle = hexA(accent, 0.7); ctx.font = '900 7px monospace'; ctx.textAlign = 'center'; ctx.fillText('$4.20', d[0], d[1] - 3);
+    const n = P(0.26, 0.2, 0.9); ctx.strokeStyle = '#1a1a1f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(n[0], n[1]); ctx.lineTo(n[0] + 4, n[1] + 10); ctx.stroke();
+  });
+};
+const drawOilDrum = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const m = base, w = TW * 0.42, h = STACK_H * 1.4, top = sy - h;
+  const g = ctx.createLinearGradient(sx - w, 0, sx + w, 0); g.addColorStop(0, shade(m, 0.6)); g.addColorStop(0.5, shade(m, 1.2)); g.addColorStop(1, shade(m, 0.6));
+  ctx.fillStyle = g; ctx.fillRect(sx - w, top, w * 2, h); ctx.fillStyle = shade(m, 0.7); ctx.beginPath(); ctx.ellipse(sx, sy, w, TH * 0.42, 0, 0, Math.PI); ctx.fill();
+  ctx.strokeStyle = hexA('#000', 0.25); ctx.lineWidth = 2; for (const f of [0.25, 0.75]) { ctx.beginPath(); ctx.ellipse(sx, top + h * f, w, TH * 0.42, 0, 0, Math.PI); ctx.stroke(); }
+  ctx.fillStyle = shade(m, 1.3); ctx.beginPath(); ctx.ellipse(sx, top, w, TH * 0.42, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = shade(m, 1.0); ctx.beginPath(); ctx.arc(sx - w * 0.4, top, 3, 0, Math.PI * 2); ctx.fill();
+};
+const drawWelder = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void accent; void base;
+  const parts: IsoPart[] = [...legs([[-0.2, 0.0], [0.2, 0.0]], 0.1).map(p => ({ ...p, t: '#3a3e46', r: '#2a2e36', l: '#15171b' })), { u0: -0.24, u1: 0.24, v0: -0.1, v1: 0.1, z0: 0.08, z1: 0.2, t: '#3a3e46', r: '#2a2e36', l: '#15171b' }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (const [u, col] of [[-0.1, '#2e7d4a'], [0.1, '#b3242e']] as [number, string][]) { const b = P(u, -0.04, 0.2); ctx.fillStyle = col; ctx.fillRect(b[0] - 5, b[1] - 30, 10, 30); ctx.fillStyle = shade(col, 1.3); ctx.beginPath(); ctx.ellipse(b[0], b[1] - 30, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#888f9e'; ctx.fillRect(b[0] - 2, b[1] - 34, 4, 4); }
+    const sp = P(0.3, 0.1, 0); ctx.save(); ctx.globalCompositeOperation = 'lighter'; const fl = 0.5 + Math.abs(Math.sin(t * 0.4)) * 0.5, g = ctx.createRadialGradient(sp[0], sp[1], 1, sp[0], sp[1], 10 * fl); g.addColorStop(0, `rgba(180,220,255,${fl})`); g.addColorStop(1, 'rgba(180,220,255,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sp[0], sp[1], 10, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.strokeStyle = '#1a1a1f'; ctx.lineWidth = 1.5; const h = P(0.1, -0.04, 0.2); ctx.beginPath(); ctx.moveTo(h[0], h[1]); ctx.lineTo(sp[0], sp[1]); ctx.stroke();
+  });
+};
+
+// ═══════════ FESTIVE / SEASONAL ═══════════
+const drawXmasTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void accent; void dir; const grn = base, H = STACK_H * 2.4, cols = ['#b3242e', '#caa24a', '#3a7bd0', '#fff'];
+  ctx.fillStyle = '#b3242e'; ctx.fillRect(sx - 8, sy - 10, 16, 10); ctx.fillStyle = '#8a1c24'; ctx.beginPath(); ctx.ellipse(sx, sy, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  for (let k = 0; k < 3; k++) { const baseY = sy - 10 - k * H * 0.28, w = TW * (0.7 - k * 0.18), ty = baseY - H * 0.4; ctx.fillStyle = shade(grn, 1.0 - k * 0.05); ctx.beginPath(); ctx.moveTo(sx - w, baseY); ctx.lineTo(sx, ty); ctx.lineTo(sx + w, baseY); ctx.closePath(); ctx.fill(); }
+  for (let i = 0; i < 10; i++) { const a = i * 2.39917, r = TW * (0.15 + (i % 4) * 0.12), bx = sx + Math.cos(a) * r, by = sy - 20 - (i % 6) * 8, tw = 0.5 + 0.5 * Math.sin(t * 0.1 + i); ctx.fillStyle = hexA(cols[i % 4], 0.6 + tw * 0.4); ctx.beginPath(); ctx.arc(bx, by, 2.2, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#ffe65c'; ctx.save(); ctx.translate(sx, sy - 10 - 3 * H * 0.28 - 2); ctx.beginPath(); for (let i = 0; i < 10; i++) { const ang = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 2.5 : 6, x = Math.cos(ang) * rr, y = Math.sin(ang) * rr; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.closePath(); ctx.fill(); ctx.restore();
+};
+const drawGiftPile = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; void dir;
+  const boxes: [number, number, number, string, string][] = [[-8, 2, 14, '#b3242e', '#caa24a'], [9, 0, 12, '#2e7d4a', '#fff'], [0, -10, 11, '#3a7bd0', '#caa24a']];
+  for (const [ox, oy, s, col, rib] of boxes) { const bx = sx + ox, by = sy + oy; ctx.fillStyle = shade(col, 0.7); ctx.beginPath(); ctx.moveTo(bx - s, by - s * 0.5); ctx.lineTo(bx, by); ctx.lineTo(bx, by - s); ctx.lineTo(bx - s, by - s * 1.5); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(col, 0.9); ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + s, by - s * 0.5); ctx.lineTo(bx + s, by - s * 1.5); ctx.lineTo(bx, by - s); ctx.closePath(); ctx.fill(); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(bx - s, by - s * 1.5); ctx.lineTo(bx, by - s); ctx.lineTo(bx + s, by - s * 1.5); ctx.lineTo(bx, by - s * 2); ctx.closePath(); ctx.fill(); ctx.fillStyle = rib; ctx.fillRect(bx - 1.5, by - s * 2 + 2, 3, s * 1.5); }
+};
+const drawSnowman = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; void dir;
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, 14, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  for (const [oy, r] of [[-8, 12], [-24, 9], [-38, 6]] as [number, number][]) { const c = sy + oy, g = ctx.createRadialGradient(sx - r * 0.3, c - r * 0.3, 2, sx, c, r); g.addColorStop(0, '#fff'); g.addColorStop(1, '#cdd6e0'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, c, r, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(sx - 2, sy - 40, 1, 0, Math.PI * 2); ctx.arc(sx + 2, sy - 40, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e07b1f'; ctx.beginPath(); ctx.moveTo(sx, sy - 37); ctx.lineTo(sx + 7, sy - 36); ctx.lineTo(sx, sy - 35); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#1a1a1f'; for (const oy of [-26, -22, -18]) { ctx.beginPath(); ctx.arc(sx, sy + oy, 1, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#1a1a1f'; ctx.fillRect(sx - 7, sy - 44, 14, 2); ctx.fillRect(sx - 4, sy - 52, 8, 8);
+  ctx.strokeStyle = '#6a4a2c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx - 9, sy - 24); ctx.lineTo(sx - 18, sy - 30); ctx.moveTo(sx + 9, sy - 24); ctx.lineTo(sx + 18, sy - 30); ctx.stroke();
+};
+const drawPumpkin = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const m = base, cy = sy - 9;
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, 14, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  for (const [ox, r, sh] of [[-7, 9, 0.8], [7, 9, 0.8], [-3, 12, 1.05], [3, 12, 1.05], [0, 13, 1.2]] as [number, number, number][]) { ctx.fillStyle = shade(m, sh); ctx.beginPath(); ctx.ellipse(sx + ox, cy, r, 12, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#3a5a28'; ctx.fillRect(sx - 2, cy - 14, 4, 5);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,180,40,0.9)';
+  ctx.beginPath(); ctx.moveTo(sx - 7, cy - 2); ctx.lineTo(sx - 3, cy - 2); ctx.lineTo(sx - 5, cy + 2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(sx + 7, cy - 2); ctx.lineTo(sx + 3, cy - 2); ctx.lineTo(sx + 5, cy + 2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(sx - 7, cy + 5); ctx.lineTo(sx - 3, cy + 8); ctx.lineTo(sx, cy + 5); ctx.lineTo(sx + 3, cy + 8); ctx.lineTo(sx + 7, cy + 5); ctx.lineTo(sx + 4, cy + 9); ctx.lineTo(sx - 4, cy + 9); ctx.closePath(); ctx.fill(); ctx.restore();
+};
+const drawMenorah = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const gold = base;
+  ctx.fillStyle = shade(gold, 0.8); ctx.beginPath(); ctx.ellipse(sx, sy - 2, 10, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = gold; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx, sy - 2); ctx.lineTo(sx, sy - 30); ctx.stroke();
+  for (let i = -3; i <= 3; i++) { if (i === 0) continue; ctx.strokeStyle = gold; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sy - 14); ctx.quadraticCurveTo(sx + i * 7, sy - 30, sx + i * 7, sy - 22); ctx.stroke(); }
+  for (const x of [-21, -14, -7, 0, 7, 14, 21]) { const cx = sx + x, top = sy - 24 - (x === 0 ? 6 : 0); ctx.fillStyle = '#f0e6d2'; ctx.fillRect(cx - 1.5, top, 3, 6); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,200,80,0.9)'; ctx.beginPath(); ctx.ellipse(cx, top - 2, 2, 4, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+};
+const drawStringLights = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void base; const c = accent;
+  const parts: IsoPart[] = [{ u0: -0.85, u1: -0.78, v0: -0.04, v1: 0.04, z0: 0, z1: 1.6, t: '#5a3f24', r: '#4a3018', l: '#3a2410' }, { u0: 0.78, u1: 0.85, v0: -0.04, v1: 0.04, z0: 0, z1: 1.6, t: '#5a3f24', r: '#4a3018', l: '#3a2410' }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const l = P(-0.82, 0, 1.55), r = P(0.82, 0, 1.55), mid = P(0, 0, 1.3);
+    ctx.strokeStyle = '#2a2a30'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(l[0], l[1]); ctx.quadraticCurveTo(mid[0], mid[1] + 14, r[0], r[1]); ctx.stroke();
+    void c; const cols = ['#ffe65c', '#b3242e', '#3a7bd0', '#2e7d4a']; ctx.save(); ctx.globalCompositeOperation = 'lighter'; for (let i = 1; i < 10; i++) { const f = i / 10, x = l[0] + (r[0] - l[0]) * f, y = l[1] + (r[1] - l[1]) * f + Math.sin(f * Math.PI) * 14; ctx.fillStyle = hexA(cols[i % 4], 0.9); ctx.beginPath(); ctx.arc(x, y + 3, 2.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+  });
+};
+
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
 function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
@@ -1744,6 +2006,36 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pinball': drawPinball(ctx, sx, sy, accent, d.color, dir); break;
     case 'airhockey': drawAirHockey(ctx, sx, sy, accent, d.color, dir); break;
     case 'toychest': drawToyChest(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pastrycase': drawPastryCase(ctx, sx, sy, accent, d.color, dir); break;
+    case 'winerack': drawWineRack(ctx, sx, sy, accent, d.color, dir); break;
+    case 'kegtap': drawKegTap(ctx, sx, sy, accent, d.color, dir); break;
+    case 'cocktailcart': drawCocktailCart(ctx, sx, sy, accent, d.color, dir); break;
+    case 'coffeebar': drawCoffeeBar(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bistro': drawBistro(ctx, sx, sy, accent, d.color, dir); break;
+    case 'holopod': drawHoloPod(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'teleporter': drawTeleporter(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'neonarch': drawNeonArch(ctx, sx, sy, accent, d.color, dir); break;
+    case 'plasmalamp': drawPlasmaLamp(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'console': drawConsole(ctx, sx, sy, accent, d.color, dir); break;
+    case 'cryopod': drawCryoPod(ctx, sx, sy, accent, d.color, dir); break;
+    case 'tikibar': drawTikiBar(ctx, sx, sy, accent, d.color, dir); break;
+    case 'surfrack': drawSurfRack(ctx, sx, sy, accent, d.color, dir); break;
+    case 'lifeguard': drawLifeguard(ctx, sx, sy, accent, d.color, dir); break;
+    case 'beachball': drawBeachBall(ctx, sx, sy, accent, d.color, dir); break;
+    case 'hammock': drawHammock(ctx, sx, sy, accent, d.color, dir); break;
+    case 'cooler': drawCooler(ctx, sx, sy, accent, d.color, dir); break;
+    case 'workbench': drawWorkbench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'toolcab': drawToolCab(ctx, sx, sy, accent, d.color, dir); break;
+    case 'tirestack': drawTireStack(ctx, sx, sy, accent, d.color, dir); break;
+    case 'gaspump': drawGasPump(ctx, sx, sy, accent, d.color, dir); break;
+    case 'oildrum': drawOilDrum(ctx, sx, sy, accent, d.color, dir); break;
+    case 'welder': drawWelder(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'xmastree': drawXmasTree(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'giftpile': drawGiftPile(ctx, sx, sy, accent, d.color, dir); break;
+    case 'snowman': drawSnowman(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pumpkin': drawPumpkin(ctx, sx, sy, accent, d.color, dir); break;
+    case 'menorah': drawMenorah(ctx, sx, sy, accent, d.color, dir); break;
+    case 'stringlights': drawStringLights(ctx, sx, sy, accent, d.color, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -1815,7 +2107,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };

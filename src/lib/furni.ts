@@ -24,6 +24,11 @@ export const CATS: FurniCat[] = [
   { id: 'bath',     name: 'Bathroom' },
   { id: 'office',   name: 'Office' },
   { id: 'games',    name: 'Arcade' },
+  { id: 'cafe',     name: 'Café' },
+  { id: 'scifi',    name: 'Sci-Fi' },
+  { id: 'beach',    name: 'Beach' },
+  { id: 'garage',   name: 'Garage' },
+  { id: 'festive',  name: 'Festive' },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -212,6 +217,41 @@ export const FURNI: FurniDef[] = [
   { kind: 'pinball',    name: 'Pinball',     emoji: '🔴', cat: 'games', color: '#1b1b26', h: 1, walk: false, foot: 1,   special: 'pinball', span: [1, 2] },
   { kind: 'airhockey',  name: 'Air Hockey',  emoji: '🏒', cat: 'games', color: '#3a7bd0', h: 1, walk: false, foot: 1,   special: 'airhockey', span: [2, 1] },
   { kind: 'toychest',   name: 'Toy Chest',   emoji: '🧸', cat: 'games', color: '#6a4a2e', h: 1, walk: false, foot: 0.8, special: 'toychest' },
+  // Café / Bar
+  { kind: 'pastrycase', name: 'Pastry Case', emoji: '🧁', cat: 'cafe', color: '#3a4450', h: 1, walk: false, foot: 1,   special: 'pastrycase', span: [2, 1] },
+  { kind: 'winerack',   name: 'Wine Rack',   emoji: '🍷', cat: 'cafe', color: '#5a3f28', h: 2, walk: false, foot: 0.6, special: 'winerack' },
+  { kind: 'kegtap',     name: 'Beer Keg',    emoji: '🍺', cat: 'cafe', color: '#9aa0ac', h: 1, walk: false, foot: 0.5, special: 'kegtap' },
+  { kind: 'cocktailcart',name: 'Bar Cart',   emoji: '🍹', cat: 'cafe', color: '#caa24a', h: 1, walk: false, foot: 1,   special: 'cocktailcart', span: [2, 1] },
+  { kind: 'coffeebar',  name: 'Coffee Bar',  emoji: '☕', cat: 'cafe', color: '#5a3f28', h: 1, walk: false, foot: 1,   special: 'coffeebar', span: [2, 1] },
+  { kind: 'bistro',     name: 'Bistro Table',emoji: '🪑', cat: 'cafe', color: '#2a2e36', h: 1, walk: false, foot: 0.6, special: 'bistro' },
+  // Sci-Fi / Neon
+  { kind: 'holopod',    name: 'Hologram Pod',emoji: '🛸', cat: 'scifi', color: '#00cfff', h: 0, walk: true,  foot: 1,   special: 'holopod' },
+  { kind: 'teleporter', name: 'Teleporter',  emoji: '🌀', cat: 'scifi', color: '#cc44ff', h: 0, walk: true,  foot: 1,   special: 'teleporter' },
+  { kind: 'neonarch',   name: 'Neon Arch',   emoji: '🌈', cat: 'scifi', color: '#ff44aa', h: 3, walk: true,  foot: 1,   special: 'neonarch', span: [3, 1] },
+  { kind: 'plasmalamp', name: 'Plasma Lamp', emoji: '🔮', cat: 'scifi', color: '#cc44ff', h: 2, walk: false, foot: 0.4, special: 'plasmalamp' },
+  { kind: 'console',    name: 'Control Console',emoji: '🖲️', cat: 'scifi', color: '#1a1c26', h: 1, walk: false, foot: 1, special: 'console', span: [2, 1] },
+  { kind: 'cryopod',    name: 'Cryo Pod',    emoji: '🧊', cat: 'scifi', color: '#2a3340', h: 3, walk: false, foot: 0.5, special: 'cryopod' },
+  // Beach / Pool
+  { kind: 'tikibar',    name: 'Tiki Bar',    emoji: '🏝️', cat: 'beach', color: '#b5874a', h: 2, walk: false, foot: 1,   special: 'tikibar', span: [2, 1] },
+  { kind: 'surfrack',   name: 'Surf Rack',   emoji: '🏄', cat: 'beach', color: '#6a4a2c', h: 3, walk: false, foot: 0.6, special: 'surfrack' },
+  { kind: 'lifeguard',  name: 'Lifeguard Tower',emoji: '🛟', cat: 'beach', color: '#e8e2d0', h: 3, walk: false, foot: 0.7, special: 'lifeguard' },
+  { kind: 'beachball',  name: 'Beach Ball',  emoji: '🏐', cat: 'beach', color: '#b3242e', h: 1, walk: false, foot: 0.5, special: 'beachball' },
+  { kind: 'hammock',    name: 'Hammock',     emoji: '🌴', cat: 'beach', color: '#e07b1f', h: 1, walk: false, foot: 1,   special: 'hammock', span: [2, 1] },
+  { kind: 'cooler',     name: 'Cooler',      emoji: '🧊', cat: 'beach', color: '#3a7bd0', h: 1, walk: false, foot: 0.6, special: 'cooler' },
+  // Garage / Workshop
+  { kind: 'workbench',  name: 'Workbench',   emoji: '🔧', cat: 'garage', color: '#7a5230', h: 1, walk: false, foot: 1,   special: 'workbench', span: [2, 1] },
+  { kind: 'toolcab',    name: 'Tool Cabinet',emoji: '🧰', cat: 'garage', color: '#b3242e', h: 2, walk: false, foot: 0.6, special: 'toolcab' },
+  { kind: 'tirestack',  name: 'Tire Stack',  emoji: '🛞', cat: 'garage', color: '#2a2a30', h: 1, walk: false, foot: 0.7, special: 'tirestack' },
+  { kind: 'gaspump',    name: 'Gas Pump',    emoji: '⛽', cat: 'garage', color: '#b3242e', h: 2, walk: false, foot: 0.5, special: 'gaspump' },
+  { kind: 'oildrum',    name: 'Oil Drum',    emoji: '🛢️', cat: 'garage', color: '#2e7d4a', h: 1, walk: false, foot: 0.5, special: 'oildrum' },
+  { kind: 'welder',     name: 'Welding Cart',emoji: '🔥', cat: 'garage', color: '#3a3e46', h: 1, walk: false, foot: 0.5, special: 'welder' },
+  // Festive / Seasonal
+  { kind: 'xmastree',   name: 'Christmas Tree',emoji: '🎄', cat: 'festive', color: '#1f7a3a', h: 3, walk: false, foot: 0.7, special: 'xmastree' },
+  { kind: 'giftpile',   name: 'Gift Pile',   emoji: '🎁', cat: 'festive', color: '#b3242e', h: 1, walk: false, foot: 0.6, special: 'giftpile' },
+  { kind: 'snowman',    name: 'Snowman',     emoji: '⛄', cat: 'festive', color: '#ffffff', h: 2, walk: false, foot: 0.5, special: 'snowman' },
+  { kind: 'pumpkin',    name: 'Jack-o-Lantern',emoji: '🎃', cat: 'festive', color: '#e07b1f', h: 1, walk: false, foot: 0.5, special: 'pumpkin' },
+  { kind: 'menorah',    name: 'Menorah',     emoji: '🕎', cat: 'festive', color: '#caa24a', h: 1, walk: false, foot: 0.5, special: 'menorah' },
+  { kind: 'stringlights',name: 'String Lights',emoji: '✨', cat: 'festive', color: '#ffe65c', h: 2, walk: true,  foot: 1, special: 'stringlights', span: [2, 1] },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
@@ -250,7 +290,10 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'dinerbooth', 'sodafount', 'popcorn', 'icecream', 'register', 'shakebar',
   'toilet', 'vanity', 'shower', 'towelrail', 'washer', 'mirror',
   'officechair', 'filecab', 'copier', 'watercooler', 'whiteboard', 'serverrack',
-  'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest']);
+  'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest',
+  // café / sci-fi / beach / garage / festive — the directional ones (round decorations stay symmetric)
+  'pastrycase', 'winerack', 'kegtap', 'cocktailcart', 'coffeebar', 'neonarch', 'console', 'cryopod',
+  'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

@@ -60,6 +60,28 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       ctx.beginPath(); ctx.moveTo(0, u * 0.55); ctx.lineTo(0, -u * 0.3); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, -u * 0.45, u * 0.2, 0, Math.PI * 2); ctx.stroke(); break;
     }
+    case 'cafe': {  // wine glass
+      ctx.beginPath(); ctx.moveTo(-u * 0.4, -u * 0.6); ctx.lineTo(u * 0.4, -u * 0.6); ctx.lineTo(u * 0.12, -u * 0.05); ctx.lineTo(-u * 0.12, -u * 0.05); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.05); ctx.lineTo(0, u * 0.55); ctx.moveTo(-u * 0.3, u * 0.55); ctx.lineTo(u * 0.3, u * 0.55); ctx.stroke(); break;
+    }
+    case 'scifi': {  // saturn
+      ctx.beginPath(); ctx.arc(0, 0, u * 0.4, 0, Math.PI * 2); ctx.stroke();
+      ctx.save(); ctx.scale(1, 0.4); ctx.beginPath(); ctx.arc(0, 0, u * 0.78, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); break;
+    }
+    case 'beach': {  // palm + sun
+      ctx.beginPath(); ctx.arc(u * 0.35, -u * 0.4, u * 0.22, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-u * 0.3, u * 0.6); ctx.quadraticCurveTo(-u * 0.45, -u * 0.2, -u * 0.4, -u * 0.45); ctx.stroke();
+      for (const a of [-0.9, -0.3, 0.3]) { ctx.beginPath(); ctx.moveTo(-u * 0.4, -u * 0.45); ctx.lineTo(-u * 0.4 + Math.cos(a) * u * 0.4, -u * 0.45 + Math.sin(a) * u * 0.4 - u * 0.1); ctx.stroke(); } break;
+    }
+    case 'garage': {  // wrench
+      ctx.beginPath(); ctx.arc(-u * 0.4, -u * 0.4, u * 0.22, Math.PI * 0.7, Math.PI * 2.1); ctx.stroke();
+      ctx.lineWidth = Math.max(2, S * 0.08); ctx.beginPath(); ctx.moveTo(-u * 0.28, -u * 0.28); ctx.lineTo(u * 0.5, u * 0.55); ctx.stroke(); break;
+    }
+    case 'festive': {  // gift box
+      ctx.strokeRect(-u * 0.55, -u * 0.15, u * 1.1, u * 0.75);
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.15); ctx.lineTo(0, u * 0.6); ctx.moveTo(-u * 0.55, -u * 0.15); ctx.lineTo(u * 0.55, -u * 0.15); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.15); ctx.lineTo(-u * 0.25, -u * 0.5); ctx.moveTo(0, -u * 0.15); ctx.lineTo(u * 0.25, -u * 0.5); ctx.stroke(); break;
+    }
     case 'constr': { diamond(u * 0.42, u * 0.72, u * 0.36); ctx.stroke(); diamond(-u * 0.12, u * 0.72, u * 0.36); ctx.stroke(); break; }  // stacked blocks
     case 'tapetes': { diamond(0, u, u * 0.62); ctx.stroke(); diamond(0, u * 0.5, u * 0.3); ctx.stroke(); break; }            // rug w/ inner
     case 'assentos': {  // chair
