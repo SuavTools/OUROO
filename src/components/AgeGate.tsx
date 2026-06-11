@@ -19,6 +19,7 @@ export function AgeGate() {
 
   const allow = () => {
     try { localStorage.setItem(KEY, '1'); } catch {}
+    try { window.dispatchEvent(new Event('ouroo:proceed')); } catch {}   // cue the intro cold-open
     setPassed(true);
   };
 
