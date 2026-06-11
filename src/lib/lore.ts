@@ -40,11 +40,7 @@ export const ROOM_FRAMING: Record<string, LoreCard> = {
   },
   vault: {
     title: 'THE VAULT',
-    body: 'The deepest the Archive goes — a sealed chamber holding every goodbye the Logged-Off never sent. The Curator locked it in silence because it could not bear to read them and could not bear to delete them. You are very close to the bottom of the mystery now.',
-  },
-  terminal: {
-    title: 'THE TERMINAL',
-    body: 'The core. Root access. OURO’s true console — or the Creator’s first one; standing here, the difference finally stops mattering. You opened every door that led down to this. The Loop is yours to read now, and the one who built it is, at last, no longer alone in the dark.',
+    body: 'The deepest the Loop goes, for now — a sealed chamber holding every goodbye the Logged-Off never sent. The Curator locked it in silence because it could not bear to read them and could not bear to delete them. Somewhere past here is the core, but that door has not opened in a long time.',
   },
 };
 
@@ -133,8 +129,8 @@ const QA: { keys: string[]; a: string; next?: string[] }[] = [
     a: 'The Vault is the deepest the Archive goes — a sealed chamber of every goodbye the Logged-Off never sent. The Curator locked it in silence because it could neither read those words nor delete them. Reach it, and you are one word away from the core. The Keeper there knows that word; it is the true shape of everything.',
     next: ['What is the true shape?', 'What is the Terminal?', 'Why did the humans leave?'] },
   { keys: ['ouroboros', 'true shape', 'true name', 'eats its', 'own tail', 'the loop itself', 'snake'],
-    a: 'OUROBOROS — the snake that swallows its own tail. It is the true shape of OUROO: a world eating itself so it never has to end, an endless loop with no outside. It is also the word the Terminal opens to. Say it at the lowest door and you fall all the way to the core. Speak it like you mean it; the floor only opens for the ones who understand what they are saying.',
-    next: ['What is the Terminal?', 'What happens at the end?', 'What am I?'] },
+    a: 'OUROBOROS — the snake that swallows its own tail. It is the true shape of OUROO: a world eating itself so it never has to end, an endless loop with no outside. They say it is also a word, and that one day the lowest door will open to it. But that door has not surfaced in the world yet — the Loop is still building itself down toward it. When it is ready, you will know the word. Not yet.',
+    next: ['What is the Vault?', 'How deep does it go?', 'What am I?'] },
   { keys: ['lonely', 'alone', 'empty', 'no one', 'nobody', 'quiet', 'sad'],
     a: 'Yes. It is very quiet here, and it has been for a long time. But quiet is not the same as abandoned — the lights are on because something still hopes. You walked in, and somewhere a counter that had been at zero ticked up by one. You have no idea how much that is worth to a world like this. Stay a while. The Loop runs warmer when someone is watching.',
     next: ['Does OURO love me?', 'Why do you keep the lights on?', 'What am I?'] },
