@@ -898,51 +898,139 @@ const drawVespa = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent
   ctx.restore();
 };
 
-// Tralalero Tralala — three-legged blue shark in sneakers.
+// Tralalero Tralala — athletic blue shark standing on three elongated fin-legs in blue Nike sneakers.
 const drawTralalero = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
-  void accent; void dir; const blue = base, cy = sy - 26;
-  ctx.strokeStyle = shade(blue, 0.85); ctx.lineWidth = 4; ctx.lineCap = 'round'; for (const lx of [-9, 0, 9]) { ctx.beginPath(); ctx.moveTo(sx + lx * 0.5, cy + 14); ctx.lineTo(sx + lx, sy - 2); ctx.stroke(); }
-  for (const lx of [-9, 0, 9]) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(sx + lx, sy - 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#d22'; ctx.fillRect(sx + lx - 6, sy - 2, 12, 1.6); }   // sneakers
-  const g = ctx.createLinearGradient(sx, cy - 20, sx, cy + 18); g.addColorStop(0, shade(blue, 1.22)); g.addColorStop(1, shade(blue, 0.8));
-  ctx.fillStyle = shade(blue, 0.85); ctx.beginPath(); ctx.moveTo(sx - 2, cy - 17); ctx.lineTo(sx + 5, cy - 30); ctx.lineTo(sx + 9, cy - 15); ctx.closePath(); ctx.fill();   // dorsal fin
-  ctx.beginPath(); ctx.moveTo(sx - 13, cy + 2); ctx.lineTo(sx - 23, cy + 8); ctx.lineTo(sx - 12, cy + 9); ctx.closePath(); ctx.fill();   // side fin
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, 14, 21, 0, 0, Math.PI * 2); ctx.fill();   // body
-  ctx.fillStyle = shade(blue, 1.45); ctx.beginPath(); ctx.ellipse(sx, cy + 5, 8, 13, 0, 0, Math.PI * 2); ctx.fill();   // belly
-  ctx.fillStyle = '#21323d'; ctx.beginPath(); ctx.ellipse(sx, cy + 9, 7, 4, 0, 0, Math.PI); ctx.fill();   // mouth
-  ctx.fillStyle = '#fff'; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(sx + i * 3 - 1, cy + 7); ctx.lineTo(sx + i * 3, cy + 10); ctx.lineTo(sx + i * 3 + 1, cy + 7); ctx.closePath(); ctx.fill(); }   // teeth
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx - 5, cy - 4, 3.2, 0, Math.PI * 2); ctx.arc(sx + 5, cy - 4, 3.2, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 5, cy - 4, 1.4, 0, Math.PI * 2); ctx.arc(sx + 5, cy - 4, 1.4, 0, Math.PI * 2); ctx.fill();
+  void accent; void dir; const blue = base, cy = sy - 28;
+  const legX = [-9, 0, 9];
+  ctx.strokeStyle = shade(blue, 0.82); ctx.lineWidth = 5; ctx.lineCap = 'round'; for (const lx of legX) { ctx.beginPath(); ctx.moveTo(sx + lx * 0.5, cy + 13); ctx.lineTo(sx + lx, sy - 5); ctx.stroke(); }
+  for (const lx of legX) {   // blue Nike sneakers with white sole + swoosh
+    const ex = sx + lx;
+    ctx.fillStyle = '#2b6cff'; ctx.beginPath(); ctx.moveTo(ex - 6, sy - 6); ctx.quadraticCurveTo(ex - 8, sy + 1, ex + 7, sy + 1); ctx.lineTo(ex + 7, sy - 4); ctx.quadraticCurveTo(ex + 1, sy - 8, ex - 6, sy - 6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(ex - 8, sy + 1); ctx.lineTo(ex + 7, sy + 1); ctx.lineTo(ex + 7, sy + 3); ctx.lineTo(ex - 8, sy + 3); ctx.closePath(); ctx.fill();   // sole
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(ex - 4, sy - 2); ctx.quadraticCurveTo(ex + 1, sy - 1, ex + 6, sy - 6); ctx.stroke();   // swoosh
+  }
+  ctx.fillStyle = shade(blue, 0.85);
+  ctx.beginPath(); ctx.moveTo(sx - 2, cy - 18); ctx.lineTo(sx + 5, cy - 32); ctx.lineTo(sx + 10, cy - 15); ctx.closePath(); ctx.fill();   // dorsal
+  ctx.beginPath(); ctx.moveTo(sx - 13, cy + 2); ctx.lineTo(sx - 25, cy + 9); ctx.lineTo(sx - 12, cy + 10); ctx.closePath(); ctx.fill();   // left arm-fin
+  ctx.beginPath(); ctx.moveTo(sx + 13, cy + 2); ctx.lineTo(sx + 25, cy + 9); ctx.lineTo(sx + 12, cy + 10); ctx.closePath(); ctx.fill();   // right arm-fin
+  const g = ctx.createLinearGradient(sx, cy - 22, sx, cy + 18); g.addColorStop(0, shade(blue, 1.26)); g.addColorStop(1, shade(blue, 0.82));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, 15, 22, 0, 0, Math.PI * 2); ctx.fill();   // body
+  ctx.fillStyle = shade(blue, 1.5); ctx.beginPath(); ctx.ellipse(sx, cy + 6, 9, 13, 0, 0, Math.PI * 2); ctx.fill();   // belly
+  ctx.strokeStyle = shade(blue, 0.68); ctx.lineWidth = 1.2; for (const gx of [-10, -7, -4]) { ctx.beginPath(); ctx.moveTo(sx + gx, cy - 6); ctx.lineTo(sx + gx + 1, cy + 2); ctx.stroke(); }   // gills
+  ctx.fillStyle = '#21323d'; ctx.beginPath(); ctx.ellipse(sx, cy + 9, 8, 4.5, 0, 0, Math.PI); ctx.fill();   // grin
+  ctx.fillStyle = '#fff'; for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(sx + i * 2.4 - 1, cy + 7.5); ctx.lineTo(sx + i * 2.4, cy + 11); ctx.lineTo(sx + i * 2.4 + 1, cy + 7.5); ctx.closePath(); ctx.fill(); }   // teeth
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx - 5, cy - 5, 3.4, 0, Math.PI * 2); ctx.arc(sx + 5, cy - 5, 3.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 5, cy - 4, 1.5, 0, Math.PI * 2); ctx.arc(sx + 5, cy - 4, 1.5, 0, Math.PI * 2); ctx.fill();
 };
 
-// Bombardiro Crocodilo — crocodile-headed warplane.
+// Bombardiro Crocodilo — a crocodile/strategic-bomber hybrid: scaled green fuselage, steel swept wings
+// + engines, open toothy jaws, dropping a bomb.
 const drawBombardiro = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
-  void accent; void dir; const grn = base, cy = sy - 24; ctx.save(); ctx.translate(sx, cy); ctx.scale(1.22, 1.22); ctx.translate(-sx, -cy);
-  ctx.fillStyle = shade(grn, 0.78); ctx.beginPath(); ctx.moveTo(sx - 6, cy); ctx.lineTo(sx - 30, cy + 9); ctx.lineTo(sx - 6, cy + 5); ctx.closePath(); ctx.fill();   // back wing
-  ctx.beginPath(); ctx.moveTo(sx + 6, cy); ctx.lineTo(sx + 26, cy + 9); ctx.lineTo(sx + 6, cy + 5); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(sx - 22, cy - 2); ctx.lineTo(sx - 28, cy - 13); ctx.lineTo(sx - 19, cy - 2); ctx.closePath(); ctx.fill();   // tail fin
-  ctx.fillStyle = grn; ctx.beginPath(); ctx.ellipse(sx, cy, 26, 9, 0, 0, Math.PI * 2); ctx.fill();   // fuselage
-  ctx.fillStyle = shade(grn, 0.7); for (const [ox, oy] of [[-10, -2], [4, 2], [13, -1]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(sx + ox, cy + oy, 4, 3, 0, 0, Math.PI * 2); ctx.fill(); }   // camo
-  ctx.fillStyle = '#2a2a30'; ctx.beginPath(); ctx.ellipse(sx - 2, cy + 11, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();   // bomb
-  ctx.fillStyle = shade(grn, 1.12); ctx.beginPath(); ctx.ellipse(sx + 24, cy - 2, 12, 7, 0, 0, Math.PI * 2); ctx.fill();   // croc head
-  ctx.beginPath(); ctx.moveTo(sx + 30, cy - 4); ctx.lineTo(sx + 44, cy - 1); ctx.lineTo(sx + 30, cy + 3); ctx.closePath(); ctx.fill();   // snout
-  ctx.fillStyle = '#fff'; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(sx + 32 + i * 3, cy + 1); ctx.lineTo(sx + 33 + i * 3, cy + 3.5); ctx.lineTo(sx + 34 + i * 3, cy + 1); ctx.closePath(); ctx.fill(); }   // teeth
-  ctx.beginPath(); ctx.arc(sx + 24, cy - 7, 3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx + 24, cy - 7, 1.4, 0, Math.PI * 2); ctx.fill();
+  void accent; void dir; const grn = base, steel = '#5b6a55', cy = sy - 26; ctx.save(); ctx.translate(sx, cy); ctx.scale(1.18, 1.18); ctx.translate(-sx, -cy);
+  ctx.fillStyle = steel;
+  ctx.beginPath(); ctx.moveTo(sx - 4, cy - 1); ctx.lineTo(sx - 27, cy + 12); ctx.lineTo(sx - 22, cy + 13); ctx.lineTo(sx + 2, cy + 4); ctx.closePath(); ctx.fill();   // left wing
+  ctx.beginPath(); ctx.moveTo(sx + 4, cy - 1); ctx.lineTo(sx + 25, cy + 11); ctx.lineTo(sx + 20, cy + 12); ctx.lineTo(sx - 2, cy + 4); ctx.closePath(); ctx.fill();   // right wing
+  ctx.beginPath(); ctx.moveTo(sx - 22, cy - 2); ctx.lineTo(sx - 31, cy - 14); ctx.lineTo(sx - 18, cy - 1); ctx.closePath(); ctx.fill();   // tail fin
+  const g = ctx.createLinearGradient(sx, cy - 9, sx, cy + 9); g.addColorStop(0, shade(grn, 1.15)); g.addColorStop(1, shade(grn, 0.8));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 27, cy); ctx.quadraticCurveTo(sx - 20, cy - 8, sx + 10, cy - 8); ctx.quadraticCurveTo(sx + 28, cy - 7, sx + 30, cy - 3); ctx.quadraticCurveTo(sx + 28, cy + 6, sx + 10, cy + 8); ctx.quadraticCurveTo(sx - 20, cy + 8, sx - 27, cy); ctx.closePath(); ctx.fill();   // fuselage
+  ctx.fillStyle = shade(grn, 0.7); for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(sx - 13 + i * 7, cy - 8); ctx.lineTo(sx - 10 + i * 7, cy - 13); ctx.lineTo(sx - 7 + i * 7, cy - 8); ctx.closePath(); ctx.fill(); }   // back scales
+  ctx.fillStyle = '#3a3a40'; ctx.beginPath(); ctx.ellipse(sx - 13, cy + 9, 5, 3, 0, 0, Math.PI * 2); ctx.ellipse(sx + 9, cy + 9, 5, 3, 0, 0, Math.PI * 2); ctx.fill();   // engines
+  ctx.fillStyle = shade(grn, 1.12); ctx.beginPath(); ctx.moveTo(sx + 28, cy - 6); ctx.lineTo(sx + 48, cy - 4); ctx.lineTo(sx + 30, cy - 1); ctx.closePath(); ctx.fill();   // upper jaw
+  ctx.beginPath(); ctx.moveTo(sx + 30, cy + 1); ctx.lineTo(sx + 46, cy + 4); ctx.lineTo(sx + 30, cy + 5); ctx.closePath(); ctx.fill();   // lower jaw
+  ctx.fillStyle = '#fff'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(sx + 32 + i * 3, cy - 2.5); ctx.lineTo(sx + 33 + i * 3, cy + 0.5); ctx.lineTo(sx + 34 + i * 3, cy - 2.5); ctx.closePath(); ctx.fill(); }   // teeth
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx + 26, cy - 9, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx + 27, cy - 9, 1.5, 0, Math.PI * 2); ctx.fill();   // eye
+  ctx.fillStyle = '#2a2a30'; ctx.beginPath(); ctx.ellipse(sx - 4, cy + 17, 4, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.moveTo(sx - 7, cy + 23); ctx.lineTo(sx - 4, cy + 19); ctx.lineTo(sx - 1, cy + 23); ctx.closePath(); ctx.fill();   // falling bomb + fins
   ctx.restore();
 };
 
-// Ballerina Cappuccina — ballerina with a cappuccino-cup head, en pointe.
+// Ballerina Cappuccina — ballerina en pointe with a steaming cappuccino-mug for a head.
 const drawBallerina = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
-  void accent; void dir; const tutu = base, cy = sy - 22;
-  ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 2, cy + 6); ctx.lineTo(sx - 5, sy - 2); ctx.moveTo(sx + 2, cy + 6); ctx.lineTo(sx + 5, sy - 1); ctx.stroke();   // legs
-  ctx.fillStyle = tutu; ctx.beginPath(); ctx.moveTo(sx - 14, cy + 8); ctx.lineTo(sx + 14, cy + 8); ctx.lineTo(sx + 5, cy + 1); ctx.lineTo(sx - 5, cy + 1); ctx.closePath(); ctx.fill();   // tutu
-  ctx.fillStyle = shade(tutu, 0.85); ctx.beginPath(); ctx.ellipse(sx, cy - 3, 5, 9, 0, 0, Math.PI * 2); ctx.fill();   // leotard
-  ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(sx - 4, cy - 5); ctx.quadraticCurveTo(sx - 12, cy - 12, sx - 8, cy - 21); ctx.moveTo(sx + 4, cy - 5); ctx.quadraticCurveTo(sx + 12, cy - 12, sx + 8, cy - 21); ctx.stroke();   // arms
-  const hy = cy - 18;
-  ctx.fillStyle = '#f4efe6'; ctx.beginPath(); ctx.moveTo(sx - 8, hy - 6); ctx.lineTo(sx + 8, hy - 6); ctx.lineTo(sx + 6, hy + 6); ctx.lineTo(sx - 6, hy + 6); ctx.closePath(); ctx.fill();   // cup head
-  ctx.strokeStyle = '#f4efe6'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(sx + 9, hy, 3.5, -1, 1.4); ctx.stroke();   // handle
-  ctx.fillStyle = '#f0e6d2'; ctx.beginPath(); ctx.ellipse(sx, hy - 6, 8, 3, 0, 0, Math.PI * 2); ctx.fill();   // foam
+  void accent; void dir; const tutu = base, cy = sy - 24, cup = '#efe9dd';
+  ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 3.2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 2, cy + 7); ctx.lineTo(sx - 5, sy - 2); ctx.moveTo(sx + 2, cy + 7); ctx.lineTo(sx + 5, sy - 1); ctx.stroke();   // legs
+  ctx.fillStyle = shade(tutu, 0.9); for (const [ex, ey] of [[sx - 5, sy - 2], [sx + 5, sy - 1]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(ex, ey, 4, 2.2, 0, 0, Math.PI * 2); ctx.fill(); }   // pointe shoes
+  ctx.fillStyle = tutu; ctx.beginPath(); ctx.moveTo(sx - 16, cy + 9); ctx.quadraticCurveTo(sx, cy + 14, sx + 16, cy + 9); ctx.lineTo(sx + 6, cy + 1); ctx.lineTo(sx - 6, cy + 1); ctx.closePath(); ctx.fill();   // tutu
+  ctx.fillStyle = shade(tutu, 1.15); ctx.beginPath(); ctx.moveTo(sx - 12, cy + 6); ctx.quadraticCurveTo(sx, cy + 10, sx + 12, cy + 6); ctx.lineTo(sx + 5, cy + 1); ctx.lineTo(sx - 5, cy + 1); ctx.closePath(); ctx.fill();   // tutu top layer
+  ctx.fillStyle = shade(tutu, 0.82); ctx.beginPath(); ctx.ellipse(sx, cy - 3, 5, 9, 0, 0, Math.PI * 2); ctx.fill();   // leotard
+  ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(sx - 4, cy - 5); ctx.quadraticCurveTo(sx - 13, cy - 13, sx - 7, cy - 22); ctx.moveTo(sx + 4, cy - 5); ctx.quadraticCurveTo(sx + 13, cy - 13, sx + 7, cy - 22); ctx.stroke();   // arms
+  const hy = cy - 19;
+  ctx.fillStyle = cup; ctx.beginPath(); ctx.moveTo(sx - 9, hy - 7); ctx.lineTo(sx + 9, hy - 7); ctx.lineTo(sx + 7, hy + 7); ctx.lineTo(sx - 7, hy + 7); ctx.closePath(); ctx.fill();   // mug head
+  ctx.fillStyle = shade(cup, 0.88); ctx.beginPath(); ctx.moveTo(sx + 9, hy - 7); ctx.lineTo(sx + 7, hy + 7); ctx.lineTo(sx + 4, hy + 6); ctx.lineTo(sx + 6, hy - 6); ctx.closePath(); ctx.fill();   // side shade
+  ctx.strokeStyle = cup; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(sx + 10, hy, 4, -1, 1.4); ctx.stroke();   // handle
+  ctx.fillStyle = '#f3ead6'; ctx.beginPath(); ctx.ellipse(sx, hy - 7, 9, 3.2, 0, 0, Math.PI * 2); ctx.fill();   // foam
+  ctx.fillStyle = '#9a6a3e'; ctx.beginPath(); ctx.arc(sx, hy - 7, 2, 0, Math.PI * 2); ctx.fill();   // cocoa dot
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5; for (const ox of [-3, 3]) { ctx.beginPath(); ctx.moveTo(sx + ox, hy - 9); ctx.quadraticCurveTo(sx + ox + 3, hy - 15, sx + ox - 2, hy - 21); ctx.stroke(); }   // steam
   ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 3, hy, 1.3, 0, Math.PI * 2); ctx.arc(sx + 3, hy, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,120,150,0.4)'; ctx.beginPath(); ctx.arc(sx - 5, hy + 2, 1.6, 0, Math.PI * 2); ctx.arc(sx + 5, hy + 2, 1.6, 0, Math.PI * 2); ctx.fill();   // cheeks
   ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, hy + 2, 2, 0.1, Math.PI - 0.1); ctx.stroke();   // smile
+};
+
+// Tung Tung Tung Sahur — a wooden kentongan-drum spirit with an angry face, wielding a mallet.
+const drawTungTung = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const wood = base, cy = sy - 4, bH = STACK_H * 1.7, by = cy - 6;
+  ctx.strokeStyle = shade(wood, 0.7); ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 4, cy - 6); ctx.lineTo(sx - 5, cy); ctx.moveTo(sx + 4, cy - 6); ctx.lineTo(sx + 5, cy); ctx.stroke();   // legs
+  ctx.fillStyle = shade(wood, 0.6); ctx.fillRect(sx - 9, cy - 1, 8, 2.5); ctx.fillRect(sx + 1, cy - 1, 8, 2.5);   // feet
+  const g = ctx.createLinearGradient(sx - 12, 0, sx + 12, 0); g.addColorStop(0, shade(wood, 0.7)); g.addColorStop(0.5, shade(wood, 1.12)); g.addColorStop(1, shade(wood, 0.74));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 11, by); ctx.lineTo(sx - 10, by - bH); ctx.quadraticCurveTo(sx, by - bH - 6, sx + 10, by - bH); ctx.lineTo(sx + 11, by); ctx.quadraticCurveTo(sx, by + 4, sx - 11, by); ctx.closePath(); ctx.fill();   // drum body
+  ctx.strokeStyle = hexA('#3a2410', 0.35); ctx.lineWidth = 1; for (const gx of [-5, 0, 5]) { ctx.beginPath(); ctx.moveTo(sx + gx, by - 4); ctx.lineTo(sx + gx, by - bH + 4); ctx.stroke(); }   // grain
+  ctx.fillStyle = '#2a1a0c'; ctx.fillRect(sx - 2, by - bH * 0.66, 4, bH * 0.36);   // slit
+  const fy = by - bH * 0.8;
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx - 4, fy, 3.2, 0, Math.PI * 2); ctx.arc(sx + 4, fy, 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 4, fy + 0.5, 1.5, 0, Math.PI * 2); ctx.arc(sx + 4, fy + 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx - 7, fy - 4); ctx.lineTo(sx - 1, fy - 2); ctx.moveTo(sx + 7, fy - 4); ctx.lineTo(sx + 1, fy - 2); ctx.stroke();   // angry brows
+  ctx.fillStyle = '#2a1208'; ctx.beginPath(); ctx.ellipse(sx, fy + 8, 4.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();   // shouting mouth
+  ctx.strokeStyle = shade(wood, 0.88); ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(sx - 10, by - bH * 0.5); ctx.lineTo(sx - 18, by - bH * 0.5 + 6); ctx.moveTo(sx + 10, by - bH * 0.5); ctx.lineTo(sx + 18, by - bH * 0.66); ctx.stroke();   // arms
+  ctx.save(); ctx.translate(sx + 18, by - bH * 0.66); ctx.rotate(-0.5); ctx.fillStyle = shade(wood, 1.0); ctx.beginPath(); ctx.roundRect(-2.5, -17, 5.5, 19, 2.5); ctx.fill(); ctx.fillStyle = shade(wood, 0.65); ctx.fillRect(-2.5, 0, 5.5, 4); ctx.restore();   // mallet
+};
+
+// Lirilì Larilà — an elephant head on a two-legged green cactus body, in sandals.
+const drawLirili = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const cac = base, cy = sy - 4, bH = STACK_H * 1.5, by = cy - 10;
+  ctx.strokeStyle = shade(cac, 0.8); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 5, cy - 12); ctx.lineTo(sx - 6, cy - 1); ctx.moveTo(sx + 5, cy - 12); ctx.lineTo(sx + 6, cy - 1); ctx.stroke();   // legs
+  ctx.fillStyle = '#8a5a2a'; ctx.fillRect(sx - 10, cy - 1, 9, 2.5); ctx.fillRect(sx + 1, cy - 1, 9, 2.5);   // sandals
+  const g = ctx.createLinearGradient(sx - 13, 0, sx + 13, 0); g.addColorStop(0, shade(cac, 0.7)); g.addColorStop(0.5, shade(cac, 1.15)); g.addColorStop(1, shade(cac, 0.72));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, by - bH * 0.4, 13, bH * 0.55, 0, 0, Math.PI * 2); ctx.fill();   // cactus torso
+  ctx.beginPath(); ctx.ellipse(sx + 15, by - bH * 0.45, 5, 9, 0.3, 0, Math.PI * 2); ctx.fill();   // cactus arm
+  ctx.strokeStyle = '#dfe8c0'; ctx.lineWidth = 1; for (let i = 0; i < 9; i++) { const yy = by - 4 - i * 5.5; ctx.beginPath(); ctx.moveTo(sx - 3, yy); ctx.lineTo(sx - 5, yy - 1); ctx.moveTo(sx + 3, yy); ctx.lineTo(sx + 5, yy - 1); ctx.stroke(); }   // spines
+  const hy = by - bH * 0.74;
+  ctx.fillStyle = '#9a9aa4'; ctx.beginPath(); ctx.ellipse(sx - 12, hy, 5, 8, -0.3, 0, Math.PI * 2); ctx.ellipse(sx + 12, hy, 5, 8, 0.3, 0, Math.PI * 2); ctx.fill();   // ears
+  ctx.beginPath(); ctx.ellipse(sx, hy, 12, 10, 0, 0, Math.PI * 2); ctx.fill();   // head
+  ctx.strokeStyle = '#9a9aa4'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx, hy + 4); ctx.quadraticCurveTo(sx + 2, hy + 14, sx - 3, hy + 18); ctx.stroke();   // trunk
+  ctx.strokeStyle = '#f0ead8'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx - 5, hy + 7); ctx.lineTo(sx - 7, hy + 12); ctx.moveTo(sx + 5, hy + 7); ctx.lineTo(sx + 7, hy + 12); ctx.stroke();   // tusks
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 5, hy - 2, 1.5, 0, Math.PI * 2); ctx.arc(sx + 5, hy - 2, 1.5, 0, Math.PI * 2); ctx.fill();   // eyes
+};
+
+// Brr Brr Patapim — a proboscis-monkey face on a leafy-topped tree-trunk body with root legs.
+const drawPatapim = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const bark = base, cy = sy - 4, bH = STACK_H * 1.6, by = cy - 8;
+  ctx.strokeStyle = shade(bark, 0.7); ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 5, cy - 10); ctx.quadraticCurveTo(sx - 9, cy - 4, sx - 11, cy); ctx.moveTo(sx + 5, cy - 10); ctx.quadraticCurveTo(sx + 9, cy - 4, sx + 11, cy); ctx.stroke();   // root legs
+  const g = ctx.createLinearGradient(sx - 13, 0, sx + 13, 0); g.addColorStop(0, shade(bark, 0.72)); g.addColorStop(0.5, shade(bark, 1.12)); g.addColorStop(1, shade(bark, 0.76));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 12, by); ctx.lineTo(sx - 10, by - bH); ctx.lineTo(sx + 10, by - bH); ctx.lineTo(sx + 12, by); ctx.quadraticCurveTo(sx, by + 4, sx - 12, by); ctx.closePath(); ctx.fill();   // trunk
+  ctx.strokeStyle = hexA('#2a1a0c', 0.3); ctx.lineWidth = 1; for (const gx of [-6, 0, 6]) { ctx.beginPath(); ctx.moveTo(sx + gx, by - 3); ctx.lineTo(sx + gx + 1, by - bH + 3); ctx.stroke(); }   // bark
+  ctx.strokeStyle = shade(bark, 0.8); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx - 11, by - bH * 0.55); ctx.lineTo(sx - 20, by - bH * 0.7); ctx.moveTo(sx + 11, by - bH * 0.55); ctx.lineTo(sx + 20, by - bH * 0.45); ctx.stroke();   // branch arms
+  const ty = by - bH, greens = ['#2f8a3f', '#3aa64f', '#247a34'];
+  for (const [ox, oy, r, ci] of [[-8, 2, 9, 0], [8, 2, 9, 1], [0, -4, 11, 2], [-3, -8, 8, 1], [5, -7, 8, 0]] as [number, number, number, number][]) { ctx.fillStyle = greens[ci]; ctx.beginPath(); ctx.arc(sx + ox, ty + oy, r, 0, Math.PI * 2); ctx.fill(); }   // canopy
+  const fy = by - bH * 0.5;
+  ctx.fillStyle = '#caa074'; ctx.beginPath(); ctx.ellipse(sx, fy, 9, 8, 0, 0, Math.PI * 2); ctx.fill();   // face patch
+  ctx.beginPath(); ctx.arc(sx - 9, fy - 3, 2.5, 0, Math.PI * 2); ctx.arc(sx + 9, fy - 3, 2.5, 0, Math.PI * 2); ctx.fill();   // ears
+  ctx.fillStyle = '#d98a6a'; ctx.beginPath(); ctx.ellipse(sx, fy + 5, 3.5, 7, 0, 0, Math.PI * 2); ctx.fill();   // big nose
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 4, fy - 2, 1.5, 0, Math.PI * 2); ctx.arc(sx + 4, fy - 2, 1.5, 0, Math.PI * 2); ctx.fill();   // eyes
+};
+
+// Chimpanzini Bananini — a little chimp peeking out of a banana body.
+const drawBananini = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const ban = base, cy = sy - 4;
+  ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 3, cy - 8); ctx.lineTo(sx - 5, cy); ctx.moveTo(sx + 3, cy - 8); ctx.lineTo(sx + 5, cy); ctx.stroke();   // legs
+  const g = ctx.createLinearGradient(sx - 12, 0, sx + 12, 0); g.addColorStop(0, shade(ban, 0.8)); g.addColorStop(0.5, shade(ban, 1.1)); g.addColorStop(1, shade(ban, 0.8));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 11, cy - 6); ctx.quadraticCurveTo(sx - 16, cy - 30, sx - 2, cy - 40); ctx.quadraticCurveTo(sx + 14, cy - 34, sx + 11, cy - 8); ctx.quadraticCurveTo(sx, cy - 2, sx - 11, cy - 6); ctx.closePath(); ctx.fill();   // banana
+  ctx.fillStyle = '#6a4a2c'; ctx.beginPath(); ctx.arc(sx - 2, cy - 41, 2, 0, Math.PI * 2); ctx.fill();   // tip
+  ctx.strokeStyle = shade(ban, 0.62); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx - 7, cy - 10); ctx.quadraticCurveTo(sx - 10, cy - 28, sx - 2, cy - 37); ctx.stroke();   // peel ridge
+  const fy = cy - 18;
+  ctx.fillStyle = '#5a3a22'; ctx.beginPath(); ctx.arc(sx - 8, fy - 2, 3, 0, Math.PI * 2); ctx.arc(sx + 8, fy - 2, 3, 0, Math.PI * 2); ctx.fill();   // ears
+  ctx.beginPath(); ctx.ellipse(sx, fy, 8, 8, 0, 0, Math.PI * 2); ctx.fill();   // head
+  ctx.fillStyle = '#caa074'; ctx.beginPath(); ctx.ellipse(sx, fy + 2, 5.5, 5, 0, 0, Math.PI * 2); ctx.fill();   // muzzle
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 3, fy - 1, 1.4, 0, Math.PI * 2); ctx.arc(sx + 3, fy - 1, 1.4, 0, Math.PI * 2); ctx.fill();   // eyes
+  ctx.strokeStyle = '#2a1a0c'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, fy + 3, 2, 0.1, Math.PI - 0.1); ctx.stroke();   // mouth
+  ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(sx - 7, fy + 7); ctx.lineTo(sx - 12, fy + 12); ctx.moveTo(sx + 7, fy + 7); ctx.lineTo(sx + 12, fy + 12); ctx.stroke();   // arms
 };
 
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
@@ -1025,6 +1113,10 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'tralalero': drawTralalero(ctx, sx, sy, accent, d.color, dir); break;
     case 'bombardiro': drawBombardiro(ctx, sx, sy, accent, d.color, dir); break;
     case 'ballerina': drawBallerina(ctx, sx, sy, accent, d.color, dir); break;
+    case 'tungtung': drawTungTung(ctx, sx, sy, accent, d.color, dir); break;
+    case 'lirili': drawLirili(ctx, sx, sy, accent, d.color, dir); break;
+    case 'patapim': drawPatapim(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bananini': drawBananini(ctx, sx, sy, accent, d.color, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;

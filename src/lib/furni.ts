@@ -142,6 +142,10 @@ export const FURNI: FurniDef[] = [
   { kind: 'tralalero',  name: 'Tralalero Tralala',      emoji: '🦈', cat: 'brainrot', color: '#5aa9d6', h: 2, walk: false, foot: 0.6, special: 'tralalero' },
   { kind: 'bombardiro', name: 'Bombardiro Crocodilo',   emoji: '🐊', cat: 'brainrot', color: '#3f6b3a', h: 2, walk: false, foot: 1,   special: 'bombardiro' },
   { kind: 'ballerina',  name: 'Ballerina Cappuccina',   emoji: '🩰', cat: 'brainrot', color: '#f4b8d0', h: 2, walk: false, foot: 0.5, special: 'ballerina' },
+  { kind: 'tungtung',   name: 'Tung Tung Sahur',        emoji: '🪵', cat: 'brainrot', color: '#9a6b3f', h: 2, walk: false, foot: 0.5, special: 'tungtung' },
+  { kind: 'lirili',     name: 'Lirilì Larilà',          emoji: '🌵', cat: 'brainrot', color: '#3a8f4a', h: 2, walk: false, foot: 0.6, special: 'lirili' },
+  { kind: 'patapim',    name: 'Brr Brr Patapim',        emoji: '🐵', cat: 'brainrot', color: '#6a4a2c', h: 2, walk: false, foot: 0.6, special: 'patapim' },
+  { kind: 'bananini',   name: 'Chimpanzini Bananini',   emoji: '🍌', cat: 'brainrot', color: '#f4c430', h: 2, walk: false, foot: 0.5, special: 'bananini' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
