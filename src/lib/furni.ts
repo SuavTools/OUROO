@@ -93,8 +93,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'palmeira', name: 'Palm',     emoji: '🌴', cat: 'plantas', color: '#7a5230', h: 3, walk: false, foot: 0.7, special: 'palm' },
   { kind: 'flores',   name: 'Flowers',  emoji: '🌷', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
   { kind: 'topiary',  name: 'Topiary',  emoji: '🌳', cat: 'plantas', color: '#2a8a44', h: 2, walk: false, foot: 0.7, special: 'topiary' },
-  { kind: 'sakura',   name: 'Sakura',   emoji: '🌸', cat: 'plantas', color: '#ff9ec7', h: 3, walk: false, foot: 0.9, special: 'svg' },
-  { kind: 'bonsai_lux', name: 'Luxe Bonsai', emoji: '🎋', cat: 'plantas', color: '#2f9a4c', h: 1, walk: false, foot: 0.7, special: 'svg' },
+  { kind: 'sakura',   name: 'Sakura',   emoji: '🌸', cat: 'plantas', color: '#ff9ec7', h: 3, walk: false, foot: 0.9, special: 'sakura' },
+  { kind: 'bonsai_lux', name: 'Luxe Bonsai', emoji: '🎋', cat: 'plantas', color: '#2f9a4c', h: 1, walk: false, foot: 0.7, special: 'bonsai_lux' },
   // luzes
   { kind: 'candeeiro',name: 'Lamp',     emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'neon',     name: 'Neon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
@@ -121,9 +121,9 @@ export const FURNI: FurniDef[] = [
   { kind: 'pato',     name: 'Duckling', emoji: '🦆', cat: 'deco', color: '#ffd23a', h: 1, walk: false, foot: 0.4, special: 'duck' },
   { kind: 'cone',     name: 'Cone',     emoji: '🚧', cat: 'deco', color: '#ff6a00', h: 1, walk: false, foot: 0.4, special: 'cone' },
   { kind: 'estatua',  name: 'Statue',   emoji: '🗿', cat: 'deco', color: '#9a9aa6', h: 2, walk: false, foot: 0.6, special: 'statue' },
-  { kind: 'torii',    name: 'Torii',    emoji: '⛩️', cat: 'deco', color: '#e8492f', h: 3, walk: true,  foot: 1, special: 'svg', span: [3, 1] },
-  { kind: 'pagoda',   name: 'Pagoda',   emoji: '🏯', cat: 'deco', color: '#d8402a', h: 4, walk: false, foot: 0.8, special: 'svg' },
-  { kind: 'toro',     name: 'Stone Lantern', emoji: '🏮', cat: 'deco', color: '#b8b8b0', h: 2, walk: false, foot: 0.5, special: 'svg' },
+  { kind: 'torii',    name: 'Torii',    emoji: '⛩️', cat: 'deco', color: '#e8492f', h: 3, walk: true,  foot: 1, special: 'torii', span: [3, 1] },
+  { kind: 'pagoda',   name: 'Pagoda',   emoji: '🏯', cat: 'deco', color: '#d8402a', h: 4, walk: false, foot: 0.8, special: 'pagoda' },
+  { kind: 'toro',     name: 'Stone Lantern', emoji: '🏮', cat: 'deco', color: '#b8b8b0', h: 2, walk: false, foot: 0.5, special: 'toro' },
   { kind: 'fonte',    name: 'Fountain', emoji: '⛲', cat: 'deco', color: '#c8ccd4', h: 1, walk: false, foot: 0.9, special: 'fountain' },
   { kind: 'poste',    name: 'VIP Rope', emoji: '🪢', cat: 'deco', color: '#caa24a', h: 0, walk: true,  foot: 0.3, special: 'rope', span: [3, 1] },
   { kind: 'boia',     name: 'Float',    emoji: '🛟', cat: 'deco', color: '#ff5a5a', h: 0, walk: true,  foot: 0.6, special: 'float' },
@@ -153,7 +153,9 @@ const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, 
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
-const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch', 'peacock', 'cloud', 'stool', 'puff', 'eggchair', 'pit']);
+const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch', 'peacock', 'cloud', 'stool', 'puff', 'eggchair', 'pit',
+  // garden pieces — now procedural iso with 4-way directional art
+  'tree', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

@@ -284,7 +284,7 @@ const drawLaptop = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
 // ═══════════ HI-FI garden / lobby pieces (trees, palm, park bench, reception desk) ═══════════
 
 // Leafy tree: tapered bark trunk with root flare + a layered, gradient-shaded canopy and speckle light.
-const drawTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string) => {
+const drawTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a;
   ctx.save(); ctx.globalAlpha = 0.24; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.7, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   const trunkH = STACK_H * 1.7, tw = TW * 0.17;
@@ -300,12 +300,12 @@ const drawTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: str
   blob(-TW * 0.52, 0, TW * 0.56, greens[1]); blob(TW * 0.52, 0, TW * 0.56, greens[1]);
   blob(-TW * 0.26, -TH * 0.7, TW * 0.56, greens[2]); blob(TW * 0.32, -TH * 0.62, TW * 0.6, greens[2]);
   blob(0, -TH * 1.1, TW * 0.62, greens[4]);
-  ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#cdfaa8'; for (let i = 0; i < 16; i++) { const a = i * 2.39917, rr = TW * (0.2 + (i % 5) * 0.13); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * rr, cy - TH * 0.3 + Math.sin(a) * rr * 0.6, 1.8, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+  ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#cdfaa8'; for (let i = 0; i < 16; i++) { const a = i * 2.39917 + dir * 1.571, rr = TW * (0.2 + (i % 5) * 0.13); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * rr, cy - TH * 0.3 + Math.sin(a) * rr * 0.6, 1.8, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
 };
 
 // Palm: curved segmented trunk + a crown of arcing gradient fronds with midribs and coconuts.
-const drawPalm = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string) => {
-  void _a;
+const drawPalm = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const flip = fwd(dir)[0] < 0; ctx.save(); if (flip) { ctx.translate(sx, 0); ctx.scale(-1, 1); ctx.translate(-sx, 0); }
   ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.55, TH * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   const H = STACK_H * 2.1, lean = TW * 0.28, segs = 7;
   ctx.lineCap = 'round';
@@ -320,6 +320,7 @@ const drawPalm = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: str
   const angs = [-3.0, -2.6, -2.2, -1.85, -1.5, -1.1, -0.7, -0.25, 0.2];
   angs.forEach((a, i) => blade(a, TW * (0.95 + (i % 3) * 0.13), greens[i % greens.length]));
   ctx.fillStyle = '#6b4a28'; for (const o of [[-4, 3], [3, 4], [0, 6]] as [number, number][]) { ctx.beginPath(); ctx.arc(tx + o[0], ty + o[1], 3, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
 };
 
 // Park bench: metal frame + legs/armrests with slatted wood seat and a gapped slatted back. Rotates 4 ways.
@@ -436,8 +437,8 @@ const drawFloat = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent
 };
 
 // Tiered stone fountain: round basin, a pedestal + upper bowl, and an animated water jet/cascade.
-const drawFountain = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, t: number) => {
-  void _a; const stone = base;
+const drawFountain = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, t: number, dir: number) => {
+  void _a; void dir; const stone = base;
   ctx.fillStyle = shade(stone, 0.7); ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.84, TH * 0.84, 0, 0, Math.PI * 2); ctx.fill();   // basin rim
   ctx.fillStyle = '#1d7fa0'; ctx.beginPath(); ctx.ellipse(sx, sy - 2, TW * 0.68, TH * 0.68, 0, 0, Math.PI * 2); ctx.fill();        // basin water
   ctx.save(); ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 0.1); ctx.strokeStyle = '#bfe9ff'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, sy - 2, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
@@ -509,8 +510,8 @@ const drawLounger = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
 };
 
 // Topiary: glazed planter + a stack of three trimmed, gradient-shaded green spheres with leaf speckle.
-const drawTopiary = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string) => {
-  const top = boxAt(ctx, sx, sy, 0.4, 0.4, 0.55, '#b5572f', accent);
+const drawTopiary = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void dir; const top = boxAt(ctx, sx, sy, 0.4, 0.4, 0.55, '#b5572f', accent);
   ctx.fillStyle = '#33241a'; ctx.beginPath(); ctx.ellipse(sx, top, TW * 0.36, TH * 0.34, 0, 0, Math.PI * 2); ctx.fill();
   const ball = (cy: number, r: number) => { const g = ctx.createRadialGradient(sx - r * 0.3, cy - r * 0.35, 1, sx, cy, r); g.addColorStop(0, shade(base, 1.4)); g.addColorStop(0.65, base); g.addColorStop(1, shade(base, 0.66)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#bdf0a0'; for (let i = 0; i < 6; i++) { const a = i * 2.4; ctx.beginPath(); ctx.arc(sx + Math.cos(a) * r * 0.6, cy + Math.sin(a) * r * 0.6, 1.4, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); };
   ball(top - TW * 0.36, TW * 0.42); ball(top - TW * 0.36 - STACK_H * 0.7, TW * 0.33); ball(top - TW * 0.36 - STACK_H * 1.25, TW * 0.24);
@@ -569,8 +570,8 @@ const drawEgg = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: 
 };
 
 // Small lantern: a glass cage with a warm pulsing flame, a metal cap and a top ring (mount it on tables).
-const drawLantern = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, t: number) => {
-  void _a; const top = boxAt(ctx, sx, sy, 0.16, 0.16, 0.18, '#2c2c34', '#000', false);
+const drawLantern = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, t: number, dir: number) => {
+  void _a; void dir; const top = boxAt(ctx, sx, sy, 0.16, 0.16, 0.18, '#2c2c34', '#000', false);
   const gx = sx, gy = top - 9, gw = 6, gh = 12;
   ctx.fillStyle = hexA(base, 0.3); ctx.fillRect(gx - gw, gy - gh, gw * 2, gh);                                  // glass
   ctx.save(); ctx.shadowColor = base; ctx.shadowBlur = 14; ctx.globalAlpha = 0.6 + Math.abs(Math.sin(t * 0.1)) * 0.4; ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(gx, gy - gh * 0.45, 2.6, 4.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();   // flame
@@ -674,6 +675,121 @@ const drawPit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: 
   ctx.strokeStyle = hexA('#fff', 0.3); ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(sx, sy - 8, TW * 0.3, TH * 0.25, 0, 0, Math.PI * 2); ctx.stroke();
 };
 
+// ═══════════ Japanese-garden pieces — procedural ISO, 4-way rotatable (no flat billboards) ═══════════
+// Directional projector centred on the piece's tile origin (u = right, v = left, z = up), rotated by dir.
+const proj = (sx: number, sy: number, dir: number) => (u: number, v: number, z = 0): [number, number] => {
+  const [ru, rv] = rotUV(u, v, dir, 0, 0); return [sx + (ru - rv) * TW, sy + (ru + rv) * TH - z * STACK_H];
+};
+// Forward screen vector a piece "faces" for each dir (matches the egg-chair convention).
+const fwd = (dir: number): [number, number] => ([[-1, 1], [1, 1], [1, -1], [-1, -1]] as [number, number][])[((dir % 4) + 4) % 4];
+// Low hip roof drawn as an iso slab (eave thickness on the two front faces) + four facets to a ridge
+// peak; returns the peak y. Used by the pagoda + stone lantern so their roofs sit in iso space.
+const hipRoof = (ctx: CanvasRenderingContext2D, sx: number, top: number, foot: number, col: string, th: number, ridgeF = 0.7, gold = false) => {
+  const hw = TW * foot, hh = TH * foot;
+  poly(ctx, [[sx - hw, top], [sx, top + hh], [sx, top + hh + th], [sx - hw, top + th]], shade(col, 0.55));   // left eave
+  poly(ctx, [[sx, top + hh], [sx + hw, top], [sx + hw, top + th], [sx, top + hh + th]], shade(col, 0.78));   // right eave
+  const pk = top - hh * ridgeF;
+  poly(ctx, [[sx - hw, top], [sx, top - hh], [sx, pk]], shade(col, 1.0));    // back-left facet
+  poly(ctx, [[sx, top - hh], [sx + hw, top], [sx, pk]], shade(col, 1.22));   // back-right facet (lit)
+  poly(ctx, [[sx + hw, top], [sx, top + hh], [sx, pk]], shade(col, 1.08));   // front-right facet
+  poly(ctx, [[sx, top + hh], [sx - hw, top], [sx, pk]], shade(col, 0.84));   // front-left facet
+  if (gold) { ctx.strokeStyle = hexA('#e8c66a', 0.85); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(sx - hw, top); ctx.lineTo(sx, pk); ctx.lineTo(sx + hw, top); ctx.stroke(); }
+  return pk;
+};
+
+// Torii gate (3 tiles, walkable): tapered vermilion posts, a nuki tie-beam behind them, an upturned
+// kasagi lintel + hanging tablet. Rotates to span either iso axis.
+const drawTorii = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const P = proj(sx, sy, dir); const red = base, pw = TW * 0.13;
+  const lN = P(-1, 0, 2.4), rN = P(1, 0, 2.4);
+  ctx.lineCap = 'butt'; ctx.strokeStyle = shade(red, 0.7); ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(lN[0], lN[1]); ctx.lineTo(rN[0], rN[1]); ctx.stroke();   // nuki (behind posts)
+  for (const u of [-1, 1]) {
+    const b = P(u, 0, 0), top = P(u, 0, 3.0);
+    const g = ctx.createLinearGradient(b[0] - pw, 0, b[0] + pw, 0); g.addColorStop(0, shade(red, 0.58)); g.addColorStop(0.5, shade(red, 1.28)); g.addColorStop(1, shade(red, 0.58));
+    ctx.fillStyle = g; ctx.fillRect(b[0] - pw, top[1], pw * 2, b[1] - top[1]);
+    ctx.fillStyle = '#181818'; ctx.fillRect(b[0] - pw - 1, b[1] - 5, pw * 2 + 2, 6);   // footing
+  }
+  const lK = P(-1.2, 0, 3.0), rK = P(1.2, 0, 3.0), mK = P(0, 0, 3.24);
+  ctx.lineCap = 'round'; ctx.strokeStyle = '#181818'; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(lK[0], lK[1] + 4); ctx.quadraticCurveTo(mK[0], mK[1] + 4, rK[0], rK[1] + 4); ctx.stroke();
+  ctx.strokeStyle = shade(red, 1.12); ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(lK[0], lK[1]); ctx.quadraticCurveTo(mK[0], mK[1], rK[0], rK[1]); ctx.stroke();   // kasagi
+  const tb = P(0, 0, 2.6); ctx.fillStyle = '#181818'; ctx.fillRect(tb[0] - 7, tb[1] - 8, 14, 15); ctx.fillStyle = '#caa24a'; ctx.fillRect(tb[0] - 5, tb[1] - 6, 10, 11);   // tablet
+};
+
+// Pagoda (4 high): stacked cream-walled tiers, each capped by a wide upturned vermilion roof, gold
+// sōrin finial. Near 4-fold symmetric so it reads as a tower from every angle.
+const drawPagoda = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void dir; const red = base, wall = '#ece4d2';
+  let top = boxAt(ctx, sx, sy, 0.6, 0.6, 1.1, wall, accent); hipRoof(ctx, sx, top, 0.96, red, STACK_H * 0.3, 0.7, true);
+  top = boxAt(ctx, sx, top - TH * 0.55, 0.48, 0.48, 1.0, wall, accent); hipRoof(ctx, sx, top, 0.78, red, STACK_H * 0.28, 0.7, true);
+  top = boxAt(ctx, sx, top - TH * 0.45, 0.36, 0.36, 0.9, wall, accent); const pk = hipRoof(ctx, sx, top, 0.6, red, STACK_H * 0.24, 0.7, true);
+  ctx.fillStyle = '#caa24a'; ctx.fillRect(sx - 2, pk - STACK_H * 0.55, 4, STACK_H * 0.55);
+  ctx.fillStyle = '#e8c66a'; ctx.beginPath(); ctx.arc(sx, pk - STACK_H * 0.55, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA('#caa24a', 0.8); ctx.lineWidth = 1.4; for (const r of [5, 8]) { ctx.beginPath(); ctx.ellipse(sx, pk - STACK_H * 0.22, r, r * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); }
+};
+
+// Stone lantern / tōrō: stacked granite — base, post, glowing fire-box, upturned roof + finial. The warm
+// windows sit on the two camera-facing faces, so it lives in iso space instead of facing flat-out.
+const drawToro = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void dir; const st = base;
+  let top = boxAt(ctx, sx, sy, 0.4, 0.4, 0.42, shade(st, 0.86), accent);                 // base
+  top = boxAt(ctx, sx, top + TH * 0.4, 0.13, 0.13, 0.95, shade(st, 1.0), accent);        // post
+  const fbTop = boxAt(ctx, sx, top + TH * 0.13, 0.3, 0.3, 0.62, shade(st, 0.92), accent); // fire box
+  const cyW = (top + fbTop) / 2;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const g = ctx.createRadialGradient(sx, cyW, 1, sx, cyW, 15); g.addColorStop(0, 'rgba(255,210,110,0.8)'); g.addColorStop(1, 'rgba(255,210,110,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, cyW, 15, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#ffd66a'; ctx.fillRect(sx - 5, cyW - 5, 4.2, 10); ctx.fillRect(sx + 0.8, cyW - 5, 4.2, 10);   // two glowing windows on the front faces
+  hipRoof(ctx, sx, fbTop, 0.42, st, STACK_H * 0.2, 0.7, false);
+  const pk = fbTop - TH * 0.42 * 0.7; ctx.fillStyle = shade(st, 1.2); ctx.beginPath(); ctx.arc(sx, pk - 2, 3, 0, Math.PI * 2); ctx.fill();   // finial
+};
+
+// Sakura: iso-grounded curved trunk (leans with dir) + a billowing pink blossom canopy of radial lobes
+// with petal speckle. Canopy is rotationally even, so nothing "faces" the camera.
+const drawSakura = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; const f = fwd(dir), lean = 7, H = STACK_H * 2.2, tx = sx + f[0] * lean, ty = sy - H;
+  ctx.save(); ctx.globalAlpha = 0.16; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.6, TH * 0.6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.lineCap = 'round'; const tg = ctx.createLinearGradient(sx - 6, 0, sx + 6, 0); tg.addColorStop(0, '#52371f'); tg.addColorStop(0.5, '#7d573a'); tg.addColorStop(1, '#4a3119');
+  ctx.strokeStyle = tg; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(sx + f[0] * lean * 0.5, sy - H * 0.55, tx, ty); ctx.stroke();
+  ctx.lineWidth = 4; ctx.strokeStyle = '#5e4026'; ctx.beginPath(); ctx.moveTo(tx, ty + 14); ctx.lineTo(tx - 13, ty + 4); ctx.moveTo(tx, ty + 10); ctx.lineTo(tx + 14, ty - 2); ctx.stroke();
+  const cy = ty - 6, lobe = (ox: number, oy: number, r: number) => { const g = ctx.createRadialGradient(tx + ox - r * 0.3, cy + oy - r * 0.35, 1, tx + ox, cy + oy, r); g.addColorStop(0, '#ffd9ea'); g.addColorStop(0.55, '#ff9ec7'); g.addColorStop(1, '#e06a9f'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(tx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill(); };
+  lobe(0, 8, 22); lobe(-18, 2, 16); lobe(18, 0, 16); lobe(-9, -12, 14); lobe(11, -10, 13); lobe(0, -20, 12);
+  ctx.save(); ctx.globalAlpha = 0.85; ctx.fillStyle = '#fff2f8'; for (let i = 0; i < 7; i++) { const a = i * 2.39917 + dir; ctx.beginPath(); ctx.arc(tx + Math.cos(a) * 16, cy - 4 + Math.sin(a) * 12, 2.2, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+};
+
+// Luxe bonsai: glazed iso pot + a gnarled trunk (leans with dir) and three trimmed foliage pads.
+const drawBonsai = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void base; const f = fwd(dir);
+  const potTop = boxAt(ctx, sx, sy, 0.36, 0.36, 0.34, '#3a6a8a', accent);
+  ctx.fillStyle = '#2c5470'; ctx.beginPath(); ctx.ellipse(sx, potTop, TW * 0.34, TH * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.ellipse(sx, potTop, TW * 0.26, TH * 0.24, 0, 0, Math.PI * 2); ctx.fill();   // soil
+  const bx = sx + f[0] * 3, by = potTop - 2;
+  ctx.lineCap = 'round'; ctx.strokeStyle = '#5e4026'; ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(sx, by); ctx.quadraticCurveTo(sx + f[0] * 8, by - 14, bx, by - 24); ctx.stroke();
+  const pad = (ox: number, oy: number, r: number) => { const g = ctx.createRadialGradient(bx + ox - r * 0.3, by - 24 + oy - r * 0.3, 1, bx + ox, by - 24 + oy, r); g.addColorStop(0, '#4cbf6a'); g.addColorStop(0.7, '#2f9a4c'); g.addColorStop(1, '#1c6e34'); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(bx + ox, by - 24 + oy, r, r * 0.6, 0, 0, Math.PI * 2); ctx.fill(); };
+  pad(-12, 6, 13); pad(12, -2, 14); pad(0, -10, 11);
+};
+
+// Statue: iso plinth + a robed figure whose face + front sheen turn toward the camera with dir.
+const drawStatue = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const f = fwd(dir), ped = boxAt(ctx, sx, sy, 0.5, 0.5, 0.5, '#55555f', accent);
+  const bh = STACK_H * 1.5, topY = ped - bh;
+  const g = ctx.createLinearGradient(sx - 11, 0, sx + 11, 0); g.addColorStop(0, shade(base, 0.62)); g.addColorStop(0.5, shade(base, 1.2)); g.addColorStop(1, shade(base, 0.7));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 11, ped); ctx.quadraticCurveTo(sx - 7, topY + 6, sx - 5, topY); ctx.lineTo(sx + 5, topY); ctx.quadraticCurveTo(sx + 7, topY + 6, sx + 11, ped); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(base, 1.1); ctx.beginPath(); ctx.arc(sx, topY - 5, 6, 0, Math.PI * 2); ctx.fill();   // head
+  if (f[1] > 0) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = shade(base, 1.5); ctx.beginPath(); ctx.arc(sx + f[0] * 2, topY - 5, 4, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }   // lit face on camera side
+};
+
+// Garden duckling: iso contact shadow + plump body, with the head + beak turning to face its dir.
+const drawDuck = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const f = fwd(dir);
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.34, TH * 0.34, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const cy = sy - 7;
+  ctx.fillStyle = shade(base, 0.85); ctx.beginPath(); ctx.ellipse(sx, cy, 11, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = base; ctx.beginPath(); ctx.ellipse(sx, cy - 2, 11, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(sx - f[0] * 9, cy - 3 - f[1] * 1.5, 4, 3, 0, 0, Math.PI * 2); ctx.fill();   // tail (opposite forward)
+  const hx = sx + f[0] * 7, hy = cy - 9 - f[1] * 1.5;
+  ctx.fillStyle = base; ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.fill();                  // head
+  ctx.fillStyle = '#ff8800'; ctx.beginPath(); ctx.moveTo(hx + f[0] * 4, hy); ctx.lineTo(hx + f[0] * 9, hy + 1); ctx.lineTo(hx + f[0] * 4, hy + 3); ctx.closePath(); ctx.fill();   // beak (forward)
+  ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(hx + f[0] * 2, hy - 1, 1.2, 0, Math.PI * 2); ctx.fill();   // eye
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -695,8 +811,13 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'sofa': drawSofaR(ctx, sx, sy, accent, d.color, dir); break;
     case 'throne': drawThroneR(ctx, sx, sy, accent, d.color, dir); break;
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
-    case 'tree': drawTree(ctx, sx, sy, accent, d.color); break;
-    case 'palm': drawPalm(ctx, sx, sy, accent, d.color); break;
+    case 'tree': drawTree(ctx, sx, sy, accent, d.color, dir); break;
+    case 'palm': drawPalm(ctx, sx, sy, accent, d.color, dir); break;
+    case 'torii': drawTorii(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pagoda': drawPagoda(ctx, sx, sy, accent, d.color, dir); break;
+    case 'toro': drawToro(ctx, sx, sy, accent, d.color, dir); break;
+    case 'sakura': drawSakura(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bonsai_lux': drawBonsai(ctx, sx, sy, accent, d.color, dir); break;
     case 'bench': drawBench(ctx, sx, sy, accent, d.color, dir); break;
     case 'reception': drawReception(ctx, sx, sy, accent, d.color, dir); break;
     case 'pa': drawPA(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -705,11 +826,11 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'booth': drawBooth(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'parasol': drawParasol(ctx, sx, sy, accent, d.color); break;
     case 'lounger': drawLounger(ctx, sx, sy, accent, d.color, dir); break;
-    case 'topiary': drawTopiary(ctx, sx, sy, accent, d.color); break;
+    case 'topiary': drawTopiary(ctx, sx, sy, accent, d.color, dir); break;
     case 'banner': drawBanner(ctx, sx, sy, accent, d.color); break;
     case 'canopy': drawCanopy(ctx, sx, sy, accent, d.color, dir); break;
     case 'eggchair': drawEgg(ctx, sx, sy, accent, d.color, dir); break;
-    case 'lantern': drawLantern(ctx, sx, sy, accent, d.color, t); break;
+    case 'lantern': drawLantern(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'chaise': drawChaise(ctx, sx, sy, accent, d.color, dir); break;
     case 'greekcol': drawGreekCol(ctx, sx, sy, accent, d.color); break;
     case 'arch': drawArch(ctx, sx, sy, accent, d.color, dir); break;
@@ -718,7 +839,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pit': drawPit(ctx, sx, sy, accent, d.color); break;
     case 'chandelier': drawChandelier(ctx, sx, sy, accent, d.color, t); break;
     case 'float': drawFloat(ctx, sx, sy, accent, d.color, t); break;
-    case 'fountain': drawFountain(ctx, sx, sy, accent, d.color, t); break;
+    case 'fountain': drawFountain(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'plant_hc': drawPlantHC(ctx, sx, sy, accent, d.color); break;
     case 'column_hc': drawColumnHC(ctx, sx, sy, accent, d.color); break;
     case 'ball_hc': drawBallHC(ctx, sx, sy, accent, d.color, t); break;
@@ -796,9 +917,9 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'frame': { const w = 18, h = 24, by = sy - 6; ctx.fillStyle = d.color; ctx.fillRect(sx - w / 2 - 3, by - h - 3, w + 6, h + 6); ctx.fillStyle = '#243a6a'; ctx.fillRect(sx - w / 2, by - h, w, h); ctx.fillStyle = hexA(accent, 0.5); ctx.fillRect(sx - w / 2 + 3, by - h + 4, w - 6, 5); break; }
     case 'trophy': { const cy = sy - 5; ctx.fillStyle = '#b88a14'; ctx.fillRect(sx - 6, cy - 2, 12, 4); ctx.fillStyle = d.color; ctx.fillRect(sx - 2, cy - 11, 4, 9); ctx.beginPath(); ctx.moveTo(sx - 9, cy - 24); ctx.quadraticCurveTo(sx, cy - 9, sx + 9, cy - 24); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx - 9, cy - 20, 4, Math.PI * 0.4, Math.PI * 1.5); ctx.stroke(); ctx.beginPath(); ctx.arc(sx + 9, cy - 20, 4, -Math.PI * 0.5, Math.PI * 0.6); ctx.stroke(); break; }
     case 'vase': { const cy = sy - 4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx - 7, cy); ctx.quadraticCurveTo(sx - 13, cy - 13, sx - 4, cy - 22); ctx.lineTo(sx + 4, cy - 22); ctx.quadraticCurveTo(sx + 13, cy - 13, sx + 7, cy); ctx.closePath(); ctx.fill(); ctx.strokeStyle = shade(d.color, 1.35); ctx.lineWidth = 1; ctx.stroke(); break; }
-    case 'duck': { const cy = sy - 4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.ellipse(sx - 1, cy - 6, 11, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(sx + 7, cy - 14, 5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#ff8800'; ctx.beginPath(); ctx.moveTo(sx + 11, cy - 14); ctx.lineTo(sx + 18, cy - 13); ctx.lineTo(sx + 11, cy - 11); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx + 8, cy - 15, 1.2, 0, Math.PI * 2); ctx.fill(); break; }
+    case 'duck': drawDuck(ctx, sx, sy, accent, d.color, dir); break;
     case 'cone': { const cy = sy - 2; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx, cy - 28); ctx.lineTo(sx + 10, cy); ctx.lineTo(sx - 10, cy); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx - 6, cy - 13); ctx.lineTo(sx + 6, cy - 13); ctx.lineTo(sx + 5, cy - 9); ctx.lineTo(sx - 5, cy - 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(d.color, 0.8); ctx.fillRect(sx - 12, cy - 2, 24, 4); break; }
-    case 'statue': { const ped = boxAt(ctx, sx, sy, d.foot * 0.8, d.foot * 0.8, 0.45, '#55555f', accent); ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx - 8, ped); ctx.lineTo(sx + 8, ped); ctx.lineTo(sx + 5, ped - 30); ctx.lineTo(sx - 5, ped - 30); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.arc(sx, ped - 36, 6, 0, Math.PI * 2); ctx.fill(); break; }
+    case 'statue': drawStatue(ctx, sx, sy, accent, d.color, dir); break;
     default: block(ctx, sx, sy, d.h, d.color, accent, d.foot);
   }
 }
