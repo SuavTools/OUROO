@@ -63,7 +63,7 @@ const SECRET_ROOMS: Record<string, RoomDef> = {
 // The maze BRANCHES and CONVERGES — rooms can have multiple out-points, and several paths meet at the
 // Terminal. Codes escalate: the world's name (easy) → room-themed words (NPC-hinted) → cryptic
 // (riddle/Oracle-hinted) → OUROBOROS (the endgame). Every code is woven into something an NPC says.
-type Portal = { gx: number; gy: number; code: string; to: string; reward?: number };
+type Portal = { gx: number; gy: number; code: string; to: string; reward?: number; user?: boolean };
 const PORTALS: Record<string, Portal[]> = {
   // ── Surface entry points (all three public rooms have a door down) ──
   praca:  [{ gx: 2, gy: 8, code: 'OUROO', to: 'archive', reward: 500 }],          // tier 1 — the world's name
@@ -364,10 +364,23 @@ const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent 
 };
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string };
+// portalTo/portalCode ride along on PLAYER-PLACED portals (a teleporter that links to another room).
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string };
 // Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
 const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
 const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
+// PLAYER PORTALS persist in the SAME room_items table (no migration) as a special kind string:
+//   `portal:<encoded dest>:<encoded access-code>`.  encodeURIComponent escapes any @ / ^ / : so decodeKind
+//   leaves the whole thing intact; we then hydrate it into a plain `teleporter` item carrying the link.
+const encodePortal = (to: string, code: string) => `portal:${encodeURIComponent(to)}:${encodeURIComponent(code)}`;
+const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
+  if (rawKind.startsWith('portal:')) {
+    const [, to = '', code = ''] = rawKind.split(':');
+    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: decodeURIComponent(to), portalCode: decodeURIComponent(code) };
+  }
+  const dk = decodeKind(rawKind);
+  return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
+};
 type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 
@@ -433,6 +446,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const posAccum = useRef(0);
   const wasMovingRef = useRef(false);
   const strideRef = useRef(0);   // distance walked since the last footstep sound
+  const lastPortalKeyRef = useRef<string | null>(null);   // rising-edge guard so a portal fires once per arrival
   const modRef = useRef(false);
 
   const [msg, setMsg] = useState('');
@@ -502,9 +516,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
-  const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you tap a portal
+  const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
   const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
+  // Player portal-maker: pick a destination + optional access code, then drop the portal onto a tile.
+  const [portalMaker, setPortalMaker] = useState(false);
+  const [pmDest, setPmDest] = useState('praca');     // a public slug, or 'code' to link by room code
+  const [pmRoomCode, setPmRoomCode] = useState('');  // the destination room's invite code (when pmDest==='code')
+  const [pmAccess, setPmAccess] = useState('');      // optional access code the next person must speak
+  const makePortal = () => {
+    const to = pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest;
+    if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
+    setPlacingKind(encodePortal(to, pmAccess.trim())); setRemoveMode(false); setRotateMode(false);
+    setPortalMaker(false); flashHint('Tap a tile to drop the portal ✦');
+  };
   // Ambient room music — the SUAV signal (generated, royalty-free; see lib/roomMusic). Off persists per device.
   const musicRef = useRef<RoomMusic | null>(null);
   const [musicOff, setMusicOff] = useState<boolean>(() => { try { return localStorage.getItem('ouroo_music_off') === '1'; } catch { return false; } });
@@ -560,6 +585,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const sp = planSpawn(planById(def.plan));
     const me = selfRef.current; me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = []; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
+    lastPortalKeyRef.current = `${sp.gx},${sp.gy}`;   // don't auto-fire a portal we happen to spawn on; arm on the first step off
     setRoomMeta(def); setRoom(def.slug);
   };
   const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan });
@@ -574,14 +600,28 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!r) { flashHint('Room not found'); return; }
     setJoinCode(''); switchRoom(roomDefOf(r));
   };
-  // Speak a portal's code → travel to its secret room (first visit pays out crystals).
-  const tryPortal = () => {
-    const p = portalPrompt; if (!p) return;
-    if (portalCode.trim().toUpperCase() !== p.code.toUpperCase()) { flashHint('The door stays shut.'); setPortalCode(''); return; }
-    const def = SECRET_ROOMS[p.to]; setPortalPrompt(null); setPortalCode('');
-    if (!def) return;
+  // Is there a portal on this tile? (curated maze portals OR a player-placed portal item.)
+  const portalAtTile = (gx: number, gy: number): Portal | null => {
+    const c = (PORTALS[roomMetaRef.current.slug] ?? []).find(pt => pt.gx === gx && pt.gy === gy);
+    if (c) return c;
+    const up = [...itemsRef.current].reverse().find(i => i.portalTo && i.gx === gx && i.gy === gy);
+    if (up) return { gx, gy, code: up.portalCode || '', to: up.portalTo!, user: true };
+    return null;
+  };
+  // Resolve a portal destination: a curated secret slug, a public room slug, or `code:<INVITE>` (any room).
+  const resolveDest = async (to: string): Promise<RoomDef | null> => {
+    if (SECRET_ROOMS[to]) return SECRET_ROOMS[to];
+    const pub = ROOMS.find(r => r.slug === to); if (pub) return pub;
+    if (to.startsWith('code:')) { const r = await roomByCode(to.slice(5)); return r ? roomDefOf(r) : null; }
+    return null;
+  };
+  // Travel through a portal (curated portals pay out + show the lore modal on first visit; player portals don't).
+  const travelTo = async (p: Portal) => {
+    const def = await resolveDest(p.to);
+    if (!def) { flashHint('That door leads nowhere now.'); return; }
     musicRef.current?.portal();   // threshold-crossing shimmer
     switchRoom(def);
+    if (p.user) return;
     try {
       const fk = `ouroo_secret_${def.slug}`;
       if (localStorage.getItem(fk) !== '1') {   // first visit → reward + "you found it" modal
@@ -591,6 +631,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (intro) setArrivalModal({ title: intro.title, body: intro.body, reward });
       }
     } catch { /* ignore */ }
+  };
+  // Speak a portal's code → travel. (No code → handled directly on walk-on; see the movement loop.)
+  const tryPortal = async () => {
+    const p = portalPrompt; if (!p) return;
+    if (p.code && portalCode.trim().toUpperCase() !== p.code.toUpperCase()) { flashHint('The door stays shut.'); setPortalCode(''); return; }
+    setPortalPrompt(null); setPortalCode('');
+    await travelTo(p);
   };
   const doDeleteRoom = async (r: RoomRow) => {
     if (!confirm(`Delete "${r.name}"? Its furniture will be gone.`)) return;
@@ -691,22 +738,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const placeItem = (kind: string, gx: number, gy: number) => {
     if (!requireAccount()) return;
     if (!canBuildHere()) { flashHint('No permission to build here'); return; }
-    // Inventory: non-mods need stock (free basics are unlimited). Mods build freely (creative mode).
-    if (!modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Unavailable' : 'Out of stock — buy more ✦'); return; }
+    const isPortal = kind.startsWith('portal:');   // a player-made portal (free; renders + behaves as a teleporter)
+    const engineKind = isPortal ? 'teleporter' : kind;
+    // Inventory: non-mods need stock for real furni (free basics are unlimited; portals are free). Mods build freely.
+    if (!isPortal && !modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Unavailable' : 'Out of stock — buy more ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Room is full'); return; }
     const mine = itemsRef.current.filter(i => i.createdBy === deviceRef.current).length;
     if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Max ${PLACE_CAP} per person`); return; }
-    const dir = isRotatable(kind) ? placeDirRef.current : 0;
-    const elev = placeElevRef.current;   // any piece can be lifted — stack decks, mount decor on tables, build tall
-    const [sw, sh] = effSpan(kind, dir);
+    const dir = isRotatable(engineKind) ? placeDirRef.current : 0;
+    const elev = isPortal ? 0 : placeElevRef.current;   // any piece can be lifted — stack decks, mount decor on tables, build tall
+    const [sw, sh] = effSpan(engineKind, dir);
     if (gx + sw > GRID || gy + sh > GRID) { flashHint('Doesn\'t fit here'); return; }
     for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) if (planLvl(gx + du, gy + dv) < 0) { flashHint('Doesn\'t fit here'); return; }
-    if (!modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
+    if (!isPortal && !modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
-    const item: Item = { id, kind, gx, gy, dir, elev, createdBy: deviceRef.current };
+    const dbKind = isPortal ? kind : encodeKind(engineKind, dir, elev);   // the room_items `kind` text (carries dir/elev or the portal link)
+    const item = hydrateItem(dbKind, id, gx, gy, deviceRef.current);
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
-    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind, gx, gy, dir, elev, by: item.createdBy } });
-    supabase?.from('room_items').insert({ id, room, kind: encodeKind(kind, dir, elev), x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
+    if (isPortal) flashHint('Portal placed ✦ walk onto it to travel');
+    channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind: isPortal ? dbKind : engineKind, gx, gy, dir, elev, by: item.createdBy } });
+    supabase?.from('room_items').insert({ id, room, kind: dbKind, x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => {
@@ -720,7 +771,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
     if (!hit) return;
-    returnFurni(hit.kind);   // pick it up into MY inventory (free basics: no-op)
+    if (!hit.portalTo) returnFurni(hit.kind);   // pick it up into MY inventory (portals are free — don't gift a teleporter)
     itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
     if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
     channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
@@ -787,7 +838,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         })
         .on('broadcast', { event: 'place' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
-          itemsRef.current.push({ id, kind: String(pl.kind), gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, elev: Number(pl.elev) || 0, createdBy: String(pl.by ?? '') }); rebuildHeight();
+          const rawK = String(pl.kind);
+          if (rawK.startsWith('portal:')) itemsRef.current.push(hydrateItem(rawK, id, Number(pl.gx), Number(pl.gy), String(pl.by ?? '')));
+          else itemsRef.current.push({ id, kind: rawK, gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, elev: Number(pl.elev) || 0, createdBy: String(pl.by ?? '') });
+          rebuildHeight();
         })
         .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
@@ -800,7 +854,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
             await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl });   // small payload only — no nested objects
             const { data } = await sb.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
-            if (data) { itemsRef.current = data.map(d => { const dk = decodeKind(String(d.kind)); return { id: String(d.id), kind: dk.kind, dir: dk.dir, elev: dk.elev, gx: Number(d.x), gy: Number(d.y), createdBy: String(d.created_by ?? '') }; }); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
+            if (data) { itemsRef.current = data.map(d => hydrateItem(String(d.kind), String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? ''))); setMyCount(itemsRef.current.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight(); }
           } else {
             setConnected(false);
             if (alive && (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')) {   // self-heal: rebuild the channel
@@ -847,6 +901,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (wasMovingRef.current && !moving) ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() });   // final position; no mid-session re-track (that bounced the channel)
       }
       wasMovingRef.current = moving;
+      // PORTALS activate by WALKING ONTO them — find the door, walk to it. Fires once you SETTLE on the tile
+      // (path finished), rising-edge so it triggers a single time per arrival. No code → travel straight away.
+      if (!moving && me.path.length === 0) {
+        const pt = portalAtTile(clampTile(me.fx), clampTile(me.fy)); const pk = pt ? `${pt.gx},${pt.gy}` : null;
+        if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelTo(pt); } }
+        lastPortalKeyRef.current = pk;
+      } else if (moving) lastPortalKeyRef.current = null;   // stepped off → re-arm
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
@@ -1059,8 +1120,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
-    const portal = (PORTALS[room] ?? []).find(pt => pt.gx === gx && pt.gy === gy);   // tapped a portal tile → ask for the code
-    if (portal) { setPortalPrompt(portal); setPortalCode(''); return; }
+    // Portals aren't tapped — you WALK onto them (see the movement loop). Tapping a portal tile just paths you there.
     const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
   const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy } = evtTile(e); hoverRef.current = planLvl(gx, gy) < 0 ? null : { gx, gy }; };
@@ -1144,6 +1204,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Pick up</span>
+              </button>
+              <button onClick={() => { setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); }} title="Place a portal to another room"
+                className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#cc66ff]/15">
+                <span className="text-[18px] leading-none text-[#cc66ff]" style={{ marginTop: '-1px' }}>◎</span>
+                <span className="text-[7px] uppercase tracking-wide leading-none text-[#cc66ff]">Portal</span>
               </button>
             </div>
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
@@ -1307,6 +1372,39 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <div className="flex gap-2">
               <button onClick={tryPortal} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Open ▸</button>
               <button onClick={() => { setPortalPrompt(null); setPortalCode(''); }} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Leave</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {portalMaker && (
+        <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setPortalMaker(false)}>
+          <div className="w-full max-w-sm border border-[#cc66ff]/40 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#cc66ff]">◎ new portal</p>
+              <p className="text-sm text-white/60 leading-relaxed mt-1">Drop a door that leads somewhere else. People walk onto it to travel — find it, walk to it.</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Leads to</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[['praca', 'Plaza'], ['clube', 'Club'], ['jardim', 'Garden'], ['code', 'A room code…']].map(([id, label]) => (
+                  <button key={id} onClick={() => setPmDest(id)}
+                    className={`text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 border transition-colors ${pmDest === id ? 'bg-[#cc66ff] text-black border-[#cc66ff]' : 'text-white/70 border-white/20 hover:border-[#cc66ff]/60'}`}>{label}</button>
+                ))}
+              </div>
+              {pmDest === 'code' && (
+                <input value={pmRoomCode} onChange={e => setPmRoomCode(e.target.value.toUpperCase())} maxLength={8} placeholder="ROOM CODE"
+                  className="mt-2 w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm tracking-[0.3em] font-mono outline-none focus:border-[#cc66ff]" />
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Access code <span className="text-white/25 normal-case tracking-normal">(optional — leave blank for an open door)</span></p>
+              <input value={pmAccess} onChange={e => setPmAccess(e.target.value.toUpperCase())} maxLength={12} placeholder="NO CODE"
+                className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm tracking-[0.3em] font-mono outline-none focus:border-[#cc66ff]" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={makePortal} className="flex-1 bg-[#cc66ff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Place portal ▸</button>
+              <button onClick={() => setPortalMaker(false)} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
             </div>
           </div>
         </div>
