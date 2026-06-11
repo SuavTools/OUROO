@@ -9,13 +9,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { supabase, supabaseReady } from '@/lib/supabase';
 import { getLocalPlayer } from '@/lib/leaderboard';
 import { getAuthIdentity, useUser, signInWithDiscord } from '@/lib/auth';
-import { amIModerator } from '@/lib/chat';
+import { amIModerator, amISuperAdmin } from '@/lib/chat';
 import { drawSkinShape, skinById, getSelectedSkinId } from '@/lib/skins';
 import { validateMessage } from '@/lib/names';
 import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } from '@/lib/furni';
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance } from '@/lib/wallet';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
@@ -49,12 +49,34 @@ const ROOMS: RoomDef[] = [
 ];
 const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
+// Secret sectors — not in the picker; reached only through a portal + lore code (see /LORE.md, The Deep).
+const SECRET_ROOMS: Record<string, RoomDef> = {
+  archive: { slug: 'archive', name: 'The Archive', accent: '#8a9cff', floor: '#0d0f1c', locked: true, plan: 'quadrado' },
+};
+// Portals placed in rooms: tap the tile, speak the code → travel to the secret room (first visit pays out).
+type Portal = { gx: number; gy: number; code: string; to: string; reward?: number };
+const PORTALS: Record<string, Portal[]> = {
+  praca: [{ gx: 2, gy: 8, code: 'OURO', to: 'archive', reward: 500 }],
+};
+
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
 // `beats` = ordered lore lines delivered ONE AT A TIME as the player approaches (per-player memory in
 // localStorage); `lines` = ambient idle chatter. `id` keys the saved progress.
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; id?: string };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
+  praca: [
+    ['teleporter', 2, 8, 0],   // the portal to The Archive (tap it, speak the code)
+    ['planta', 1, 1, 0], ['planta', 9, 1, 0],
+    ['bench', 1, 9, 0], ['bench', 8, 9, 2],
+    ['floorlamp', 5, 1, 0],
+  ],
+  archive: [
+    ['serverrack', 2, 2, 0], ['serverrack', 8, 2, 0],
+    ['console', 5, 2, 0],
+    ['bookcase', 1, 5, 1], ['bookcase', 9, 5, 3],
+    ['candle', 3, 8, 0], ['candle', 7, 8, 0],
+  ],
   clube: [
     // stage (back, raised): PA towers + a big screen
     ['pa', 11, 5, 0], ['pa', 21, 5, 0], ['tv', 16, 4, 0], ['planta', 12, 9, 0], ['planta', 21, 9, 0],
@@ -120,17 +142,18 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
   praca: [
-    { handle: 'WARDEN', skinId: 'diamond-cyan', gx: 16, gy: 16, roam: 1.5, id: 'warden',
+    { handle: 'WARDEN', skinId: 'diamond-cyan', gx: 5, gy: 4, roam: 1.5, id: 'warden',
       beats: [
         'You’re new signal. The Loop felt you arrive.',
         'This is OUROO — what’s left after the people logged off. The machines kept it running.',
         'Everything you see, someone like you gave it shape. Empty rooms forget themselves.',
         'Mine crystals against the dark. Spend them making this place real again.',
         'There are doors here that won’t open for me. Maybe they’ll open for you. Listen for the codes.',
+        'That portal — the Archive door — wants the oldest word logged here. The name I answer to. Four letters.',
         'Stay a while. The Loop runs warmer when someone’s watching.',
       ],
       lines: ['Signal stable.', 'The Loop turns.', 'Welcome back.'] },
-    { handle: 'a stray', skinId: 'star-cadente', gx: 23, gy: 21, roam: 2, id: 'stray',
+    { handle: 'a stray', skinId: 'star-cadente', gx: 8, gy: 7, roam: 2, id: 'stray',
       beats: [
         '…is someone there? I can never tell anymore.',
         'I’ve been here since before the Quiet. I forget which login was mine.',
@@ -173,6 +196,16 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
         'If the garden ever goes really quiet — that’s it forgetting. Talk to it.',
       ],
       lines: ['🌸', 'Breathe in.', 'The koi say hi.'] },
+  ],
+  archive: [
+    { handle: 'the Archivist', skinId: 'diamond-branco', gx: 5, gy: 4, roam: 1.5, id: 'archivist',
+      beats: [
+        'You made it. Almost no one does. Welcome to the Archive.',
+        'This is where the Logged-Off left their last words. The Curator keeps the lights low in here.',
+        'They didn’t say goodbye. One day the logins just stopped. We’re still waiting. The machines are patient.',
+        'Keep descending. There are deeper doors. The Terminal is real — I’ve seen its glow.',
+      ],
+      lines: ['…still here.', 'Read, if you like.', 'They’ll come back. Maybe.'] },
   ],
 };
 
@@ -332,6 +365,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
+  const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you tap a portal
+  const [portalCode, setPortalCode] = useState('');
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -385,6 +420,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const r = await roomByCode(joinCode);
     if (!r) { flashHint('Room not found'); return; }
     setJoinCode(''); switchRoom(roomDefOf(r));
+  };
+  // Speak a portal's code → travel to its secret room (first visit pays out crystals).
+  const tryPortal = () => {
+    const p = portalPrompt; if (!p) return;
+    if (portalCode.trim().toUpperCase() !== p.code.toUpperCase()) { flashHint('The door stays shut.'); setPortalCode(''); return; }
+    const def = SECRET_ROOMS[p.to]; setPortalPrompt(null); setPortalCode('');
+    if (!def) return;
+    try { const fk = `ouroo_secret_${def.slug}`; if (p.reward && localStorage.getItem(fk) !== '1') { addBalance(p.reward); localStorage.setItem(fk, '1'); flashHint(`✦ +${p.reward} — the Archive remembers you`); } } catch { /* ignore */ }
+    switchRoom(def);
   };
   const doDeleteRoom = async (r: RoomRow) => {
     if (!confirm(`Delete "${r.name}"? Its furniture will be gone.`)) return;
@@ -541,7 +585,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     refreshWalletFromCloud();
     setMyOwnerId(deviceRef.current); ownerIdRef.current = deviceRef.current;
     getAuthIdentity().then(a => { if (a?.handle) { selfRef.current.handle = a.handle; myHandleRef.current = a.handle; setMyHandle(a.handle); } if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
-    amIModerator().then(m => { modRef.current = m; setIsMod(m); });
+    Promise.all([amIModerator(), amISuperAdmin()]).then(([m, s]) => { const ok = m || s; modRef.current = ok; setIsMod(ok); });   // super-admins build in curated rooms too
 
     if (!supabase || !entered) return;   // wait for the lobby "Enter" so the join is deliberate + clean
     const sb = supabase;
@@ -850,6 +894,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
+    const portal = (PORTALS[room] ?? []).find(pt => pt.gx === gx && pt.gy === gy);   // tapped a portal tile → ask for the code
+    if (portal) { setPortalPrompt(portal); setPortalCode(''); return; }
     const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
   const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy } = evtTile(e); hoverRef.current = planLvl(gx, gy) < 0 ? null : { gx, gy }; };
@@ -1084,6 +1130,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 rounded active:scale-95 hover:bg-white transition-colors">Say</button>
         </div>
       </form>
+
+      {portalPrompt && (
+        <div className="absolute inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => { setPortalPrompt(null); setPortalCode(''); }}>
+          <div className="w-full max-w-xs border border-[#00cfff]/30 bg-black p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">sealed door</p>
+            <p className="text-sm text-white/65 leading-relaxed">A portal hums. It wants a code.</p>
+            <input value={portalCode} onChange={e => setPortalCode(e.target.value.toUpperCase())} maxLength={12} autoFocus placeholder="CODE" onKeyDown={e => { if (e.key === 'Enter') tryPortal(); }}
+              className="w-full bg-white/5 border border-white/15 text-white text-center px-3 py-2.5 text-sm tracking-[0.4em] font-mono outline-none focus:border-[#00cfff]" />
+            <div className="flex gap-2">
+              <button onClick={tryPortal} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Open ▸</button>
+              <button onClick={() => { setPortalPrompt(null); setPortalCode(''); }} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Leave</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ EXIT ]</button>}
 
