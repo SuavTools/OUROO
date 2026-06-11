@@ -21,6 +21,7 @@ import { CatIcon, FurniSprite } from '@/components/UiIcon';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
+import { RoomMusic } from '@/lib/roomMusic';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -397,6 +398,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you tap a portal
   const [portalCode, setPortalCode] = useState('');
   const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
+  // Ambient room music — the SUAV signal (generated, royalty-free; see lib/roomMusic). Off persists per device.
+  const musicRef = useRef<RoomMusic | null>(null);
+  const [musicOff, setMusicOff] = useState<boolean>(() => { try { return localStorage.getItem('ouroo_music_off') === '1'; } catch { return false; } });
+  useEffect(() => {
+    const m = new RoomMusic(); musicRef.current = m;
+    m.setMuted(musicOff); m.setRoom(roomMetaRef.current.slug);
+    m.start();   // attempts to resume; if the context is still suspended, the gesture listener below arms it
+    const arm = () => m.start();
+    window.addEventListener('pointerdown', arm); window.addEventListener('keydown', arm);
+    return () => { window.removeEventListener('pointerdown', arm); window.removeEventListener('keydown', arm); m.dispose(); musicRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { musicRef.current?.setRoom(roomMeta.slug); }, [roomMeta.slug]);
+  const toggleMusic = () => setMusicOff(v => { const nv = !v; musicRef.current?.setMuted(nv); try { localStorage.setItem('ouroo_music_off', nv ? '1' : '0'); } catch { /* ignore */ } return nv; });
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -1200,6 +1215,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </div>
         </div>
       )}
+
+      <button onClick={toggleMusic} title={musicOff ? 'Signal muted — tap to listen' : 'SUAV signal — tap to mute'} aria-label="Toggle music"
+        className={`absolute top-3 z-40 text-[15px] font-mono border border-brandYellow bg-black/60 w-8 h-8 flex items-center justify-center hover:bg-brandYellow hover:text-black transition-all ${musicOff ? 'text-brandYellow/40 line-through' : 'text-brandYellow'}`}
+        style={{ right: onExit ? '5.5rem' : '1rem' }}>♪</button>
 
       {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ EXIT ]</button>}
 
