@@ -1033,6 +1033,119 @@ const drawBananini = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acc
   ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(sx - 7, fy + 7); ctx.lineTo(sx - 12, fy + 12); ctx.moveTo(sx + 7, fy + 7); ctx.lineTo(sx + 12, fy + 12); ctx.stroke();   // arms
 };
 
+// ═══════════ HOME — real rotatable iso furniture (built on drawParts, world-axis faces) ═══════════
+
+// Double bed (2×2): wood frame, mattress, tall headboard at the back, duvet + two pillows.
+const drawBed = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const wood = base, cT = shade(wood, 1.2), cR = shade(wood, 0.9), cL = shade(wood, 0.58);
+  const sheet = '#eef1f6', sT = shade(sheet, 1.0), sR = shade(sheet, 0.92), sL = shade(sheet, 0.8);
+  const parts: IsoPart[] = [
+    { u0: -0.95, u1: 0.95, v0: -0.95, v1: 0.95, z0: 0, z1: 0.32, t: cT, r: cR, l: cL },        // frame
+    { u0: -0.88, u1: 0.88, v0: -0.7, v1: 0.9, z0: 0.32, z1: 0.6, t: sT, r: sR, l: sL },         // mattress
+    { u0: -0.92, u1: 0.92, v0: -0.95, v1: -0.74, z0: 0.32, z1: 1.45, t: cT, r: cR, l: cL }];    // headboard
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.86, 0.12, 0.6), P(0.86, 0.12, 0.6), P(0.86, 0.88, 0.6), P(-0.86, 0.88, 0.6)], hexA(accent, 0.8));   // duvet
+    poly(ctx, [P(-0.86, 0.12, 0.6), P(0.86, 0.12, 0.6), P(0.86, 0.12, 0.52), P(-0.86, 0.12, 0.52)], hexA(accent, 0.55));
+    for (const u of [-0.42, 0.42]) { const c = P(u, -0.5, 0.6); ctx.fillStyle = shade(sheet, 1.15); ctx.beginPath(); ctx.ellipse(c[0], c[1] - 3, 15, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = hexA('#c8ccd4', 0.6); ctx.lineWidth = 1; ctx.stroke(); }   // pillows
+  });
+};
+
+// Wardrobe (3 high): tall cabinet, twin panelled doors + brass handles on the camera-facing front.
+const drawWardrobe = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.18), cR = shade(wood, 0.92), cL = shade(wood, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.42, u1: 0.42, v0: -0.3, v1: 0.3, z0: 0, z1: 3, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    for (const [u0, u1] of [[-0.4, -0.02], [0.02, 0.4]] as [number, number][]) {
+      poly(ctx, [P(u0 + 0.04, 0.3, 2.6), P(u1 - 0.04, 0.3, 2.6), P(u1 - 0.04, 0.3, 0.4), P(u0 + 0.04, 0.3, 0.4)], hexA('#fff', 0.06), hexA('#000', 0.28), 1);
+    }
+    for (const u of [-0.06, 0.06]) { const h = P(u, 0.3, 1.5); ctx.fillStyle = '#caa24a'; ctx.beginPath(); ctx.ellipse(h[0], h[1], 2, 5, 0, 0, Math.PI * 2); ctx.fill(); }   // handles
+  });
+};
+
+// Bookcase (2.6 high): open carcass with shelves + a wall of coloured book spines on the front.
+const drawBookcase = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.15), cR = shade(wood, 0.9), cL = shade(wood, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.45, u1: 0.45, v0: -0.28, v1: 0.3, z0: 0, z1: 2.6, t: cT, r: cR, l: cL }];
+  const cols = ['#b3242e', '#2e7d4a', '#caa24a', '#3a7bd0', '#7a4ba0', '#d8702a'];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    poly(ctx, [P(-0.4, 0.3, 2.42), P(0.4, 0.3, 2.42), P(0.4, 0.3, 0.16), P(-0.4, 0.3, 0.16)], '#2a1f16');   // interior
+    for (let s = 0; s < 4; s++) {
+      const zb = 0.2 + s * 0.57;
+      poly(ctx, [P(-0.4, 0.3, zb), P(0.4, 0.3, zb), P(0.4, 0.3, zb - 0.06), P(-0.4, 0.3, zb - 0.06)], shade(wood, 0.8));   // shelf
+      for (let bI = 0; bI < 7; bI++) { const u = -0.36 + bI * 0.1, bh = 0.3 + ((bI * 37) % 5) * 0.04; poly(ctx, [P(u, 0.3, zb + bh), P(u + 0.075, 0.3, zb + bh), P(u + 0.075, 0.3, zb), P(u, 0.3, zb)], cols[(bI + s) % 6]); }
+    }
+  });
+};
+
+// Desk (2×1): wood top on a drawer pedestal + legs, with a glowing monitor + keyboard on top.
+const drawDesk = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const wood = base, cT = shade(wood, 1.2), cR = shade(wood, 0.92), cL = shade(wood, 0.6);
+  const parts: IsoPart[] = [
+    ...legs([[-0.82, -0.2], [-0.82, 0.28]], 0.58).map(p => ({ ...p, t: shade(wood, 0.9), r: shade(wood, 0.7), l: shade(wood, 0.5) })),
+    { u0: 0.5, u1: 0.88, v0: -0.24, v1: 0.32, z0: 0, z1: 0.58, t: cT, r: cR, l: cL },           // drawer pedestal
+    { u0: -0.9, u1: 0.9, v0: -0.28, v1: 0.34, z0: 0.58, z1: 0.72, t: cT, r: cR, l: cL }];       // top
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (faceVisible(0, 1, dir)) for (const z of [0.18, 0.4]) { const h = P(0.69, 0.32, z); ctx.fillStyle = '#caa24a'; ctx.fillRect(h[0] - 5, h[1] - 1.5, 10, 3); }   // drawer handles
+    const b = P(-0.3, 0.0, 0.72); ctx.fillStyle = '#2a2a30'; ctx.fillRect(b[0] - 2, b[1] - 18, 4, 18);
+    ctx.fillStyle = '#15151f'; ctx.fillRect(b[0] - 15, b[1] - 36, 30, 19); ctx.fillStyle = hexA(accent, 0.75); ctx.fillRect(b[0] - 12, b[1] - 33, 24, 13);   // monitor
+    const k = P(-0.18, 0.2, 0.72); ctx.fillStyle = '#3a3a44'; ctx.fillRect(k[0] - 9, k[1] - 3, 18, 5);   // keyboard
+  });
+};
+
+// Kitchen counter (2×1): cabinet body, stone worktop overhang, inset sink + tap, cupboard doors.
+const drawKitchen = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const body = base, cT = shade(body, 1.18), cR = shade(body, 0.92), cL = shade(body, 0.56), top = '#d8dce4';
+  const parts: IsoPart[] = [{ u0: -0.9, u1: 0.9, v0: -0.2, v1: 0.34, z0: 0, z1: 1.4, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 1.4;
+    poly(ctx, [P(-0.96, -0.26, z), P(0.96, -0.26, z), P(0.96, 0.4, z), P(-0.96, 0.4, z)], shade(top, 1.2));
+    poly(ctx, [P(-0.96, 0.4, z), P(0.96, 0.4, z), P(0.96, 0.4, z - 0.1), P(-0.96, 0.4, z - 0.1)], shade(top, 0.8));
+    const s = P(-0.45, 0.04, z); ctx.fillStyle = '#9aa0aa'; ctx.beginPath(); ctx.ellipse(s[0], s[1], 14, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#5a6068'; ctx.beginPath(); ctx.ellipse(s[0], s[1], 10, 5.5, 0, 0, Math.PI * 2); ctx.fill();   // sink
+    const tp = P(-0.45, -0.12, z); ctx.strokeStyle = '#cfd6e2'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(tp[0], tp[1]); ctx.lineTo(tp[0], tp[1] - 9); ctx.lineTo(tp[0] + 6, tp[1] - 9); ctx.stroke();   // tap
+    if (faceVisible(0, 1, dir)) for (const u of [-0.62, -0.2, 0.42]) { poly(ctx, [P(u - 0.16, 0.34, 1.2), P(u + 0.16, 0.34, 1.2), P(u + 0.16, 0.34, 0.15), P(u - 0.16, 0.34, 0.15)], undefined, hexA('#000', 0.22), 1); const h = P(u + 0.12, 0.34, 1.0); ctx.fillStyle = '#cfd6e2'; ctx.fillRect(h[0] - 1, h[1] - 5, 2.5, 10); }
+  });
+};
+
+// Bathtub (2×1): enamel shell with an inner basin of water, foam, and a chrome tap at one end.
+const drawBathtub = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const en = base, cT = shade(en, 1.15), cR = shade(en, 0.9), cL = shade(en, 0.74);
+  const parts: IsoPart[] = [{ u0: -0.85, u1: 0.85, v0: -0.3, v1: 0.34, z0: 0, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.7;
+    poly(ctx, [P(-0.74, -0.2, z), P(0.74, -0.2, z), P(0.74, 0.24, z), P(-0.74, 0.24, z)], shade(en, 0.78));
+    poly(ctx, [P(-0.66, -0.14, z), P(0.66, -0.14, z), P(0.66, 0.18, z), P(-0.66, 0.18, z)], 'rgba(96,184,214,0.75)');   // water
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; for (const [u, v] of [[-0.4, 0], [0.2, 0.05], [0.5, -0.04]] as [number, number][]) { const c = P(u, v, z); ctx.beginPath(); ctx.arc(c[0], c[1], 3, 0, Math.PI * 2); ctx.fill(); }   // foam
+    const tp = P(0.8, 0.02, z); ctx.strokeStyle = '#cfd6e2'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(tp[0], tp[1]); ctx.lineTo(tp[0], tp[1] - 11); ctx.lineTo(tp[0] - 7, tp[1] - 11); ctx.stroke();   // tap
+  });
+};
+
+// Grandfather clock (3 high): slim case, a clock face with hands + ticks, glass body + brass pendulum.
+const drawClock = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.15), cR = shade(wood, 0.9), cL = shade(wood, 0.54);
+  const parts: IsoPart[] = [{ u0: -0.28, u1: 0.28, v0: -0.22, v1: 0.22, z0: 0, z1: 3, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    poly(ctx, [P(-0.2, 0.22, 2.2), P(0.2, 0.22, 2.2), P(0.2, 0.22, 0.4), P(-0.2, 0.22, 0.4)], 'rgba(18,28,38,0.5)');   // glass
+    const top = P(0, 0.22, 2.0), pv = P(0, 0.22, 1.05); ctx.strokeStyle = '#caa24a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(pv[0], pv[1]); ctx.stroke(); ctx.fillStyle = '#e8c66a'; ctx.beginPath(); ctx.arc(pv[0], pv[1], 5, 0, Math.PI * 2); ctx.fill();   // pendulum
+    const f = P(0, 0.22, 2.55); ctx.fillStyle = '#f4efe2'; ctx.beginPath(); ctx.arc(f[0], f[1], 11, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#caa24a'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#2a2a30'; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; ctx.beginPath(); ctx.arc(f[0] + Math.cos(a) * 8, f[1] + Math.sin(a) * 8, 0.9, 0, Math.PI * 2); ctx.fill(); }
+    ctx.strokeStyle = '#2a2a30'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(f[0], f[1]); ctx.lineTo(f[0] + 5, f[1] - 4); ctx.moveTo(f[0], f[1]); ctx.lineTo(f[0] - 2, f[1] + 7); ctx.stroke();   // hands
+  });
+};
+
+// Dresser (2×1): low chest, top slab, two columns of three drawers with brass pulls on the front.
+const drawDresser = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.18), cR = shade(wood, 0.92), cL = shade(wood, 0.6);
+  const parts: IsoPart[] = [{ u0: -0.9, u1: 0.9, v0: -0.24, v1: 0.34, z0: 0, z1: 1.2, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    poly(ctx, [P(-0.94, -0.3, 1.2), P(0.94, -0.3, 1.2), P(0.94, 0.4, 1.2), P(-0.94, 0.4, 1.2)], shade(wood, 1.3));   // top slab
+    if (!faceVisible(0, 1, dir)) return;
+    for (let r = 0; r < 3; r++) { const z0 = 0.12 + r * 0.34, z1 = z0 + 0.28; for (const [u0, u1] of [[-0.84, -0.04], [0.04, 0.84]] as [number, number][]) { poly(ctx, [P(u0, 0.34, z1), P(u1, 0.34, z1), P(u1, 0.34, z0), P(u0, 0.34, z0)], hexA('#fff', 0.05), hexA('#000', 0.22), 1); const h = P((u0 + u1) / 2, 0.34, (z0 + z1) / 2); ctx.fillStyle = '#caa24a'; ctx.fillRect(h[0] - 4, h[1] - 1.5, 8, 3); } }
+  });
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -1117,6 +1230,14 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'lirili': drawLirili(ctx, sx, sy, accent, d.color, dir); break;
     case 'patapim': drawPatapim(ctx, sx, sy, accent, d.color, dir); break;
     case 'bananini': drawBananini(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bed': drawBed(ctx, sx, sy, accent, d.color, dir); break;
+    case 'wardrobe': drawWardrobe(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bookcase': drawBookcase(ctx, sx, sy, accent, d.color, dir); break;
+    case 'desk': drawDesk(ctx, sx, sy, accent, d.color, dir); break;
+    case 'kitchen': drawKitchen(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bathtub': drawBathtub(ctx, sx, sy, accent, d.color, dir); break;
+    case 'clock': drawClock(ctx, sx, sy, accent, d.color, dir); break;
+    case 'dresser': drawDresser(ctx, sx, sy, accent, d.color, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;

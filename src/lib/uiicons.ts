@@ -21,6 +21,12 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       ctx.beginPath(); ctx.moveTo(-u * 0.18, -u * 0.32); ctx.quadraticCurveTo(-u * 0.03, -u * 0.48, -u * 0.18, -u * 0.66); ctx.moveTo(u * 0.12, -u * 0.32); ctx.quadraticCurveTo(u * 0.27, -u * 0.48, u * 0.12, -u * 0.66); ctx.stroke();   // steam
       break;
     }
+    case 'home': {  // house
+      ctx.beginPath(); ctx.moveTo(-u * 0.7, -u * 0.05); ctx.lineTo(0, -u * 0.7); ctx.lineTo(u * 0.7, -u * 0.05); ctx.stroke();   // roof
+      ctx.beginPath(); ctx.moveTo(-u * 0.5, -u * 0.05); ctx.lineTo(-u * 0.5, u * 0.65); ctx.lineTo(u * 0.5, u * 0.65); ctx.lineTo(u * 0.5, -u * 0.05); ctx.stroke();   // walls
+      ctx.beginPath(); ctx.moveTo(-u * 0.12, u * 0.65); ctx.lineTo(-u * 0.12, u * 0.2); ctx.lineTo(u * 0.18, u * 0.2); ctx.lineTo(u * 0.18, u * 0.65); ctx.stroke();   // door
+      break;
+    }
     case 'constr': { diamond(u * 0.42, u * 0.72, u * 0.36); ctx.stroke(); diamond(-u * 0.12, u * 0.72, u * 0.36); ctx.stroke(); break; }  // stacked blocks
     case 'tapetes': { diamond(0, u, u * 0.62); ctx.stroke(); diamond(0, u * 0.5, u * 0.3); ctx.stroke(); break; }            // rug w/ inner
     case 'assentos': {  // chair

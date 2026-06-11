@@ -16,6 +16,7 @@ export type FurniCat = { id: string; name: string; premium?: boolean };
 export const CATS: FurniCat[] = [
   { id: 'tier1',    name: '★ Hi-Fi', premium: true },
   { id: 'brainrot', name: '★ Brainrot', premium: true },
+  { id: 'home',     name: 'Home' },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -146,6 +147,15 @@ export const FURNI: FurniDef[] = [
   { kind: 'lirili',     name: 'Lirilì Larilà',          emoji: '🌵', cat: 'brainrot', color: '#3a8f4a', h: 2, walk: false, foot: 0.6, special: 'lirili' },
   { kind: 'patapim',    name: 'Brr Brr Patapim',        emoji: '🐵', cat: 'brainrot', color: '#6a4a2c', h: 2, walk: false, foot: 0.6, special: 'patapim' },
   { kind: 'bananini',   name: 'Chimpanzini Bananini',   emoji: '🍌', cat: 'brainrot', color: '#f4c430', h: 2, walk: false, foot: 0.5, special: 'bananini' },
+  // Home — rotatable iso furniture for building real rooms
+  { kind: 'bed',      name: 'Double Bed',        emoji: '🛏️', cat: 'home', color: '#6b4a2c', h: 1, walk: false, foot: 1,   special: 'bed', span: [2, 2] },
+  { kind: 'wardrobe', name: 'Wardrobe',          emoji: '🚪', cat: 'home', color: '#5a3f28', h: 3, walk: false, foot: 0.5, special: 'wardrobe' },
+  { kind: 'bookcase', name: 'Bookcase',          emoji: '📚', cat: 'home', color: '#6a4a2e', h: 2, walk: false, foot: 0.6, special: 'bookcase' },
+  { kind: 'desk',     name: 'Desk',              emoji: '🖥️', cat: 'home', color: '#7a5230', h: 1, walk: false, foot: 1,   special: 'desk', span: [2, 1] },
+  { kind: 'kitchen',  name: 'Kitchen Counter',   emoji: '🚰', cat: 'home', color: '#3a4450', h: 2, walk: false, foot: 1,   special: 'kitchen', span: [2, 1] },
+  { kind: 'bathtub',  name: 'Bathtub',           emoji: '🛁', cat: 'home', color: '#eef1f6', h: 1, walk: false, foot: 1,   special: 'bathtub', span: [2, 1] },
+  { kind: 'clock',    name: 'Grandfather Clock', emoji: '🕰️', cat: 'home', color: '#5a3f28', h: 3, walk: false, foot: 0.4, special: 'clock' },
+  { kind: 'dresser',  name: 'Dresser',           emoji: '🗄️', cat: 'home', color: '#6b4a2c', h: 1, walk: false, foot: 1,   special: 'dresser', span: [2, 1] },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
@@ -173,7 +183,9 @@ export const sitHeight = (kind: string): number | null => { const s = defOf(kind
 const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch', 'peacock', 'cloud', 'stool', 'puff', 'eggchair', 'pit',
   // garden pieces — now procedural iso with 4-way directional art
   'tree', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux',
-  'vespa']);
+  'vespa',
+  // home pieces — all turn (front doors/headboard/taps face the camera correctly)
+  'bed', 'wardrobe', 'bookcase', 'desk', 'kitchen', 'bathtub', 'clock', 'dresser']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
