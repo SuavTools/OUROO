@@ -52,11 +52,19 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 // Secret sectors — not in the picker; reached only through a portal + lore code (see /LORE.md, The Deep).
 const SECRET_ROOMS: Record<string, RoomDef> = {
   archive: { slug: 'archive', name: 'The Archive', accent: '#8a9cff', floor: '#0d0f1c', locked: true, plan: 'quadrado' },
+  foundry: { slug: 'foundry', name: 'The Foundry', accent: '#ff8a3a', floor: '#1c1208', locked: true, plan: 'quadrado' },
 };
 // Portals placed in rooms: tap the tile, speak the code → travel to the secret room (first visit pays out).
+// The chain: Plaza → Archive → Foundry → (Terminal, later). Each room's NPC hints the next code.
 type Portal = { gx: number; gy: number; code: string; to: string; reward?: number };
 const PORTALS: Record<string, Portal[]> = {
-  praca: [{ gx: 2, gy: 8, code: 'OURO', to: 'archive', reward: 500 }],
+  praca: [{ gx: 2, gy: 8, code: 'OUROO', to: 'archive', reward: 500 }],
+  archive: [{ gx: 5, gy: 8, code: 'SIGNAL', to: 'foundry', reward: 1000 }],
+};
+// First-visit "you found it" modal: reward + a bit of lore + an onboarding nudge.
+const SECRET_INTRO: Record<string, { title: string; body: string }> = {
+  archive: { title: 'YOU FOUND THE ARCHIVE', body: 'First door, cracked. The Curator trusts you a little more now.\n\nThis is how OUROO grows: explore, talk to people, and the codes hide in what they say. Every door you open, the world remembers you.\n\nYou can build your OWN room too — ⤧ Rooms → Create. Mine crystals in the Arcade to afford the good stuff. And keep looking — there are more portals than this one.' },
+  foundry: { title: 'YOU FOUND THE FOUNDRY', body: 'Deeper still. This is where your presence is minted into crystal.\n\nYou’re getting the hang of it: talk, find the clues, speak the codes. One door is left below — the Terminal, OURO’s core — but it isn’t open yet.\n\nKeep building, keep exploring. The Loop runs warmer the further you go.' },
 };
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
@@ -76,6 +84,14 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['console', 5, 2, 0],
     ['bookcase', 1, 5, 1], ['bookcase', 9, 5, 3],
     ['candle', 3, 8, 0], ['candle', 7, 8, 0],
+    ['teleporter', 5, 8, 0],   // onward portal → The Foundry
+  ],
+  foundry: [
+    ['serverrack', 2, 2, 0], ['serverrack', 8, 2, 0],
+    ['console', 5, 2, 0],
+    ['plasmalamp', 3, 5, 0], ['plasmalamp', 7, 5, 0],
+    ['lavalux', 1, 8, 0], ['lavalux', 9, 8, 0],
+    ['fountain', 5, 6, 0],   // the signal well
   ],
   clube: [
     // stage (back, raised): PA towers + a big screen
@@ -149,10 +165,19 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
         'Everything you see, someone like you gave it shape. Empty rooms forget themselves.',
         'Mine crystals against the dark. Spend them making this place real again.',
         'There are doors here that won’t open for me. Maybe they’ll open for you. Listen for the codes.',
-        'That portal — the Archive door — wants the oldest word logged here. The name I answer to. Four letters.',
+        'That glowing portal? It wants the name of this whole world — the word stamped on everything. Five letters. Say OUROO.',
         'Stay a while. The Loop runs warmer when someone’s watching.',
       ],
       lines: ['Signal stable.', 'The Loop turns.', 'Welcome back.'] },
+    { handle: 'GUIDE', skinId: 'star-dourada', gx: 7, gy: 6, roam: 1.2, id: 'guide',
+      beats: [
+        'New here? Quick version — tap a tile to walk. Tap someone’s name to say hi.',
+        'Up top: ✦ Decorate places furniture, ☻ is your character (skins + icons).',
+        'Crystals are the currency. Earn them in the Arcade — the OUROO game — and by finding hidden things.',
+        'Spend them furnishing rooms, or make your OWN: ⤧ Rooms → Create. It’s yours to build.',
+        'That glowing portal leads somewhere hidden. The codes hide in what people say — so talk to everyone.',
+      ],
+      lines: ['Need a hand?', 'Tap to walk 🛸', 'Have fun out there.'] },
     { handle: 'a stray', skinId: 'star-cadente', gx: 8, gy: 7, roam: 2, id: 'stray',
       beats: [
         '…is someone there? I can never tell anymore.',
@@ -203,9 +228,20 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
         'You made it. Almost no one does. Welcome to the Archive.',
         'This is where the Logged-Off left their last words. The Curator keeps the lights low in here.',
         'They didn’t say goodbye. One day the logins just stopped. We’re still waiting. The machines are patient.',
+        'There’s a door here too — the Foundry, where crystals are made. Its lock is the word for what you ARE to OUROO. You’re SIGNAL.',
         'Keep descending. There are deeper doors. The Terminal is real — I’ve seen its glow.',
       ],
       lines: ['…still here.', 'Read, if you like.', 'They’ll come back. Maybe.'] },
+  ],
+  foundry: [
+    { handle: 'the Smith', skinId: 'nave-laranja', gx: 5, gy: 4, roam: 1.5, id: 'smith',
+      beats: [
+        'The Foundry. This is where your presence becomes crystal. Win in the Arcade against the dark, and the dark gives a little back — minted right here.',
+        'That’s the whole trick of OUROO: attention is the only real resource. You, watching, is what keeps the lights on.',
+        'Spend what you mine. Build. The more shape this world has, the slower it forgets itself.',
+        'One door left, deeper than this — the Terminal. OURO’s core. It isn’t open yet. Keep coming back.',
+      ],
+      lines: ['Mind the heat.', 'Signal in, crystal out.', 'Keep it turning.'] },
   ],
 };
 
@@ -367,6 +403,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you tap a portal
   const [portalCode, setPortalCode] = useState('');
+  const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -427,8 +464,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (portalCode.trim().toUpperCase() !== p.code.toUpperCase()) { flashHint('The door stays shut.'); setPortalCode(''); return; }
     const def = SECRET_ROOMS[p.to]; setPortalPrompt(null); setPortalCode('');
     if (!def) return;
-    try { const fk = `ouroo_secret_${def.slug}`; if (p.reward && localStorage.getItem(fk) !== '1') { addBalance(p.reward); localStorage.setItem(fk, '1'); flashHint(`✦ +${p.reward} — the Archive remembers you`); } } catch { /* ignore */ }
     switchRoom(def);
+    try {
+      const fk = `ouroo_secret_${def.slug}`;
+      if (localStorage.getItem(fk) !== '1') {   // first visit → reward + "you found it" modal
+        const reward = p.reward ?? 0; if (reward) addBalance(reward);
+        localStorage.setItem(fk, '1');
+        const intro = SECRET_INTRO[def.slug];
+        if (intro) setArrivalModal({ title: intro.title, body: intro.body, reward });
+      }
+    } catch { /* ignore */ }
   };
   const doDeleteRoom = async (r: RoomRow) => {
     if (!confirm(`Delete "${r.name}"? Its furniture will be gone.`)) return;
@@ -1141,6 +1186,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <div className="flex gap-2">
               <button onClick={tryPortal} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Open ▸</button>
               <button onClick={() => { setPortalPrompt(null); setPortalCode(''); }} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Leave</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {arrivalModal && (
+        <div className="absolute inset-0 z-[80] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}>
+          <div className="max-w-sm w-full border border-[#00cfff]/30 bg-black p-7 text-center space-y-4 overflow-y-auto max-h-full">
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">portal opened</p>
+            <p className="font-helvetica font-black uppercase tracking-wide text-lg text-white leading-tight">{arrivalModal.title}</p>
+            {arrivalModal.reward > 0 && <p className="font-mono text-2xl text-brandYellow">✦ +{arrivalModal.reward}</p>}
+            <p className="text-[13px] text-white/65 leading-relaxed whitespace-pre-line text-left">{arrivalModal.body}</p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setArrivalModal(null)} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Explore ▸</button>
+              <button onClick={() => { setArrivalModal(null); setShowRooms(true); }} className="px-4 border border-white/20 text-white/60 hover:text-white text-xs uppercase tracking-widest active:scale-95">Build a room</button>
             </div>
           </div>
         </div>
