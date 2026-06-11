@@ -1,7 +1,7 @@
 // In-game character skins: shape (diamond / chariot / unicorn) × colour.
 // Unlocked by best score, or by a secret lore-code (redeemed separately).
 
-export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave' | 'star' | 'heart';
+export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave' | 'star' | 'heart' | 'shark' | 'crocbomber' | 'ballerina';
 export type Skin = {
   id: string;
   name: string;
@@ -44,6 +44,10 @@ export const SKINS: Skin[] = [
   { id: 'heart-rosa',      name: 'Pink Heart',        shape: 'heart',   color: '#ff88cc', unlock: { type: 'score', need: 350000 } },
   { id: 'heart-dourado',   name: 'Golden Heart',      shape: 'heart',   color: '#ffd700', unlock: { type: 'score', need: 800000 } },
   { id: 'heart-alma',      name: 'Soul Heart',        shape: 'heart',   color: '#cc44ff', unlock: { type: 'code' } },
+  // Italian Brainrot 🇮🇹
+  { id: 'br-tralalero',    name: 'Tralalero Tralala',     shape: 'shark',      color: '#5aa9d6', unlock: { type: 'score', need: 300000 } },
+  { id: 'br-bombardiro',   name: 'Bombardiro Crocodilo',  shape: 'crocbomber', color: '#3f6b3a', unlock: { type: 'score', need: 600000 } },
+  { id: 'br-ballerina',    name: 'Ballerina Cappuccina',  shape: 'ballerina',  color: '#f4b8d0', unlock: { type: 'code' } },
 ];
 
 export const DEFAULT_SKIN_ID = 'diamond-gold';
@@ -71,6 +75,48 @@ export function setSelectedSkinId(id: string) { localStorage.setItem('ouroo_skin
 // ---- shared canvas drawing (used by the game player + dashboard previews) ----
 // All draw centred at the current transform origin, sized to w×h, `af` = anim frame.
 export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, color: string, w: number, h: number, af: number) {
+  if (shape === 'shark') {   // Tralalero Tralala — finned shark emblem with a toothy grin
+    const W = w, H = h, wig = Math.sin(af * 0.2) * 3;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.moveTo(-W * 0.4, 0); ctx.lineTo(-W * 0.62, -H * 0.22 + wig); ctx.lineTo(-W * 0.52, 0); ctx.lineTo(-W * 0.62, H * 0.22 + wig); ctx.closePath(); ctx.fill();   // tail
+    ctx.beginPath(); ctx.ellipse(0, 0, W * 0.46, H * 0.3, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.beginPath(); ctx.moveTo(0, -H * 0.28); ctx.lineTo(W * 0.12, -H * 0.52); ctx.lineTo(W * 0.2, -H * 0.26); ctx.closePath(); ctx.fill();   // dorsal
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.ellipse(W * 0.05, H * 0.12, W * 0.3, H * 0.15, 0, 0, Math.PI * 2); ctx.fill();   // belly
+    ctx.fillStyle = '#21323d'; ctx.beginPath(); ctx.ellipse(W * 0.22, H * 0.08, W * 0.16, H * 0.08, 0, 0, Math.PI); ctx.fill();   // mouth
+    ctx.fillStyle = '#fff'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(W * 0.12 + i * W * 0.08, H * 0.04); ctx.lineTo(W * 0.14 + i * W * 0.08, H * 0.13); ctx.lineTo(W * 0.16 + i * W * 0.08, H * 0.04); ctx.closePath(); ctx.fill(); }
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.18, -H * 0.08, W * 0.09, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(W * 0.2, -H * 0.08, W * 0.04, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  if (shape === 'crocbomber') {   // Bombardiro Crocodilo — crocodile-headed warplane
+    const W = w, H = h;
+    ctx.save(); ctx.rotate(Math.sin(af * 0.1) * 0.08);
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    ctx.beginPath(); ctx.moveTo(-W * 0.1, 0); ctx.lineTo(-W * 0.22, -H * 0.34); ctx.lineTo(W * 0.05, -H * 0.05); ctx.closePath(); ctx.fill();   // wings
+    ctx.beginPath(); ctx.moveTo(-W * 0.1, 0); ctx.lineTo(-W * 0.22, H * 0.34); ctx.lineTo(W * 0.05, H * 0.05); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-W * 0.45, 0); ctx.lineTo(-W * 0.56, -H * 0.24); ctx.lineTo(-W * 0.4, 0); ctx.closePath(); ctx.fill();   // tail
+    ctx.beginPath(); ctx.ellipse(0, 0, W * 0.5, H * 0.16, 0, 0, Math.PI * 2); ctx.fill();   // fuselage
+    ctx.beginPath(); ctx.ellipse(W * 0.42, -H * 0.03, W * 0.2, H * 0.13, 0, 0, Math.PI * 2); ctx.fill();   // croc head
+    ctx.beginPath(); ctx.moveTo(W * 0.56, -H * 0.07); ctx.lineTo(W * 0.82, -H * 0.02); ctx.lineTo(W * 0.56, H * 0.05); ctx.closePath(); ctx.fill();   // snout
+    ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(W * 0.58 + i * W * 0.07, H * 0.0); ctx.lineTo(W * 0.6 + i * W * 0.07, H * 0.07); ctx.lineTo(W * 0.62 + i * W * 0.07, H * 0.0); ctx.closePath(); ctx.fill(); }
+    ctx.beginPath(); ctx.arc(W * 0.42, -H * 0.13, W * 0.06, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(W * 0.43, -H * 0.13, W * 0.03, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
+  if (shape === 'ballerina') {   // Ballerina Cappuccina — cup-headed ballerina
+    const W = w, H = h;
+    ctx.save(); ctx.rotate(Math.sin(af * 0.15) * 0.1);
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.moveTo(-W * 0.4, H * 0.22); ctx.lineTo(W * 0.4, H * 0.22); ctx.lineTo(W * 0.12, H * 0.02); ctx.lineTo(-W * 0.12, H * 0.02); ctx.closePath(); ctx.fill();   // tutu
+    ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.moveTo(-W * 0.05, H * 0.2); ctx.lineTo(-W * 0.1, H * 0.5); ctx.moveTo(W * 0.05, H * 0.2); ctx.lineTo(W * 0.1, H * 0.5); ctx.stroke();   // legs
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, -H * 0.02, W * 0.12, H * 0.16, 0, 0, Math.PI * 2); ctx.fill();   // leotard
+    ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-W * 0.08, -H * 0.08); ctx.quadraticCurveTo(-W * 0.28, -H * 0.2, -W * 0.18, -H * 0.36); ctx.moveTo(W * 0.08, -H * 0.08); ctx.quadraticCurveTo(W * 0.28, -H * 0.2, W * 0.18, -H * 0.36); ctx.stroke();   // arms
+    ctx.fillStyle = '#f4efe6'; ctx.beginPath(); ctx.moveTo(-W * 0.2, -H * 0.3); ctx.lineTo(W * 0.2, -H * 0.3); ctx.lineTo(W * 0.15, -H * 0.05); ctx.lineTo(-W * 0.15, -H * 0.05); ctx.closePath(); ctx.fill();   // cup head
+    ctx.fillStyle = '#f0e6d2'; ctx.beginPath(); ctx.ellipse(0, -H * 0.3, W * 0.2, H * 0.05, 0, 0, Math.PI * 2); ctx.fill();   // foam
+    ctx.strokeStyle = '#f4efe6'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(W * 0.22, -H * 0.17, W * 0.08, -1, 1.4); ctx.stroke();   // handle
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-W * 0.07, -H * 0.17, W * 0.03, 0, Math.PI * 2); ctx.arc(W * 0.07, -H * 0.17, W * 0.03, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
   if (shape === 'chariot') {
     const W = w * 1.25, H = h * 0.95;
     const gl = 0.7 + Math.sin(af * 0.12) * 0.3;

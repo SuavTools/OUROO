@@ -15,6 +15,7 @@ export type FurniCat = { id: string; name: string; premium?: boolean };
 
 export const CATS: FurniCat[] = [
   { id: 'tier1',    name: '★ Hi-Fi', premium: true },
+  { id: 'brainrot', name: '★ Brainrot', premium: true },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -28,6 +29,7 @@ export const CATS: FurniCat[] = [
 // Per-item Cristais price for premium collections (0 / absent = free basic furni).
 export const CAT_PRICE: Record<string, number> = {
   tier1: 1500,
+  brainrot: 1200,
 };
 
 export const FURNI: FurniDef[] = [
@@ -44,6 +46,9 @@ export const FURNI: FurniDef[] = [
   { kind: 'peacock',   name: 'Peacock Throne', emoji: '🦚', cat: 'tier1', color: '#0e6f78', h: 3, walk: false, foot: 0.8,  special: 'peacock' },
   { kind: 'cloud',     name: 'Cloud Couch',  emoji: '☁️', cat: 'tier1', color: '#eef1f6', h: 1, walk: false, foot: 1,    special: 'cloud', span: [2, 1] },
   { kind: 'pit',       name: 'Round Couch',  emoji: '🛋️', cat: 'tier1', color: '#caa24a', h: 1, walk: false, foot: 1,    special: 'pit' },
+  { kind: 'lavalux',   name: 'Lava Lamp XL', emoji: '🫧', cat: 'tier1', color: '#ff4ea8', h: 2, walk: false, foot: 0.5,  special: 'lavalamp' },
+  { kind: 'aquarium',  name: 'Aquarium',     emoji: '🐠', cat: 'tier1', color: '#1a7896', h: 2, walk: false, foot: 0.9,  special: 'aquarium' },
+  { kind: 'fireplace', name: 'Fireplace',    emoji: '🔥', cat: 'tier1', color: '#8a8a92', h: 2, walk: false, foot: 0.9,  special: 'fireplace' },
   { kind: 'coluna_gr', name: 'Greek Column', emoji: '🏛️', cat: 'tier1', color: '#e8e8ee', h: 4, walk: false, foot: 0.5,  special: 'greekcol' },
   { kind: 'arco_gr',   name: 'Greek Arch',  emoji: '🏛️', cat: 'tier1', color: '#e8e8ee', h: 3, walk: true,  foot: 1,    special: 'arch', span: [3, 1] },
   // construção (walkable build pieces + solid walls)
@@ -100,7 +105,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'neon',     name: 'Neon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
   { kind: 'disco',    name: 'Disco Ball',emoji: '🪩', cat: 'luzes', color: '#cfd6ff', h: 0, walk: true,  foot: 1, special: 'disco' },
   { kind: 'holofote', name: 'Spotlight', emoji: '🔦', cat: 'luzes', color: '#ffffff', h: 1, walk: false, foot: 0.5, special: 'lamp' },
-  { kind: 'lavalamp', name: 'Lava Lamp',emoji: '🟣', cat: 'luzes', color: '#cc44ff', h: 1, walk: false, foot: 0.4, special: 'lamp' },
+  { kind: 'lavalamp', name: 'Lava Lamp',emoji: '🟣', cat: 'luzes', color: '#cc44ff', h: 2, walk: false, foot: 0.4, special: 'lavalamp' },
   { kind: 'tocha',    name: 'Torch',    emoji: '🔥', cat: 'luzes', color: '#ff8800', h: 1, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'lanterna', name: 'Lantern',  emoji: '🏮', cat: 'luzes', color: '#ffcf7a', h: 1, walk: false, foot: 0.3, special: 'lantern' },
   { kind: 'lustre',   name: 'Chandelier', emoji: '🛋️', cat: 'luzes', color: '#ffd98a', h: 0, walk: true, foot: 0.5, special: 'chandelier' },
@@ -129,6 +134,14 @@ export const FURNI: FurniDef[] = [
   { kind: 'boia',     name: 'Float',    emoji: '🛟', cat: 'deco', color: '#ff5a5a', h: 0, walk: true,  foot: 0.6, special: 'float' },
   { kind: 'parasol',  name: 'Parasol',  emoji: '⛱️', cat: 'deco', color: '#e23b46', h: 2, walk: false, foot: 0.8, special: 'parasol' },
   { kind: 'banner',   name: 'Banner',   emoji: '🎌', cat: 'deco', color: '#7a1020', h: 0, walk: true, foot: 0.4, special: 'banner' },
+  // ★ Italian Brainrot — café gear + the iconic AI-meme characters
+  { kind: 'espresso',   name: 'Espresso Bar',           emoji: '☕', cat: 'brainrot', color: '#c8ccd4', h: 2, walk: false, foot: 0.6, special: 'espresso' },
+  { kind: 'cappuccino', name: 'Cappuccino',             emoji: '☕', cat: 'brainrot', color: '#f4efe6', h: 1, walk: false, foot: 0.5, special: 'cappuccino' },
+  { kind: 'pizza',      name: 'Pizza',                  emoji: '🍕', cat: 'brainrot', color: '#f2c84b', h: 1, walk: false, foot: 0.6, special: 'pizza' },
+  { kind: 'vespa',      name: 'Vespa',                  emoji: '🛵', cat: 'brainrot', color: '#4aa3a0', h: 1, walk: false, foot: 1,   special: 'vespa' },
+  { kind: 'tralalero',  name: 'Tralalero Tralala',      emoji: '🦈', cat: 'brainrot', color: '#5aa9d6', h: 2, walk: false, foot: 0.6, special: 'tralalero' },
+  { kind: 'bombardiro', name: 'Bombardiro Crocodilo',   emoji: '🐊', cat: 'brainrot', color: '#3f6b3a', h: 2, walk: false, foot: 1,   special: 'bombardiro' },
+  { kind: 'ballerina',  name: 'Ballerina Cappuccina',   emoji: '🩰', cat: 'brainrot', color: '#f4b8d0', h: 2, walk: false, foot: 0.5, special: 'ballerina' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
@@ -155,7 +168,8 @@ export const sitHeight = (kind: string): number | null => { const s = defOf(kind
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
 const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch', 'peacock', 'cloud', 'stool', 'puff', 'eggchair', 'pit',
   // garden pieces — now procedural iso with 4-way directional art
-  'tree', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux']);
+  'tree', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux',
+  'vespa']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)

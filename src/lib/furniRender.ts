@@ -790,6 +790,161 @@ const drawDuck = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent:
   ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(hx + f[0] * 2, hy - 1, 1.2, 0, Math.PI * 2); ctx.fill();   // eye
 };
 
+// ═══════════ HIGH-END animated pieces (contact shadow is added by the caller) ═══════════
+
+// Lava lamp: chrome cone base + cap, a glass capsule of tinted fluid, and gooey glowing blobs that rise
+// and fall on the frame counter. The hero piece — lots of love.
+const drawLavaLamp = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number) => {
+  void accent; const col = base, bw = TW * 0.34, gw = TW * 0.25;
+  const baseH = STACK_H * 0.5, capBot = sy - baseH, capH = STACK_H * 1.7, capTop = capBot - capH;
+  const metal = (x0: number, x1: number, yTop: number, yBot: number) => { const g = ctx.createLinearGradient(sx + x0, 0, sx + x1, 0); g.addColorStop(0, '#3a3a44'); g.addColorStop(0.5, '#aab0bd'); g.addColorStop(1, '#3a3a44'); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx + x0, yBot); ctx.lineTo(sx + x1, yBot); ctx.lineTo(sx + x1 * 0.7, yTop); ctx.lineTo(sx + x0 * 0.7, yTop); ctx.closePath(); ctx.fill(); };
+  metal(-bw, bw, capBot, sy);                                   // cone base
+  ctx.fillStyle = '#22232a'; ctx.beginPath(); ctx.ellipse(sx, sy, bw, TH * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  const capsule = () => { ctx.beginPath(); ctx.moveTo(sx - gw, capBot); ctx.lineTo(sx - gw * 0.6, capTop + 7); ctx.quadraticCurveTo(sx, capTop - 11, sx + gw * 0.6, capTop + 7); ctx.lineTo(sx + gw, capBot); ctx.closePath(); };
+  ctx.save(); capsule(); ctx.clip();
+  ctx.fillStyle = hexA(col, 0.3); ctx.fillRect(sx - gw, capTop - 14, gw * 2, capH + 16);                       // tinted fluid
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const hg = ctx.createRadialGradient(sx, capBot - 4, 2, sx, capBot - 4, gw * 2.4); hg.addColorStop(0, hexA(col, 0.75)); hg.addColorStop(1, hexA(col, 0)); ctx.fillStyle = hg; ctx.fillRect(sx - gw, capTop - 14, gw * 2, capH + 16); ctx.restore();
+  const blob = (ph: number, rad: number, c: string) => {
+    const yy = capBot - 7 - (0.5 + 0.5 * Math.sin(t * 0.018 + ph)) * (capH - 18);
+    const xx = sx + Math.sin(t * 0.011 + ph * 1.7) * gw * 0.32, r = rad * (0.82 + 0.26 * Math.sin(t * 0.03 + ph));
+    const g = ctx.createRadialGradient(xx - r * 0.3, yy - r * 0.35, 1, xx, yy, r); g.addColorStop(0, shade(c, 1.55)); g.addColorStop(0.6, c); g.addColorStop(1, shade(c, 0.65));
+    ctx.fillStyle = g; ctx.shadowColor = c; ctx.shadowBlur = 10; ctx.beginPath(); ctx.ellipse(xx, yy, r, r * 1.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+  };
+  blob(0, 7, col); blob(2.1, 5.4, shade(col, 1.18)); blob(4.2, 6.1, col); blob(1.0, 3.8, shade(col, 0.82)); blob(5.4, 4.6, shade(col, 1.1));
+  ctx.restore();
+  capsule(); ctx.strokeStyle = hexA('#ffffff', 0.28); ctx.lineWidth = 1.4; ctx.stroke();                        // glass rim
+  ctx.fillStyle = hexA('#ffffff', 0.16); ctx.beginPath(); ctx.ellipse(sx - gw * 0.42, capTop + capH * 0.45, 2.4, capH * 0.32, 0, 0, Math.PI * 2); ctx.fill();   // specular streak
+  metal(-gw * 0.55, gw * 0.55, capTop - 9, capTop + 6);                                                         // cap
+};
+
+// Aquarium: a big translucent glass tank with lit water faces, gravel, weed, drifting fish + bubbles.
+const drawAquarium = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number) => {
+  void accent; void base; const w = TW * 0.94, d = TH * 0.94, H = STACK_H * 1.75, ty = sy - H;
+  ctx.fillStyle = 'rgba(28,132,166,0.62)'; poly(ctx, [[sx - w, sy], [sx, sy + d], [sx, sy + d - H], [sx - w, ty]]);     // left water face
+  ctx.fillStyle = 'rgba(20,108,140,0.74)'; poly(ctx, [[sx, sy + d], [sx + w, sy], [sx + w, ty], [sx, sy + d - H]]);     // right water face
+  ctx.save(); ctx.beginPath(); ctx.moveTo(sx - w, sy); ctx.lineTo(sx, sy + d); ctx.lineTo(sx + w, sy); ctx.lineTo(sx, ty + d); ctx.lineTo(sx - w, ty); ctx.lineTo(sx, sy + d - H); ctx.closePath(); ctx.clip();   // contents stay inside
+  ctx.fillStyle = '#374a34'; ctx.beginPath(); ctx.ellipse(sx, sy + d * 0.25, w * 0.96, 8, 0, 0, Math.PI * 2); ctx.fill();   // gravel bed
+  ctx.fillStyle = '#46583f'; for (let i = 0; i < 9; i++) { ctx.beginPath(); ctx.arc(sx - w * 0.75 + i * w * 0.19, sy + d * 0.18 + (i % 2) * 4, 2.2, 0, Math.PI * 2); ctx.fill(); }
+  ctx.strokeStyle = '#2e8d4a'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; for (const px of [-w * 0.58, w * 0.5]) { ctx.beginPath(); ctx.moveTo(sx + px, sy + d * 0.2); ctx.quadraticCurveTo(sx + px + Math.sin(t * 0.04) * 5, ty + H * 0.42, sx + px - 4, ty + H * 0.24); ctx.stroke(); }   // weed
+  const fish = (ph: number, c: string) => { const fx = sx + Math.sin(t * 0.02 + ph) * w * 0.55, fy = ty + 18 + (0.5 + 0.5 * Math.sin(t * 0.013 + ph * 2)) * (H - 36), dir = Math.cos(t * 0.02 + ph) >= 0 ? 1 : -1; ctx.save(); ctx.translate(fx, fy); ctx.scale(dir, 1); ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(0, 0, 9, 5.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-14, -5); ctx.lineTo(-14, 5); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(5, -1.5, 1.9, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#0a0a0a'; ctx.beginPath(); ctx.arc(5.6, -1.5, 0.95, 0, Math.PI * 2); ctx.fill(); ctx.restore(); };
+  fish(0, '#ff8a3a'); fish(2.3, '#ffd23a'); fish(4.2, '#ff5a8a');
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; for (let i = 0; i < 6; i++) { const bx = sx - w * 0.2 + i * 8, by = sy + d - ((t * 0.8 + i * 40) % (H + 10)); ctx.beginPath(); ctx.arc(bx, by, 1.8, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+  ctx.fillStyle = 'rgba(140,212,238,0.4)'; poly(ctx, [[sx - w, ty + 3], [sx, ty - d + 3], [sx + w, ty + 3], [sx, ty + d + 3]]);   // water surface
+  ctx.strokeStyle = 'rgba(210,238,248,0.6)'; ctx.lineWidth = 2; poly(ctx, [[sx - w, ty], [sx, ty - d], [sx + w, ty], [sx, ty + d]]);   // top rim
+  ctx.beginPath(); ctx.moveTo(sx - w, sy); ctx.lineTo(sx - w, ty); ctx.moveTo(sx, sy + d); ctx.lineTo(sx, sy + d - H); ctx.moveTo(sx + w, sy); ctx.lineTo(sx + w, ty); ctx.stroke();   // glass posts
+};
+
+// Fireplace: a stone block with a dark firebox on the camera-facing front, logs, and flickering flames.
+const drawFireplace = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number) => {
+  const top = boxAt(ctx, sx, sy, 0.92, 0.6, 1.5, base, accent);
+  for (let i = 0; i < 5; i++) { ctx.fillStyle = hexA('#000', 0.12); ctx.fillRect(sx - 18 + (i % 3) * 13, top + 6 + Math.floor(i / 3) * 14, 11, 6); }   // brick hints
+  const fy = sy - STACK_H * 0.45;
+  ctx.fillStyle = '#140d08'; ctx.beginPath(); ctx.moveTo(sx - 16, fy - 28); ctx.lineTo(sx + 16, fy - 28); ctx.lineTo(sx + 16, fy); ctx.quadraticCurveTo(sx, fy + 4, sx - 16, fy); ctx.closePath(); ctx.fill();   // firebox
+  ctx.fillStyle = '#5a3a22'; ctx.fillRect(sx - 12, fy - 7, 24, 4); ctx.save(); ctx.translate(sx, fy - 9); ctx.rotate(0.18); ctx.fillRect(-10, -2, 20, 4); ctx.restore();   // logs
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const flame = (ox: number, h: number, c: string, ph: number) => { const fl = h * (0.78 + 0.22 * Math.sin(t * 0.3 + ph)); ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(sx + ox - 5, fy - 6); ctx.quadraticCurveTo(sx + ox - 4, fy - 6 - fl * 0.6, sx + ox + Math.sin(t * 0.2 + ph) * 3, fy - 6 - fl); ctx.quadraticCurveTo(sx + ox + 4, fy - 6 - fl * 0.6, sx + ox + 5, fy - 6); ctx.closePath(); ctx.fill(); };
+  flame(-6, 22, 'rgba(255,90,20,0.8)', 0); flame(6, 20, 'rgba(255,90,20,0.8)', 1.6); flame(0, 28, 'rgba(255,150,30,0.85)', 0.7); flame(0, 15, 'rgba(255,232,120,0.92)', 2.2);
+  const g = ctx.createRadialGradient(sx, fy - 6, 1, sx, fy - 6, 24); g.addColorStop(0, 'rgba(255,140,40,0.5)'); g.addColorStop(1, 'rgba(255,140,40,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, fy - 6, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+};
+
+// ═══════════ ITALIAN BRAINROT — café gear + the iconic AI-meme characters (front-facing figures) ═══════════
+
+// Espresso bar: chrome machine body, group head, a filling cup, accent strip + curling steam.
+const drawEspresso = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number) => {
+  const top = boxAt(ctx, sx, sy, 0.6, 0.48, 1.25, base, accent);
+  ctx.fillStyle = accent; ctx.fillRect(sx - 9, top + 2, 18, 3);
+  ctx.fillStyle = '#2a2a30'; ctx.fillRect(sx - 3, top + 9, 6, 9); ctx.fillStyle = '#1a1a1f'; ctx.fillRect(sx - 7, top + 17, 14, 3);   // group head + portafilter
+  ctx.fillStyle = '#f2ede2'; ctx.beginPath(); ctx.moveTo(sx - 5, top + 21); ctx.lineTo(sx + 5, top + 21); ctx.lineTo(sx + 4, top + 29); ctx.lineTo(sx - 4, top + 29); ctx.closePath(); ctx.fill();   // cup
+  ctx.fillStyle = '#3a2218'; ctx.fillRect(sx - 4, top + 22, 8, 2);
+  ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; for (const ox of [-2.5, 2.5]) { ctx.beginPath(); ctx.moveTo(sx + ox, top + 20); for (let s = 1; s <= 4; s++) ctx.lineTo(sx + ox + Math.sin(t * 0.12 + s + ox) * 3, top + 20 - s * 6); ctx.stroke(); } ctx.restore();   // steam
+};
+
+// Giant cappuccino: saucer, glossy cup, foam cap with cocoa dot + handle.
+const drawCappuccino = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const cup = base, ch = STACK_H * 0.95, cy = sy - 5;
+  ctx.fillStyle = shade(cup, 0.82); ctx.beginPath(); ctx.ellipse(sx, sy - 3, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = cup; ctx.beginPath(); ctx.ellipse(sx, sy - 5, TW * 0.36, TH * 0.36, 0, 0, Math.PI * 2); ctx.fill();   // saucer
+  const g = ctx.createLinearGradient(sx - 14, 0, sx + 14, 0); g.addColorStop(0, shade(cup, 0.78)); g.addColorStop(0.5, shade(cup, 1.12)); g.addColorStop(1, shade(cup, 0.82));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 13, cy - 4); ctx.quadraticCurveTo(sx - 15, cy - ch, sx - 9, cy - ch - 2); ctx.lineTo(sx + 9, cy - ch - 2); ctx.quadraticCurveTo(sx + 15, cy - ch, sx + 13, cy - 4); ctx.closePath(); ctx.fill();   // cup body
+  ctx.strokeStyle = cup; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(sx + 15, cy - ch * 0.5, 5, -1, 1.4); ctx.stroke();   // handle
+  ctx.fillStyle = '#f0e6d2'; ctx.beginPath(); ctx.ellipse(sx, cy - ch - 2, 12, 4.6, 0, 0, Math.PI * 2); ctx.fill();   // foam
+  ctx.fillStyle = '#8a5a32'; ctx.beginPath(); ctx.moveTo(sx, cy - ch - 5); ctx.bezierCurveTo(sx - 5, cy - ch - 1, sx - 2, cy - ch + 1, sx, cy - ch + 1); ctx.bezierCurveTo(sx + 2, cy - ch + 1, sx + 5, cy - ch - 1, sx, cy - ch - 5); ctx.closePath(); ctx.fill();   // cocoa leaf art
+};
+
+// Pizza margherita on the floor — crust, cheese, pepperoni, basil, slice scoring.
+const drawPizza = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void base; void dir; const cy = sy - 3;
+  ctx.fillStyle = '#d9a441'; ctx.beginPath(); ctx.ellipse(sx, cy, TW * 0.62, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill();   // crust
+  ctx.fillStyle = '#f2c84b'; ctx.beginPath(); ctx.ellipse(sx, cy - 1, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2); ctx.fill();   // cheese
+  ctx.fillStyle = '#c0392b'; for (const [ox, oy] of [[-9, -2], [7, -3], [0, 3], [-4, 5], [10, 4], [3, -6]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(sx + ox, cy + oy * 0.5, 3, 2, 0, 0, Math.PI * 2); ctx.fill(); }   // pepperoni
+  ctx.fillStyle = '#2e7d32'; for (const [ox, oy] of [[-2, -4], [6, 2], [-7, 3]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(sx + ox, cy + oy * 0.5, 1.9, 1.2, 0, 0, Math.PI * 2); ctx.fill(); }   // basil
+  ctx.strokeStyle = 'rgba(150,86,18,0.4)'; ctx.lineWidth = 1; for (let i = 0; i < 4; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(sx - Math.cos(a) * TW * 0.5, cy - Math.sin(a) * TH * 0.5); ctx.lineTo(sx + Math.cos(a) * TW * 0.5, cy + Math.sin(a) * TH * 0.5); ctx.stroke(); }
+};
+
+// Vespa scooter: stamped step-through body, rear cowl, wheels, handlebar + headlight. Rotates (flips).
+const drawVespa = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const col = base, cy = sy - 4; ctx.save(); if (fwd(dir)[0] < 0) { ctx.translate(sx, 0); ctx.scale(-1, 1); ctx.translate(-sx, 0); } ctx.translate(sx, cy); ctx.scale(1.4, 1.4); ctx.translate(-sx, -cy);
+  ctx.fillStyle = '#15151a'; for (const wx of [-12, 12]) { ctx.beginPath(); ctx.arc(sx + wx, cy, 5, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = '#3a3a44'; for (const wx of [-12, 12]) { ctx.beginPath(); ctx.arc(sx + wx, cy, 2, 0, Math.PI * 2); ctx.fill(); }
+  const g = ctx.createLinearGradient(0, cy - 16, 0, cy); g.addColorStop(0, shade(col, 1.2)); g.addColorStop(1, shade(col, 0.85));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - 16, cy - 2); ctx.quadraticCurveTo(sx - 18, cy - 14, sx - 8, cy - 15); ctx.lineTo(sx + 4, cy - 15); ctx.quadraticCurveTo(sx + 14, cy - 15, sx + 15, cy - 2); ctx.lineTo(sx + 8, cy - 2); ctx.lineTo(sx + 4, cy - 8); ctx.lineTo(sx - 6, cy - 8); ctx.lineTo(sx - 10, cy - 2); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(sx - 13, cy - 7, 5, 6, 0, 0, Math.PI * 2); ctx.fill();   // rear cowl
+  ctx.fillStyle = '#241c14'; ctx.beginPath(); ctx.ellipse(sx - 7, cy - 15, 7, 3, 0, 0, Math.PI * 2); ctx.fill();   // seat
+  ctx.strokeStyle = shade(col, 0.7); ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx + 12, cy - 2); ctx.lineTo(sx + 15, cy - 18); ctx.stroke();
+  ctx.fillStyle = '#2a2a30'; ctx.beginPath(); ctx.ellipse(sx + 15, cy - 19, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffe9a0'; ctx.beginPath(); ctx.arc(sx + 16, cy - 9, 2.4, 0, Math.PI * 2); ctx.fill();   // headlight
+  ctx.restore();
+};
+
+// Tralalero Tralala — three-legged blue shark in sneakers.
+const drawTralalero = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const blue = base, cy = sy - 26;
+  ctx.strokeStyle = shade(blue, 0.85); ctx.lineWidth = 4; ctx.lineCap = 'round'; for (const lx of [-9, 0, 9]) { ctx.beginPath(); ctx.moveTo(sx + lx * 0.5, cy + 14); ctx.lineTo(sx + lx, sy - 2); ctx.stroke(); }
+  for (const lx of [-9, 0, 9]) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(sx + lx, sy - 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#d22'; ctx.fillRect(sx + lx - 6, sy - 2, 12, 1.6); }   // sneakers
+  const g = ctx.createLinearGradient(sx, cy - 20, sx, cy + 18); g.addColorStop(0, shade(blue, 1.22)); g.addColorStop(1, shade(blue, 0.8));
+  ctx.fillStyle = shade(blue, 0.85); ctx.beginPath(); ctx.moveTo(sx - 2, cy - 17); ctx.lineTo(sx + 5, cy - 30); ctx.lineTo(sx + 9, cy - 15); ctx.closePath(); ctx.fill();   // dorsal fin
+  ctx.beginPath(); ctx.moveTo(sx - 13, cy + 2); ctx.lineTo(sx - 23, cy + 8); ctx.lineTo(sx - 12, cy + 9); ctx.closePath(); ctx.fill();   // side fin
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, 14, 21, 0, 0, Math.PI * 2); ctx.fill();   // body
+  ctx.fillStyle = shade(blue, 1.45); ctx.beginPath(); ctx.ellipse(sx, cy + 5, 8, 13, 0, 0, Math.PI * 2); ctx.fill();   // belly
+  ctx.fillStyle = '#21323d'; ctx.beginPath(); ctx.ellipse(sx, cy + 9, 7, 4, 0, 0, Math.PI); ctx.fill();   // mouth
+  ctx.fillStyle = '#fff'; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(sx + i * 3 - 1, cy + 7); ctx.lineTo(sx + i * 3, cy + 10); ctx.lineTo(sx + i * 3 + 1, cy + 7); ctx.closePath(); ctx.fill(); }   // teeth
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(sx - 5, cy - 4, 3.2, 0, Math.PI * 2); ctx.arc(sx + 5, cy - 4, 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 5, cy - 4, 1.4, 0, Math.PI * 2); ctx.arc(sx + 5, cy - 4, 1.4, 0, Math.PI * 2); ctx.fill();
+};
+
+// Bombardiro Crocodilo — crocodile-headed warplane.
+const drawBombardiro = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const grn = base, cy = sy - 24; ctx.save(); ctx.translate(sx, cy); ctx.scale(1.22, 1.22); ctx.translate(-sx, -cy);
+  ctx.fillStyle = shade(grn, 0.78); ctx.beginPath(); ctx.moveTo(sx - 6, cy); ctx.lineTo(sx - 30, cy + 9); ctx.lineTo(sx - 6, cy + 5); ctx.closePath(); ctx.fill();   // back wing
+  ctx.beginPath(); ctx.moveTo(sx + 6, cy); ctx.lineTo(sx + 26, cy + 9); ctx.lineTo(sx + 6, cy + 5); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(sx - 22, cy - 2); ctx.lineTo(sx - 28, cy - 13); ctx.lineTo(sx - 19, cy - 2); ctx.closePath(); ctx.fill();   // tail fin
+  ctx.fillStyle = grn; ctx.beginPath(); ctx.ellipse(sx, cy, 26, 9, 0, 0, Math.PI * 2); ctx.fill();   // fuselage
+  ctx.fillStyle = shade(grn, 0.7); for (const [ox, oy] of [[-10, -2], [4, 2], [13, -1]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(sx + ox, cy + oy, 4, 3, 0, 0, Math.PI * 2); ctx.fill(); }   // camo
+  ctx.fillStyle = '#2a2a30'; ctx.beginPath(); ctx.ellipse(sx - 2, cy + 11, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();   // bomb
+  ctx.fillStyle = shade(grn, 1.12); ctx.beginPath(); ctx.ellipse(sx + 24, cy - 2, 12, 7, 0, 0, Math.PI * 2); ctx.fill();   // croc head
+  ctx.beginPath(); ctx.moveTo(sx + 30, cy - 4); ctx.lineTo(sx + 44, cy - 1); ctx.lineTo(sx + 30, cy + 3); ctx.closePath(); ctx.fill();   // snout
+  ctx.fillStyle = '#fff'; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(sx + 32 + i * 3, cy + 1); ctx.lineTo(sx + 33 + i * 3, cy + 3.5); ctx.lineTo(sx + 34 + i * 3, cy + 1); ctx.closePath(); ctx.fill(); }   // teeth
+  ctx.beginPath(); ctx.arc(sx + 24, cy - 7, 3, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx + 24, cy - 7, 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+};
+
+// Ballerina Cappuccina — ballerina with a cappuccino-cup head, en pointe.
+const drawBallerina = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; void dir; const tutu = base, cy = sy - 22;
+  ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(sx - 2, cy + 6); ctx.lineTo(sx - 5, sy - 2); ctx.moveTo(sx + 2, cy + 6); ctx.lineTo(sx + 5, sy - 1); ctx.stroke();   // legs
+  ctx.fillStyle = tutu; ctx.beginPath(); ctx.moveTo(sx - 14, cy + 8); ctx.lineTo(sx + 14, cy + 8); ctx.lineTo(sx + 5, cy + 1); ctx.lineTo(sx - 5, cy + 1); ctx.closePath(); ctx.fill();   // tutu
+  ctx.fillStyle = shade(tutu, 0.85); ctx.beginPath(); ctx.ellipse(sx, cy - 3, 5, 9, 0, 0, Math.PI * 2); ctx.fill();   // leotard
+  ctx.strokeStyle = '#e8c9a8'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(sx - 4, cy - 5); ctx.quadraticCurveTo(sx - 12, cy - 12, sx - 8, cy - 21); ctx.moveTo(sx + 4, cy - 5); ctx.quadraticCurveTo(sx + 12, cy - 12, sx + 8, cy - 21); ctx.stroke();   // arms
+  const hy = cy - 18;
+  ctx.fillStyle = '#f4efe6'; ctx.beginPath(); ctx.moveTo(sx - 8, hy - 6); ctx.lineTo(sx + 8, hy - 6); ctx.lineTo(sx + 6, hy + 6); ctx.lineTo(sx - 6, hy + 6); ctx.closePath(); ctx.fill();   // cup head
+  ctx.strokeStyle = '#f4efe6'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(sx + 9, hy, 3.5, -1, 1.4); ctx.stroke();   // handle
+  ctx.fillStyle = '#f0e6d2'; ctx.beginPath(); ctx.ellipse(sx, hy - 6, 8, 3, 0, 0, Math.PI * 2); ctx.fill();   // foam
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(sx - 3, hy, 1.3, 0, Math.PI * 2); ctx.arc(sx + 3, hy, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(sx, hy + 2, 2, 0.1, Math.PI - 0.1); ctx.stroke();   // smile
+};
+
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
@@ -860,6 +1015,16 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'wall': { block(ctx, sx, sy, d.h, d.color, accent, d.foot); break; }
     case 'plant': { const top = block(ctx, sx, sy, 1, '#8a4f2a', accent, d.foot * 0.8); const lc = kind === 'flores' ? '#ff66aa' : '#1ED760'; const lvl = d.h; for (let r = 0; r < (lvl === 2 ? 5 : 3); r++) { const ox = (r - 1) * 7; ctx.fillStyle = lc; ctx.beginPath(); ctx.ellipse(sx + ox, top - 8 - (lvl === 2 ? r * 6 : 0), 6, 13, ox * 0.05, 0, Math.PI * 2); ctx.fill(); } break; }
     case 'lamp': { const top = block(ctx, sx, sy, d.h, '#2a2a30', accent, d.foot); ctx.save(); ctx.shadowColor = d.color; ctx.shadowBlur = 22; ctx.globalAlpha = 0.5 + Math.abs(Math.sin(t * 0.08)) * 0.4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(sx, top - 4, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break; }
+    case 'lavalamp': drawLavaLamp(ctx, sx, sy, accent, d.color, t); break;
+    case 'aquarium': drawAquarium(ctx, sx, sy, accent, d.color, t); break;
+    case 'fireplace': drawFireplace(ctx, sx, sy, accent, d.color, t); break;
+    case 'espresso': drawEspresso(ctx, sx, sy, accent, d.color, t); break;
+    case 'cappuccino': drawCappuccino(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pizza': drawPizza(ctx, sx, sy, accent, d.color, dir); break;
+    case 'vespa': drawVespa(ctx, sx, sy, accent, d.color, dir); break;
+    case 'tralalero': drawTralalero(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bombardiro': drawBombardiro(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ballerina': drawBallerina(ctx, sx, sy, accent, d.color, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -931,7 +1096,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };

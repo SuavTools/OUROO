@@ -616,7 +616,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
     // Furni sprites are drawn by the shared renderer in @/lib/furniRender (drawFurniSprite).
 
-    const drawAvatar = (a: Avatar, isSelf: boolean) => {
+    // Avatar BODY (shadow + skin) — drawn in the depth-sorted pass so it occludes / is occluded correctly.
+    const drawAvatarBody = (a: Avatar, isSelf: boolean) => {
       const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;   // sink + ripple when standing in a pool
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
       const col = a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
@@ -629,6 +630,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
+    };
+    // Avatar NAME LABEL + chat BUBBLE — drawn in a separate pass AFTER everything, so a tall piece of
+    // furniture in front can never hide who someone is or what they just said.
+    const drawAvatarLabel = (a: Avatar, isSelf: boolean) => {
+      const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;
+      const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
+      const col = a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       ctx.save(); ctx.font = '700 11px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const nw = ctx.measureText(a.handle).width + 12, ny = sy + 13;
       ctx.fillStyle = 'rgba(8,8,14,0.72)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();
@@ -751,10 +759,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
       // sort by their front corner, so add a boost when standing on a seat's footprint.
       const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of allItems) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
-      for (const n of npcsRef.current) { const nn = n; ents.push({ s: nn.fx + nn.fy + nn.z * 0.02 + 0.005 + seatBoost(nn.fx, nn.fy), draw: () => drawAvatar(nn, false) }); }
-      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatar(selfRef.current, true) });
-      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatar(rr, false) }); }
+      for (const n of npcsRef.current) { const nn = n; ents.push({ s: nn.fx + nn.fy + nn.z * 0.02 + 0.005 + seatBoost(nn.fx, nn.fy), draw: () => drawAvatarBody(nn, false) }); }
+      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatarBody(selfRef.current, true) });
+      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatarBody(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
+      // Names + chat bubbles in a final pass so furniture never occludes them.
+      for (const n of npcsRef.current) drawAvatarLabel(n, false);
+      drawAvatarLabel(selfRef.current, true);
+      for (const r of remotesRef.current.values()) drawAvatarLabel(r, false);
       ctx.restore();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);
