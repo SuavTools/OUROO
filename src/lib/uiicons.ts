@@ -27,6 +27,16 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       ctx.beginPath(); ctx.moveTo(-u * 0.12, u * 0.65); ctx.lineTo(-u * 0.12, u * 0.2); ctx.lineTo(u * 0.18, u * 0.2); ctx.lineTo(u * 0.18, u * 0.65); ctx.stroke();   // door
       break;
     }
+    case 'gym': {  // dumbbell
+      ctx.lineWidth = Math.max(2, S * 0.07); ctx.beginPath(); ctx.moveTo(-u * 0.35, 0); ctx.lineTo(u * 0.35, 0); ctx.stroke();
+      for (const x of [-u * 0.45, u * 0.45]) { ctx.beginPath(); ctx.moveTo(x, -u * 0.4); ctx.lineTo(x, u * 0.4); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + (x < 0 ? u * 0.18 : -u * 0.18), -u * 0.28); ctx.lineTo(x + (x < 0 ? u * 0.18 : -u * 0.18), u * 0.28); ctx.stroke(); }
+      break;
+    }
+    case 'outdoor': {  // sun
+      ctx.beginPath(); ctx.arc(0, 0, u * 0.4, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * u * 0.55, Math.sin(a) * u * 0.55); ctx.lineTo(Math.cos(a) * u * 0.78, Math.sin(a) * u * 0.78); ctx.stroke(); }
+      break;
+    }
     case 'constr': { diamond(u * 0.42, u * 0.72, u * 0.36); ctx.stroke(); diamond(-u * 0.12, u * 0.72, u * 0.36); ctx.stroke(); break; }  // stacked blocks
     case 'tapetes': { diamond(0, u, u * 0.62); ctx.stroke(); diamond(0, u * 0.5, u * 0.3); ctx.stroke(); break; }            // rug w/ inner
     case 'assentos': {  // chair

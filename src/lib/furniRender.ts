@@ -1148,6 +1148,175 @@ const drawDresser = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
 
 // Draw furni `kind` so its tile origin sits at (sx, sy). accent = room accent, t = frame counter.
 // Effective footprint of a (possibly rotated) piece: 90°/270° swap width & depth.
+// ═══════════ GYM — rotatable iso fitness gear ═══════════
+
+// Treadmill (1×2): dark belt deck + side rails, an upright console with a glowing screen + handrails.
+const drawTreadmill = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.58);
+  const parts: IsoPart[] = [
+    { u0: -0.36, u1: 0.36, v0: -0.85, v1: 0.6, z0: 0, z1: 0.22, t: '#14151a', r: cR, l: cL },
+    { u0: -0.42, u1: -0.3, v0: -0.85, v1: 0.6, z0: 0.22, z1: 0.34, t: cT, r: cR, l: cL },
+    { u0: 0.3, u1: 0.42, v0: -0.85, v1: 0.6, z0: 0.22, z1: 0.34, t: cT, r: cR, l: cL },
+    { u0: -0.42, u1: 0.42, v0: -0.9, v1: -0.76, z0: 0, z1: 1.3, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.strokeStyle = hexA('#000', 0.35); ctx.lineWidth = 1; for (let i = 0; i < 6; i++) { const v = -0.6 + i * 0.2, a = P(-0.3, v, 0.23), b = P(0.3, v, 0.23); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }   // belt slats
+    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.32, -0.76, 1.25), P(0.32, -0.76, 1.25), P(0.32, -0.76, 0.72), P(-0.32, -0.76, 0.72)], '#0e1c26'); poly(ctx, [P(-0.26, -0.76, 1.18), P(0.26, -0.76, 1.18), P(0.26, -0.76, 0.8), P(-0.26, -0.76, 0.8)], hexA(accent, 0.6)); }   // console
+    ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 3; ctx.lineCap = 'round'; for (const u of [-0.38, 0.38]) { const a = P(u, -0.86, 1.25), b = P(u, -0.45, 0.95); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }   // handrails
+  });
+};
+
+// Weight bench (1×2): padded bench on a steel frame + two uprights holding a loaded barbell.
+const drawWeightBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const pad = base, cT = shade(pad, 1.25), cR = shade(pad, 0.95), cL = shade(pad, 0.62), m = '#3a3e46';
+  const parts: IsoPart[] = [
+    ...legs([[-0.18, -0.55], [0.18, -0.55], [-0.18, 0.5], [0.18, 0.5]], 0.42).map(p => ({ ...p, t: m, r: shade(m, 0.8), l: shade(m, 0.5) })),
+    { u0: -0.22, u1: 0.22, v0: -0.6, v1: 0.55, z0: 0.42, z1: 0.6, t: cT, r: cR, l: cL },
+    { u0: -0.3, u1: -0.2, v0: -0.7, v1: -0.6, z0: 0, z1: 1.1, t: m, r: shade(m, 0.8), l: shade(m, 0.5) },
+    { u0: 0.2, u1: 0.3, v0: -0.7, v1: -0.6, z0: 0, z1: 1.1, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const a = P(-0.5, -0.65, 1.08), b = P(0.5, -0.65, 1.08); ctx.strokeStyle = '#aab0bd'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();   // bar
+    for (const u of [-0.46, 0.46]) { const c = P(u, -0.65, 1.08); ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 3, 9, 0, 0, Math.PI * 2); ctx.fill(); }   // plates
+  });
+};
+
+// Free-standing heavy bag: weighted base, a curved boom arm, and a strapped punching bag on a chain.
+const drawHeavyBag = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const bag = base;
+  const parts: IsoPart[] = [{ u0: -0.3, u1: 0.3, v0: -0.05, v1: 0.35, z0: 0, z1: 0.18, t: '#2a2e36', r: '#22252c', l: '#15171b' }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const b = P(0, 0.3, 0.18), top = P(0, 0.3, 2.3), arm = P(0, -0.15, 2.3);
+    ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(top[0], top[1]); ctx.quadraticCurveTo((top[0] + arm[0]) / 2, top[1] - 10, arm[0], arm[1]); ctx.stroke();
+    ctx.strokeStyle = '#5a5f6a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(arm[0], arm[1]); ctx.lineTo(arm[0], arm[1] + 6); ctx.stroke();
+    const bx = arm[0], by = arm[1] + 6, g = ctx.createLinearGradient(bx - 12, 0, bx + 12, 0); g.addColorStop(0, shade(bag, 0.7)); g.addColorStop(0.5, shade(bag, 1.18)); g.addColorStop(1, shade(bag, 0.72));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(bx - 11, by, 22, 42, 9); ctx.fill();
+    ctx.fillStyle = hexA('#000', 0.25); ctx.fillRect(bx - 11, by + 20, 22, 3); ctx.fillRect(bx - 11, by + 32, 22, 3);
+    ctx.fillStyle = hexA('#fff', 0.15); ctx.fillRect(bx - 9, by + 3, 5, 36);
+  });
+};
+
+// Dumbbell rack: a low steel A-rack holding two tiers of colour-capped dumbbells.
+const drawDumbbells = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.58), cols = ['#b3242e', '#caa24a', '#2e7d4a', '#3a7bd0', '#7a4ba0'];
+  const parts: IsoPart[] = [
+    { u0: -0.5, u1: 0.5, v0: -0.05, v1: 0.25, z0: 0, z1: 0.24, t: cT, r: cR, l: cL },
+    { u0: -0.5, u1: 0.5, v0: 0.0, v1: 0.08, z0: 0.24, z1: 0.66, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    for (const [z, vv] of [[0.34, 0.16], [0.62, 0.05]] as [number, number][]) for (let i = 0; i < 5; i++) { const u = -0.4 + i * 0.2, c = P(u, vv, z); ctx.fillStyle = '#2a2a30'; ctx.fillRect(c[0] - 6, c[1] - 2, 12, 4); ctx.fillStyle = cols[i]; ctx.beginPath(); ctx.arc(c[0] - 6, c[1], 3.2, 0, Math.PI * 2); ctx.arc(c[0] + 6, c[1], 3.2, 0, Math.PI * 2); ctx.fill(); }
+  });
+};
+
+// Spin bike (1×2): weighted flywheel at the front, frame, saddle + handlebars.
+const drawExBike = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [
+    ...legs([[-0.1, -0.5], [-0.1, 0.45]], 0.1).map(p => ({ ...p, t: '#3a3e46', r: '#2a2e36', l: '#15171b' })),
+    { u0: -0.06, u1: 0.06, v0: -0.5, v1: 0.45, z0: 0.08, z1: 0.16, t: '#3a3e46', r: '#2a2e36', l: '#15171b' }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const fw = P(0, -0.5, 0.52); ctx.fillStyle = '#4a4e56'; ctx.beginPath(); ctx.arc(fw[0], fw[1], 11, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#2a2e36'; ctx.beginPath(); ctx.arc(fw[0], fw[1], 4, 0, Math.PI * 2); ctx.fill();   // flywheel
+    const crank = P(0, -0.2, 0.4), seat = P(0, 0.35, 1.0), hbar = P(0, -0.42, 1.15);
+    ctx.strokeStyle = shade(m, 1.1); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(crank[0], crank[1]); ctx.lineTo(seat[0], seat[1]); ctx.moveTo(crank[0], crank[1]); ctx.lineTo(hbar[0], hbar[1]); ctx.stroke();
+    ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.ellipse(seat[0], seat[1] - 2, 7, 3, 0, 0, Math.PI * 2); ctx.fill();   // saddle
+    ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(hbar[0] - 6, hbar[1]); ctx.lineTo(hbar[0] + 6, hbar[1]); ctx.stroke();   // bars
+  });
+};
+
+// Gym lockers (3h): metal twin cabinet, louvre vents + handles on the camera-facing front.
+const drawLocker = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base, cT = shade(m, 1.18), cR = shade(m, 0.92), cL = shade(m, 0.56);
+  const parts: IsoPart[] = [{ u0: -0.45, u1: 0.45, v0: -0.3, v1: 0.3, z0: 0, z1: 2.6, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    for (const [u0, u1] of [[-0.42, -0.02], [0.02, 0.42]] as [number, number][]) {
+      poly(ctx, [P(u0, 0.3, 2.55), P(u1, 0.3, 2.55), P(u1, 0.3, 0.1), P(u0, 0.3, 0.1)], undefined, hexA('#000', 0.3), 1);
+      ctx.strokeStyle = hexA('#000', 0.3); ctx.lineWidth = 1; for (let i = 0; i < 3; i++) { const a = P(u0 + 0.04, 0.3, 2.4 - i * 0.08), b = P(u1 - 0.04, 0.3, 2.4 - i * 0.08); ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+      const h = P(u1 - 0.06, 0.3, 1.3); ctx.fillStyle = '#cfd6e2'; ctx.fillRect(h[0] - 1.5, h[1] - 6, 3, 12);
+    }
+  });
+};
+
+// ═══════════ OUTDOOR — rotatable iso patio / garden gear ═══════════
+
+// Kettle BBQ: tripod legs, a domed bowl with a glowing grill grate + coal glow, side handle.
+const drawBBQ = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [...legs([[-0.28, -0.1], [0.28, -0.1], [0, 0.32]], 0.55).map(p => ({ ...p, t: '#3a3e46', r: '#2a2e36', l: '#15171b' }))];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const c = P(0, 0.05, 0.7), g = ctx.createRadialGradient(c[0] - 5, c[1] - 5, 2, c[0], c[1], 18); g.addColorStop(0, shade(m, 1.4)); g.addColorStop(1, shade(m, 0.7));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(c[0], c[1], 18, 10, 0, 0, Math.PI); ctx.fill();   // bowl
+    ctx.fillStyle = '#33363c'; ctx.beginPath(); ctx.ellipse(c[0], c[1], 18, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; const gg = ctx.createRadialGradient(c[0], c[1], 1, c[0], c[1], 12); gg.addColorStop(0, 'rgba(255,140,40,0.6)'); gg.addColorStop(1, 'rgba(255,140,40,0)'); ctx.fillStyle = gg; ctx.beginPath(); ctx.ellipse(c[0], c[1], 15, 6, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();   // coals
+    ctx.strokeStyle = '#9aa0ac'; ctx.lineWidth = 1; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(c[0] + i * 6, c[1] - 4.5); ctx.lineTo(c[0] + i * 6, c[1] + 4.5); ctx.stroke(); }   // grate
+    const hd = P(0.42, 0.05, 0.7); ctx.strokeStyle = '#2a2e36'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(hd[0], hd[1], 4, -1.2, 1.2); ctx.stroke();   // handle
+  });
+};
+
+// Picnic table (2×1): A-frame timber table with attached bench seats both sides.
+const drawPicnicTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.22), cR = shade(wood, 0.92), cL = shade(wood, 0.58);
+  const parts: IsoPart[] = [
+    { u0: -0.7, u1: -0.6, v0: -0.5, v1: 0.5, z0: 0, z1: 0.5, t: shade(wood, 0.85), r: cR, l: cL },
+    { u0: 0.6, u1: 0.7, v0: -0.5, v1: 0.5, z0: 0, z1: 0.5, t: shade(wood, 0.85), r: cR, l: cL },
+    { u0: -0.85, u1: 0.85, v0: -0.55, v1: -0.42, z0: 0.26, z1: 0.34, t: cT, r: cR, l: cL },
+    { u0: -0.85, u1: 0.85, v0: 0.42, v1: 0.55, z0: 0.26, z1: 0.34, t: cT, r: cR, l: cL },
+    { u0: -0.85, u1: 0.85, v0: -0.22, v1: 0.22, z0: 0.5, z1: 0.62, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts);
+};
+
+// Hot tub (2×2): timber-clad tub with a sunken pool of bubbling, steaming water (animated).
+const drawHotTub = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  void accent; const wood = base, cT = shade(wood, 1.18), cR = shade(wood, 0.92), cL = shade(wood, 0.58);
+  const parts: IsoPart[] = [{ u0: -0.92, u1: 0.92, v0: -0.92, v1: 0.92, z0: 0, z1: 0.7, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const z = 0.7;
+    poly(ctx, [P(-0.8, -0.8, z), P(0.8, -0.8, z), P(0.8, 0.8, z), P(-0.8, 0.8, z)], 'rgba(58,160,200,0.85)');   // water
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 11; i++) { const ph = t * 0.06 + i, u = -0.6 + ((i * 7) % 5) * 0.3, v = -0.6 + ((i * 3) % 5) * 0.3, c = P(u, v, z), r = 1.5 + Math.abs(Math.sin(ph)) * 2.5; ctx.beginPath(); ctx.arc(c[0], c[1], r, 0, Math.PI * 2); ctx.fill(); }   // bubbles
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; for (const [u, v] of [[-0.3, -0.2], [0.3, 0.2]] as [number, number][]) { const c = P(u, v, z); ctx.beginPath(); ctx.moveTo(c[0], c[1]); ctx.quadraticCurveTo(c[0] + 4 + Math.sin(t * 0.1) * 2, c[1] - 14, c[0] - 3, c[1] - 26); ctx.stroke(); }   // steam
+  });
+};
+
+// Porch swing (2×1): a free-standing A-frame with a slatted bench hung on chains.
+const drawSwingBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const wood = base, m = '#3a3e46', cT = shade(wood, 1.22), cR = shade(wood, 0.92), cL = shade(wood, 0.6);
+  const post = (u0: number, u1: number, v0: number, v1: number): IsoPart => ({ u0, u1, v0, v1, z0: 0, z1: 1.6, t: m, r: shade(m, 0.8), l: shade(m, 0.5) });
+  const parts: IsoPart[] = [
+    post(-0.85, -0.74, -0.3, -0.2), post(-0.85, -0.74, 0.2, 0.3), post(0.74, 0.85, -0.3, -0.2), post(0.74, 0.85, 0.2, 0.3),
+    { u0: -0.85, u1: 0.85, v0: -0.05, v1: 0.05, z0: 1.55, z1: 1.65, t: m, r: shade(m, 0.8), l: shade(m, 0.5) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 1.5; for (const u of [-0.5, 0.5]) { const top = P(u, 0, 1.55), s = P(u, 0.12, 0.85); ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.lineTo(s[0], s[1]); ctx.stroke(); }   // chains
+    poly(ctx, [P(-0.55, -0.12, 0.85), P(0.55, -0.12, 0.85), P(0.55, 0.3, 0.85), P(-0.55, 0.3, 0.85)], cT);   // seat
+    poly(ctx, [P(-0.55, 0.3, 0.85), P(0.55, 0.3, 0.85), P(0.55, 0.3, 0.76), P(-0.55, 0.3, 0.76)], cL);
+    poly(ctx, [P(-0.55, -0.14, 1.32), P(0.55, -0.14, 1.32), P(0.55, -0.14, 0.85), P(-0.55, -0.14, 0.85)], cR);   // backrest
+  });
+};
+
+// Street lamp (4h): tall pole, a curved arm reaching out, glowing lantern head.
+const drawStreetLamp = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [
+    { u0: -0.1, u1: 0.1, v0: -0.12, v1: 0.12, z0: 0, z1: 0.18, t: shade(m, 1.0), r: shade(m, 0.8), l: shade(m, 0.5) },
+    { u0: -0.07, u1: 0.07, v0: -0.07, v1: 0.07, z0: 0.18, z1: 3.6, t: shade(m, 1.2), r: shade(m, 0.9), l: shade(m, 0.6) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const top = P(0, 0, 3.6), arm = P(0, -0.5, 3.5);
+    ctx.strokeStyle = shade(m, 1.0); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(top[0], top[1]); ctx.quadraticCurveTo(top[0], top[1] - 8, arm[0], arm[1]); ctx.stroke();
+    ctx.fillStyle = '#3a3e46'; ctx.beginPath(); ctx.moveTo(arm[0] - 7, arm[1]); ctx.lineTo(arm[0] + 7, arm[1]); ctx.lineTo(arm[0] + 4, arm[1] + 9); ctx.lineTo(arm[0] - 4, arm[1] + 9); ctx.closePath(); ctx.fill();   // head
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; const g = ctx.createRadialGradient(arm[0], arm[1] + 9, 1, arm[0], arm[1] + 9, 22); g.addColorStop(0, 'rgba(255,225,150,0.6)'); g.addColorStop(1, 'rgba(255,225,150,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(arm[0], arm[1] + 9, 22, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#fff3c0'; ctx.beginPath(); ctx.ellipse(arm[0], arm[1] + 7, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  });
+};
+
+// Mailbox: timber post + a rounded-top metal box (opening + red flag on the camera-facing front).
+const drawMailbox = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
+  void accent; const m = base;
+  const parts: IsoPart[] = [{ u0: -0.05, u1: 0.05, v0: -0.05, v1: 0.05, z0: 0, z1: 1.0, t: '#6a4a2c', r: '#5a3f24', l: '#3a2818' }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const c = P(0, 0, 1.0), cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.6), bw = 12, bd = 16, bh = 13;
+    poly(ctx, [[c[0] - bw, c[1]], [c[0], c[1] + bd * 0.32], [c[0], c[1] - bh], [c[0] - bw, c[1] - bh - bd * 0.32]], cL);
+    poly(ctx, [[c[0], c[1] + bd * 0.32], [c[0] + bw, c[1]], [c[0] + bw, c[1] - bh], [c[0], c[1] - bh - bd * 0.32]], cR);
+    ctx.fillStyle = cT; ctx.beginPath(); ctx.ellipse(c[0], c[1] - bh - bd * 0.16, bw, bd * 0.32, 0, Math.PI, 0); ctx.fill();
+    if (faceVisible(0, 1, dir)) { const f = P(0.0, 0.12, 1.0); ctx.fillStyle = '#d22'; ctx.fillRect(f[0] + 7, f[1] - 13, 2, 11); ctx.fillRect(f[0] + 9, f[1] - 13, 5, 5); }   // flag
+  });
+};
+
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
 function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
@@ -1238,6 +1407,18 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'bathtub': drawBathtub(ctx, sx, sy, accent, d.color, dir); break;
     case 'clock': drawClock(ctx, sx, sy, accent, d.color, dir); break;
     case 'dresser': drawDresser(ctx, sx, sy, accent, d.color, dir); break;
+    case 'treadmill': drawTreadmill(ctx, sx, sy, accent, d.color, dir); break;
+    case 'weightbench': drawWeightBench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'heavybag': drawHeavyBag(ctx, sx, sy, accent, d.color, dir); break;
+    case 'dumbbells': drawDumbbells(ctx, sx, sy, accent, d.color, dir); break;
+    case 'exbike': drawExBike(ctx, sx, sy, accent, d.color, dir); break;
+    case 'locker': drawLocker(ctx, sx, sy, accent, d.color, dir); break;
+    case 'bbq': drawBBQ(ctx, sx, sy, accent, d.color, dir); break;
+    case 'picnictable': drawPicnicTable(ctx, sx, sy, accent, d.color, dir); break;
+    case 'hottub': drawHotTub(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'swingbench': drawSwingBench(ctx, sx, sy, accent, d.color, dir); break;
+    case 'streetlamp': drawStreetLamp(ctx, sx, sy, accent, d.color, dir); break;
+    case 'mailbox': drawMailbox(ctx, sx, sy, accent, d.color, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -1309,7 +1490,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };

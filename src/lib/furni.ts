@@ -17,6 +17,8 @@ export const CATS: FurniCat[] = [
   { id: 'tier1',    name: '★ Hi-Fi', premium: true },
   { id: 'brainrot', name: '★ Brainrot', premium: true },
   { id: 'home',     name: 'Home' },
+  { id: 'gym',      name: 'Gym' },
+  { id: 'outdoor',  name: 'Outdoor' },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -156,6 +158,20 @@ export const FURNI: FurniDef[] = [
   { kind: 'bathtub',  name: 'Bathtub',           emoji: '🛁', cat: 'home', color: '#eef1f6', h: 1, walk: false, foot: 1,   special: 'bathtub', span: [2, 1] },
   { kind: 'clock',    name: 'Grandfather Clock', emoji: '🕰️', cat: 'home', color: '#5a3f28', h: 3, walk: false, foot: 0.4, special: 'clock' },
   { kind: 'dresser',  name: 'Dresser',           emoji: '🗄️', cat: 'home', color: '#6b4a2c', h: 1, walk: false, foot: 1,   special: 'dresser', span: [2, 1] },
+  // Gym — rotatable fitness gear
+  { kind: 'treadmill',  name: 'Treadmill',       emoji: '🏃', cat: 'gym', color: '#2a2e36', h: 1, walk: false, foot: 1,   special: 'treadmill', span: [1, 2] },
+  { kind: 'weightbench',name: 'Weight Bench',    emoji: '🏋️', cat: 'gym', color: '#b3242e', h: 1, walk: false, foot: 1,   special: 'weightbench', span: [1, 2] },
+  { kind: 'heavybag',   name: 'Punching Bag',    emoji: '🥊', cat: 'gym', color: '#8a2e2e', h: 2, walk: false, foot: 0.7, special: 'heavybag' },
+  { kind: 'dumbbells',  name: 'Dumbbell Rack',   emoji: '🏋️', cat: 'gym', color: '#3a3e46', h: 1, walk: false, foot: 1,   special: 'dumbbells' },
+  { kind: 'exbike',     name: 'Exercise Bike',   emoji: '🚲', cat: 'gym', color: '#2a2e36', h: 1, walk: false, foot: 1,   special: 'exbike', span: [1, 2] },
+  { kind: 'locker',     name: 'Lockers',         emoji: '🔒', cat: 'gym', color: '#3f6b8a', h: 3, walk: false, foot: 0.6, special: 'locker' },
+  // Outdoor — rotatable patio / garden gear
+  { kind: 'bbq',        name: 'BBQ Grill',       emoji: '🍖', cat: 'outdoor', color: '#2a2e36', h: 1, walk: false, foot: 0.7, special: 'bbq' },
+  { kind: 'picnictable',name: 'Picnic Table',    emoji: '🧺', cat: 'outdoor', color: '#7a5230', h: 1, walk: false, foot: 1,   special: 'picnictable', span: [2, 1] },
+  { kind: 'hottub',     name: 'Hot Tub',         emoji: '♨️', cat: 'outdoor', color: '#6a4a2c', h: 1, walk: false, foot: 1,   special: 'hottub', span: [2, 2] },
+  { kind: 'swingbench', name: 'Porch Swing',     emoji: '🪑', cat: 'outdoor', color: '#7a5230', h: 2, walk: false, foot: 1,   special: 'swingbench', span: [2, 1] },
+  { kind: 'streetlamp', name: 'Street Lamp',     emoji: '💡', cat: 'outdoor', color: '#2a2e36', h: 4, walk: false, foot: 0.3, special: 'streetlamp' },
+  { kind: 'mailbox',    name: 'Mailbox',         emoji: '📫', cat: 'outdoor', color: '#3f6b8a', h: 1, walk: false, foot: 0.3, special: 'mailbox' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
@@ -185,7 +201,10 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'tree', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux',
   'vespa',
   // home pieces — all turn (front doors/headboard/taps face the camera correctly)
-  'bed', 'wardrobe', 'bookcase', 'desk', 'kitchen', 'bathtub', 'clock', 'dresser']);
+  'bed', 'wardrobe', 'bookcase', 'desk', 'kitchen', 'bathtub', 'clock', 'dresser',
+  // gym + outdoor — all directional iso
+  'treadmill', 'weightbench', 'heavybag', 'dumbbells', 'exbike', 'locker',
+  'bbq', 'picnictable', 'hottub', 'swingbench', 'streetlamp', 'mailbox']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
