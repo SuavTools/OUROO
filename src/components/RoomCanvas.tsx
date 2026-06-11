@@ -22,6 +22,7 @@ import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
 import { RoomMusic } from '@/lib/roomMusic';
+import { Oracle } from '@/components/Oracle';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -413,6 +414,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   }, []);
   useEffect(() => { musicRef.current?.setRoom(roomMeta.slug); }, [roomMeta.slug]);
   const toggleMusic = () => setMusicOff(v => { const nv = !v; musicRef.current?.setMuted(nv); try { localStorage.setItem('ouroo_music_off', nv ? '1' : '0'); } catch { /* ignore */ } return nv; });
+  const [oracleOpen, setOracleOpen] = useState(false);   // the lore codex + Oracle Q&A
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -974,6 +976,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
         <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>
         <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>
+        <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
         {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
 
@@ -1225,6 +1228,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         style={{ right: onExit ? '5.5rem' : '1rem' }}>♪</button>
 
       {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ EXIT ]</button>}
+
+      <Oracle open={oracleOpen} onClose={() => setOracleOpen(false)} roomSlug={roomMeta.slug} roomName={roomMeta.name} />
 
       <InventoryModal open={invOpen} onClose={() => setInvOpen(false)} onEquip={equipAppearance} title="Character" />
     </div>
