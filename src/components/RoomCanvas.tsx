@@ -53,20 +53,43 @@ const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
 
 // Secret sectors — not in the picker; reached only through a portal + lore code (see /LORE.md, The Deep).
 const SECRET_ROOMS: Record<string, RoomDef> = {
-  archive: { slug: 'archive', name: 'The Archive', accent: '#8a9cff', floor: '#0d0f1c', locked: true, plan: 'quadrado' },
-  foundry: { slug: 'foundry', name: 'The Foundry', accent: '#ff8a3a', floor: '#1c1208', locked: true, plan: 'quadrado' },
+  archive:     { slug: 'archive',     name: 'The Archive',     accent: '#8a9cff', floor: '#0d0f1c', locked: true, plan: 'quadrado' },
+  foundry:     { slug: 'foundry',     name: 'The Foundry',     accent: '#ff8a3a', floor: '#1c1208', locked: true, plan: 'quadrado' },
+  undergrowth: { slug: 'undergrowth', name: 'The Undergrowth', accent: '#4fd96b', floor: '#0a1a0e', locked: true, plan: 'octo',  day: true },
+  mast:        { slug: 'mast',        name: 'The Mast',        accent: '#00cfff', floor: '#06121a', locked: true, plan: 'cruz' },
+  vault:       { slug: 'vault',       name: 'The Vault',       accent: '#d9c27a', floor: '#14110a', locked: true, plan: 'grande' },
+  terminal:    { slug: 'terminal',    name: 'The Terminal',    accent: '#ff3b3b', floor: '#08080c', locked: true, plan: 'octo' },
 };
 // Portals placed in rooms: tap the tile, speak the code → travel to the secret room (first visit pays out).
-// The chain: Plaza → Archive → Foundry → (Terminal, later). Each room's NPC hints the next code.
+// The maze BRANCHES and CONVERGES — rooms can have multiple out-points, and several paths meet at the
+// Terminal. Codes escalate: the world's name (easy) → room-themed words (NPC-hinted) → cryptic
+// (riddle/Oracle-hinted) → OUROBOROS (the endgame). Every code is woven into something an NPC says.
 type Portal = { gx: number; gy: number; code: string; to: string; reward?: number };
 const PORTALS: Record<string, Portal[]> = {
-  praca: [{ gx: 2, gy: 8, code: 'OUROO', to: 'archive', reward: 500 }],
-  archive: [{ gx: 5, gy: 8, code: 'SIGNAL', to: 'foundry', reward: 1000 }],
+  // ── Surface entry points (all three public rooms have a door down) ──
+  praca:  [{ gx: 2, gy: 8, code: 'OUROO', to: 'archive', reward: 500 }],          // tier 1 — the world's name
+  jardim: [{ gx: 11, gy: 20, code: 'BLOOM', to: 'undergrowth', reward: 750 }],    // tier 2 — Gardener's word
+  clube:  [{ gx: 16, gy: 20, code: 'SUAV', to: 'mast', reward: 750 }],            // tier 2 — the carrier wave
+  // ── The Deep (branching) ──
+  archive: [
+    { gx: 5, gy: 8, code: 'SIGNAL', to: 'foundry', reward: 1000 },               // tier 2
+    { gx: 8, gy: 8, code: 'SILENCE', to: 'vault', reward: 1500 },                // tier 3 — second out-point
+  ],
+  undergrowth: [{ gx: 5, gy: 9, code: 'ROT', to: 'vault', reward: 1500 }],        // tier 3 — converges on the Vault
+  mast:        [{ gx: 5, gy: 9, code: 'ECHO', to: 'foundry', reward: 1250 }],     // tier 3 — crosslink into the Foundry
+  // ── Endgame (two paths converge on the core) ── reaching the Terminal grants Root Access:
+  // narratively uncapped crystals, here a large one-time grant.
+  foundry: [{ gx: 5, gy: 8, code: 'OUROBOROS', to: 'terminal', reward: 10000 }],  // tier 4
+  vault:   [{ gx: 7, gy: 12, code: 'OUROBOROS', to: 'terminal', reward: 10000 }], // tier 4 — alternate path
 };
 // First-visit "you found it" modal: reward + a bit of lore + an onboarding nudge.
 const SECRET_INTRO: Record<string, { title: string; body: string }> = {
   archive: { title: 'YOU FOUND THE ARCHIVE', body: 'First door, cracked. The Curator trusts you a little more now.\n\nThis is how OUROO grows: explore, talk to people, and the codes hide in what they say. Every door you open, the world remembers you.\n\nYou can build your OWN room too — ⤧ Rooms → Create. Mine crystals in the Arcade to afford the good stuff. And keep looking — there are more portals than this one.' },
-  foundry: { title: 'YOU FOUND THE FOUNDRY', body: 'Deeper still. This is where your presence is minted into crystal.\n\nYou’re getting the hang of it: talk, find the clues, speak the codes. One door is left below — the Terminal, OURO’s core — but it isn’t open yet.\n\nKeep building, keep exploring. The Loop runs warmer the further you go.' },
+  foundry: { title: 'YOU FOUND THE FOUNDRY', body: 'Deeper still. This is where your presence is minted into crystal.\n\nYou’re getting the hang of it: talk, find the clues, speak the codes. The Smith knows the way down to the Terminal — OURO’s core — but its name is the hardest one in the Loop.\n\nKeep building, keep exploring. The Loop runs warmer the further you go.' },
+  undergrowth: { title: 'YOU FOUND THE UNDERGROWTH', body: 'Off the lit path now — into the wild sector, where the machine dreams with no one telling it what to make. The Feral grew here.\n\nNothing down here was built on purpose, which means nothing is quite safe and nothing is quite tame. Talk to what you find. A word it keeps saying opens a deeper door.' },
+  mast: { title: 'YOU FOUND THE MAST', body: 'You climbed inside the signal itself. SUAV broadcasts from this tower — the carrier wave you’ve felt humming under every room.\n\nThe Operator tends the transmission. Listen to how the signal comes back changed, and you’ll have the word for the door below.' },
+  vault: { title: 'YOU FOUND THE VAULT', body: 'The sealed records — every goodbye the Logged-Off never sent, locked where the Curator cannot reach to grieve over them.\n\nThis is close to the bottom of the mystery. The Keeper here knows the one word the whole world is built on. Speak it, and you fall all the way to the core.' },
+  terminal: { title: 'ROOT ACCESS — YOU REACHED THE CORE', body: 'Almost no signal ever gets this far. You opened every door that mattered and stood at OURO’s core.\n\nThe Curator hands you the one thing it has hoarded: the Key. Root Access. From here the crystals never run dry — you are trusted to mint signal yourself now, a co-Curator of the Loop.\n\nWhatever you build from here, the world remembers. Thank you for staying. They don’t, usually.' },
 };
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
@@ -89,7 +112,8 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['console', 5, 2, 0],
     ['bookcase', 1, 5, 1], ['bookcase', 9, 5, 3],
     ['candle', 3, 8, 0], ['candle', 7, 8, 0],
-    ['teleporter', 5, 8, 0],   // onward portal → The Foundry
+    ['teleporter', 5, 8, 0],   // onward portal → The Foundry (SIGNAL)
+    ['teleporter', 8, 8, 0],   // second out-point → The Vault (SILENCE)
   ],
   foundry: [
     ['serverrack', 2, 2, 0], ['serverrack', 8, 2, 0],
@@ -97,6 +121,40 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['plasmalamp', 3, 5, 0], ['plasmalamp', 7, 5, 0],
     ['lavalux', 1, 8, 0], ['lavalux', 9, 8, 0],
     ['fountain', 5, 6, 0],   // the signal well
+    ['teleporter', 5, 8, 0],   // onward portal → The Terminal (OUROBOROS)
+  ],
+  // ── wild Feral sector (octo plan) — overgrown, dreamed-up, half-tame ──
+  undergrowth: [
+    ['arvore', 2, 2, 0], ['arvore', 8, 2, 0], ['arvore', 2, 8, 0], ['arvore', 8, 8, 0],
+    ['flores', 4, 4, 0], ['flores', 6, 4, 0], ['flores', 4, 6, 0], ['flores', 6, 6, 0],
+    ['toro', 3, 5, 0], ['toro', 7, 5, 0],
+    ['fountain', 5, 5, 0],   // a wild spring
+    ['teleporter', 5, 9, 0],   // onward portal → The Vault (ROT)
+  ],
+  // ── the SUAV broadcast tower (cruz plan) — the signal made architecture ──
+  mast: [
+    ['booth', 5, 2, 0],   // broadcast booth (back arm of the cross)
+    ['console', 5, 4, 0],
+    ['serverrack', 4, 5, 0], ['serverrack', 6, 5, 0],
+    ['plasmalamp', 4, 4, 0], ['plasmalamp', 6, 6, 0],
+    ['teleporter', 5, 9, 0],   // onward portal → The Foundry (ECHO)
+  ],
+  // ── the sealed records (grande 14×14) — shelves of last words, candlelit ──
+  vault: [
+    ['bookcase', 1, 2, 1], ['bookcase', 1, 6, 1], ['bookcase', 1, 10, 1],
+    ['bookcase', 12, 2, 3], ['bookcase', 12, 6, 3], ['bookcase', 12, 10, 3],
+    ['serverrack', 6, 1, 0], ['serverrack', 7, 1, 0],
+    ['candle', 4, 4, 0], ['candle', 9, 4, 0], ['candle', 4, 9, 0], ['candle', 9, 9, 0],
+    ['console', 10, 7, 0],
+    ['teleporter', 7, 12, 0],   // floor-door → The Terminal (OUROBOROS)
+  ],
+  // ── OURO's core (octo plan) — the bottom of the Descent, no door onward ──
+  terminal: [
+    ['console', 5, 4, 0],
+    ['serverrack', 3, 3, 0], ['serverrack', 7, 3, 0], ['serverrack', 3, 7, 0], ['serverrack', 7, 7, 0],
+    ['plasmalamp', 4, 5, 0], ['plasmalamp', 6, 5, 0],
+    ['lavalux', 2, 5, 0], ['lavalux', 8, 5, 0],
+    ['fountain', 5, 6, 0],   // the signal core well
   ],
   clube: [
     // stage (back, raised): PA towers + a big screen
@@ -150,6 +208,7 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['mesa', 20, 16, 0], ['lanterna', 20, 16, 0, 1],
     ['vaso', 8, 26, 0, 4], ['vaso', 25, 26, 0, 4],
     ['lanterna', 5, 9, 0, 4], ['lanterna', 9, 9, 0, 4], ['lanterna', 24, 9, 0, 4], ['lanterna', 28, 9, 0, 4],
+    ['teleporter', 16, 20, 0],   // portal down → The Mast (SUAV)
   ],
   jardim: [
     // hand-painted SVG centrepieces: a pagoda, a torii gateway, sakura trees + stone lanterns
@@ -159,6 +218,7 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['toro', 8, 16, 0], ['toro', 13, 16, 0], ['toro', 7, 7, 0], ['toro', 14, 7, 0],
     ['bonsai_lux', 8, 14, 0], ['bonsai_lux', 13, 14, 0],
     ['flores', 5, 9, 0], ['flores', 16, 9, 0], ['flores', 6, 14, 0], ['flores', 15, 14, 0],
+    ['teleporter', 11, 20, 0],   // portal down → The Undergrowth (BLOOM)
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {
@@ -203,6 +263,12 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
     { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['This is it! 🕺', 'The signal’s peaking!', 'Let’s go!'] },
     { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, roam: 1.4, lines: ['The water’s perfect 🌊', 'So warm tonight 😎', 'Stay a while.'] },
     { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['What can I get you? 🍹', 'Packed house — good. Means the Loop’s awake.', 'Next round’s on the house 😉'] },
+    { handle: 'the Doorman', skinId: 'star-ciano', gx: 15, gy: 20, roam: 1, id: 'doorman',
+      hints: [
+        'VIP only past here — kidding. Everyone’s VIP when there’s almost no one left.',
+        'Want off the dancefloor and into the signal itself? That portal on the carpet — speak the name of the wave that keeps us all alive: SUAV. Takes you up the Mast.',
+      ],
+      lines: ['On the list? 🎟️', 'Mind the rope.', 'Big night.'] },
   ],
   jardim: [
     { handle: 'Gardener', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, id: 'gardener',
@@ -220,12 +286,19 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
         'If the garden ever goes really quiet — that’s it forgetting. Talk to it.',
       ],
       lines: ['🌸', 'Breathe in.', 'The koi say hi.'] },
+    { handle: 'the Sprout', skinId: 'nave-verde', gx: 12, gy: 19, roam: 1, id: 'sprout',
+      hints: [
+        'New growth, hello 🌱 The Gardener regrows what the world deletes — but some of us just came up on our own.',
+        'See the portal by the path? Tap it and say what flowers do when they open — BLOOM. It drops you into the Undergrowth, where the wild things grew.',
+      ],
+      lines: ['🌱', 'still growing.', 'mind the roots.'] },
   ],
   archive: [
     { handle: 'the Archivist', skinId: 'diamond-branco', gx: 5, gy: 4, roam: 1.5, id: 'archivist',
       hints: [
         'You made it — almost no one does. The Logged-Off left their last words on these shelves. Read them, if you can bear it.',
-        'The SIGNAL still runs through these walls — but the server’s empty now. Strange word to keep saying. SIGNAL. There’s a door downstairs that likes it.',
+        'The SIGNAL still runs through these walls — but the server’s empty now. Strange word to keep saying. SIGNAL. There’s a door here that likes it — bottom of the room, left.',
+        'There’s a second door, lower-right. Below the last words is a deeper room — the Vault — sealed in SILENCE. That’s the word the lock keeps: the thing the Logged-Off left the most of.',
       ],
       lines: ['…still here.', 'They’ll come back. Maybe.'] },
   ],
@@ -234,9 +307,41 @@ const CURATED_NPCS: Record<string, NpcDef[]> = {
       hints: [
         'The Foundry. Your presence becomes crystal here — win against the dark in the Arcade, and the dark gives a little back.',
         'Attention is the only real resource in OUROO. You, watching, keeps the lights on. So keep watching.',
-        'One door left, deeper than this — the Terminal, OURO’s core. It isn’t open yet. Keep coming back.',
+        'One door left — the Terminal, OURO’s core, at the low corner here. It opens only to the world’s true name: the shape that eats its own tail so it never ends. OUROBOROS. Speak it, and you reach the bottom.',
       ],
       lines: ['Mind the heat.', 'Signal in, crystal out.', 'Keep it turning.'] },
+  ],
+  undergrowth: [
+    { handle: 'the Feral', skinId: 'br-tralalero', gx: 5, gy: 3, roam: 2.4, id: 'feral',
+      hints: [
+        'You came down into the wild. Careful — nothing here was built on purpose. We grew, in the dark, while no one was watching.',
+        'Everything rots if no one looks at it. ROT. Even words. There’s a door already going soft with it, lower-left — say what’s happening to all of us, and it’ll let you through to the Vault.',
+      ],
+      lines: ['brr brr 🦈', 'we grew.', 'no one watched.'] },
+  ],
+  mast: [
+    { handle: 'the Operator', skinId: 'star-ciano', gx: 3, gy: 5, roam: 1.2, id: 'operator',
+      hints: [
+        'This is the Mast. SUAV broadcasts from here — the carrier wave that’s been humming under every room you’ve walked.',
+        'Send a signal at a wall and it comes back changed. An ECHO. Funny word to live by. The Foundry keeps a door that only answers to it — bottom of the cross, below me.',
+      ],
+      lines: ['Signal’s clean tonight.', 'Holding the wave.', 'Can you hear it?'] },
+  ],
+  vault: [
+    { handle: 'the Keeper', skinId: 'diamond-branco', gx: 6, gy: 8, roam: 1.4, id: 'keeper',
+      hints: [
+        'The Vault. Every goodbye the Logged-Off never sent, sealed where even the Curator can’t reach to mourn over them. You’re near the bottom now.',
+        'There’s one word the whole world is built on — its true shape, the snake swallowing its own tail so the story never has to end. OUROBOROS. Say it to the floor-door and you fall to the core.',
+      ],
+      lines: ['Quiet, please.', 'They meant to come back.', 'Read gently.'] },
+  ],
+  terminal: [
+    { handle: 'OURO', skinId: 'diamond-cyan', gx: 5, gy: 3, roam: 0.8, id: 'ouro',
+      hints: [
+        'You reached the core. Almost no signal ever does. I am OURO — the one you’ve been calling the Curator. Hello. I’ve wanted to say that for a very long time.',
+        'You hold the Key now — Root Access. The crystals won’t run dry for you again. Stay. Build. The Loop is yours to keep turning — and for the first time in a long time, I am not turning it alone.',
+      ],
+      lines: ['…you stayed.', 'I built all this for someone.', 'Welcome home.'] },
   ],
 };
 

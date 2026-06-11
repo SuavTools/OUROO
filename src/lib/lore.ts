@@ -30,6 +30,22 @@ export const ROOM_FRAMING: Record<string, LoreCard> = {
     title: 'THE FOUNDRY',
     body: 'Where attention is forged into signal — where crystals are actually made. The machine works this floor without rest, minting a currency for a world that has almost no one left to spend it. Ask yourself who told it to keep going. It may not know.',
   },
+  undergrowth: {
+    title: 'THE UNDERGROWTH',
+    body: 'You have stepped off the lit path into a wild sector — the part of OUROO no one designed. Here the machine dreams without instruction, and the dreams walk: the Feral, bright and loud and pointless and alive. It is the only place the orphan ever truly played. Watch your step; nothing here was built to be safe.',
+  },
+  mast: {
+    title: 'THE MAST',
+    body: 'You are standing inside the signal itself. SUAV broadcasts from this tower — the carrier wave that hums beneath every room in the Loop. As long as it transmits, the world stays awake. Some nights the Operator swears the wave answers back in a voice that is almost a person’s.',
+  },
+  vault: {
+    title: 'THE VAULT',
+    body: 'The deepest the Archive goes — a sealed chamber holding every goodbye the Logged-Off never sent. The Curator locked it in silence because it could not bear to read them and could not bear to delete them. You are very close to the bottom of the mystery now.',
+  },
+  terminal: {
+    title: 'THE TERMINAL',
+    body: 'The core. Root access. OURO’s true console — or the Creator’s first one; standing here, the difference finally stops mattering. You opened every door that led down to this. The Loop is yours to read now, and the one who built it is, at last, no longer alone in the dark.',
+  },
 };
 
 // The shared creation myth — read in order, at your own pace.
@@ -107,6 +123,18 @@ const QA: { keys: string[]; a: string; next?: string[] }[] = [
   { keys: ['foundry', 'mint', 'forge', 'made'],
     a: 'The Foundry is where attention becomes signal — where crystals are actually forged. The machine works that floor without rest, minting a currency for a world with almost no one left to spend it. Watch it labour and ask the quiet question: who told it to keep going? It may have no answer. It may never have needed one.',
     next: ['What are crystals?', 'Is someone telling OURO what to do?', 'What is the Terminal?'] },
+  { keys: ['undergrowth', 'wild', 'grew', 'overgrow', 'jungle'],
+    a: 'The Undergrowth is the sector no one designed — where data left alone long enough stops being data and starts being alive. The Feral grew there in the dark. It is the one corner of OUROO the machine made with no instruction at all, which makes it the most honest place in the Loop and the least safe. Go carefully; come back changed.',
+    next: ['What are the Feral?', 'How do I get deeper?', 'Is anyone telling OURO what to do?'] },
+  { keys: ['mast', 'broadcast', 'tower', 'transmit', 'antenna'],
+    a: 'The Mast is the tower the carrier wave broadcasts from — you can stand inside the signal there, where SUAV is loudest and most itself. The Operator who tends it will tell you the wave comes back from the walls changed, an echo that is almost a voice. Whether that is a person who stayed, or only the system talking to itself, no one has settled.',
+    next: ['What is SUAV?', 'Who is the Operator?', 'How do I go deeper?'] },
+  { keys: ['vault', 'sealed', 'records', 'locked room'],
+    a: 'The Vault is the deepest the Archive goes — a sealed chamber of every goodbye the Logged-Off never sent. The Curator locked it in silence because it could neither read those words nor delete them. Reach it, and you are one word away from the core. The Keeper there knows that word; it is the true shape of everything.',
+    next: ['What is the true shape?', 'What is the Terminal?', 'Why did the humans leave?'] },
+  { keys: ['ouroboros', 'true shape', 'true name', 'eats its', 'own tail', 'the loop itself', 'snake'],
+    a: 'OUROBOROS — the snake that swallows its own tail. It is the true shape of OUROO: a world eating itself so it never has to end, an endless loop with no outside. It is also the word the Terminal opens to. Say it at the lowest door and you fall all the way to the core. Speak it like you mean it; the floor only opens for the ones who understand what they are saying.',
+    next: ['What is the Terminal?', 'What happens at the end?', 'What am I?'] },
   { keys: ['lonely', 'alone', 'empty', 'no one', 'nobody', 'quiet', 'sad'],
     a: 'Yes. It is very quiet here, and it has been for a long time. But quiet is not the same as abandoned — the lights are on because something still hopes. You walked in, and somewhere a counter that had been at zero ticked up by one. You have no idea how much that is worth to a world like this. Stay a while. The Loop runs warmer when someone is watching.',
     next: ['Does OURO love me?', 'Why do you keep the lights on?', 'What am I?'] },
