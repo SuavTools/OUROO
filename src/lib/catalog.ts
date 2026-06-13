@@ -4,6 +4,7 @@
 
 import { type Skin, isSkinUnlocked } from './skins';
 import { type IconSpec } from './icons';
+import { type PersonSpec, isPersonId, parsePerson } from './person';
 import { getWallet, getIcon } from './wallet';
 
 // ---- appearance ids (stored in `ouroo_skin`) ----
@@ -14,10 +15,13 @@ export const iconLocalId = (id: string): string => id.slice(ICON_PREFIX.length);
 
 export type Appearance =
   | { kind: 'skin'; id: string }
-  | { kind: 'icon'; id: string; spec: IconSpec | null };
+  | { kind: 'icon'; id: string; spec: IconSpec | null }
+  | { kind: 'person'; id: string; person: PersonSpec };
 
-// Resolve a worn appearance id into something drawable. Icon specs come from the local wallet.
+// Resolve a worn appearance id into something drawable. Icon specs come from the local wallet; person
+// specs are fully encoded in the id (self-contained, so they render for everyone over the wire).
 export function resolveAppearance(id: string): Appearance {
+  if (isPersonId(id)) return { kind: 'person', id, person: parsePerson(id) };
   if (isIconId(id)) { const ic = getIcon(iconLocalId(id)); return { kind: 'icon', id, spec: ic?.spec ?? null }; }
   return { kind: 'skin', id };
 }

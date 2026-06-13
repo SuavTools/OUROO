@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useUser, getAuthIdentity } from '@/lib/auth';
 import { amIModerator } from '@/lib/chat';
 import { getPlayerStats, getBestAcrossGames, getLocalPlayer } from '@/lib/leaderboard';
@@ -9,12 +9,14 @@ import { SKINS, skinById, getSelectedSkinId, setSelectedSkinId, fmtScore } from 
 import { SkinPreview } from '@/components/SkinPreview';
 import { IconPreview } from '@/components/IconPreview';
 import { IconEditor } from '@/components/IconEditor';
+import { PersonPreview } from '@/components/PersonPreview';
+import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
 import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon } from '@/lib/wallet';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 
-type Tab = 'skins' | 'furni' | 'icons';
+type Tab = 'person' | 'skins' | 'furni' | 'icons';
 
 // The cosmetics hub: balance, owned counts, buy/equip across skins · furni · custom icons.
 // Mounted on the landing AND inside PRAÇA — pass `onEquip` so equipping updates a live avatar.
@@ -23,8 +25,10 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
 }) {
   const { user } = useUser();
   const wallet = useWallet();
-  const [tab, setTab] = useState<Tab>('skins');
+  const [tab, setTab] = useState<Tab>('person');
   const [selected, setSelected] = useState(getSelectedSkinId());
+  const [person, setPerson] = useState<PersonSpec>(() => { const s = getSelectedSkinId(); return isPersonId(s) ? parsePerson(s) : defaultPerson(); });
+  const setP = (patch: Partial<PersonSpec>) => setPerson(p => ({ ...p, ...patch }));
   const [best, setBest] = useState(0);
   const [codeUnlocks, setCodeUnlocks] = useState<string[]>([]);
   const [isMod, setIsMod] = useState(false);
@@ -33,7 +37,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const flash = (ok: boolean, text: string) => { setToast({ ok, text }); setTimeout(() => setToast(null), 2200); };
 
-  useEffect(() => { if (open) setSelected(getSelectedSkinId()); }, [open]);
+  useEffect(() => { if (open) { const s = getSelectedSkinId(); setSelected(s); if (isPersonId(s)) setPerson(parsePerson(s)); } }, [open]);
   useEffect(() => {
     if (!open) return;
     amIModerator().then(setIsMod);
@@ -57,6 +61,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
   const ownedPaidFurni = paidFurni.filter(f => furniCount(f.kind) > 0).length;
 
   const TABS: { id: Tab; label: string; badge: string }[] = [
+    { id: 'person', label: 'Character', badge: '👤' },
     { id: 'skins', label: 'Skins', badge: `${ownedSkins}/${SKINS.length}` },
     { id: 'furni', label: 'Furniture', badge: `${ownedPaidFurni}/${paidFurni.length}` },
     { id: 'icons', label: 'Icons', badge: `${wallet.icons.length}` },
@@ -73,7 +78,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-12 h-12 border border-white/15 bg-black/60 flex items-center justify-center shrink-0">
-              {cur.kind === 'icon' && cur.spec ? <IconPreview spec={cur.spec} size={44} /> : <SkinPreview skin={skinById(selected)} size={44} />}
+              {cur.kind === 'person' ? <PersonPreview spec={cur.person} size={44} /> : cur.kind === 'icon' && cur.spec ? <IconPreview spec={cur.spec} size={44} /> : <SkinPreview skin={skinById(selected)} size={44} />}
             </div>
             <div className="min-w-0">
               <p className="font-helvetica font-black text-xl text-white leading-none">{title}</p>
@@ -100,6 +105,51 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
         </div>
 
         {toast && <p className={`text-[12px] text-center mb-3 ${toast.ok ? 'text-[#1ED760]' : 'text-brandRed'}`}>{toast.text}</p>}
+
+        {/* DESIGN A PERSON */}
+        {tab === 'person' && (() => {
+          const isWorn = selected === encodePerson(person);
+          const Chips = (opts: string[], val: number, on: (i: number) => void) => (
+            <div className="flex flex-wrap gap-1">{opts.map((o, i) => (
+              <button key={o} onClick={() => on(i)} className={`text-[10px] uppercase tracking-wide px-2 py-1 border transition-colors ${val === i ? 'border-white text-white bg-white/10' : 'border-white/15 text-white/55 hover:text-white/80'}`}>{o}</button>
+            ))}</div>
+          );
+          const Swatches = (cols: string[], val: string, on: (c: string) => void) => (
+            <div className="flex flex-wrap gap-1">{cols.map(c => (
+              <button key={c} onClick={() => on(c)} title={c} className={`w-5 h-5 rounded-full border ${val === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} />
+            ))}</div>
+          );
+          const Row = ({ label, children }: { label: string; children: ReactNode }) => (
+            <div className="space-y-1"><p className="text-[10px] uppercase tracking-[0.2em] text-white/40">{label}</p>{children}</div>
+          );
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 border border-white/12 bg-black/40 p-3">
+                <div className="w-24 h-28 bg-black/50 border border-white/10 flex items-center justify-center shrink-0"><PersonPreview spec={person} size={104} animate /></div>
+                <div className="flex-1 space-y-2">
+                  <Row label="Body">{Chips(['Slim', 'Broad'], person.g, i => setP({ g: i }))}</Row>
+                  <Row label="Skin tone"><div className="flex gap-1">{TONES.map((c, i) => (<button key={c} onClick={() => setP({ tone: i })} className={`w-6 h-6 rounded-full border ${person.tone === i ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} />))}</div></Row>
+                  <Row label="Face">{Chips(FACES, person.face, i => setP({ face: i }))}</Row>
+                </div>
+              </div>
+              <Row label="Hair">{Chips(HAIR, person.hair, i => setP({ hair: i }))}</Row>
+              {person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}
+              <Row label="Hat">{Chips(HATS, person.hat, i => setP({ hat: i }))}</Row>
+              {person.hat !== 0 && Swatches(CLOTH_COLORS, person.hatC, c => setP({ hatC: c }))}
+              <Row label="Top">{Chips(TOPS, person.top, i => setP({ top: i }))}</Row>
+              {Swatches(CLOTH_COLORS, person.topC, c => setP({ topC: c }))}
+              {person.top !== 4 && (<><Row label="Legs">{Chips(PANTS, person.pants, i => setP({ pants: i }))}</Row>{Swatches(CLOTH_COLORS, person.pantsC, c => setP({ pantsC: c }))}</>)}
+              <Row label="Shoes">{Chips(SHOES, person.shoes, i => setP({ shoes: i }))}</Row>
+              {person.shoes !== 2 && Swatches(CLOTH_COLORS, person.shoeC, c => setP({ shoeC: c }))}
+              <Row label="Accessory">{Chips(ACCS, person.acc, i => setP({ acc: i }))}</Row>
+              <button onClick={() => equip(encodePerson(person))} disabled={isWorn}
+                className="w-full mt-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 hover:bg-white transition-colors active:scale-95 disabled:opacity-50 disabled:bg-[#1ED760]">
+                {isWorn ? 'Wearing this ✓' : 'Wear this character ▸'}
+              </button>
+              <p className="text-[11px] text-white/35">Build a person — gender, skin tone, hair, hats, clothes, shoes and accessories. The skins and icons tabs are still there for the specialty looks.</p>
+            </div>
+          );
+        })()}
 
         {/* SKINS */}
         {tab === 'skins' && (
