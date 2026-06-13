@@ -341,6 +341,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const wasMovingRef = useRef(false);
   const strideRef = useRef(0);   // distance walked since the last footstep sound
   const lastPortalKeyRef = useRef<string | null>(null);   // rising-edge guard so a portal fires once per arrival
+  const voidTimerRef = useRef(0);   // frames the player has lingered on a void tile (time-based hazard)
   const modRef = useRef(false);
 
   const [msg, setMsg] = useState('');
@@ -1051,12 +1052,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         lm.near = near;
       }
-      // SPECIALTY TILE — LAVA: settle on a lava floor and it sends you back to Town (skip when already there).
-      if (!moving && me.path.length === 0 && roomMetaRef.current.slug !== 'town') {
-        const lk = key(clampTile(me.fx), clampTile(me.fy));
-        const matv = matOverrideRef.current.has(lk) ? matOverrideRef.current.get(lk)! : matRef.current[lk];
-        if (matv === 7) { flashHint('The lava takes you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
-      }
+      // SPECIALTY TILES (material properties). Read the player's current tile material once.
+      if (roomMetaRef.current.slug !== 'town') {
+        const sk = key(clampTile(me.fx), clampTile(me.fy));
+        const smat = matOverrideRef.current.has(sk) ? matOverrideRef.current.get(sk)! : matRef.current[sk];
+        // LAVA — instant: settle on it → back to Town.
+        if (smat === 7 && !moving && me.path.length === 0) { flashHint('The lava takes you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
+        // VOID — slow: linger on it too long (~3s) → pulled back to Town.
+        if (smat === 12) {
+          voidTimerRef.current++;
+          if (voidTimerRef.current === 70) flashHint('The void is pulling you under…');
+          if (voidTimerRef.current > 200) { voidTimerRef.current = 0; flashHint('The void swallows you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
+        } else voidTimerRef.current = 0;
+      } else voidTimerRef.current = 0;
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
@@ -1261,6 +1269,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             ctx.save(); ctx.globalCompositeOperation = 'lighter';
             ctx.strokeStyle = `hsla(28, 100%, 60%, ${0.25 + pulse * 0.4})`; ctx.lineWidth = 1.5; diamond(b.sx, b.sy, TW * 0.8, TH * 0.8); ctx.stroke();   // glowing crack
             for (let q = 0; q < 2; q++) { const bp = ((t * (0.9 + q * 0.5) + (gx * 53 + gy * 31) + q * 40) % 60) / 60; const by = b.sy + TH * 0.5 - bp * TH; const r = (1 - Math.abs(bp - 0.5) * 2) * 3.4; if (r > 0.3) { ctx.fillStyle = `hsla(${36 + q * 10},100%,${60 + bp * 20}%,${0.7 * (1 - bp)})`; ctx.beginPath(); ctx.arc(b.sx + (q ? 7 : -6), by, r, 0, Math.PI * 2); ctx.fill(); } }   // bubbles
+            ctx.restore();
+          }
+          else if (mat === 8) { ctx.fillStyle = odd ? '#e6d2a0' : '#dcc88c'; ctx.fill(); ctx.fillStyle = 'rgba(120,90,40,0.18)'; for (let q = 0; q < 4; q++) ctx.fillRect(b.sx + (q - 2) * 7 + ((gx * 7 + gy) % 5), b.sy + ((q % 2) - 0.5) * 8, 1.5, 1.5); }   // sand
+          else if (mat === 9) { ctx.fillStyle = odd ? '#eef4fb' : '#dde8f5'; ctx.fill(); ctx.save(); ctx.globalAlpha = 0.4 + 0.4 * Math.abs(Math.sin(t * 0.06 + gx + gy)); ctx.fillStyle = '#fff'; ctx.fillRect(b.sx - 2, b.sy - 1, 2, 2); ctx.restore(); }   // snow / ice sparkle
+          else if (mat === 10) { ctx.fillStyle = odd ? '#8a5a32' : '#7a4e2a'; ctx.fill(); ctx.strokeStyle = 'rgba(40,24,10,0.4)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(b.sx - TW * 0.7, b.sy + TH * 0.2); ctx.lineTo(b.sx + TW * 0.3, b.sy - TH * 0.3); ctx.stroke(); }   // wood planks
+          else if (mat === 11) { ctx.fillStyle = '#0a0a16'; ctx.fill(); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = hexA(theme.accent, 0.5 + 0.3 * Math.sin(t * 0.1 + gx + gy)); ctx.lineWidth = 1.5; diamond(b.sx, b.sy, TW * 0.92, TH * 0.92); ctx.stroke(); ctx.restore(); }   // neon grid
+          else if (mat === 12) {   // void — abyss with drifting stars (the slow hazard)
+            ctx.fillStyle = '#04040a'; ctx.fill();
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            for (let q = 0; q < 3; q++) { const sxv = b.sx + ((gx * 13 + gy * 7 + q * 29) % 40) - 20, syv = b.sy + ((gy * 11 + q * 17 + (t >> 4)) % 24) - 12; ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 0.05 + gx + q)); ctx.fillStyle = q ? '#8a9cff' : '#fff'; ctx.fillRect(sxv, syv, 1.5, 1.5); }
             ctx.restore();
           }
           else { ctx.fillStyle = theme.floor; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill(); }
@@ -1579,7 +1597,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <div className="p-3">
                 <p className="text-[11px] text-[#1ED760]/90 mb-2">Pick a floor and tap tiles to paint it. Furniture and triggers are untouched.</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {([[-1, 'Default', '#2a2a36'], [2, 'Grass', '#358540'], [1, 'Marble', '#bdb6a6'], [3, 'Carpet', '#9c1f29'], [4, 'Dark', '#1d1d27'], [5, 'Disco', '#cc44ff'], [6, 'Water', '#0c5e78'], [7, 'Lava', '#e0531e']] as [number, string, string][]).map(([m, label, col]) => (
+                  {([[-1, 'Default', '#2a2a36'], [2, 'Grass', '#358540'], [1, 'Marble', '#bdb6a6'], [3, 'Carpet', '#9c1f29'], [4, 'Dark', '#1d1d27'], [5, 'Disco', '#cc44ff'], [6, 'Water', '#0c5e78'], [7, 'Lava', '#e0531e'], [8, 'Sand', '#dcc88c'], [9, 'Snow', '#dde8f5'], [10, 'Wood', '#8a5a32'], [11, 'Neon', '#0a0a16'], [12, 'Void', '#04040a']] as [number, string, string][]).map(([m, label, col]) => (
                     <button key={m} onClick={() => setPaintMat(m)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-[11px] transition-colors ${paintMat === m ? 'border-[#1ED760] bg-[#1ED760]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
                       <span className="w-3.5 h-3.5 rounded-sm border border-white/20" style={{ background: col }} />{label}
