@@ -15,21 +15,25 @@ import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
 
 type View = 'landing' | 'arcade' | 'leap' | 'lobby';
-// Onboarding spine: a new player boots straight into the Plaza ('play'), is steered to an arcade
-// machine, plays once, and on their first death is asked to make an account ('account') → design
-// their character ('design') → dropped into the world with the full UI unlocked ('done'). Persisted
-// per device so returning players skip straight to 'done'.
-type OnboardStep = 'play' | 'account' | 'design' | 'done';
+// Onboarding spine — a portal-chained, Oracle-guided tutorial (canon: tutorial-sequence-spec):
+//   oracle → arcade → terminal → character → yourroom → town → done.
+// page.tsx owns the persisted step + whether the tutorial game was played (that fact has to survive
+// the game launch, which unmounts the world). RoomCanvas owns everything inside each room.
+type OnboardStep = 'oracle' | 'arcade' | 'terminal' | 'character' | 'yourroom' | 'town' | 'done';
 const ONBOARD_KEY = 'ouroo_onboard';
+const TUT_PLAYED_KEY = 'ouroo_tut_played';
+const TUT_STEPS: OnboardStep[] = ['oracle', 'arcade', 'terminal', 'character', 'yourroom', 'town'];
 
 export default function Home() {
-  const [view, setView] = useState<View>('lobby');   // launch straight into the Plaza, not a marketing page
+  const [view, setView] = useState<View>('lobby');   // launch straight into the world, not a marketing page
   const [isZooming, setIsZooming] = useState(false);
   const [onboard, setOnboard] = useState<OnboardStep>(() => {
-    if (typeof window === 'undefined') return 'play';
-    try { const s = localStorage.getItem(ONBOARD_KEY); return s === 'done' ? 'done' : (s === 'account' || s === 'design' ? s : 'play'); } catch { return 'play'; }
+    if (typeof window === 'undefined') return 'oracle';
+    try { const s = localStorage.getItem(ONBOARD_KEY) as OnboardStep | null; return s === 'done' ? 'done' : (s && TUT_STEPS.includes(s) ? s : 'oracle'); } catch { return 'oracle'; }
   });
   const setStep = (s: OnboardStep) => { setOnboard(s); try { localStorage.setItem(ONBOARD_KEY, s); } catch { /* ignore */ } };
+  const [gamePlayed, setGamePlayed] = useState<boolean>(() => { if (typeof window === 'undefined') return false; try { return localStorage.getItem(TUT_PLAYED_KEY) === '1'; } catch { return false; } });
+  const markGamePlayed = () => { setGamePlayed(true); try { localStorage.setItem(TUT_PLAYED_KEY, '1'); } catch { /* ignore */ } };
   const { user } = useUser();   // Discord login state (null when logged out)
   const [profileOpen, setProfileOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
@@ -103,15 +107,8 @@ export default function Home() {
     setTimeout(() => { setView('lobby'); setIsZooming(false); }, 550);
   };
 
-  // Launch a game from inside the world (walking up to an arcade machine). Returns to the Plaza on exit.
+  // Launch a game from inside the world (walking up to an arcade machine). Returns to the world on exit.
   const launchGame = (id: string) => setView(id === 'leap' ? 'leap' : 'arcade');
-
-  // After a Discord sign-in completes (the OAuth round-trip lands back here), a player mid-onboarding
-  // moves on to designing their character, back in the world.
-  useEffect(() => {
-    if (user && onboard === 'account') { setStep('design'); setView('lobby'); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, onboard]);
 
   // ==========================================================================
   // THE ARCADE
@@ -119,7 +116,7 @@ export default function Home() {
   if (view === 'arcade') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onFirstGameOver={onboard === 'play' ? () => { setStep('account'); setView('lobby'); } : undefined} />
+        <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onFirstGameOver={onboard === 'arcade' ? () => { markGamePlayed(); setView('lobby'); } : undefined} />
         {/* In-app-browser users hit the no-rotate wall here — float the "open in browser" nudge on top. */}
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
         <button
@@ -158,23 +155,8 @@ export default function Home() {
   if (view === 'lobby') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onLaunchGame={launchGame} onboarding={onboard} onDesignDone={() => setStep('done')} />
+        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onLaunchGame={launchGame} onboarding={onboard} gamePlayed={gamePlayed} onSetStep={setStep} />
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
-
-        {/* ── ONBOARDING · make an account ── shown over the world after the first game-over. */}
-        {onboard === 'account' && (
-          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6"
-            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}>
-            <div className="max-w-sm w-full border border-[#5865F2]/40 bg-black p-7 text-center space-y-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">that&apos;s your first run</p>
-              <p className="font-helvetica font-black uppercase tracking-wide text-xl text-white leading-tight">Save your progress</p>
-              <p className="text-[13px] text-white/65 leading-relaxed">Make an account and the world remembers you — your crystals, high scores, skins, furniture and your own room all carry over. Sign in with Discord, or keep going as a guest (nothing saves).</p>
-              <button onClick={() => signInWithDiscord()} className="w-full bg-[#5865F2] text-white font-bold uppercase text-xs tracking-widest py-3 hover:bg-[#6c78f5] transition-colors active:scale-95">Continue with Discord</button>
-              <button onClick={() => setStep('done')} className="w-full border border-white/20 text-white/60 hover:text-white text-xs uppercase tracking-widest py-2.5 active:scale-95">Keep playing as a guest</button>
-            </div>
-          </div>
-        )}
-
       </main>
     );
   }

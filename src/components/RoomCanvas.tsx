@@ -41,18 +41,26 @@ const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean)
   if (!def.owner) return false;   // official/public rooms — only moderators build or take
   return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
 };
-// The world is being rebuilt around the guided sequence. INDUCTION is the sandbox room every new
-// player starts in — the tutorial plays out here (reach the cabinet → play the first game → make an
-// account → design your character) before they're launched into TOWN, the social hub. The old lore
-// rooms / NPCs / portal-maze were cleared on purpose; the lore sequence gets rebuilt on top of this.
-const INDUCTION: RoomDef = { slug: 'induction', name: 'Induction', accent: '#00cfff', floor: '#12121e', plan: 'quadrado' };
-const TOWN: RoomDef       = { slug: 'town',      name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'salao' };
-const ARCADE: RoomDef     = { slug: 'arcade',    name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'quadrado' };
-const WOODS: RoomDef      = { slug: 'woods',     name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'salao', day: true };
-// The menu's destinations (Induction is the solo start-only sandbox, never listed). The Arcade holds
-// the games; Town is the social hub; the Woods are the wild edge.
+// The guided tutorial is a chain of SOLO rooms (canon: tutorial-sequence-spec), linked by portals:
+//   t_oracle (movement + a cryptic code) → t_arcade (play the one game once) → t_terminal (easter egg
+//   + the terminal → character creator) → t_yourroom (your own room) → TOWN (the social hub).
+const TUT_ROOMS: Record<string, RoomDef> = {
+  oracle:   { slug: 't_oracle',   name: 'Induction',    accent: '#00cfff', floor: '#0c0c16', plan: 'quadrado' },
+  arcade:   { slug: 't_arcade',   name: 'The Arcade',   accent: '#ffd23a', floor: '#16121f', plan: 'quadrado' },
+  terminal: { slug: 't_terminal', name: 'The Terminal', accent: '#8a9cff', floor: '#0d0f1c', plan: 'quadrado' },
+  yourroom: { slug: 't_yourroom', name: 'Your Room',    accent: '#1ED760', floor: '#161628', plan: 'quadrado' },
+};
+const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'salao' };
+const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'quadrado' };
+const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'salao', day: true };
+// The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
+// Town is the social hub, the Woods are the wild edge.
 const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
-const roomOf = (slug: string) => (slug === 'induction' ? INDUCTION : ROOMS.find(r => r.slug === slug)) ?? TOWN;
+const TUT_BY_SLUG: Record<string, RoomDef> = Object.fromEntries(Object.values(TUT_ROOMS).map(r => [r.slug, r]));
+const roomOf = (slug: string) => TUT_BY_SLUG[slug] ?? ROOMS.find(r => r.slug === slug) ?? TOWN;
+const isTutRoom = (slug: string) => slug.startsWith('t_');
+// Which tutorial room each onboarding step lives in ('character' shares the terminal room).
+const tutSlugFor = (step: string): string | null => (({ oracle: 't_oracle', arcade: 't_arcade', terminal: 't_terminal', character: 't_terminal', yourroom: 't_yourroom' }) as Record<string, string>)[step] ?? null;
 
 // Secret/lore sectors are gone for now — the lore sequence is being rebuilt. Kept as an empty map so
 // player-made portals (which resolve public slugs / room codes) still compile.
@@ -69,24 +77,46 @@ type Machine = { gx: number; gy: number; games: GameSlot[] };
 const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swarm · mine crystals' };
 const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
 const MACHINES: Record<string, Machine[]> = {
-  induction: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: just the first game
-  arcade:    [{ gx: 3, gy: 2, games: [GAME_OUROO] }, { gx: 7, gy: 2, games: [GAME_LEAP] }],   // the Arcade room — one cabinet per game
+  t_arcade: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: the single machine
+  arcade:   [{ gx: 3, gy: 2, games: [GAME_OUROO] }, { gx: 7, gy: 2, games: [GAME_LEAP] }],   // the Arcade room — one cabinet per game
   // Town has NO machine — you reach the Arcade from the menu.
 };
-const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker
+const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker / terminal
+const TUT_PORTAL_TILE = { gx: 9, gy: 5 } as const;   // every tutorial room's onward door sits here
 
 // First-visit reward modal kept (empty) — re-attached when the lore sequence + its rooms come back.
 const SECRET_INTRO: Record<string, { title: string; body: string }> = {};
 
-// The Curator's induction speech — the on-screen tutorial voice (see /LORE.md). Grounds the player in
-// the lore (a dead net kept lit by a lonely AI; crystals = cached attention; the Arcade fights Entropy)
-// while teaching the one control they need and steering them to the machine.
-const INDUCTION_SCRIPT: string[] = [
-  'Someone new. It has been a long while since the Loop drew fresh signal. I am the Curator — I keep this place lit for the ones who logged off, and never came back.',
-  'A world no one watches forgets itself, and forgetting is how it dies. You can hold that back, just by being here. First — learn to move. Tap or click anywhere to walk there.',
-  'Crystals are not money. They are cached attention — your presence made solid, the only thing that keeps OUROO awake. You mine them in the Arcade, holding back the dark.',
-  'Step up to the machine ahead and play. Survive one run. Then we will see if you are worth remembering.',
-];
+// The Oracle's on-screen tutorial voice, per step (see /LORE.md + tutorial-sequence-spec). The Curator
+// inducts you on the surface; once you "enter the simulation" it speaks as a familiar, human voice.
+type TutScript = { persona: string; code?: string; lines: string[] };
+const TUT_SCRIPT: Record<string, TutScript> = {
+  oracle: { persona: 'the Curator', code: 'OURO', lines: [
+    'Someone new. It has been a long while since the Loop drew fresh signal. I am the Curator — I keep this place lit for the ones who logged off, and never came back.',
+    'Learn to move first: tap or click anywhere to walk there. Go on — try a few steps.',
+    'A world no one watches forgets itself, and forgetting is how it dies. You can hold that back just by being here. There is a door in this room. The code is the world’s first name — OURO. Walk to the door and speak it.',
+  ] },
+  arcade_pre: { persona: 'the Curator', lines: [
+    'Through the door. This is the front line — where the world fights back against Entropy. One machine, one game. Step close to it and play.',
+  ] },
+  arcade_post: { persona: 'the Curator', lines: [
+    'You held the dark back, and the world minted a little signal for it. Crystals are not money — they are cached attention, your presence made solid, the only thing that keeps OUROO awake.',
+    'There are more games than this one, scattered through the Loop; find them and you fill your wallet. A door has opened behind you. Walk through.',
+  ] },
+  terminal: { persona: 'the Curator', lines: [
+    'A terminal — the old machines still answer, if you ask. Step up to it and let it read you; it is time the world learned your face. (And the wall at the top of this room… some say it gives, if you touch it.)',
+  ] },
+  yourroom: { persona: 'a familiar voice', lines: [
+    'You made it inside the simulation. This — this is yours. Your own corner of the Loop.',
+    'Everything you place here, the world remembers; building is how you teach a dead world to have shape again. Furniture is bought with crystals — that comes later. When you are ready, step through the door to Town.',
+  ] },
+  town: { persona: 'a familiar voice', lines: [
+    'Town. The heart of what is left — where everyone still here comes to gather.',
+    'From the menu you can reach the Arcade to mine more signal, and the Woods at the wild edge. The town centre holds the jar; fill it together and the Loop runs warmer.',
+    'That is everything I can teach you. The rest is yours to find. Good luck out there — the Loop runs warmer when someone is watching.',
+  ] },
+};
+const EASTER_EGG_REWARD = 250;   // the hidden top-centre wall in the terminal room
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
@@ -97,17 +127,38 @@ const INDUCTION_SCRIPT: string[] = [
 //   `lines`  → ambient idle chatter (random). `id` keys saved beat progress.
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; hints?: string[]; id?: string };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
-  // ── INDUCTION — the solo room you wake up in. One arcade machine to draw you in; the Curator guides. ──
-  induction: [
-    ['arcade', 5, 2, 0],       // the first game — walk close to play (see MACHINES)
-    ['planta', 1, 1, 0], ['planta', 9, 1, 0],
-    ['floorlamp', 1, 8, 0], ['floorlamp', 9, 8, 0],
-    ['bench', 4, 8, 0], ['bench', 6, 8, 0],
+  // ── TUTORIAL ROOMS (solo) — the onward door always sits at TUT_PORTAL_TILE (9,5). ──
+  // t_oracle: the room you wake in. Just the Oracle's voice + a coded door.
+  t_oracle: [
+    ['teleporter', 9, 5, 0],
+    ['planta', 1, 1, 0], ['planta', 1, 9, 0],
+    ['floorlamp', 9, 1, 0], ['floorlamp', 9, 9, 0],
+  ],
+  // t_arcade: a single machine + the onward door (opens after you've played).
+  t_arcade: [
+    ['arcade', 5, 2, 0],
+    ['teleporter', 9, 5, 0],
+    ['neon', 5, 1, 0],
+    ['floorlamp', 1, 1, 0], ['floorlamp', 1, 9, 0],
+  ],
+  // t_terminal: the computer terminal + the onward door (opens after the character creator). The hidden
+  // wall easter egg is the top-centre tile (5,1) — handled in the click handler, not a furni.
+  t_terminal: [
+    ['console', 4, 2, 0],
+    ['serverrack', 1, 2, 0], ['serverrack', 8, 2, 0],
+    ['teleporter', 9, 5, 0],
+    ['floorlamp', 1, 9, 0], ['floorlamp', 9, 9, 0],
+  ],
+  // t_yourroom: your own room — a starter set the Oracle talks you through + the door to Town.
+  t_yourroom: [
+    ['teleporter', 9, 5, 0],
+    ['sofa', 2, 3, 0], ['mesa', 4, 4, 0], ['tv', 7, 2, 0],
+    ['planta', 1, 8, 0], ['floorlamp', 8, 8, 0], ['banco_jd', 4, 8, 0],
   ],
   // ── TOWN — the social hub. NO arcade here — the Arcade is its own place, reached from the menu. ──
   town: [
     ['planta', 1, 1, 0], ['planta', 9, 1, 0],
-    ['bench', 1, 9, 0], ['bench', 8, 9, 2],
+    ['banco_jd', 1, 9, 0], ['banco_jd', 7, 9, 0],
     ['floorlamp', 5, 1, 0],
   ],
   // ── ARCADE — the games room. One cabinet per game (more slot in as they're built). ──
@@ -116,7 +167,7 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['neon', 5, 1, 0],
     ['holofote', 1, 1, 0], ['holofote', 9, 1, 0],
     ['vending', 2, 5, 0],
-    ['bench', 4, 8, 0], ['bench', 6, 8, 0],
+    ['banco_jd', 4, 8, 0], ['banco_jd', 6, 8, 0],
     ['floorlamp', 1, 8, 0], ['floorlamp', 9, 8, 0],
   ],
   // ── THE WOODS — the wild edge. Trees + a spring (the pond/fishing comes later). ──
@@ -203,8 +254,9 @@ const parseIcon = (v: unknown): IconSpec | null => {
   return Array.isArray(o.layers) && o.layers.length ? (v as IconSpec) : null;
 };
 
-export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string) => void; onboarding?: 'play' | 'account' | 'design' | 'done'; onDesignDone?: () => void }> = ({
-  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onboarding = 'done', onDesignDone,
+type OnboardStep = 'oracle' | 'arcade' | 'terminal' | 'character' | 'yourroom' | 'town' | 'done';
+export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string) => void; onboarding?: OnboardStep; gamePlayed?: boolean; onSetStep?: (s: OnboardStep) => void }> = ({
+  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onboarding = 'done', gamePlayed = false, onSetStep,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -240,8 +292,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [connected, setConnected] = useState(false);
   const [feed, setFeed] = useState<{ id: number; handle: string; text: string }[]>([]);
   const feedId = useRef(0);
-  // New players (mid-onboarding) wake up in the Induction sandbox; everyone else lands in Town.
-  const startSlug = onboarding === 'done' ? 'town' : 'induction';
+  // New players start in the tutorial's first room; everyone done lands in Town.
+  const startSlug = tutSlugFor(onboarding) ?? 'town';
   const [room, setRoom] = useState(startSlug);
   const [roomMeta, setRoomMeta] = useState<RoomDef>(roomOf(startSlug));   // current room's def (official or personal)
   const roomMetaRef = useRef<RoomDef>(roomMeta);
@@ -307,11 +359,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
   const [machinePrompt, setMachinePrompt] = useState<Machine | null>(null);   // game picker when you walk close to an arcade machine
-  const [inductStep, setInductStep] = useState(0);     // Curator induction speech (on-screen tutorial)
-  const [inductDone, setInductDone] = useState(false); // dismissed the speech → falls back to a small steer
+  // ── Tutorial in-room state ──
+  const [tutLine, setTutLine] = useState(0);        // index into the current step's Oracle speech
+  const [tutCardDone, setTutCardDone] = useState(false);   // dismissed the speech card for this room
+  const [bootAnim, setBootAnim] = useState(false);  // terminal boot/code-running overlay
+  const [simFade, setSimFade] = useState(false);    // "enter the simulation" fade-to-white
+  const [simConfirm, setSimConfirm] = useState(false);  // "enter the simulation?" prompt at the terminal-room door
+  const [charDone, setCharDone] = useState(false);  // finished the character creator (account + design)
+  const [guestChosen, setGuestChosen] = useState(false);   // chose "continue as guest" in the creator
+  const [eggClaimed, setEggClaimed] = useState(false);     // hidden-wall easter egg taken (this room)
   const nearMachineRef = useRef(false);   // rising-edge guard so the picker pops once per approach
+  const nearTermRef = useRef(false);      // rising-edge guard for the terminal
+  const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
   const onLaunchGameRef = useRef(onLaunchGame);
   useEffect(() => { onLaunchGameRef.current = onLaunchGame; }, [onLaunchGame]);
+  const onSetStepRef = useRef(onSetStep);
+  useEffect(() => { onSetStepRef.current = onSetStep; }, [onSetStep]);
+  const gamePlayedRef = useRef(gamePlayed);
+  useEffect(() => { gamePlayedRef.current = gamePlayed; }, [gamePlayed]);
+  const onboardingRef = useRef(onboarding);
+  useEffect(() => { onboardingRef.current = onboarding; }, [onboarding]);
+  const charDoneRef = useRef(false);
+  useEffect(() => { charDoneRef.current = charDone; }, [charDone]);
+  // Reset the per-room tutorial state whenever the step changes (new room = fresh speech, guards re-armed).
+  useEffect(() => { setTutLine(0); setTutCardDone(false); setSimConfirm(false); nearMachineRef.current = false; nearTermRef.current = false; tutPortalArmRef.current = false; }, [onboarding]);
+  // Persisted character-creator progress (survives the Discord OAuth round-trip mid-tutorial).
+  useEffect(() => {
+    try { setCharDone(localStorage.getItem('ouroo_tut_char') === '1'); setGuestChosen(localStorage.getItem('ouroo_tut_guest') === '1'); } catch { /* ignore */ }
+  }, []);
   const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
   // Player portal-maker: pick a destination + optional access code, then drop the portal onto a tile.
   const [portalMaker, setPortalMaker] = useState(false);
@@ -355,12 +430,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Same check from inside canvas closures (reads refs, not render state).
   const canBuildHere = () => canBuildIn(roomMetaRef.current, ownerIdRef.current, myHandleRef.current, modRef.current);
   const [invOpen, setInvOpen] = useState(false);
-  // Onboarding 'design' step → throw open the wardrobe so they style their character before entering town.
-  useEffect(() => { if (onboarding === 'design') setInvOpen(true); }, [onboarding]);
   const wallet = useWallet();
   // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in.
   const { user } = useUser();
   const signedIn = !!user;
+  // Character-creator step: once they've chosen Discord (signed in) or guest, throw open the wardrobe.
+  useEffect(() => { if (onboarding === 'character' && (signedIn || guestChosen) && !charDone) setInvOpen(true); }, [onboarding, signedIn, guestChosen, charDone]);
   const signedInRef = useRef(false);
   useEffect(() => { signedInRef.current = signedIn; }, [signedIn]);
   const requireAccount = (): boolean => { if (signedInRef.current) return true; flashHint('Create an account to build 🛸'); signInWithDiscord(); return false; };
@@ -387,13 +462,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     lastPortalKeyRef.current = `${sp.gx},${sp.gy}`;   // don't auto-fire a portal we happen to spawn on; arm on the first step off
     setRoomMeta(def); setRoom(def.slug);
   };
-  // Onboarding complete → launch out of the Induction sandbox into Town.
-  const prevOnboardRef = useRef(onboarding);
+  // Follow the onboarding step into its room — each tutorial step has its own solo room; 'town'/'done'
+  // land in Town. (The fade/transition that motivates the move is played before the step is advanced.)
   useEffect(() => {
-    if (onboarding === 'done' && prevOnboardRef.current !== 'done' && roomMetaRef.current.slug === 'induction') switchRoom(TOWN);
-    prevOnboardRef.current = onboarding;
+    const target = tutSlugFor(onboarding) ?? 'town';
+    if (roomMetaRef.current.slug !== target) switchRoom(roomOf(target));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onboarding]);
+  // Terminal boot/code-running animation, then the character creator opens (step → 'character').
+  useEffect(() => { if (!bootAnim) return; const t = setTimeout(() => { setBootAnim(false); onSetStepRef.current?.('character'); }, 1700); return () => clearTimeout(t); }, [bootAnim]);
+  // Character-creator choices (persisted so the Discord OAuth round-trip can resume mid-tutorial).
+  const chooseGuest = () => { setGuestChosen(true); try { localStorage.setItem('ouroo_tut_guest', '1'); } catch { /* ignore */ } };
+  const finishCharacter = () => { setCharDone(true); try { localStorage.setItem('ouroo_tut_char', '1'); } catch { /* ignore */ } };
+  // "Enter the simulation?" → fade to white → Your Room.
+  const enterSimulation = () => { setSimConfirm(false); setSimFade(true); setTimeout(() => { setSimFade(false); onSetStepRef.current?.('yourroom'); }, 1200); };
   const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
@@ -443,6 +525,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const p = portalPrompt; if (!p) return;
     if (p.code && portalCode.trim().toUpperCase() !== p.code.toUpperCase()) { flashHint('The door stays shut.'); setPortalCode(''); return; }
     setPortalPrompt(null); setPortalCode('');
+    if (p.to === '__tut__') { onSetStepRef.current?.('arcade'); return; }   // the Oracle's coded door advances the tutorial
     await travelTo(p);
   };
   const doDeleteRoom = async (r: RoomRow) => {
@@ -608,7 +691,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     // Induction is a SOLO instance — the tutorial sandbox. No presence/broadcast join: it's just you
     // and the Curator, never a social room. (You're made social only once you're launched into Town.)
-    if (room === 'induction') { remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false); return; }
+    if (isTutRoom(room)) { remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false); return; }
     if (!supabase || !entered) return;   // wait for the lobby "Enter" so the join is deliberate + clean
     const sb = supabase;
     const me = selfRef.current;
@@ -725,6 +808,29 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         for (const m of ms) { if (Math.hypot(m.gx - me.fx, m.gy - me.fy) < MACHINE_RANGE) { near = m; break; } }
         if (near && !nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
         nearMachineRef.current = !!near;
+      }
+      // ── TUTORIAL flow ── the onward door (TUT_PORTAL_TILE) + the terminal, gated by the current step.
+      {
+        const step = onboardingRef.current;
+        // Terminal (t_terminal) — walk close → boot animation → character creator.
+        if (step === 'terminal') {
+          const nearTerm = Math.hypot(5 - me.fx, 2 - me.fy) < MACHINE_RANGE;
+          if (nearTerm && !nearTermRef.current) { musicRef.current?.chime(); setBootAnim(true); }
+          nearTermRef.current = nearTerm;
+        }
+        // The onward door: which action it triggers (or null if not yet open this step).
+        const door = step === 'oracle' ? 'code'
+          : step === 'arcade' ? (gamePlayedRef.current ? 'go' : null)
+          : step === 'character' ? (charDoneRef.current ? 'sim' : null)
+          : step === 'yourroom' ? 'go' : null;
+        const onDoor = clampTile(me.fx) === TUT_PORTAL_TILE.gx && clampTile(me.fy) === TUT_PORTAL_TILE.gy;
+        if (!moving && me.path.length === 0 && door && onDoor && !tutPortalArmRef.current) {
+          tutPortalArmRef.current = true;
+          musicRef.current?.portal();
+          if (door === 'code') { setPortalPrompt({ gx: TUT_PORTAL_TILE.gx, gy: TUT_PORTAL_TILE.gy, code: TUT_SCRIPT.oracle.code!, to: '__tut__' }); setPortalCode(''); }
+          else if (door === 'sim') setSimConfirm(true);
+          else { const nx = step === 'arcade' ? 'terminal' : 'town'; onSetStepRef.current?.(nx as OnboardStep); }
+        } else if (!onDoor) tutPortalArmRef.current = false;   // re-arm when you step off the door
       }
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
@@ -935,6 +1041,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const onPointerDown = (e: React.PointerEvent) => {
     const { gx, gy } = evtTile(e);
     if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
+    // Hidden easter egg — the wall at the top-centre of the Terminal room pays out, once.
+    if (room === 't_terminal' && gx === 5 && gy === 1 && !eggClaimed) {
+      setEggClaimed(true); addBalance(EASTER_EGG_REWARD); musicRef.current?.chime();
+      flashHint(`The wall gives. ${CURRENCY_SYMBOL}+${EASTER_EGG_REWARD} ✦`);
+      return;
+    }
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
@@ -942,6 +1054,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
   const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy } = evtTile(e); hoverRef.current = planLvl(gx, gy) < 0 ? null : { gx, gy }; };
+
+  // ── Tutorial render state ── which Oracle speech to show, and the residual steer once it's dismissed.
+  const tutKey = onboarding === 'arcade' ? (gamePlayed ? 'arcade_post' : 'arcade_pre') : onboarding;
+  const tutScript: TutScript | undefined = TUT_SCRIPT[tutKey];
+  const showTutCard = !!tutScript && onboarding !== 'character' && !tutCardDone;   // covers tut rooms + the Town tour ('done' has no script)
+  const tutLastLine = tutScript ? tutLine >= tutScript.lines.length - 1 : true;
+  const tutSteer: string = (isTutRoom(room) && !showTutCard) ? (({
+    oracle: '🚪 walk to the door and speak the code',
+    arcade: gamePlayed ? '🚪 a door has opened — walk through' : '🕹 walk close to the machine to play',
+    terminal: '🖥 step up to the terminal',
+    character: charDone ? '🚪 the door is open — step through' : '',
+    yourroom: '🚪 step through the door to Town',
+  }) as Record<string, string>)[onboarding] ?? '' : '';
+  // Character-creator account prompt (Discord / guest) — shown in the Terminal room after the boot.
+  const showAcct = onboarding === 'character' && !signedIn && !guestChosen;
 
   return (
     <div ref={outerRef} className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}>
@@ -953,7 +1080,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{room === 'induction' ? '· induction ·' : supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{isTutRoom(room) ? '· tutorial ·' : supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
@@ -963,30 +1090,71 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
 
-      {/* ── INDUCTION · the Curator speaks ── on-screen tutorial: lore + the one control + the steer. */}
-      {onboarding === 'play' && room === 'induction' && !inductDone && (
+      {/* ── TUTORIAL · the Oracle speaks ── on-screen guidance per room (lore + the steer). */}
+      {showTutCard && tutScript && (
         <div className="absolute inset-x-0 z-[60] flex justify-center px-4 pointer-events-none" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 64px)' }}>
           <div className="w-full max-w-md border border-[#00cfff]/40 bg-black/85 backdrop-blur-md p-5 pointer-events-auto shadow-2xl">
             <div className="flex items-center justify-between mb-2">
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">❖ the Curator</p>
-              <p className="font-mono text-[10px] tracking-widest text-white/30">{inductStep + 1}/{INDUCTION_SCRIPT.length}</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">❖ {tutScript.persona}</p>
+              <p className="font-mono text-[10px] tracking-widest text-white/30">{tutLine + 1}/{tutScript.lines.length}</p>
             </div>
-            <p className="text-[13.5px] text-white/80 leading-relaxed min-h-[4.5rem]">{INDUCTION_SCRIPT[inductStep]}</p>
+            <p className="text-[13.5px] text-white/80 leading-relaxed min-h-[4.5rem]">{tutScript.lines[Math.min(tutLine, tutScript.lines.length - 1)]}</p>
             <button
-              onClick={() => { if (inductStep < INDUCTION_SCRIPT.length - 1) setInductStep(s => s + 1); else setInductDone(true); }}
+              onClick={() => { if (!tutLastLine) setTutLine(s => s + 1); else if (onboarding === 'town') onSetStep?.('done'); else setTutCardDone(true); }}
               className="mt-3 w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-[0.25em] py-2.5 hover:bg-white transition-colors active:scale-95">
-              {inductStep < INDUCTION_SCRIPT.length - 1 ? 'Next ▸' : 'Step up ▸'}
+              {!tutLastLine ? 'Next ▸' : onboarding === 'town' ? 'Good luck ▸' : 'Got it ▸'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Residual steer once the speech is dismissed — until they reach the machine. */}
-      {onboarding === 'play' && room === 'induction' && inductDone && !machinePrompt && (
+      {/* Residual steer once the speech is dismissed — until they reach the next thing. */}
+      {!!tutSteer && !machinePrompt && !showAcct && !simConfirm && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-center">
-          <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#00cfff] bg-black/70 px-4 py-1.5 inline-block">🕹 walk to the arcade machine to play</p>
+          <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#00cfff] bg-black/70 px-4 py-1.5 inline-block">{tutSteer}</p>
         </div>
       )}
+
+      {/* ── CHARACTER CREATOR · account prompt ── Discord login or continue as guest (no save). */}
+      {showAcct && (
+        <div className="absolute inset-0 z-[95] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)', paddingBottom: 'calc(env(safe-area-inset-bottom) + 1.5rem)' }}>
+          <div className="max-w-sm w-full border border-[#5865F2]/40 bg-black p-7 text-center space-y-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">terminal · identity</p>
+            <p className="font-helvetica font-black uppercase tracking-wide text-xl text-white leading-tight">Make your mark</p>
+            <p className="text-[13px] text-white/65 leading-relaxed">The terminal wants to remember you. Sign in with Discord and the world keeps everything — crystals, scores, skins, the room you build. Or carry on as a guest, and nothing is saved.</p>
+            <button onClick={() => signInWithDiscord()} className="w-full bg-[#5865F2] text-white font-bold uppercase text-xs tracking-widest py-3 hover:bg-[#6c78f5] transition-colors active:scale-95">Continue with Discord</button>
+            <button onClick={chooseGuest} className="w-full border border-white/20 text-white/60 hover:text-white text-xs uppercase tracking-widest py-2.5 active:scale-95">Continue as guest</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── "Enter the simulation?" ── the door out of the Terminal room, after the creator. */}
+      {simConfirm && (
+        <div className="absolute inset-0 z-[95] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="max-w-xs w-full border border-[#00cfff]/40 bg-black p-7 text-center space-y-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">ready</p>
+            <p className="font-helvetica font-black uppercase tracking-wide text-lg text-white leading-tight">Enter the simulation?</p>
+            <p className="text-[13px] text-white/60 leading-relaxed">Step through, and you’re really in. There’s a room waiting that’s yours.</p>
+            <div className="flex gap-2">
+              <button onClick={enterSimulation} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 hover:bg-white transition-colors active:scale-95">Enter ▸</button>
+              <button onClick={() => setSimConfirm(false)} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Wait</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Flavour animations ── terminal boot/code-running, and the fade-to-white into the simulation. */}
+      {bootAnim && (
+        <div className="absolute inset-0 z-[96] bg-black flex items-center justify-center font-mono text-[#00cfff] text-xs sm:text-sm p-8 overflow-hidden">
+          <div className="space-y-1 animate-[fadeIn_0.3s_ease]">
+            {['> OURO // terminal handshake', '> reading signal…', '> allocating identity buffer…', '> rendering avatar shell…', '> ░▒▓ booting character creator ▓▒░'].map((l, i) => (
+              <p key={i} style={{ animation: `fadeIn 0.4s ease ${i * 0.28}s both` }}>{l}</p>
+            ))}
+          </div>
+        </div>
+      )}
+      {simFade && <div className="absolute inset-0 z-[97] bg-white animate-[fadeIn_1s_ease] pointer-events-none" />}
 
       {(hint || placingKind || removeMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
@@ -1301,7 +1469,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <Oracle open={oracleOpen} onClose={() => setOracleOpen(false)} roomSlug={roomMeta.slug} roomName={roomMeta.name} />
 
-      <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'design') onDesignDone?.(); }} onEquip={equipAppearance} title={onboarding === 'design' ? 'Design your character' : 'Character'} />
+      <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'character') finishCharacter(); }} onEquip={equipAppearance} title={onboarding === 'character' ? 'Design your character' : 'Character'} />
     </div>
   );
 };
