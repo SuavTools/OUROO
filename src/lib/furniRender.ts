@@ -33,6 +33,46 @@ const boxAt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, fw: numbe
 };
 const poly = (ctx: CanvasRenderingContext2D, pts: number[][], fill?: string, stroke?: string, lw = 1) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); } };
 
+// ───────── Building kit: textured iso blocks + rotatable doors/windows ─────────
+// A face is a parallelogram [A,B,C,D] = bottom-left, bottom-right, top-right, top-left. fp(fx,fy)
+// bilinearly maps a 0..1 face coord onto it (fy 0 = floor, 1 = top), so texture/openings sit in iso.
+const lerp2 = (a: number[], b: number[], f: number): number[] => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+const fp = (A: number[], B: number[], C: number[], D: number[], fx: number, fy: number) => lerp2(lerp2(A, B, fx), lerp2(D, C, fx), fy);
+const fLine = (ctx: CanvasRenderingContext2D, F: number[][], x0: number, y0: number, x1: number, y1: number, col: string, lw = 1) => { const p = fp(F[0], F[1], F[2], F[3], x0, y0), q = fp(F[0], F[1], F[2], F[3], x1, y1); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); };
+const fQuad = (ctx: CanvasRenderingContext2D, F: number[][], x0: number, x1: number, y0: number, y1: number, fill?: string, stroke?: string, lw = 1) => poly(ctx, [fp(F[0], F[1], F[2], F[3], x0, y0), fp(F[0], F[1], F[2], F[3], x1, y0), fp(F[0], F[1], F[2], F[3], x1, y1), fp(F[0], F[1], F[2], F[3], x0, y1)], fill, stroke, lw);
+const texOf = (kind: string): string | null => /brick/.test(kind) ? 'brick' : /wood|thatch/.test(kind) ? 'wood' : /stone|pillar/.test(kind) ? 'stone' : /marble/.test(kind) ? 'marble' : /metal/.test(kind) ? 'metal' : /glass/.test(kind) ? 'glass' : null;
+const faceTex = (ctx: CanvasRenderingContext2D, F: number[][], tex: string | null, base: string, rows: number) => {
+  if (!tex) return; ctx.save();
+  const dk = shade(base, 0.5), lt = shade(base, 1.15);
+  if (tex === 'brick') { for (let i = 1; i < rows; i++) fLine(ctx, F, 0, i / rows, 1, i / rows, dk, 1); for (let i = 0; i < rows; i++) { const off = (i % 2) ? 0.25 : 0; for (let c = 0; c <= 2; c++) { const fx = c * 0.5 + off; if (fx > 0.02 && fx < 0.98) fLine(ctx, F, fx, i / rows, fx, (i + 1) / rows, dk, 1); } } }
+  else if (tex === 'wood') { for (let c = 1; c < 4; c++) fLine(ctx, F, c / 4, 0, c / 4, 1, dk, 1.2); for (let c = 0; c < 4; c++) fLine(ctx, F, c / 4 + 0.06, 0, c / 4 + 0.06, 1, hexA(lt, 0.4), 0.6); }
+  else if (tex === 'stone') { for (let i = 1; i < rows; i++) fLine(ctx, F, 0, i / rows, 1, i / rows, dk, 1); for (let i = 0; i < rows; i++) { const fx = 0.3 + (i % 3) * 0.2; fLine(ctx, F, fx, i / rows, fx, (i + 1) / rows, dk, 1); } }
+  else if (tex === 'marble') { ctx.globalAlpha = 0.5; fLine(ctx, F, 0.15, 0.85, 0.6, 0.25, hexA(dk, 0.7), 1); fLine(ctx, F, 0.55, 0.9, 0.85, 0.5, hexA(dk, 0.5), 1); }
+  else if (tex === 'metal') { for (const fx of [0.33, 0.66]) fLine(ctx, F, fx, 0, fx, 1, dk, 1.2); ctx.fillStyle = lt; for (const c of [[0.08, 0.1], [0.92, 0.1], [0.08, 0.9], [0.92, 0.9]]) { const p = fp(F[0], F[1], F[2], F[3], c[0], c[1]); ctx.beginPath(); ctx.arc(p[0], p[1], 1.2, 0, Math.PI * 2); ctx.fill(); } }
+  else if (tex === 'glass') { fQuad(ctx, F, 0.12, 0.88, 0.12, 0.92, hexA('#bfe6ff', 0.35)); fLine(ctx, F, 0.5, 0.1, 0.5, 0.92, hexA('#fff', 0.5), 1); fLine(ctx, F, 0.12, 0.5, 0.88, 0.5, hexA('#fff', 0.5), 1); }
+  ctx.restore();
+};
+// A full-tile iso cube with material texture; optional doorway / window carved on a chosen face (dir).
+const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: number, base: string, accent: string, foot: number, kind: string, opening: 'door' | 'window' | null = null, dir = 0) => {
+  const hw = TW * foot * 0.9, hh = TH * foot * 0.9, cyT = cyB - h * STACK_H, tex = texOf(kind), rows = Math.max(3, Math.round(h * 3));
+  const L = [[cx - hw, cyB], [cx, cyB + hh], [cx, cyT + hh], [cx - hw, cyT]];   // left face A,B,C,D
+  const R = [[cx, cyB + hh], [cx + hw, cyB], [cx + hw, cyT], [cx, cyT + hh]];   // right face
+  poly(ctx, L, shade(base, 0.62)); poly(ctx, R, shade(base, 0.82));
+  ctx.fillStyle = shade(base, 1.2); diamond(ctx, cx, cyT, hw, hh); ctx.fill(); ctx.strokeStyle = hexA(accent, 0.3); ctx.lineWidth = 1; diamond(ctx, cx, cyT, hw, hh); ctx.stroke();
+  faceTex(ctx, L, tex, base, rows); faceTex(ctx, R, tex, base, rows);
+  if (opening) {
+    const F = (((dir % 4) + 4) % 4) % 2 === 1 ? R : L;   // rotate the opening between the two iso faces
+    if (opening === 'door') {
+      fQuad(ctx, F, 0.3, 0.7, 0.0, 0.78, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
+      const hp = fp(F[0], F[1], F[2], F[3], 0.64, 0.4); ctx.fillStyle = shade(base, 1.4); ctx.beginPath(); ctx.arc(hp[0], hp[1], 1.6, 0, Math.PI * 2); ctx.fill();
+    } else {
+      fQuad(ctx, F, 0.18, 0.82, 0.34, 0.82, shade(base, 0.5));   // frame
+      fQuad(ctx, F, 0.22, 0.78, 0.38, 0.78, '#9fd0f0');           // glass
+      fLine(ctx, F, 0.5, 0.36, 0.5, 0.8, hexA('#fff', 0.7), 1.2); fLine(ctx, F, 0.22, 0.58, 0.78, 0.58, hexA('#fff', 0.7), 1.2);
+    }
+  }
+};
+
 // ───────── 4-way rotation framework ─────────
 // A directional piece is a list of iso-box "parts". For a given dir (0..3 = 90° steps) each part's
 // (u,v) footprint is rotated, then parts are drawn back-to-front (depth = nearest rotated corner) so
@@ -2030,24 +2070,9 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       ctx.strokeStyle = hexA(accent, 0.25); ctx.lineWidth = 1; diamond(ctx, sx, sy - STACK_H, TW, TH); ctx.stroke();
       break;
     }
-    case 'wall': { block(ctx, sx, sy, d.h, d.color, accent, d.foot); break; }
-    case 'door': {   // a 2-high wall block with a doorway opening on the front (walk-through)
-      block(ctx, sx, sy, d.h, d.color, accent, 1);
-      const H = d.h * STACK_H, cyTop = sy - H, bot = sy + TH * 0.62, oTop = cyTop + 8, ow = 11;
-      ctx.fillStyle = 'rgba(8,8,12,0.92)'; ctx.beginPath(); ctx.moveTo(sx - ow, bot); ctx.lineTo(sx - ow, oTop + 6); ctx.quadraticCurveTo(sx, oTop - 6, sx + ow, oTop + 6); ctx.lineTo(sx + ow, bot); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = hexA(accent, 0.5); ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = shade(d.color, 1.35); ctx.beginPath(); ctx.arc(sx + ow - 3, (oTop + bot) / 2, 1.8, 0, Math.PI * 2); ctx.fill();   // handle
-      break;
-    }
-    case 'window': {   // a 2-high wall block with a glowing pane
-      block(ctx, sx, sy, d.h, d.color, accent, 1);
-      const H = d.h * STACK_H, cy = sy - H * 0.52, pw = 11, ph = 13;
-      ctx.fillStyle = shade(d.color, 0.6); poly(ctx, [[sx - pw - 2, cy - ph - 2], [sx + pw + 2, cy - ph - 2], [sx + pw + 2, cy + ph + 2], [sx - pw - 2, cy + ph + 2]]); ctx.fill();   // frame
-      const g = ctx.createLinearGradient(sx - pw, cy - ph, sx + pw, cy + ph); g.addColorStop(0, '#bfe6ff'); g.addColorStop(1, '#7fb4e0');
-      ctx.fillStyle = g; poly(ctx, [[sx - pw, cy - ph], [sx + pw, cy - ph], [sx + pw, cy + ph], [sx - pw, cy + ph]]); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx, cy - ph); ctx.lineTo(sx, cy + ph); ctx.moveTo(sx - pw, cy); ctx.lineTo(sx + pw, cy); ctx.stroke();   // mullions
-      break;
-    }
+    case 'wall': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind); break; }
+    case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir); break; }       // rotatable iso doorway
+    case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir); break; }   // rotatable iso window
     case 'roof': { hipRoof(ctx, sx, sy + TH * 0.7, 0.98, d.color, STACK_H * 0.7, 0.55, false); break; }
     case 'plant': { const top = block(ctx, sx, sy, 1, '#8a4f2a', accent, d.foot * 0.8); const lc = kind === 'flores' ? '#ff66aa' : '#1ED760'; const lvl = d.h; for (let r = 0; r < (lvl === 2 ? 5 : 3); r++) { const ox = (r - 1) * 7; ctx.fillStyle = lc; ctx.beginPath(); ctx.ellipse(sx + ox, top - 8 - (lvl === 2 ? r * 6 : 0), 6, 13, ox * 0.05, 0, Math.PI * 2); ctx.fill(); } break; }
     case 'lamp': { const top = block(ctx, sx, sy, d.h, '#2a2a30', accent, d.foot); ctx.save(); ctx.shadowColor = d.color; ctx.shadowBlur = 22; ctx.globalAlpha = 0.5 + Math.abs(Math.sin(t * 0.08)) * 0.4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(sx, top - 4, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break; }
@@ -2213,7 +2238,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'duck': drawDuck(ctx, sx, sy, accent, d.color, dir); break;
     case 'cone': { const cy = sy - 2; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx, cy - 28); ctx.lineTo(sx + 10, cy); ctx.lineTo(sx - 10, cy); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx - 6, cy - 13); ctx.lineTo(sx + 6, cy - 13); ctx.lineTo(sx + 5, cy - 9); ctx.lineTo(sx - 5, cy - 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(d.color, 0.8); ctx.fillRect(sx - 12, cy - 2, 24, 4); break; }
     case 'statue': drawStatue(ctx, sx, sy, accent, d.color, dir); break;
-    default: block(ctx, sx, sy, d.h, d.color, accent, d.foot);
+    default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind) : block(ctx, sx, sy, d.h, d.color, accent, d.foot);
   }
 }
 
