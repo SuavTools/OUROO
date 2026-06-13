@@ -2094,6 +2094,20 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir); break; }       // rotatable iso doorway
     case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir); break; }   // rotatable iso window
     case 'roof': { hipRoof(ctx, sx, sy + TH * 0.7, 0.98, d.color, STACK_H * 0.7, 0.55, false); break; }
+    case 'lavablock': {   // walkable molten block — hazard at its top level (handled in RoomCanvas)
+      const hw = TW * 0.9, hh = TH * 0.9, cyT = sy - d.h * STACK_H, pulse = 0.5 + 0.5 * Math.sin(t * 0.08);
+      poly(ctx, [[sx - hw, sy], [sx, sy + hh], [sx, cyT + hh], [sx - hw, cyT]], '#2a0f08'); poly(ctx, [[sx, sy + hh], [sx + hw, sy], [sx + hw, cyT], [sx, cyT + hh]], '#1d0904');
+      ctx.fillStyle = `hsl(${14 + pulse * 10},90%,${26 + pulse * 14}%)`; diamond(ctx, sx, cyT, hw, hh); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = `hsla(28,100%,60%,${0.3 + pulse * 0.4})`; ctx.lineWidth = 1.5; diamond(ctx, sx, cyT, hw * 0.66, hh * 0.66); ctx.stroke();
+      for (let q = 0; q < 2; q++) { const bp = ((t * (0.9 + q * 0.5) + q * 40) % 60) / 60, by = cyT + hh * 0.35 - bp * hh * 0.6, r = (1 - Math.abs(bp - 0.5) * 2) * 3; if (r > 0.3) { ctx.fillStyle = `hsla(${36 + q * 10},100%,${60 + bp * 20}%,${0.7 * (1 - bp)})`; ctx.beginPath(); ctx.arc(sx + (q ? 6 : -6), by, r, 0, Math.PI * 2); ctx.fill(); } }
+      ctx.restore(); break;
+    }
+    case 'voidblock': {   // walkable abyss block — time-based hazard at its top level
+      const hw = TW * 0.9, hh = TH * 0.9, cyT = sy - d.h * STACK_H;
+      poly(ctx, [[sx - hw, sy], [sx, sy + hh], [sx, cyT + hh], [sx - hw, cyT]], '#0a0a16'); poly(ctx, [[sx, sy + hh], [sx + hw, sy], [sx + hw, cyT], [sx, cyT + hh]], '#06060e');
+      ctx.fillStyle = '#04040a'; diamond(ctx, sx, cyT, hw, hh); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; for (let q = 0; q < 6; q++) { const sxv = sx + ((q * 23) % 36) - 18, syv = cyT + ((q * 13 + (t >> 4)) % 18) - 9; ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 0.05 + q)); ctx.fillStyle = q % 2 ? '#8a9cff' : '#fff'; ctx.fillRect(sxv, syv, 1.5, 1.5); } ctx.restore(); break;
+    }
     case 'plant': { const top = block(ctx, sx, sy, 1, '#8a4f2a', accent, d.foot * 0.8); const lc = kind === 'flores' ? '#ff66aa' : '#1ED760'; const lvl = d.h; for (let r = 0; r < (lvl === 2 ? 5 : 3); r++) { const ox = (r - 1) * 7; ctx.fillStyle = lc; ctx.beginPath(); ctx.ellipse(sx + ox, top - 8 - (lvl === 2 ? r * 6 : 0), 6, 13, ox * 0.05, 0, Math.PI * 2); ctx.fill(); } break; }
     case 'lamp': { const top = block(ctx, sx, sy, d.h, '#2a2a30', accent, d.foot); ctx.save(); ctx.shadowColor = d.color; ctx.shadowBlur = 22; ctx.globalAlpha = 0.5 + Math.abs(Math.sin(t * 0.08)) * 0.4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(sx, top - 4, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break; }
     case 'lavalamp': drawLavaLamp(ctx, sx, sy, accent, d.color, t); break;
@@ -2269,7 +2283,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };

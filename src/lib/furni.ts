@@ -84,6 +84,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'door',       name: 'Door',         emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
   { kind: 'window',     name: 'Window',       emoji: '🪟', cat: 'constr', color: '#cfd6e0', h: 2, walk: false, foot: 1, special: 'window' },
   { kind: 'roof',       name: 'Roof',         emoji: '🛖', cat: 'constr', color: '#9c3a2e', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
+  { kind: 'blk_lava',   name: 'Lava Block',   emoji: '🌋', cat: 'constr', color: '#e0531e', h: 1, walk: true,  foot: 1, special: 'lavablock' },
+  { kind: 'blk_void',   name: 'Void Block',   emoji: '🕳️', cat: 'constr', color: '#04040a', h: 1, walk: true,  foot: 1, special: 'voidblock' },
   { kind: 'blk_glass',  name: 'Glass Block',  emoji: '🧊', cat: 'constr', color: '#bfe6ff', h: 1, walk: true,  foot: 1 },
   { kind: 'blk_brick',  name: 'Brick Block',  emoji: '🧱', cat: 'constr', color: '#a3503a', h: 1, walk: true,  foot: 1 },
   { kind: 'blk_stone',  name: 'Stone Block',  emoji: '🪨', cat: 'constr', color: '#8a8f98', h: 1, walk: true,  foot: 1 },

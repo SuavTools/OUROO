@@ -1052,14 +1052,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         lm.near = near;
       }
-      // SPECIALTY TILES (material properties). Read the player's current tile material once.
+      // SPECIALTY TILES (material/block properties) — lava + void hazards, at the player's CURRENT level.
       if (roomMetaRef.current.slug !== 'town') {
-        const sk = key(clampTile(me.fx), clampTile(me.fy));
+        const px = clampTile(me.fx), py = clampTile(me.fy), sk = key(px, py), pbase = Math.max(0, planLvl(px, py));
         const smat = matOverrideRef.current.has(sk) ? matOverrideRef.current.get(sk)! : matRef.current[sk];
-        // LAVA — instant: settle on it → back to Town.
-        if (smat === 7 && !moving && me.path.length === 0) { flashHint('The lava takes you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
-        // VOID — slow: linger on it too long (~3s) → pulled back to Town.
-        if (smat === 12) {
+        const onFloor = Math.abs(me.lvl - pbase) < 0.3;   // floor material only counts when you're on the ground floor
+        let onLava = onFloor && smat === 7, onVoid = onFloor && smat === 12;
+        // lava/void BLOCKS — a hazard when you're standing on that block's top (any elevation).
+        const all = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
+        for (const it of all) {
+          if (it.kind !== 'blk_lava' && it.kind !== 'blk_void') continue;
+          const [sw, sh] = effSpan(it.kind, it.dir || 0);
+          if (px >= it.gx && px < it.gx + sw && py >= it.gy && py < it.gy + sh) {
+            const surf = Math.max(0, planLvl(it.gx, it.gy)) + (it.elev || 0) + defOf(it.kind).h;
+            if (Math.abs(surf - me.lvl) < 0.25) { if (it.kind === 'blk_lava') onLava = true; else onVoid = true; }
+          }
+        }
+        if (onLava && !moving && me.path.length === 0) { flashHint('The lava takes you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
+        if (onVoid) {
           voidTimerRef.current++;
           if (voidTimerRef.current === 70) flashHint('The void is pulling you under…');
           if (voidTimerRef.current > 200) { voidTimerRef.current = 0; flashHint('The void swallows you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
