@@ -627,6 +627,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (SECRET_ROOMS[to]) return SECRET_ROOMS[to];
     const pub = ROOMS.find(r => r.slug === to); if (pub) return pub;   // official room
     if (to.startsWith('code:')) { const r = await roomByCode(to.slice(5)); return r ? roomDefOf(r) : null; }
+    const known = personalRooms.find(r => r.slug === to) || myRooms.find(r => r.slug === to);
+    if (known) return roomDefOf(known);                                // already-loaded public/own room (no round-trip)
     const r = await roomBySlug(to); return r ? roomDefOf(r) : null;    // a public (or any) room by slug
   };
   // Travel through a portal (curated portals pay out + show the lore modal on first visit; player portals don't).
@@ -646,6 +648,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
     } catch { /* ignore */ }
   };
+  // The movement loop is mounted once, so it must call the LATEST travelTo (fresh `room`/personalRooms) —
+  // a stale closure compared def.slug against the INITIAL room, which silently no-op'd return-trip portals.
+  const travelToRef = useRef(travelTo); useEffect(() => { travelToRef.current = travelTo; });
   // Speak a portal's code → travel. (No code → handled directly on walk-on; see the movement loop.)
   const tryPortal = async () => {
     const p = portalPrompt; if (!p) return;
@@ -1078,7 +1083,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (ct !== portalTileRef.current) {   // only scan when our tile actually changes (not every frame)
           portalTileRef.current = ct;
           const pt = portalAtTile(cgx, cgy); const pk = pt ? `${pt.gx},${pt.gy}` : null;
-          if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelTo(pt); } }
+          if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelToRef.current(pt); } }
           lastPortalKeyRef.current = pk;
         }
       }
@@ -1403,8 +1408,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
       for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => {
         const { sx, sy } = iso(ii.gx, ii.gy, z);
-        if (ii.portalHidden) {   // disguised trigger — invisible to players; a faint ring only while an admin is decorating
-          if (uiRef.current.decorOpen) { const pulse = 0.25 + 0.15 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#cc66ff'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.7, TH * 0.7); ctx.stroke(); ctx.restore(); }
+        if (ii.portalHidden) {   // disguised trigger — invisible to players, but ADMINS always see a soft glow (stronger while decorating) so they can find/manage it
+          if (uiRef.current.decorOpen || modRef.current) {
+            const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save();
+            const g = ctx.createRadialGradient(sx, sy, 1, sx, sy, TW * 0.85); g.addColorStop(0, hexA('#cc66ff', 0.14 + 0.28 * pulse)); g.addColorStop(1, hexA('#cc66ff', 0));
+            ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.85, TH * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = uiRef.current.decorOpen ? 0.7 : 0.45; ctx.strokeStyle = '#cc66ff'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.7, TH * 0.7); ctx.stroke(); ctx.restore();
+          }
           return;
         }
         if (lift > 0 && dd.walk) drawSupports(ii, z, sw, sh);
