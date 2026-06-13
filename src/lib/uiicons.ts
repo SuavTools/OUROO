@@ -105,6 +105,10 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       ctx.beginPath(); ctx.moveTo(0, u * 0.42); ctx.lineTo(0, u * 0.64); ctx.moveTo(-u * 0.26, u * 0.64); ctx.lineTo(u * 0.26, u * 0.64); ctx.stroke(); break;
     }
     case 'deco': { ctx.strokeRect(-u * 0.6, -u * 0.6, u * 1.2, u * 1.2); ctx.strokeRect(-u * 0.3, -u * 0.3, u * 0.6, u * 0.6); break; }  // frame
+    case 'boutique': {  // clothes hanger
+      ctx.beginPath(); ctx.arc(0, -u * 0.42, u * 0.18, Math.PI * 0.1, Math.PI * 1.4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.26); ctx.lineTo(0, u * 0.04); ctx.lineTo(-u * 0.78, u * 0.52); ctx.lineTo(u * 0.78, u * 0.52); ctx.closePath(); ctx.stroke(); break;
+    }
     case 'rotate': {  // circular arrow
       ctx.beginPath(); ctx.arc(0, 0, u * 0.62, Math.PI * 0.55, Math.PI * 2.15); ctx.stroke();
       const ang = Math.PI * 2.15, ex = Math.cos(ang) * u * 0.62, ey = Math.sin(ang) * u * 0.62;

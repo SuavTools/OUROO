@@ -30,6 +30,7 @@ export const CATS: FurniCat[] = [
   { id: 'beach',    name: 'Beach' },
   { id: 'garage',   name: 'Garage' },
   { id: 'festive',  name: 'Festive' },
+  { id: 'boutique', name: 'Boutique' },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -304,6 +305,14 @@ export const FURNI: FurniDef[] = [
   { kind: 'gaspump',    name: 'Gas Pump',    emoji: '⛽', cat: 'garage', color: '#b3242e', h: 2, walk: false, foot: 0.5, special: 'gaspump' },
   { kind: 'oildrum',    name: 'Oil Drum',    emoji: '🛢️', cat: 'garage', color: '#2e7d4a', h: 1, walk: false, foot: 0.5, special: 'oildrum' },
   { kind: 'welder',     name: 'Welding Cart',emoji: '🔥', cat: 'garage', color: '#3a3e46', h: 1, walk: false, foot: 0.5, special: 'welder' },
+  // Boutique / Clothes shop — rails, racks, mannequins, fitting room, checkout
+  { kind: 'clorack',   name: 'Round Rack',   emoji: '🧥', cat: 'boutique', color: '#9aa3b0', h: 2, walk: false, foot: 0.9, special: 'clorack' },
+  { kind: 'clorail',   name: 'Clothing Rail', emoji: '👕', cat: 'boutique', color: '#b8bcc4', h: 2, walk: false, foot: 1, special: 'clorail', span: [2, 1] },
+  { kind: 'mannequin', name: 'Mannequin',    emoji: '🧍', cat: 'boutique', color: '#d8d2c8', h: 2, walk: false, foot: 0.5, special: 'mannequin' },
+  { kind: 'clotable',  name: 'Display Table', emoji: '👖', cat: 'boutique', color: '#7a5230', h: 1, walk: false, foot: 1, special: 'clotable', span: [2, 1] },
+  { kind: 'shoewall',  name: 'Shoe Display', emoji: '👟', cat: 'boutique', color: '#6a4a2e', h: 2, walk: false, foot: 0.6, special: 'shoewall' },
+  { kind: 'fitroom',   name: 'Fitting Room', emoji: '🚪', cat: 'boutique', color: '#7b2d3a', h: 3, walk: false, foot: 1, special: 'fitroom' },
+  { kind: 'clocounter',name: 'Checkout',     emoji: '🛍️', cat: 'boutique', color: '#3a4450', h: 2, walk: false, foot: 1, special: 'clocounter', span: [2, 1] },
   // Festive / Seasonal
   { kind: 'xmastree',   name: 'Christmas Tree',emoji: '🎄', cat: 'festive', color: '#1f7a3a', h: 3, walk: false, foot: 0.7, special: 'xmastree' },
   { kind: 'giftpile',   name: 'Gift Pile',   emoji: '🎁', cat: 'festive', color: '#b3242e', h: 1, walk: false, foot: 0.6, special: 'giftpile' },
@@ -350,6 +359,8 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'toilet', 'vanity', 'shower', 'towelrail', 'washer', 'mirror',
   'officechair', 'filecab', 'copier', 'watercooler', 'whiteboard', 'serverrack',
   'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest', 'pacman', 'cashvault',
+  // boutique — rails/tables/shelves/booth/counter face a direction (the round rack stays symmetric)
+  'clorail', 'clotable', 'shoewall', 'fitroom', 'clocounter', 'mannequin',
   // café / sci-fi / beach / garage / festive — the directional ones (round decorations stay symmetric)
   'pastrycase', 'winerack', 'kegtap', 'cocktailcart', 'coffeebar', 'neonarch', 'console', 'cryopod',
   'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights',
