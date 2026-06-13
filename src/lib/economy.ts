@@ -34,3 +34,21 @@ export async function createCode(code: string, skinId: string, maxUses?: number)
   if (error) return { ok: false, error: error.code === '23505' ? 'That code already exists.' : error.message };
   return { ok: true };
 }
+
+// Grant a skin to the current account (used by admin reward markers). Server-side via the grant_skin
+// RPC (security definer). Needs that migration applied + the player signed in; degrades to false.
+export async function grantSkin(skinId: string): Promise<boolean> {
+  if (!supabase || !skinId) return false;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { error } = await supabase.rpc('grant_skin', { p_skin: skinId });
+  return !error;
+}
+
+// The Town money jar — total real money spent on the game, all-time (filled by purchases later).
+// Returns 0 if the `jar` table isn't there yet, so the counter shows $0 until it's wired up.
+export async function getJarTotal(): Promise<number> {
+  if (!supabase) return 0;
+  const { data } = await supabase.from('jar').select('total').eq('id', 1).maybeSingle();
+  return data ? Number(data.total) || 0 : 0;
+}
