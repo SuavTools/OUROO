@@ -63,9 +63,10 @@ const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: nu
   if (opening) {
     const F = (((dir % 4) + 4) % 4) % 2 === 1 ? R : L;   // rotate the opening between the two iso faces
     if (opening === 'door') {
-      // `full` = opening fills (nearly) the whole face — a full-block door/portal; `double` = wide twin doors.
-      const dbl = /double/.test(kind), arch = /arch/.test(kind), full = /full/.test(kind);
-      const x0 = full ? 0.12 : dbl ? 0.22 : 0.3, x1 = full ? 0.88 : dbl ? 0.78 : 0.7, yTop = full ? 0.94 : 0.78;
+      // All doors are full-block now — the opening fills (nearly) the whole face. `double` keeps a centre
+      // split; `arch` keeps a rounded top. (`door_full*` kept as aliases.)
+      const dbl = /double/.test(kind), arch = /arch/.test(kind);
+      const x0 = 0.12, x1 = 0.88, yTop = 0.95;
       if (arch) {   // rounded-top opening
         const pts: number[][] = [fp(F[0], F[1], F[2], F[3], x0, 0), fp(F[0], F[1], F[2], F[3], x0, yTop - 0.28)];
         for (let a = 0; a <= 7; a++) { const fx = x0 + (x1 - x0) * (a / 7), fy = (yTop - 0.28) + 0.28 * Math.sin(Math.PI * (a / 7)); pts.push(fp(F[0], F[1], F[2], F[3], fx, fy)); }
@@ -1656,6 +1657,66 @@ const drawClawMachine = (ctx: CanvasRenderingContext2D, sx: number, sy: number, 
     if (faceVisible(0, 1, dir)) { const mq = P(0, 0.3, 2.55); ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = hexA(accent, 0.8); ctx.fillRect(mq[0] - 22, mq[1] - 6, 44, 12); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '900 7px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('PRIZES', mq[0], mq[1]); }
   });
 };
+// Squid-Game prize vault — a slim column topped by a glass cube that fills with green cash at the bottom.
+const drawCashVault = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  const m = base, cT = shade(m, 1.25), cR = shade(m, 0.92), cL = shade(m, 0.55);
+  const parts: IsoPart[] = [
+    { u0: -0.34, u1: 0.34, v0: -0.34, v1: 0.34, z0: 0, z1: 0.2, t: cT, r: cR, l: cL },     // plinth
+    { u0: -0.18, u1: 0.18, v0: -0.18, v1: 0.18, z0: 0.2, z1: 1.5, t: cT, r: cR, l: cL },   // column
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    // iso cube helper: 4 side faces (front two emphasised) + top
+    const cube = (hu: number, z0: number, z1: number, top: string, rt: string, lf: string, bk: string) => {
+      poly(ctx, [P(-hu, -hu, z1), P(hu, -hu, z1), P(hu, -hu, z0), P(-hu, -hu, z0)], bk);     // back -v
+      poly(ctx, [P(-hu, -hu, z1), P(-hu, hu, z1), P(-hu, hu, z0), P(-hu, -hu, z0)], bk);     // back -u
+      poly(ctx, [P(hu, -hu, z1), P(hu, hu, z1), P(hu, hu, z0), P(hu, -hu, z0)], rt);         // +u
+      poly(ctx, [P(-hu, hu, z1), P(hu, hu, z1), P(hu, hu, z0), P(-hu, hu, z0)], lf);         // +v
+      poly(ctx, [P(-hu, -hu, z1), P(hu, -hu, z1), P(hu, hu, z1), P(-hu, hu, z1)], top);      // top
+    };
+    const lvl = 0.55 + 0.12 * Math.sin(t * 0.05);   // cash level gently rises/settles
+    cube(0.3, 1.55, 1.55 + lvl, '#2e8f48', '#2e8f48', '#247a3a', '#1c5e2c');   // green cash mass
+    // stacked-bill banding lines on the cash
+    ctx.strokeStyle = hexA('#0c3a1c', 0.6); ctx.lineWidth = 1;
+    for (let i = 1; i <= 3; i++) { const z = 1.55 + lvl * (i / 4); ctx.beginPath(); ctx.moveTo(...(P(-0.3, 0.3, z) as [number, number])); ctx.lineTo(...(P(0.3, 0.3, z) as [number, number])); ctx.stroke(); }
+    ctx.fillStyle = hexA('#bff0cf', 0.7); for (let i = 0; i < 4; i++) { const c = P(-0.18 + (i % 2) * 0.2, 0.18, 1.6 + (i * 0.12) % lvl); ctx.beginPath(); ctx.arc(c[0], c[1], 2, 0, Math.PI * 2); ctx.fill(); }   // $ specks
+    // glass case (translucent over the cash)
+    cube(0.36, 1.5, 3.3, 'rgba(190,225,245,0.16)', 'rgba(150,195,225,0.16)', 'rgba(175,210,235,0.2)', 'rgba(150,195,225,0.08)');
+    // bright glass edges + a glint
+    ctx.strokeStyle = hexA('#dff2ff', 0.55); ctx.lineWidth = 1.2;
+    const e = [P(-0.36, 0.36, 3.3), P(0.36, 0.36, 3.3), P(0.36, -0.36, 3.3), P(0.36, 0.36, 1.5)];
+    ctx.beginPath(); ctx.moveTo(e[0][0], e[0][1]); ctx.lineTo(e[1][0], e[1][1]); ctx.lineTo(e[2][0], e[2][1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e[1][0], e[1][1]); ctx.lineTo(e[3][0], e[3][1]); ctx.stroke();
+    const g0 = P(0.12, 0.36, 3.1), g1 = P(0.24, 0.36, 2.2); ctx.strokeStyle = hexA('#ffffff', 0.5); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(g0[0], g0[1]); ctx.lineTo(g1[0], g1[1]); ctx.stroke();
+    if (faceVisible(0, 1, dir)) { const mk = P(0, 0.36, 3.55); ctx.fillStyle = hexA(accent, 0.9); ctx.beginPath(); ctx.arc(mk[0], mk[1], 6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#1a1a22'; ctx.font = '900 8px Helvetica'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('₩', mk[0], mk[1] + 0.5); ctx.textBaseline = 'alphabetic'; }
+  });
+};
+// Pac-Man-style upright arcade cabinet — yellow body, a maze screen (pac + dots + ghost), joystick + coin slot.
+const drawPacman = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, t: number, dir: number) => {
+  const m = base, cT = shade(m, 1.22), cR = shade(m, 0.9), cL = shade(m, 0.55);
+  const parts: IsoPart[] = [
+    { u0: -0.34, u1: 0.34, v0: -0.26, v1: 0.26, z0: 0, z1: 2.15, t: cT, r: cR, l: cL },     // cabinet body
+    { u0: -0.36, u1: 0.36, v0: -0.28, v1: 0.28, z0: 2.15, z1: 2.5, t: shade(m, 1.3), r: cR, l: cL },   // marquee
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;   // all the art lives on the front face
+    const F = 0.27;   // front plane (v)
+    // screen
+    poly(ctx, [P(-0.26, F, 2.05), P(0.26, F, 2.05), P(0.26, F, 1.4), P(-0.26, F, 1.4)], '#05060a');
+    poly(ctx, [P(-0.24, F, 2.0), P(0.24, F, 2.0), P(0.24, F, 1.45), P(-0.24, F, 1.45)], '#0a0e2a');   // maze-blue glow
+    const pac = P(-0.08, F, 1.72), chomp = 0.18 + 0.16 * Math.abs(Math.sin(t * 0.12));
+    ctx.fillStyle = '#ffe23a'; ctx.beginPath(); ctx.arc(pac[0], pac[1], 6, chomp, Math.PI * 2 - chomp); ctx.lineTo(pac[0], pac[1]); ctx.closePath(); ctx.fill();   // pac-man
+    ctx.fillStyle = '#ffffff'; for (let i = 0; i < 3; i++) { const d = P(0.02 + i * 0.08, F, 1.72); ctx.beginPath(); ctx.arc(d[0], d[1], 1.6, 0, Math.PI * 2); ctx.fill(); }   // dots
+    const gh = P(0.2, F, 1.72); ctx.fillStyle = '#ff6ad0'; ctx.beginPath(); ctx.arc(gh[0], gh[1], 5, Math.PI, 0); ctx.lineTo(gh[0] + 5, gh[1] + 5); ctx.lineTo(gh[0] - 5, gh[1] + 5); ctx.closePath(); ctx.fill();   // ghost
+    ctx.fillStyle = '#fff'; for (const ex of [-2, 2]) { const ey = gh[1] - 1; ctx.beginPath(); ctx.arc(gh[0] + ex, ey, 1.5, 0, Math.PI * 2); ctx.fill(); }
+    // control panel + joystick + buttons
+    poly(ctx, [P(-0.26, F, 1.32), P(0.26, F, 1.32), P(0.26, F, 1.1), P(-0.26, F, 1.1)], shade(m, 0.78));
+    const js = P(-0.1, F, 1.22); ctx.strokeStyle = '#15171b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(js[0], js[1] + 3); ctx.lineTo(js[0], js[1] - 3); ctx.stroke(); ctx.fillStyle = '#e0457b'; ctx.beginPath(); ctx.arc(js[0], js[1] - 4, 2.5, 0, Math.PI * 2); ctx.fill();
+    for (const [u, col] of [[0.06, '#ff5a5a'], [0.16, '#3a7bd0']] as [number, string][]) { const b = P(u, F, 1.22); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(b[0], b[1], 2.2, 0, Math.PI * 2); ctx.fill(); }
+    const coin = P(0, F, 0.55); ctx.fillStyle = '#15171b'; ctx.fillRect(coin[0] - 3, coin[1] - 5, 6, 10);   // coin door
+    // marquee text
+    const mq = P(0, 0.28, 2.32); ctx.fillStyle = hexA(accent, 0.85); ctx.fillRect(mq[0] - 22, mq[1] - 6, 44, 12); ctx.fillStyle = '#1a1a22'; ctx.font = '900 8px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('PAC', mq[0], mq[1] + 3);
+  });
+};
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
   const parts: IsoPart[] = [...legs([[-0.3, -0.5], [0.3, -0.5], [-0.3, 0.5], [0.3, 0.5]], 0.55).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.36, u1: 0.36, v0: -0.6, v1: 0.6, z0: 0.55, z1: 0.72, t: cT, r: cR, l: cL }, { u0: -0.36, u1: 0.36, v0: -0.66, v1: -0.5, z0: 0.72, z1: 1.8, t: cT, r: cR, l: cL }];
@@ -2230,6 +2291,8 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'firepit': drawFirePit(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'pacman': drawPacman(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'cashvault': drawCashVault(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'sign': { const top = block(ctx, sx, sy, 1, d.color, accent, d.foot); if (showDet) { ctx.fillStyle = accent; ctx.font = '900 10px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SUAV', sx, top); } break; }
     case 'disco': { const cy = sy - 2.6 * STACK_H; ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx, cy - 22); ctx.lineTo(sx, cy - 56); ctx.stroke(); ctx.save(); ctx.translate(sx, cy); ctx.rotate(t * 0.04); const grd = ctx.createRadialGradient(-6, -6, 3, 0, 0, 20); grd.addColorStop(0, '#fff'); grd.addColorStop(1, '#8893b8'); ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + t * 0.04; ctx.fillStyle = `hsla(${(t * 4 + i * 60) % 360},90%,65%,0.9)`; ctx.beginPath(); ctx.arc(Math.cos(a) * 12, Math.sin(a) * 12, 3.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); break; }

@@ -271,6 +271,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'pooltable',  name: 'Pool Table',  emoji: '🎱', cat: 'games', color: '#5a3f28', h: 1, walk: false, foot: 1,   special: 'pooltable', span: [2, 2] },
   { kind: 'foosball',   name: 'Foosball',    emoji: '⚽', cat: 'games', color: '#6a4a2e', h: 1, walk: false, foot: 1,   special: 'foosball', span: [2, 1] },
   { kind: 'clawmachine',name: 'Claw Machine',emoji: '🕹️', cat: 'games', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'clawmachine' },
+  { kind: 'pacman',     name: 'Pac Arcade',  emoji: '🟡', cat: 'games', color: '#f4c430', h: 2, walk: false, foot: 0.7, special: 'pacman' },
+  { kind: 'cashvault',  name: 'Prize Vault', emoji: '💰', cat: 'games', color: '#3a3e4a', h: 4, walk: false, foot: 0.7, special: 'cashvault' },
   { kind: 'pinball',    name: 'Pinball',     emoji: '🔴', cat: 'games', color: '#1b1b26', h: 1, walk: false, foot: 1,   special: 'pinball', span: [1, 2] },
   { kind: 'airhockey',  name: 'Air Hockey',  emoji: '🏒', cat: 'games', color: '#3a7bd0', h: 1, walk: false, foot: 1,   special: 'airhockey', span: [2, 1] },
   { kind: 'toychest',   name: 'Toy Chest',   emoji: '🧸', cat: 'games', color: '#6a4a2e', h: 1, walk: false, foot: 0.8, special: 'toychest' },
@@ -347,7 +349,7 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'dinerbooth', 'sodafount', 'popcorn', 'icecream', 'register', 'shakebar',
   'toilet', 'vanity', 'shower', 'towelrail', 'washer', 'mirror',
   'officechair', 'filecab', 'copier', 'watercooler', 'whiteboard', 'serverrack',
-  'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest',
+  'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest', 'pacman', 'cashvault',
   // café / sci-fi / beach / garage / festive — the directional ones (round decorations stay symmetric)
   'pastrycase', 'winerack', 'kegtap', 'cocktailcart', 'coffeebar', 'neonarch', 'console', 'cryopod',
   'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights',

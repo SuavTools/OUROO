@@ -45,7 +45,9 @@ const wrapBubble = (text: string): string[] => {
   if (lines.length > 3) { lines.length = 3; lines[2] = lines[2].replace(/\s*\S*$/, '') + '…'; }
   return lines.length ? lines : [text];
 };
-const MAX_ITEMS = 200, PLACE_CAP = 20;
+// No real per-person / per-room limit — keep only a very high safety ceiling so a runaway loop or bad
+// import can't insert unbounded rows. Place as much as you like.
+const MAX_ITEMS = 100000;
 
 type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
@@ -773,9 +775,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const engineKind = isPortal ? 'teleporter' : kind;
     // Inventory: non-mods need stock for real furni (free basics are unlimited; portals are free). Mods build freely.
     if (!isPortal && !modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Unavailable' : 'Out of stock — buy more ✦'); return; }
-    if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Room is full'); return; }
-    const mine = itemsRef.current.filter(i => i.createdBy === deviceRef.current).length;
-    if (!modRef.current && mine >= PLACE_CAP) { flashHint(`Max ${PLACE_CAP} per person`); return; }
+    if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Room is full'); return; }   // generous safety ceiling only
     const dir = isRotatable(engineKind) ? placeDirRef.current : 0;
     const elev = isPortal ? 0 : placeElevRef.current;   // any piece can be lifted — stack decks, mount decor on tables, build tall
     const [sw, sh] = effSpan(engineKind, dir);
@@ -1579,7 +1579,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           {!decorMin && (<>
             {/* header: count + altura (for floating decks) + balance */}
             <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-white/10">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderator' : `objects ${myCount}/${PLACE_CAP}`}</span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-white/50 shrink-0">{isMod ? 'moderator' : `objects ${myCount}`}</span>
               {placingKind && (
                 <span className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-[#00cfff]">
                   Height
