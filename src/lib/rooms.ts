@@ -43,6 +43,21 @@ export async function roomByCode(code: string): Promise<RoomRow | null> {
   return data ? norm(data) : null;
 }
 
+// Find a room by its slug (used to resolve a portal pointing at a public room).
+export async function roomBySlug(slug: string): Promise<RoomRow | null> {
+  if (!supabase) return null;
+  const s = slug.trim(); if (!s) return null;
+  const { data } = await supabase.from('rooms').select(SEL).eq('slug', s).limit(1).maybeSingle();
+  return data ? norm(data) : null;
+}
+
+// Flip a room public (a pickable portal destination + listed in the browser) or back to invite-only.
+export async function setRoomPublic(slug: string, isPublic: boolean): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.from('rooms').update({ public: isPublic }).eq('slug', slug);
+  return !error;
+}
+
 // Create a personal room owned by the current player. `isPublic=false` → invite-only (join by code).
 export async function createRoom(name: string, isPublic = true, plan = 'salao'): Promise<{ ok: true; room: RoomRow } | { ok: false; error: string }> {
   if (!supabase) return { ok: false, error: 'Offline.' };

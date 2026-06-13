@@ -22,7 +22,7 @@ import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
 import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
-import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
+import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, roomBySlug, setRoomPublic, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
 import { RoomMusic } from '@/lib/roomMusic';
 import { Oracle } from '@/components/Oracle';
@@ -363,6 +363,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const wasMovingRef = useRef(false);
   const strideRef = useRef(0);   // distance walked since the last footstep sound
   const lastPortalKeyRef = useRef<string | null>(null);   // rising-edge guard so a portal fires once per arrival
+  const portalTileRef = useRef(-1);                       // last tile we ran the portal check on (skip the per-frame scan otherwise)
   const voidTimerRef = useRef(0);   // frames the player has lingered on a void tile (time-based hazard)
   const modRef = useRef(false);
 
@@ -386,6 +387,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Permissions editor (for one of your own rooms): open everyone-toggle + a list of granted handles.
   const [permsRoom, setPermsRoom] = useState<RoomRow | null>(null);
   const [permsAll, setPermsAll] = useState(false);
+  const [permsPublic, setPermsPublic] = useState(false);   // room is a public main room (pickable portal destination)
   const [permsList, setPermsList] = useState<string[]>([]);
   const [permsHandle, setPermsHandle] = useState('');
   const [myOwnerId, setMyOwnerId] = useState('');
@@ -419,6 +421,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { editSelRef.current = editSel; }, [editSel]);
   // Click-drag painting: stamp floor/carpet (or admin tile-paint) across every tile the cursor sweeps.
   const paintDragRef = useRef<{ on: boolean; kind: string | null; tile: number }>({ on: false, kind: null, tile: -1 });
+  // Drag a selected object to reposition it (press an object + drag → it follows the cursor; release to drop).
+  const moveDragRef = useRef<{ id: string | null; moved: boolean }>({ id: null, moved: false });
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
   const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
@@ -614,16 +618,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const portalAtTile = (gx: number, gy: number): Portal | null => {
     const c = (PORTALS[roomMetaRef.current.slug] ?? []).find(pt => pt.gx === gx && pt.gy === gy);
     if (c) return c;
-    const up = [...itemsRef.current].reverse().find(i => i.portalTo && i.gx === gx && i.gy === gy);
-    if (up) return { gx, gy, code: up.portalCode || '', to: up.portalTo!, user: true };
+    const items = itemsRef.current;   // scan back-to-front WITHOUT copying (runs while exploring; rooms can hold thousands)
+    for (let i = items.length - 1; i >= 0; i--) { const up = items[i]; if (up.portalTo && up.gx === gx && up.gy === gy) return { gx, gy, code: up.portalCode || '', to: up.portalTo, user: true }; }
     return null;
   };
   // Resolve a portal destination: a curated secret slug, a public room slug, or `code:<INVITE>` (any room).
   const resolveDest = async (to: string): Promise<RoomDef | null> => {
     if (SECRET_ROOMS[to]) return SECRET_ROOMS[to];
-    const pub = ROOMS.find(r => r.slug === to); if (pub) return pub;
+    const pub = ROOMS.find(r => r.slug === to); if (pub) return pub;   // official room
     if (to.startsWith('code:')) { const r = await roomByCode(to.slice(5)); return r ? roomDefOf(r) : null; }
-    return null;
+    const r = await roomBySlug(to); return r ? roomDefOf(r) : null;    // a public (or any) room by slug
   };
   // Travel through a portal (curated portals pay out + show the lore modal on first visit; player portals don't).
   const travelTo = async (p: Portal) => {
@@ -657,7 +661,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (room === r.slug) switchRoom(roomOf('town'));
     refreshRoomLists();
   };
-  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsList(r.rights ?? []); setPermsHandle(''); };
+  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); };
   const addPermHandle = () => {
     const h = permsHandle.trim(); if (!h) return;
     if (!permsList.some(x => x.toLowerCase() === h.toLowerCase())) setPermsList(l => [...l, h]);
@@ -668,9 +672,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const list = Array.from(new Set(permsList.map(h => h.trim()).filter(Boolean)));
     const ok = await updateRoomPerms(permsRoom.slug, permsAll, list);
     if (!ok) { flashHint('Failed to save permissions'); return; }
+    if (permsPublic !== permsRoom.public) await setRoomPublic(permsRoom.slug, permsPublic);   // flip public ↔ invite-only
     // Reflect immediately in local lists + the live room if it's the one open.
-    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list } : r));
+    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic } : r));
     if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list }));
+    refreshRoomLists();   // public flag changed → refresh the public-room list (portal picker + browser)
     setPermsRoom(null); flashHint('Permissions saved ✓');
   };
 
@@ -1005,6 +1011,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           rebuildHeight();
         })
         .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
+        .on('broadcast', { event: 'move' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const it = itemsRef.current.find(i => i.id === String(pl?.id ?? '')); if (it) { it.gx = Number(pl.gx); it.gy = Number(pl.gy); rebuildHeight(); } })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
@@ -1064,13 +1071,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (wasMovingRef.current && !moving) ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() });   // final position; no mid-session re-track (that bounced the channel)
       }
       wasMovingRef.current = moving;
-      // PORTALS activate by WALKING ONTO them — find the door, walk to it. Fires once you SETTLE on the tile
-      // (path finished), rising-edge so it triggers a single time per arrival. No code → travel straight away.
-      if (!moving && me.path.length === 0) {
-        const pt = portalAtTile(clampTile(me.fx), clampTile(me.fy)); const pk = pt ? `${pt.gx},${pt.gy}` : null;
-        if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelTo(pt); } }
-        lastPortalKeyRef.current = pk;
-      } else if (moving) lastPortalKeyRef.current = null;   // stepped off → re-arm
+      // PORTALS activate by WALKING ONTO them — fires the instant your tile becomes a portal tile (whether
+      // you stop on it OR walk straight over it), rising-edge so it triggers once per arrival; stepping off
+      // re-arms it. No code → travel straight away; coded → prompt.
+      { const cgx = clampTile(me.fx), cgy = clampTile(me.fy), ct = cgy * GRID + cgx;
+        if (ct !== portalTileRef.current) {   // only scan when our tile actually changes (not every frame)
+          portalTileRef.current = ct;
+          const pt = portalAtTile(cgx, cgy); const pk = pt ? `${pt.gx},${pt.gy}` : null;
+          if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelTo(pt); } }
+          lastPortalKeyRef.current = pk;
+        }
+      }
       // ARCADE MACHINES — pop the game picker when you walk CLOSE (cabinets are solid, so it's proximity,
       // not stepping onto the tile). Rising edge → opens once per approach; re-arms when you step away.
       {
@@ -1379,8 +1390,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(col, 0.28); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; diamond(sx, sy, TW, TH); ctx.stroke();
         }
       } else if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode || ui.tileMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
-      // Selected-object highlight — a pulsing ring under the piece the edit popup is acting on.
-      if (ui.decorOpen && editSelRef.current) { const it = itemsRef.current.find(i => i.id === editSelRef.current!.id); if (it) { const [sw, sh] = effSpan(it.kind, it.dir || 0); const pulse = 0.4 + 0.25 * Math.sin(framesRef.current * 0.12); for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) { const { sx, sy } = iso(it.gx + du, it.gy + dv, Math.max(0, planLvl(it.gx + du, it.gy + dv))); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA('#ffe65c', 0.12); ctx.fill(); ctx.strokeStyle = hexA('#ffe65c', pulse); ctx.lineWidth = 2; diamond(sx, sy, TW, TH); ctx.stroke(); } } }
       // Lore tile markers — invisible to players; a small glyph only while an admin is decorating.
       if (ui.decorOpen) for (const lm of loreRef.current) { if (lm.mode !== 'tile') continue; const L = Math.max(0, planLvl(lm.gx, lm.gy)); const { sx, sy } = iso(lm.gx, lm.gy, L); const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#00cfff'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.6, TH * 0.6); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.9; ctx.fillStyle = '#00cfff'; ctx.font = '700 12px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✎', sx, sy - 1); ctx.restore(); }
 
@@ -1408,6 +1417,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatarBody(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatarBody(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
+      // Selected-object highlight — drawn AFTER the pieces (so it isn't hidden behind a tall one): a pulsing
+      // ring around the footprint + a bobbing chevron above, marking the piece the edit popup is acting on.
+      if (uiRef.current.decorOpen && editSelRef.current) {
+        const it = itemsRef.current.find(i => i.id === editSelRef.current!.id);
+        if (it) {
+          const [sw, sh] = effSpan(it.kind, it.dir || 0), pulse = 0.45 + 0.3 * Math.sin(framesRef.current * 0.12);
+          for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) { const { sx, sy } = iso(it.gx + du, it.gy + dv, Math.max(0, planLvl(it.gx + du, it.gy + dv)) + (it.elev || 0)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA('#ffe65c', 0.16); ctx.fill(); ctx.strokeStyle = hexA('#ffe65c', pulse); ctx.lineWidth = 2.5; diamond(sx, sy, TW, TH); ctx.stroke(); }
+          const dd = defOf(it.kind), topZ = Math.max(0, planLvl(it.gx, it.gy)) + (it.elev || 0) + (dd.h || 0) + 0.6;
+          const c = iso(it.gx + (sw - 1) / 2, it.gy + (sh - 1) / 2, topZ), bob = Math.sin(framesRef.current * 0.12) * 2.5;
+          ctx.fillStyle = '#ffe65c'; ctx.beginPath(); ctx.moveTo(c.sx - 6, c.sy - 10 + bob); ctx.lineTo(c.sx + 6, c.sy - 10 + bob); ctx.lineTo(c.sx, c.sy - 2 + bob); ctx.closePath(); ctx.fill();
+        }
+      }
       ctx.restore();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);
@@ -1452,10 +1473,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (placingKind) { placeItem(placingKind, gx, gy); if (isFloorPaint(placingKind)) startPaintDrag(e, placingKind); return; }   // carpet/floor → drag to lay a swathe
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
-    // Decorating with no tool armed: tap an object to SELECT it (rotate/pick-up popup); tap empty to deselect + walk.
+    // Decorating with no tool armed: press an object to SELECT it + arm a move-drag (drag to reposition,
+    // release to drop; a plain tap just selects → rotate/pick-up popup). Tap empty floor to deselect + walk.
     if (decorOpen && !portalMaker) {
       const hit = topItemAt(gx, gy);
-      if (hit) { setEditSel(s => (s?.id === hit.id ? null : { id: hit.id, kind: hit.kind })); return; }
+      if (hit) {
+        setEditSel({ id: hit.id, kind: hit.kind });
+        moveDragRef.current = { id: hit.id, moved: false };
+        try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* ignore */ }
+        return;
+      }
       if (editSelRef.current) { setEditSel(null); return; }
     }
     // Portals aren't tapped — you WALK onto them (see the movement loop). Tapping a portal tile just paths you there.
@@ -1467,10 +1494,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const { gx, gy } = evtTile(e); paintDragRef.current = { on: true, kind, tile: key(gx, gy) };
     try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* ignore */ }
   };
-  const endPaintDrag = (e: React.PointerEvent) => { paintDragRef.current = { on: false, kind: null, tile: -1 }; try { (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId); } catch { /* ignore */ } };
+  const endPaintDrag = (e: React.PointerEvent) => {
+    const md = moveDragRef.current;
+    if (md.id) {
+      const it = itemsRef.current.find(i => i.id === md.id);
+      if (it && md.moved) {   // dropped somewhere new → broadcast + persist the new position
+        channelRef.current?.send({ type: 'broadcast', event: 'move', payload: { id: it.id, gx: it.gx, gy: it.gy } });
+        supabase?.from('room_items').update({ x: it.gx, y: it.gy }).eq('id', it.id).then(undefined, () => {});
+        setEditSel(s => (s && s.id === it.id ? { ...s } : s));   // re-anchor the popup to the new spot
+      }
+      moveDragRef.current = { id: null, moved: false };
+    }
+    paintDragRef.current = { on: false, kind: null, tile: -1 };
+    try { (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId); } catch { /* ignore */ }
+  };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!decorOpen) { hoverRef.current = null; return; }
     const { gx, gy } = evtTile(e); const off = planLvl(gx, gy) < 0; hoverRef.current = off ? null : { gx, gy };
+    const md = moveDragRef.current;
+    if (md.id) {   // dragging a selected object → it follows the cursor (only onto valid floor its footprint fits)
+      if (!off) { const it = itemsRef.current.find(i => i.id === md.id);
+        if (it && (it.gx !== gx || it.gy !== gy)) {
+          const [sw, sh] = effSpan(it.kind, it.dir || 0); let fits = gx >= 0 && gy >= 0 && gx + sw <= GRID && gy + sh <= GRID;
+          for (let du = 0; du < sw && fits; du++) for (let dv = 0; dv < sh && fits; dv++) if (planLvl(gx + du, gy + dv) < 0) fits = false;
+          if (fits) { it.gx = gx; it.gy = gy; md.moved = true; rebuildHeight(); }
+        }
+      }
+      return;
+    }
     const dr = paintDragRef.current;
     if (dr.on && !off) { const k = key(gx, gy); if (k !== dr.tile) { dr.tile = k;
       if (dr.kind === null) paintTile(gx, gy);
@@ -1682,7 +1733,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: buildMode ? '#ffe65c' : '#cfd2dc' }}>🏠</span>
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${buildMode ? 'text-brandYellow' : 'text-white/50'}`}>Builds</span>
               </button>
-              <button onClick={() => { setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Place a portal to another room"
+              <button onClick={() => { refreshRoomLists(); setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); }} title="Place a portal to another room"
                 className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#cc66ff]/15">
                 <span className="text-[18px] leading-none text-[#cc66ff]" style={{ marginTop: '-1px' }}>◎</span>
                 <span className="text-[7px] uppercase tracking-wide leading-none text-[#cc66ff]">Portal</span>
@@ -1876,6 +1927,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             </div>
             <p className="font-bold text-white truncate mb-4">{permsRoom.name}</p>
 
+            <label className="flex items-center gap-3 p-3 border border-white/15 cursor-pointer hover:border-white/35 mb-2">
+              <input type="checkbox" checked={permsPublic} onChange={e => setPermsPublic(e.target.checked)} className="accent-[#cc66ff] w-4 h-4" />
+              <span className="text-sm text-white">Public main room<br /><span className="text-[11px] text-white/45">Listed in the browser + pickable as a portal destination.</span></span>
+            </label>
             <label className="flex items-center gap-3 p-3 border border-white/15 cursor-pointer hover:border-white/35">
               <input type="checkbox" checked={permsAll} onChange={e => setPermsAll(e.target.checked)} className="accent-[#1ED760] w-4 h-4" />
               <span className="text-sm text-white">Everyone can build<br /><span className="text-[11px] text-white/45">Any visitor can drop and pick up furniture.</span></span>
@@ -1962,8 +2017,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Leads to</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[['town', 'Town'], ['code', 'A room code…']].map(([id, label]) => (
+              <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto">
+                {([
+                  ...ROOMS.map(r => [r.slug, r.name] as [string, string]),                 // official public rooms
+                  ...personalRooms.map(r => [r.slug, r.name] as [string, string]),         // admin/community public rooms
+                  ['code', 'Room code…'],
+                ] as [string, string][]).map(([id, label]) => (
                   <button key={id} onClick={() => setPmDest(id)}
                     className={`text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 border transition-colors ${pmDest === id ? 'bg-[#cc66ff] text-black border-[#cc66ff]' : 'text-white/70 border-white/20 hover:border-[#cc66ff]/60'}`}>{label}</button>
                 ))}
