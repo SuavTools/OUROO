@@ -128,6 +128,8 @@ export const ROOM_PLANS: RoomPlan[] = [
   },
   { id: 'grande', name: 'Large', rows: full(14) },
   { id: 'enorme', name: 'Huge', rows: full(18) },
+  { id: 'mega', name: 'Plaza', rows: full(22), spawn: [11, 11] },           // big open public square
+  { id: 'grove', name: 'Grove', rows: octa(22, 7), spawn: [11, 11] },       // big organic octagon (the Woods)
   { id: 'pista', name: 'Dancefloor', rows: octa(16, 5), spawn: [8, 8] },
   { id: 'clube', name: 'Club', rows: clube(), spawn: [17, 31] },
   { id: 'jardim', name: 'Garden', rows: jardim(), spawn: [11, 19] },

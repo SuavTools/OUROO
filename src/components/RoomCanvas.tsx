@@ -51,9 +51,9 @@ const TUT_ROOMS: Record<string, RoomDef> = {
   terminal: { slug: 't_terminal', name: 'The Terminal', accent: '#8a9cff', floor: '#0d0f1c', plan: 'quadrado' },
   yourroom: { slug: 't_yourroom', name: 'Your Room',    accent: '#1ED760', floor: '#161628', plan: 'quadrado' },
 };
-const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'salao' };
-const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'quadrado' };
-const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'salao', day: true };
+const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'mega' };
+const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'enorme' };
+const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'grove', day: true };
 // The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
 // Town is the social hub, the Woods are the wild edge.
 const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
@@ -79,7 +79,7 @@ const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swa
 const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
 const MACHINES: Record<string, Machine[]> = {
   t_arcade: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: the single machine
-  arcade:   [{ gx: 3, gy: 2, games: [GAME_OUROO] }, { gx: 7, gy: 2, games: [GAME_LEAP] }],   // the Arcade room — one cabinet per game
+  arcade:   [{ gx: 5, gy: 3, games: [GAME_OUROO] }, { gx: 12, gy: 3, games: [GAME_LEAP] }],   // the Arcade room — one cabinet per game
   // Town has NO machine — you reach the Arcade from the menu.
 };
 const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker / terminal
@@ -156,29 +156,32 @@ const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]
     ['sofa', 2, 3, 0], ['mesa', 4, 4, 0], ['tv', 7, 2, 0],
     ['planta', 1, 8, 0], ['floorlamp', 8, 8, 0], ['banco_jd', 4, 8, 0],
   ],
-  // ── TOWN — the social hub. NO arcade here — the Arcade is its own place, reached from the menu. ──
+  // ── TOWN — the big social hub (22×22). NO arcade here — the Arcade is its own place via the menu. ──
   town: [
-    ['planta', 1, 1, 0], ['planta', 9, 1, 0],
-    ['banco_jd', 1, 9, 0], ['banco_jd', 7, 9, 0],
-    ['floorlamp', 5, 1, 0],
+    ['fonte', 11, 5, 0],   // town-centre fountain (the Money Jar lands near here later)
+    ['planta', 2, 2, 0], ['planta', 19, 2, 0], ['planta', 2, 19, 0], ['planta', 19, 19, 0],
+    ['arvore', 2, 11, 0], ['arvore', 19, 11, 0],
+    ['banco_jd', 7, 9, 0], ['banco_jd', 14, 9, 0], ['banco_jd', 7, 14, 0], ['banco_jd', 14, 14, 0],
+    ['floorlamp', 4, 5, 0], ['floorlamp', 17, 5, 0], ['floorlamp', 4, 17, 0], ['floorlamp', 17, 17, 0],
   ],
-  // ── ARCADE — the games room. One cabinet per game (more slot in as they're built). ──
+  // ── ARCADE — the big games room (18×18). One cabinet per game (more slot in as they're built). ──
   arcade: [
-    ['arcade', 3, 2, 0], ['arcade', 7, 2, 0],   // the game cabinets (OUROO, LEAP — see MACHINES)
-    ['neon', 5, 1, 0],
-    ['holofote', 1, 1, 0], ['holofote', 9, 1, 0],
-    ['vending', 2, 5, 0],
-    ['banco_jd', 4, 8, 0], ['banco_jd', 6, 8, 0],
-    ['floorlamp', 1, 8, 0], ['floorlamp', 9, 8, 0],
+    ['arcade', 5, 3, 0], ['arcade', 12, 3, 0],   // the game cabinets (OUROO, LEAP — see MACHINES)
+    ['neon', 8, 2, 0],
+    ['holofote', 2, 2, 0], ['holofote', 15, 2, 0],
+    ['vending', 2, 8, 0],
+    ['banco_jd', 6, 12, 0], ['banco_jd', 10, 12, 0],
+    ['floorlamp', 2, 15, 0], ['floorlamp', 15, 15, 0],
   ],
-  // ── THE WOODS — the wild edge. Trees + a spring (the pond/fishing comes later). ──
+  // ── THE WOODS — the big wild edge (22-tile octagon). Trees + a spring (pond/fishing comes later). ──
   woods: [
-    ['arvore', 1, 1, 0], ['arvore', 9, 1, 0], ['arvore', 1, 9, 0], ['arvore', 9, 9, 0],
-    ['palmeira', 3, 2, 0], ['palmeira', 7, 2, 0],
-    ['relva', 2, 6, 0], ['relva', 8, 6, 0],
-    ['flores', 3, 7, 0], ['flores', 7, 7, 0],
-    ['cato', 1, 5, 0], ['cato', 9, 5, 0],
-    ['fonte', 5, 7, 0],   // a wild spring — the pond proper arrives with fishing later
+    ['arvore', 4, 4, 0], ['arvore', 17, 4, 0], ['arvore', 4, 17, 0], ['arvore', 17, 17, 0],
+    ['arvore', 2, 11, 0], ['arvore', 19, 11, 0], ['arvore', 11, 2, 0], ['arvore', 11, 19, 0],
+    ['palmeira', 7, 6, 0], ['palmeira', 14, 6, 0], ['palmeira', 7, 15, 0], ['palmeira', 14, 15, 0],
+    ['relva', 5, 11, 0], ['relva', 16, 11, 0], ['relva', 11, 16, 0],
+    ['flores', 8, 9, 0], ['flores', 13, 9, 0],
+    ['cato', 4, 8, 0], ['cato', 17, 14, 0],
+    ['fonte', 11, 8, 0],   // a wild spring — the pond proper arrives with fishing later
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {};   // NPCs cleared — the lore cast gets rebuilt on the new sequence
@@ -203,18 +206,19 @@ const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent 
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 // portalTo/portalCode ride along on PLAYER-PLACED portals (a teleporter that links to another room).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean };
 // Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
 const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
 const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
 // PLAYER PORTALS persist in the SAME room_items table (no migration) as a special kind string:
-//   `portal:<encoded dest>:<encoded access-code>`.  encodeURIComponent escapes any @ / ^ / : so decodeKind
-//   leaves the whole thing intact; we then hydrate it into a plain `teleporter` item carrying the link.
-const encodePortal = (to: string, code: string) => `portal:${encodeURIComponent(to)}:${encodeURIComponent(code)}`;
+//   `portal:<encoded dest>:<encoded access-code>[:1]`.  A trailing `:1` marks a HIDDEN trigger (no
+//   visible teleporter sprite — a disguised floor trigger). encodeURIComponent escapes any @ / ^ / :
+//   in the dest/code, so the segments stay clean; we hydrate it into a `teleporter` item with the link.
+const encodePortal = (to: string, code: string, hidden = false) => `portal:${encodeURIComponent(to)}:${encodeURIComponent(code)}${hidden ? ':1' : ''}`;
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
-    const [, to = '', code = ''] = rawKind.split(':');
-    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: decodeURIComponent(to), portalCode: decodeURIComponent(code) };
+    const [, to = '', code = '', hidden = ''] = rawKind.split(':');
+    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: decodeURIComponent(to), portalCode: decodeURIComponent(code), portalHidden: hidden === '1' };
   }
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
@@ -281,6 +285,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // (so it works for the hardcoded official + tutorial rooms, which aren't in the rooms table).
   const matOverrideRef = useRef<Map<number, number>>(new Map());
   const matIdRef = useRef<Map<number, string>>(new Map());   // tileKey → the room_items id of its override row
+  // Admins can pick up baked-in (curated) furniture too; removals persist as `del:<curatedId>` tombstone
+  // rows in room_items so the piece stays gone for everyone.
+  const delCuratedRef = useRef<Set<string>>(new Set());
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
   const isWater = (gx: number, gy: number) => gx >= 0 && gy >= 0 && gx < GRID && gy < GRID && waterRef.current[gy * GRID + gx] === 1;
   const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
@@ -403,11 +410,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [pmDest, setPmDest] = useState('town');      // a public slug, or 'code' to link by room code
   const [pmRoomCode, setPmRoomCode] = useState('');  // the destination room's invite code (when pmDest==='code')
   const [pmAccess, setPmAccess] = useState('');      // optional access code the next person must speak
+  const [pmHidden, setPmHidden] = useState(false);   // disguised trigger — no visible teleporter sprite
   const makePortal = () => {
     const to = pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest;
     if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
-    setPlacingKind(encodePortal(to, pmAccess.trim())); setRemoveMode(false); setRotateMode(false);
-    setPortalMaker(false); flashHint('Tap a tile to drop the portal ✦');
+    setPlacingKind(encodePortal(to, pmAccess.trim(), pmHidden)); setRemoveMode(false); setRotateMode(false); setTileMode(false);
+    setPortalMaker(false); flashHint(pmHidden ? 'Tap a tile to drop the hidden trigger ◌' : 'Tap a tile to drop the portal ✦');
   };
   // Ambient room music — the SUAV signal (generated, royalty-free; see lib/roomMusic). Off persists per device.
   const musicRef = useRef<RoomMusic | null>(null);
@@ -596,15 +604,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear();
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear();
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
       const m = raw.match(/^mat:(\d)$/);
       if (m) { const k = key(Number(d.x), Number(d.y)); matOverrideRef.current.set(k, Number(m[1])); matIdRef.current.set(k, String(d.id)); continue; }
+      if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
     }
-    itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length); rebuildHeight();
+    itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length);
+    if (delCuratedRef.current.size) decorRef.current = decorRef.current.filter(d => !delCuratedRef.current.has(d.id));   // hide removed curated decor
+    rebuildHeight();
   };
   // Apply the current room's floor plan (shape + base levels), then rebuild walkability. Repositions
   // you to the plan's spawn if your tile became void after a shape change.
@@ -615,7 +626,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     matRef.current = planMaterialMask(plan);
     matOverrideRef.current.clear(); matIdRef.current.clear();   // tile-paint overrides reload per room
     camRef.current = computeCam(planRef.current, GRID);
-    decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' }));
+    decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' })).filter(d => !delCuratedRef.current.has(d.id));
     npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
@@ -688,12 +699,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
-    if (!hit) return;
-    if (!hit.portalTo) returnFurni(hit.kind);   // pick it up into MY inventory (portals are free — don't gift a teleporter)
-    itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
-    if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
-    channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
-    supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
+    if (hit) {
+      if (!hit.portalTo) returnFurni(hit.kind);   // pick it up into MY inventory (portals are free — don't gift a teleporter)
+      itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
+      if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
+      channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
+      supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
+      return;
+    }
+    // No player furni here — admins may also pick up baked-in (curated) decor. Persist a tombstone so
+    // it stays gone for everyone; triggers (machine/door/terminal) are coords, so this only hides decor.
+    if (modRef.current) {
+      const cur = [...decorRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh; });
+      if (!cur) return;
+      delCuratedRef.current.add(cur.id);
+      decorRef.current = decorRef.current.filter(d => d.id !== cur.id); rebuildHeight();
+      channelRef.current?.send({ type: 'broadcast', event: 'delcurated', payload: { id: cur.id } });
+      const tid = (crypto?.randomUUID?.() ?? `del_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
+      supabase?.from('room_items').insert({ id: tid, room, kind: `del:${cur.id}`, x: cur.gx, y: cur.gy, created_by: deviceRef.current }).then(undefined, () => {});
+      flashHint('Removed (baked-in piece) ✦');
+    }
   };
   // Admin tile-painting — set a tile's material (grass/marble/…) or clear it (paintMat -1) back to the
   // plan default. Persisted as a `mat:<n>` room_items row keyed to the tile (works in any room slug).
@@ -701,6 +726,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!modRef.current) { flashHint('Admins only'); return; }
     if (planLvl(gx, gy) < 0) return;
     const k = key(gx, gy); const n = paintMatRef.current; const existing = matIdRef.current.get(k);
+    channelRef.current?.send({ type: 'broadcast', event: 'mat', payload: { x: gx, y: gy, n } });   // live for others in the room
     if (n < 0) {   // clear → revert to the plan's material
       matOverrideRef.current.delete(k); matIdRef.current.delete(k);
       if (existing) supabase?.from('room_items').delete().eq('id', existing).then(undefined, () => {});
@@ -789,6 +815,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         })
         .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
+        .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
+        .on('broadcast', { event: 'delcurated' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { delCuratedRef.current.add(id); decorRef.current = decorRef.current.filter(d => d.id !== id); rebuildHeight(); } })   // admin removed a baked-in piece
         .on('broadcast', { event: 'leave' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id && remotesRef.current.delete(id)) setPopulation(remotesRef.current.size + 1); })   // someone left/refreshed → drop them now (don't wait for presence timeout)
         .subscribe(async status => {
           if (!alive) return;
@@ -1057,7 +1085,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
       const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
-      for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => { if (lift > 0 && dd.walk) drawSupports(ii, z, sw, sh); const { sx, sy } = iso(ii.gx, ii.gy, z); drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0); } }); }
+      for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => {
+        const { sx, sy } = iso(ii.gx, ii.gy, z);
+        if (ii.portalHidden) {   // disguised trigger — invisible to players; a faint ring only while an admin is decorating
+          if (uiRef.current.decorOpen) { const pulse = 0.25 + 0.15 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#cc66ff'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.7, TH * 0.7); ctx.stroke(); ctx.restore(); }
+          return;
+        }
+        if (lift > 0 && dd.walk) drawSupports(ii, z, sw, sh);
+        drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0);
+      } }); }
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
       // sort by their front corner, so add a boost when standing on a seat's footprint.
       const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of allItems) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
@@ -1529,6 +1565,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <input value={pmAccess} onChange={e => setPmAccess(e.target.value.toUpperCase())} maxLength={12} placeholder="NO CODE"
                 className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm tracking-[0.3em] font-mono outline-none focus:border-[#cc66ff]" />
             </div>
+            <label className="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer">
+              <input type="checkbox" checked={pmHidden} onChange={e => setPmHidden(e.target.checked)} className="accent-[#cc66ff]" />
+              Hidden trigger — no visible door (a disguised spot players have to find)
+            </label>
             <div className="flex gap-2 pt-1">
               <button onClick={makePortal} className="flex-1 bg-[#cc66ff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Place portal ▸</button>
               <button onClick={() => setPortalMaker(false)} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
