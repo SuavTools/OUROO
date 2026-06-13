@@ -30,6 +30,7 @@ import { MenuModal } from '@/components/MenuModal';
 import { GlitchSequence } from '@/components/GlitchSequence';
 import { AdminModal } from '@/components/AdminModal';
 import { SkinPreview } from '@/components/SkinPreview';
+import { NpcEditor, type NpcData } from '@/components/NpcEditor';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -142,6 +143,13 @@ const EASTER_EGG_REWARD = 250;   // the hidden top-centre wall in the terminal r
 //   `beats`  → ordered lore, delivered ONCE each (per-player memory in localStorage). Use for story.
 //   `lines`  → ambient idle chatter (random). `id` keys saved beat progress.
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; hints?: string[]; id?: string };
+// Admin-placed NPCs persist in room_items as `npc:<encodeURIComponent(JSON)>` (name + appearance + lines).
+const encodeNpc = (d: NpcData) => `npc:${encodeURIComponent(JSON.stringify(d))}`;
+const decodeNpc = (raw: string): NpcData | null => {
+  try { const o = JSON.parse(decodeURIComponent(raw.slice(4))); if (!o || typeof o.n !== 'string') return null;
+    return { n: String(o.n).slice(0, 24), a: String(o.a || 'diamond-gold'), l: Array.isArray(o.l) ? o.l.map(String).slice(0, 8) : [] }; }
+  catch { return null; }
+};
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
   // ── TUTORIAL ROOMS (solo) — the onward door always sits at TUT_PORTAL_TILE (9,5). ──
   // t_oracle: the room you wake in. Just the Oracle's voice + a coded door.
@@ -333,7 +341,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number })[]>([]);   // curated NPCs (hints + lore beats + chatter + roaming)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming)
+  const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -423,6 +432,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const paintDragRef = useRef<{ on: boolean; kind: string | null; tile: number }>({ on: false, kind: null, tile: -1 });
   // Drag a selected object to reposition it (press an object + drag → it follows the cursor; release to drop).
   const moveDragRef = useRef<{ id: string | null; moved: boolean }>({ id: null, moved: false });
+  // NPC editor (admin): design a character → tap a tile to drop it.
+  const [npcEditor, setNpcEditor] = useState(false);
+  const [placeNpc, setPlaceNpc] = useState(false);
+  const pendingNpcRef = useRef<NpcData | null>(null);
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
   const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
@@ -467,7 +480,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -729,12 +742,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null;
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null;
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
       const m = raw.match(/^mat:(\d)$/);
       if (m) { const k = key(Number(d.x), Number(d.y)); matOverrideRef.current.set(k, Number(m[1])); matIdRef.current.set(k, String(d.id)); continue; }
+      if (raw.startsWith('npc:')) { const nd = decodeNpc(raw); if (nd) placedNpcsRef.current.push({ id: String(d.id), gx: Number(d.x), gy: Number(d.y), data: nd }); continue; }   // admin-placed NPC
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
       if (raw.startsWith('bg:')) { const a = raw.slice(3) as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; bgIdRef.current = String(d.id); } continue; }
       if (raw.startsWith('reward:')) { const p = raw.split(':'); const mode = (p[1] === 'enter' ? 'enter' : 'tile') as LoreMode; loreRef.current.push({ id: String(d.id), mode, style: 'reward', gx: Number(d.x), gy: Number(d.y), text: '', crystals: Number(p[2]) || 0, skinId: decodeURIComponent(p[3] || '') }); continue; }
@@ -744,7 +758,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     setBgAtmo(bgRef.current);
     itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length);
     if (delCuratedRef.current.size) decorRef.current = decorRef.current.filter(d => !delCuratedRef.current.has(d.id));   // hide removed curated decor
-    setLoreVer(v => v + 1); rebuildHeight();
+    setLoreVer(v => v + 1); rebuildHeight(); rebuildNpcs();
     // On-enter markers: fire once per player (per marker id) — Oracle card / glitch sequence / reward.
     for (const mk of loreRef.current.filter(l => l.mode === 'enter')) {
       let unseen = true; try { unseen = localStorage.getItem(`ouroo_lore_${mk.id}`) !== '1'; localStorage.setItem(`ouroo_lore_${mk.id}`, '1'); } catch { /* ignore */ }
@@ -761,7 +775,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     matOverrideRef.current.clear(); matIdRef.current.clear(); loreRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null;   // overrides + lore + atmosphere reload per room
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' })).filter(d => !delCuratedRef.current.has(d.id));
-    npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
+    placedNpcsRef.current = [];   // admin-placed NPCs reload per room (from room_items via ingest)
+    rebuildNpcs();
     const me = selfRef.current;
     if (planLvl(clampTile(me.fx), clampTile(me.fy)) < 0) {
       const sp = planSpawn(plan); me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = [];
@@ -846,6 +861,25 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     flashHint(`${p.name} placed ✦`);
     supabase?.from('room_items').insert(rows).then(undefined, () => {});
   };
+  // Rebuild the live NPC roster = curated cast + admin-placed NPCs (called on room load + on add/remove).
+  const rebuildNpcs = () => {
+    const slug = roomMetaRef.current.slug;
+    const curated = (CURATED_NPCS[slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
+    const placed = placedNpcsRef.current.map(p => { const lvl = Math.max(0, planLvl(p.gx, p.gy)); return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines: p.data.l, hx: p.gx, hy: p.gy, roam: 0, beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0 }; });
+    npcsRef.current = [...curated, ...placed];
+  };
+  // Drop a designed NPC at a tile (admin). Persists as an `npc:` row + live-broadcasts to the room.
+  const placeNpcAt = (gx: number, gy: number) => {
+    const d = pendingNpcRef.current; if (!d) { setPlaceNpc(false); return; }
+    if (!canBuildHere()) { flashHint('No permission to build here'); return; }
+    const id = (crypto?.randomUUID?.() ?? `npc_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
+    placedNpcsRef.current.push({ id, gx, gy, data: d }); rebuildNpcs();
+    const kind = encodeNpc(d);
+    channelRef.current?.send({ type: 'broadcast', event: 'npc', payload: { id, kind, x: gx, y: gy } });
+    supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
+    setPlaceNpc(false); pendingNpcRef.current = null; flashHint(`${d.n} placed ☻`);
+  };
+  const openNpcEditor = () => { setNpcEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
   // The top editable player item on a tile (own items, or anything if you can build here).
   const topItemAt = (gx: number, gy: number): Item | undefined =>
     [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
@@ -870,9 +904,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const removeAt = (gx: number, gy: number) => {
     const hit = topItemAt(gx, gy);
     if (hit) { dropItem(hit); return; }
-    // No player furni here — admins may also pick up baked-in (curated) decor. Persist a tombstone so
-    // it stays gone for everyone; triggers (machine/door/terminal) are coords, so this only hides decor.
+    // No player furni here — admins may also pick up an admin-placed NPC, or a baked-in (curated) decor piece.
     if (modRef.current) {
+      const npc = placedNpcsRef.current.find(p => p.gx === gx && p.gy === gy);
+      if (npc) {
+        placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== npc.id); rebuildNpcs();
+        channelRef.current?.send({ type: 'broadcast', event: 'npcdel', payload: { id: npc.id } });
+        supabase?.from('room_items').delete().eq('id', npc.id).then(undefined, () => {});
+        flashHint('NPC removed ☻'); return;
+      }
+      // Persist a tombstone so a removed curated piece stays gone for everyone.
       const cur = [...decorRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh; });
       if (!cur) return;
       delCuratedRef.current.add(cur.id);
@@ -1017,6 +1058,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         })
         .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
         .on('broadcast', { event: 'move' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const it = itemsRef.current.find(i => i.id === String(pl?.id ?? '')); if (it) { it.gx = Number(pl.gx); it.gy = Number(pl.gy); rebuildHeight(); } })
+        .on('broadcast', { event: 'npc' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || placedNpcsRef.current.some(p => p.id === id)) return; const nd = decodeNpc(String(pl.kind)); if (nd) { placedNpcsRef.current.push({ id, gx: Number(pl.x), gy: Number(pl.y), data: nd }); rebuildNpcs(); } })
+        .on('broadcast', { event: 'npcdel' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== id); rebuildNpcs(); } })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
@@ -1478,6 +1521,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       return;
     }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
+    if (placeNpc) { placeNpcAt(gx, gy); return; }
     if (tileMode) { paintTile(gx, gy); startPaintDrag(e, null); return; }                                 // admin floor-paint (drag to sweep)
     if (placingPrefab) { placePrefab(placingPrefab, gx, gy); return; }
     if (placingKind) { placeItem(placingKind, gx, gy); if (isFloorPaint(placingKind)) startPaintDrag(e, placingKind); return; }   // carpet/floor → drag to lay a swathe
@@ -1678,9 +1722,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
       {simFade && <div className="absolute inset-0 z-[97] bg-white animate-[fadeIn_1s_ease] pointer-events-none" />}
 
-      {(hint || placingKind || placingPrefab || removeMode || placeLore || tileMode) && (
+      {(hint || placingKind || placingPrefab || placeNpc || removeMode || placeLore || tileMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
-          {hint || (placeLore ? 'tap a tile to drop the lore marker ✎' : tileMode ? 'tap tiles to paint the floor' : placingPrefab ? 'tap a tile to drop the building 🏠' : placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
+          {hint || (placeLore ? 'tap a tile to drop the lore marker ✎' : placeNpc ? 'tap a tile to drop the NPC ☻' : tileMode ? 'tap tiles to paint the floor' : placingPrefab ? 'tap a tile to drop the building 🏠' : placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
         </div>
       )}
 
@@ -1767,6 +1811,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${atmoMode ? 'bg-[#cc66ff]/20' : 'hover:bg-[#cc66ff]/15'}`}>
                   <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: atmoMode ? '#cc66ff' : '#c79fe0' }}>☁</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: atmoMode ? '#cc66ff' : '#c79fe0' }}>Atmo</span>
+                </button>
+              )}
+              {isMod && (
+                <button onClick={openNpcEditor} title="Design + place an NPC (admin)"
+                  className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${placeNpc || npcEditor ? 'bg-[#ffb84d]/20' : 'hover:bg-[#ffb84d]/15'}`}>
+                  <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: placeNpc || npcEditor ? '#ffb84d' : '#e0c79f' }}>☻</span>
+                  <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: placeNpc || npcEditor ? '#ffb84d' : '#e0c79f' }}>NPC</span>
                 </button>
               )}
             </div>
@@ -2017,6 +2068,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </div>
         </div>
       )}
+
+      <NpcEditor open={npcEditor} onClose={() => setNpcEditor(false)}
+        onPlace={d => { pendingNpcRef.current = d; setNpcEditor(false); setPlaceNpc(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setEditSel(null); flashHint('Tap a tile to drop the NPC ☻'); }} />
 
       {portalMaker && (
         <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setPortalMaker(false)}>
