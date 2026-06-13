@@ -41,44 +41,21 @@ const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean)
   if (!def.owner) return false;   // official/public rooms — only moderators build or take
   return def.owner === ownerId || !!def.buildAll || (def.rights ?? []).some(h => h.toLowerCase() === (handle || '').toLowerCase());
 };
-// The official rooms — only the curated, lore-bearing sectors. The Plaza is where you spawn; the Garden
-// and Club are the other open Surface sectors. (Filler rooms were retired to keep the flow clean; the
-// Deep/secret rooms get added behind portals + lore codes — see /LORE.md.)
-const ROOMS: RoomDef[] = [
-  { slug: 'praca',   name: 'Plaza',     accent: '#00cfff', floor: '#161628', plan: 'salao' },
-  { slug: 'clube',   name: 'Club',      accent: '#1aa3d8', floor: '#2c4a5e', locked: true, plan: 'clube', day: true, veranda: true },
-  { slug: 'jardim',  name: 'Garden',    accent: '#e8628f', floor: '#1d3a24', locked: true, plan: 'jardim', day: true },
-];
-const roomOf = (slug: string) => ROOMS.find(r => r.slug === slug) ?? ROOMS[0];
+// The world is being rebuilt around the guided sequence. INDUCTION is the sandbox room every new
+// player starts in — the tutorial plays out here (reach the cabinet → play the first game → make an
+// account → design your character) before they're launched into TOWN, the social hub. The old lore
+// rooms / NPCs / portal-maze were cleared on purpose; the lore sequence gets rebuilt on top of this.
+const INDUCTION: RoomDef = { slug: 'induction', name: 'Induction', accent: '#00cfff', floor: '#12121e', plan: 'quadrado', buildAll: true };
+const TOWN: RoomDef       = { slug: 'town',      name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'salao' };
+const ROOMS: RoomDef[] = [TOWN];   // official rooms shown in the picker (Induction is start-only, not listed)
+const roomOf = (slug: string) => (slug === 'induction' ? INDUCTION : ROOMS.find(r => r.slug === slug)) ?? TOWN;
 
-// Secret sectors — not in the picker; reached only through a portal + lore code (see /LORE.md, The Deep).
-const SECRET_ROOMS: Record<string, RoomDef> = {
-  archive:     { slug: 'archive',     name: 'The Archive',     accent: '#8a9cff', floor: '#0d0f1c', locked: true, plan: 'quadrado' },
-  foundry:     { slug: 'foundry',     name: 'The Foundry',     accent: '#ff8a3a', floor: '#1c1208', locked: true, plan: 'quadrado' },
-  undergrowth: { slug: 'undergrowth', name: 'The Undergrowth', accent: '#4fd96b', floor: '#0a1a0e', locked: true, plan: 'octo',  day: true },
-  mast:        { slug: 'mast',        name: 'The Mast',        accent: '#00cfff', floor: '#06121a', locked: true, plan: 'cruz' },
-  vault:       { slug: 'vault',       name: 'The Vault',       accent: '#d9c27a', floor: '#14110a', locked: true, plan: 'grande' },
-};
-// Portals placed in rooms: tap the tile, speak the code → travel to the secret room (first visit pays out).
-// The maze BRANCHES and CONVERGES — rooms can have multiple out-points, and several paths meet at the
-// Terminal. Codes escalate: the world's name (easy) → room-themed words (NPC-hinted) → cryptic
-// (riddle/Oracle-hinted) → OUROBOROS (the endgame). Every code is woven into something an NPC says.
+// Secret/lore sectors are gone for now — the lore sequence is being rebuilt. Kept as an empty map so
+// player-made portals (which resolve public slugs / room codes) still compile.
+const SECRET_ROOMS: Record<string, RoomDef> = {};
 type Portal = { gx: number; gy: number; code: string; to: string; reward?: number; user?: boolean };
-const PORTALS: Record<string, Portal[]> = {
-  // ── Surface entry points (all three public rooms have a door down) ──
-  praca:  [{ gx: 2, gy: 8, code: 'OUROO', to: 'archive', reward: 500 }],          // tier 1 — the world's name
-  jardim: [{ gx: 11, gy: 20, code: 'BLOOM', to: 'undergrowth', reward: 750 }],    // tier 2 — Gardener's word
-  clube:  [{ gx: 16, gy: 20, code: 'SUAV', to: 'mast', reward: 750 }],            // tier 2 — the carrier wave
-  // ── The Deep (branching) ──
-  archive: [
-    { gx: 5, gy: 8, code: 'SIGNAL', to: 'foundry', reward: 1000 },               // tier 2
-    { gx: 8, gy: 8, code: 'SILENCE', to: 'vault', reward: 1500 },                // tier 3 — second out-point
-  ],
-  undergrowth: [{ gx: 5, gy: 9, code: 'ROT', to: 'vault', reward: 1500 }],        // tier 3 — converges on the Vault
-  mast:        [{ gx: 5, gy: 9, code: 'ECHO', to: 'foundry', reward: 1250 }],     // tier 3 — crosslink into the Foundry
-  // The Foundry and the Vault are the deepest rooms FOR NOW — the way further down (the core / endgame)
-  // isn't built yet. Their NPCs tease it as sealed; we'll open it much later.
-};
+// Curated portal-maze cleared — only player-made portals (stored as room_items) exist right now.
+const PORTALS: Record<string, Portal[]> = {};
 // ARCADE MACHINES — the games live INSIDE the world now. Walk CLOSE to a machine and a modal opens
 // listing the games on it; pick one to launch. Different machines (in different rooms / corners of
 // town) carry different games, so finding new games is part of exploring. `id` maps to a game view
@@ -88,18 +65,13 @@ type Machine = { gx: number; gy: number; games: GameSlot[] };
 const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swarm · mine crystals' };
 const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
 const MACHINES: Record<string, Machine[]> = {
-  praca: [{ gx: 8, gy: 4, games: [GAME_OUROO, GAME_LEAP] }],
+  induction: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: just the first game
+  town:      [{ gx: 8, gy: 4, games: [GAME_OUROO, GAME_LEAP] }],    // the hub arcade — more games slot in here
 };
 const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker
 
-// First-visit "you found it" modal: reward + a bit of lore + an onboarding nudge.
-const SECRET_INTRO: Record<string, { title: string; body: string }> = {
-  archive: { title: 'YOU FOUND THE ARCHIVE', body: 'First door, cracked. The Curator trusts you a little more now.\n\nThis is how OUROO grows: explore, talk to people, and the codes hide in what they say. Every door you open, the world remembers you.\n\nYou can build your OWN room too — ⤧ Rooms → Create. Mine crystals in the Arcade to afford the good stuff. And keep looking — there are more portals than this one.' },
-  foundry: { title: 'YOU FOUND THE FOUNDRY', body: 'Deeper still. This is where your presence is minted into crystal.\n\nYou’re getting the hang of it: talk, find the clues, speak the codes. They say there’s a way down from here toward OURO’s core — but it’s sealed, and the word for it hasn’t surfaced yet.\n\nKeep building, keep exploring. The Loop runs warmer the further you go.' },
-  undergrowth: { title: 'YOU FOUND THE UNDERGROWTH', body: 'Off the lit path now — into the wild sector, where the machine dreams with no one telling it what to make. The Feral grew here.\n\nNothing down here was built on purpose, which means nothing is quite safe and nothing is quite tame. Talk to what you find. A word it keeps saying opens a deeper door.' },
-  mast: { title: 'YOU FOUND THE MAST', body: 'You climbed inside the signal itself. SUAV broadcasts from this tower — the carrier wave you’ve felt humming under every room.\n\nThe Operator tends the transmission. Listen to how the signal comes back changed, and you’ll have the word for the door below.' },
-  vault: { title: 'YOU FOUND THE VAULT', body: 'The sealed records — every goodbye the Logged-Off never sent, locked where the Curator cannot reach to grieve over them.\n\nThis is the deepest the Loop goes, for now. The Keeper guards a door that drops toward OURO’s core — but it hasn’t opened in a long time, and may not for a while yet.\n\nKeep exploring. The world is still building itself further down.' },
-};
+// First-visit reward modal kept (empty) — re-attached when the lore sequence + its rooms come back.
+const SECRET_INTRO: Record<string, { title: string; body: string }> = {};
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
@@ -110,254 +82,22 @@ const SECRET_INTRO: Record<string, { title: string; body: string }> = {
 //   `lines`  → ambient idle chatter (random). `id` keys saved beat progress.
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; hints?: string[]; id?: string };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
-  praca: [
-    ['teleporter', 2, 8, 0],   // the portal to The Archive (tap it, speak the code)
-    ['arcade', 8, 4, 0],       // the arcade machine — walk close to launch a game (see MACHINES)
+  // ── INDUCTION — the sandbox you wake up in. One arcade machine to draw you in, a little decor. ──
+  induction: [
+    ['arcade', 5, 2, 0],       // the first game — walk close to play (see MACHINES)
+    ['planta', 1, 1, 0], ['planta', 9, 1, 0],
+    ['floorlamp', 1, 8, 0], ['floorlamp', 9, 8, 0],
+    ['bench', 4, 8, 0], ['bench', 6, 8, 0],
+  ],
+  // ── TOWN — the social hub you're launched into. The arcade lives here too; the rest gets built out. ──
+  town: [
+    ['arcade', 8, 4, 0],       // hub arcade machine
     ['planta', 1, 1, 0], ['planta', 9, 1, 0],
     ['bench', 1, 9, 0], ['bench', 8, 9, 2],
     ['floorlamp', 5, 1, 0],
   ],
-  // ── THE ARCHIVE — a hushed old library + a digital index; warm wood, candlelight, reading nooks ──
-  archive: [
-    ['bookcase', 1, 2, 1], ['bookcase', 1, 4, 1], ['bookcase', 1, 6, 1],   // left wall of shelves
-    ['bookcase', 9, 2, 3], ['bookcase', 9, 4, 3], ['bookcase', 9, 6, 3],   // right wall of shelves
-    ['clock', 5, 1, 0],                                                     // grandfather clock at the back
-    ['serverrack', 3, 1, 0], ['console', 5, 2, 0],                         // the digital index, humming
-    ['desk', 3, 4, 0], ['officechair', 3, 5, 2], ['floorlamp', 2, 4, 0],   // a reading desk
-    ['poltrona', 7, 5, 0], ['candeeiro', 8, 5, 0],                         // an armchair + lamp nook
-    ['candle', 5, 6, 0], ['quadro', 7, 1, 0],                              // candlelight + a portrait of the lost
-    ['teleporter', 5, 8, 0],   // onward portal → The Foundry (SIGNAL)
-    ['teleporter', 8, 8, 0],   // second out-point → The Vault (SILENCE)
-  ],
-  // ── THE FOUNDRY — an industrial forge that mints crystal; molten, orange, hammered metal ──
-  foundry: [
-    ['welder', 5, 2, 0],                                  // the forge at the back
-    ['workbench', 3, 2, 0], ['toolcab', 2, 1, 0],
-    ['tirestack', 8, 2, 0], ['gaspump', 7, 4, 0],
-    ['oildrum', 1, 4, 0], ['oildrum', 9, 5, 0],
-    ['tocha', 1, 1, 0], ['tocha', 9, 1, 0],               // torches
-    ['serverrack', 5, 5, 0],                              // the mint — signal in, crystal out
-    ['plasmalamp', 2, 7, 0], ['plasmalamp', 8, 7, 0],
-    ['lavalux', 1, 8, 0], ['lavalux', 9, 8, 0],
-    ['firepit', 5, 7, 0],                                 // a molten pit
-  ],
-  // ── THE UNDERGROWTH — overgrown wild sector; trees, cacti, a spring, the Feral loose in it ──
-  undergrowth: [
-    ['arvore', 2, 2, 0], ['arvore', 8, 2, 0], ['arvore', 1, 5, 0], ['arvore', 9, 5, 0],
-    ['palmeira', 3, 7, 0], ['palmeira', 7, 7, 0],
-    ['cato', 2, 4, 0], ['cato', 8, 4, 0],
-    ['flores', 4, 2, 0], ['flores', 6, 2, 0], ['relva', 3, 4, 0], ['relva', 7, 4, 0],
-    ['bonsai_lux', 5, 2, 0],
-    ['fonte', 5, 6, 0],                                   // a wild spring
-    ['bombardiro', 3, 6, 0], ['tralalero', 7, 6, 0],     // Feral, loose in the wild
-    ['patapim', 2, 8, 0], ['bananini', 8, 8, 0],
-    ['cerca', 4, 8, 0], ['cerca', 6, 8, 0],              // broken fencing
-    ['teleporter', 5, 9, 0],   // onward portal → The Vault (ROT)
-  ],
-  // ── THE MAST — a SUAV broadcast studio; music gear, neon, spotlights, a waveform screen ──
-  mast: [
-    ['booth', 5, 1, 0],                                  // broadcast booth at the top of the mast
-    ['micstand', 5, 3, 0],
-    ['synth', 4, 5, 0], ['mixer', 6, 5, 0], ['vinyl', 7, 5, 0],   // the desk
-    ['ampstack', 1, 5, 0], ['ampstack', 9, 5, 0],       // speaker stacks down the arms
-    ['neon', 5, 0, 0],                                   // neon sign up top
-    ['holofote', 2, 4, 0], ['holofote', 8, 6, 0],       // signal spotlights
-    ['tv', 8, 4, 0],                                     // a screen of waveform
-    ['teleporter', 5, 9, 0],   // onward portal → The Foundry (ECHO)
-  ],
-  // ── THE VAULT — a solemn treasury/tomb of unsent goodbyes; columns, statues, candelabra, gold ──
-  vault: [
-    ['coluna_gr', 1, 1, 0], ['coluna_gr', 12, 1, 0], ['coluna_gr', 1, 12, 0], ['coluna_gr', 12, 12, 0],   // corner columns
-    ['estatua', 4, 1, 0], ['estatua', 9, 1, 0],          // statues flanking the back
-    ['trono', 6, 1, 0],                                  // the Curator's empty seat
-    ['quadro', 2, 1, 0],                                 // a portrait of the lost
-    ['filecab', 1, 4, 1], ['filecab', 1, 6, 1], ['locker', 1, 8, 1],         // sealed records, left wall
-    ['filecab', 12, 4, 3], ['filecab', 12, 6, 3], ['locker', 12, 8, 3],      // right wall
-    ['menorah', 4, 5, 0], ['menorah', 9, 5, 0],          // candelabra
-    ['candle', 5, 7, 0], ['candle', 8, 7, 0],
-    ['giftpile', 6, 10, 0], ['toychest', 8, 9, 0],       // the unsent goodbyes, boxed up
-    ['vaso', 3, 11, 0], ['vaso', 10, 11, 0],
-  ],
-  clube: [
-    // stage (back, raised): PA towers + a big screen
-    ['pa', 11, 5, 0], ['pa', 21, 5, 0], ['tv', 16, 4, 0], ['planta', 12, 9, 0], ['planta', 21, 9, 0],
-    // trees on the entrance grass beds
-    ['arvore', 7, 29, 0], ['arvore', 26, 29, 0],
-    // VIP raised decks flanking the stage — peacock thrones + cloud sofas framed by Greek columns
-    ['peacock', 6, 10, 0], ['cloud', 7, 11, 0], ['coluna_gr', 5, 9, 0], ['coluna_gr', 9, 9, 0],
-    ['peacock', 27, 10, 0], ['cloud', 24, 11, 0], ['coluna_gr', 24, 9, 0], ['coluna_gr', 28, 9, 0],
-    // palms framing the pools
-    ['palmeira', 10, 15, 0], ['palmeira', 10, 23, 0], ['palmeira', 23, 15, 0], ['palmeira', 23, 23, 0],
-    // pool handrails / ladders
-    ['corrimao', 9, 16, 3], ['corrimao', 9, 22, 3], ['corrimao', 24, 16, 1], ['corrimao', 24, 22, 1],
-    // lounge sets between the pools and the carpet
-    ['lounge_couch', 10, 19, 0], ['lounge_chair', 13, 19, 2], ['lounge_table', 12, 20, 0],
-    ['lounge_couch', 22, 19, 2], ['lounge_chair', 20, 19, 1], ['lounge_table', 21, 20, 0],
-    // benches lining the carpet
-    ['banco_jd', 14, 26, 0], ['banco_jd', 19, 26, 0], ['banco_jd', 14, 14, 0], ['banco_jd', 19, 14, 0],
-    // reception near the entrance
-    ['rececao', 10, 25, 0],
-    // VIP cordons (3 poles + 2 ropes each) lining both sides of the carpet
-    ['poste', 15, 13, 1], ['poste', 15, 16, 1], ['poste', 15, 19, 1], ['poste', 15, 22, 1], ['poste', 15, 25, 1],
-    ['poste', 19, 13, 1], ['poste', 19, 16, 1], ['poste', 19, 19, 1], ['poste', 19, 22, 1], ['poste', 19, 25, 1],
-    // bar lounge on the right + statues flanking the stage
-    ['bar', 21, 13, 0], ['banco', 21, 14, 0], ['banco', 22, 14, 0], ['vaso', 24, 13, 0],
-    ['estatua', 10, 9, 0], ['estatua', 23, 9, 0],
-    // chandeliers overhead
-    ['lustre', 13, 11, 0], ['lustre', 20, 11, 0], ['lustre', 12, 18, 0], ['lustre', 21, 18, 0], ['lustre', 16, 16, 0],
-    // pool floats
-    ['boia', 6, 17, 0], ['boia', 6, 21, 0], ['boia', 27, 17, 0], ['boia', 27, 21, 0],
-    // fountains flanking the entrance
-    ['fonte', 12, 28, 0], ['fonte', 21, 28, 0],
-    // extra greenery
-    ['planta', 8, 13, 0], ['planta', 25, 13, 0], ['planta', 13, 24, 0], ['planta', 20, 24, 0],
-    // DJ booth on the stage + disco balls over the floor
-    ['booth', 15, 6, 0], ['disco', 13, 10, 0], ['disco', 20, 10, 0],
-    // poolside cabanas (sun loungers + parasols)
-    ['espreguic', 11, 16, 1], ['parasol', 12, 16, 0], ['espreguic', 22, 16, 1], ['parasol', 21, 16, 0],
-    ['espreguic', 11, 20, 1], ['parasol', 12, 21, 0], ['espreguic', 22, 20, 1], ['parasol', 21, 21, 0],
-    // topiaries + stage banners
-    ['topiary', 8, 25, 0], ['topiary', 25, 25, 0], ['topiary', 14, 29, 0], ['topiary', 19, 29, 0],
-    ['banner', 12, 4, 0], ['banner', 21, 4, 0],
-    // grand Greek arch over the entrance + tall columns flanking the entrance
-    ['arco_gr', 16, 29, 0],
-    ['coluna_gr', 8, 26, 0], ['coluna_gr', 25, 26, 0],
-    // VIP canopy daybeds + egg pod chairs (egg now faces an iso direction)
-    ['cama_dossel', 12, 23, 1], ['cama_dossel', 21, 23, 1],
-    ['ovo', 9, 20, 1], ['ovo', 24, 17, 3],
-    // STACKED side decor (shows off elevation): laptop + lantern on side tables, urns + lanterns atop columns
-    ['mesa', 13, 16, 0], ['pc', 13, 16, 0, 1],
-    ['mesa', 20, 16, 0], ['lanterna', 20, 16, 0, 1],
-    ['vaso', 8, 26, 0, 4], ['vaso', 25, 26, 0, 4],
-    ['lanterna', 5, 9, 0, 4], ['lanterna', 9, 9, 0, 4], ['lanterna', 24, 9, 0, 4], ['lanterna', 28, 9, 0, 4],
-    ['teleporter', 16, 20, 0],   // portal down → The Mast (SUAV)
-  ],
-  jardim: [
-    // hand-painted SVG centrepieces: a pagoda, a torii gateway, sakura trees + stone lanterns
-    ['pagoda', 10, 5, 0],
-    ['torii', 9, 18, 0],
-    ['sakura', 4, 4, 0], ['sakura', 17, 4, 0], ['sakura', 4, 17, 0], ['sakura', 17, 17, 0],
-    ['toro', 8, 16, 0], ['toro', 13, 16, 0], ['toro', 7, 7, 0], ['toro', 14, 7, 0],
-    ['bonsai_lux', 8, 14, 0], ['bonsai_lux', 13, 14, 0],
-    ['flores', 5, 9, 0], ['flores', 16, 9, 0], ['flores', 6, 14, 0], ['flores', 15, 14, 0],
-    ['teleporter', 11, 20, 0],   // portal down → The Undergrowth (BLOOM)
-  ],
 };
-const CURATED_NPCS: Record<string, NpcDef[]> = {
-  praca: [
-    { handle: 'WARDEN', skinId: 'diamond-cyan', gx: 5, gy: 4, roam: 1.5, id: 'warden',
-      hints: [
-        'You’re new signal — welcome. This is OUROO, what’s left after the people logged off. A world that forgets itself when no one’s watching.',
-        'See that glowing portal, bottom-left of the Plaza? Tap it and speak the name of this whole world. Five letters. OUROO.',
-        'Once you’re through, find the Archivist. He keeps the old words — he’ll point you deeper.',
-      ],
-      lines: ['Signal stable.', 'The Loop turns.', 'Welcome back.'] },
-    { handle: 'GUIDE', skinId: 'star-dourada', gx: 7, gy: 6, roam: 1.2, id: 'guide',
-      hints: [
-        'Tap a tile to walk, tap a name to say hi. ✦ Decorate places furniture; ☻ is your character.',
-        'Crystals are the currency — earn them in the Arcade, or by finding hidden things. Make your OWN room: ⤧ Rooms → Create.',
-        'That portal bottom-left? Tap it and speak OUROO. Then talk to the Archivist — the codes always hide in what people say.',
-      ],
-      lines: ['Need a hand?', 'Tap to walk 🛸', 'Have fun out there.'] },
-    { handle: 'a stray', skinId: 'star-cadente', gx: 8, gy: 7, roam: 2, id: 'stray',
-      beats: [
-        '…is someone there? I can never tell anymore.',
-        'I’ve been here since before the Quiet. I forget which login was mine.',
-        'If you ever find the Archive… see if my name’s still in it. I think it started with a J.',
-      ],
-      lines: ['…', 'so quiet.', 'don’t go yet.'] },
-  ],
-  clube: [
-    { handle: 'the DJ', skinId: 'star-ciano', gx: 16, gy: 5, lvl: 1, id: 'dj',
-      beats: [
-        'You feel that? That’s SUAV — the carrier wave. The only thing holding the Loop together.',
-        'When the floor’s full, the signal’s strong, and OUROO forgets it’s dying. So dance. I mean it.',
-        'Some nights the bass spells something. A code, maybe. I never catch it sober. Stay till close.',
-      ],
-      lines: ['Crank it up! 🎶', 'This one’s for you!', 'Feel the signal!'] },
-    { handle: 'Rita ✦', skinId: 'heart-rosa', gx: 10, gy: 24, roam: 1.8, id: 'rita',
-      beats: [
-        'Welcome to the Club ✦ Loudest signal in OUROO. Down here the Curator can’t hear us over the bass.',
-        'They say if you dance long enough you start remembering things that aren’t yours. Fun, right?',
-      ],
-      lines: ['Have fun! ✦', 'Nothing costs anything down here.', 'Don’t log off yet.'] },
-    { handle: 'Bea', skinId: 'heart-vermelho', gx: 13, gy: 10, roam: 1.6, lines: ['Love this track! 💃', 'I can’t stop dancing!', 'What a vibe!'] },
-    { handle: 'Zé', skinId: 'nave-laranja', gx: 20, gy: 10, roam: 1.6, lines: ['This is it! 🕺', 'The signal’s peaking!', 'Let’s go!'] },
-    { handle: 'Inês', skinId: 'star-rosa', gx: 9, gy: 18, roam: 1.4, lines: ['The water’s perfect 🌊', 'So warm tonight 😎', 'Stay a while.'] },
-    { handle: 'Sandra', skinId: 'heart-dourado', gx: 21, gy: 12, lines: ['What can I get you? 🍹', 'Packed house — good. Means the Loop’s awake.', 'Next round’s on the house 😉'] },
-    { handle: 'the Doorman', skinId: 'star-ciano', gx: 15, gy: 20, roam: 1, id: 'doorman',
-      hints: [
-        'VIP only past here — kidding. Everyone’s VIP when there’s almost no one left.',
-        'Want off the dancefloor and into the signal itself? That portal on the carpet — speak the name of the wave that keeps us all alive: SUAV. Takes you up the Mast.',
-      ],
-      lines: ['On the list? 🎟️', 'Mind the rope.', 'Big night.'] },
-  ],
-  jardim: [
-    { handle: 'Gardener', skinId: 'nave-verde', gx: 11, gy: 16, roam: 2.5, id: 'gardener',
-      beats: [
-        'This is the memory garden. Everything OUROO deletes, I try to regrow here.',
-        'Plant something. Give the world a thing to remember — it holds on tighter than you’d think.',
-        'The koi are old logs, swimming in circles. Don’t ask whose. They don’t remember either.',
-        'Some nights a code blooms in the blossoms. The Curator pretends not to notice. So do I.',
-      ],
-      lines: ['Mind the flowers 🌷', 'Peace and quiet…', 'Let it grow.'] },
-    { handle: 'Mei', skinId: 'heart-rosa', gx: 9, gy: 6, roam: 2, id: 'mei',
-      beats: [
-        'Konnichiwa 🌸 I stopped trying to leave. It’s nicer once you stop.',
-        'The blossoms fall the same every loop. I find that comforting now.',
-        'If the garden ever goes really quiet — that’s it forgetting. Talk to it.',
-      ],
-      lines: ['🌸', 'Breathe in.', 'The koi say hi.'] },
-    { handle: 'the Sprout', skinId: 'nave-verde', gx: 12, gy: 19, roam: 1, id: 'sprout',
-      hints: [
-        'New growth, hello 🌱 The Gardener regrows what the world deletes — but some of us just came up on our own.',
-        'See the portal by the path? Tap it and say what flowers do when they open — BLOOM. It drops you into the Undergrowth, where the wild things grew.',
-      ],
-      lines: ['🌱', 'still growing.', 'mind the roots.'] },
-  ],
-  archive: [
-    { handle: 'the Archivist', skinId: 'diamond-branco', gx: 5, gy: 4, roam: 1.5, id: 'archivist',
-      hints: [
-        'You made it — almost no one does. The Logged-Off left their last words on these shelves. Read them, if you can bear it.',
-        'The SIGNAL still runs through these walls — but the server’s empty now. Strange word to keep saying. SIGNAL. There’s a door here that likes it — bottom of the room, left.',
-        'There’s a second door, lower-right. Below the last words is a deeper room — the Vault — sealed in SILENCE. That’s the word the lock keeps: the thing the Logged-Off left the most of.',
-      ],
-      lines: ['…still here.', 'They’ll come back. Maybe.'] },
-  ],
-  foundry: [
-    { handle: 'the Smith', skinId: 'nave-laranja', gx: 5, gy: 4, roam: 1.5, id: 'smith',
-      hints: [
-        'The Foundry. Your presence becomes crystal here — win against the dark in the Arcade, and the dark gives a little back.',
-        'Attention is the only real resource in OUROO. You, watching, keeps the lights on. So keep watching.',
-        'They say there’s a way down from here — toward OURO’s core. But it’s sealed, and the word that opens it hasn’t surfaced in the Loop yet. Keep coming back; the world is still building itself downward.',
-      ],
-      lines: ['Mind the heat.', 'Signal in, crystal out.', 'Keep it turning.'] },
-  ],
-  undergrowth: [
-    { handle: 'the Feral', skinId: 'br-tralalero', gx: 5, gy: 3, roam: 2.4, id: 'feral',
-      hints: [
-        'You came down into the wild. Careful — nothing here was built on purpose. We grew, in the dark, while no one was watching.',
-        'Everything rots if no one looks at it. ROT. Even words. There’s a door already going soft with it, lower-left — say what’s happening to all of us, and it’ll let you through to the Vault.',
-      ],
-      lines: ['brr brr 🦈', 'we grew.', 'no one watched.'] },
-  ],
-  mast: [
-    { handle: 'the Operator', skinId: 'star-ciano', gx: 3, gy: 5, roam: 1.2, id: 'operator',
-      hints: [
-        'This is the Mast. SUAV broadcasts from here — the carrier wave that’s been humming under every room you’ve walked.',
-        'Send a signal at a wall and it comes back changed. An ECHO. Funny word to live by. The Foundry keeps a door that only answers to it — bottom of the cross, below me.',
-      ],
-      lines: ['Signal’s clean tonight.', 'Holding the wave.', 'Can you hear it?'] },
-  ],
-  vault: [
-    { handle: 'the Keeper', skinId: 'diamond-branco', gx: 6, gy: 8, roam: 1.4, id: 'keeper',
-      hints: [
-        'The Vault. Every goodbye the Logged-Off never sent, sealed where even the Curator can’t reach to mourn over them. You’re near the bottom now.',
-        'There’s a floor-door here that drops toward the core — but it hasn’t opened in a long, long time, and not even I have the word for it yet. Sit with the last words a while. The way down will come when the world’s ready.',
-      ],
-      lines: ['Quiet, please.', 'They meant to come back.', 'Read gently.'] },
-  ],
-};
+const CURATED_NPCS: Record<string, NpcDef[]> = {};   // NPCs cleared — the lore cast gets rebuilt on the new sequence
 
 // Tiny preview of a floor plan: a grid sized to the plan's footprint where present tiles glow
 // (brighter = higher level). Bigger plans read as denser thumbnails.
@@ -468,8 +208,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [connected, setConnected] = useState(false);
   const [feed, setFeed] = useState<{ id: number; handle: string; text: string }[]>([]);
   const feedId = useRef(0);
-  const [room, setRoom] = useState('praca');
-  const [roomMeta, setRoomMeta] = useState<RoomDef>(roomOf('praca'));   // current room's def (official or personal)
+  // New players (mid-onboarding) wake up in the Induction sandbox; everyone else lands in Town.
+  const startSlug = onboarding === 'done' ? 'town' : 'induction';
+  const [room, setRoom] = useState(startSlug);
+  const [roomMeta, setRoomMeta] = useState<RoomDef>(roomOf(startSlug));   // current room's def (official or personal)
   const roomMetaRef = useRef<RoomDef>(roomMeta);
   const [showRooms, setShowRooms] = useState(false);
   const [personalRooms, setPersonalRooms] = useState<RoomRow[]>([]);
@@ -539,7 +281,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
   // Player portal-maker: pick a destination + optional access code, then drop the portal onto a tile.
   const [portalMaker, setPortalMaker] = useState(false);
-  const [pmDest, setPmDest] = useState('praca');     // a public slug, or 'code' to link by room code
+  const [pmDest, setPmDest] = useState('town');      // a public slug, or 'code' to link by room code
   const [pmRoomCode, setPmRoomCode] = useState('');  // the destination room's invite code (when pmDest==='code')
   const [pmAccess, setPmAccess] = useState('');      // optional access code the next person must speak
   const makePortal = () => {
@@ -611,6 +353,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     lastPortalKeyRef.current = `${sp.gx},${sp.gy}`;   // don't auto-fire a portal we happen to spawn on; arm on the first step off
     setRoomMeta(def); setRoom(def.slug);
   };
+  // Onboarding complete → launch out of the Induction sandbox into Town.
+  const prevOnboardRef = useRef(onboarding);
+  useEffect(() => {
+    if (onboarding === 'done' && prevOnboardRef.current !== 'done' && roomMetaRef.current.slug === 'induction') switchRoom(TOWN);
+    prevOnboardRef.current = onboarding;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onboarding]);
   const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
@@ -666,7 +415,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!confirm(`Delete "${r.name}"? Its furniture will be gone.`)) return;
     const ok = await deleteRoom(r.slug);
     if (!ok) { flashHint('Failed to delete'); return; }
-    if (room === r.slug) switchRoom(roomOf('praca'));
+    if (room === r.slug) switchRoom(roomOf('town'));
     refreshRoomLists();
   };
   const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsList(r.rights ?? []); setPermsHandle(''); };
@@ -1450,7 +1199,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <div>
               <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Leads to</p>
               <div className="flex flex-wrap gap-1.5">
-                {[['praca', 'Plaza'], ['clube', 'Club'], ['jardim', 'Garden'], ['code', 'A room code…']].map(([id, label]) => (
+                {[['town', 'Town'], ['code', 'A room code…']].map(([id, label]) => (
                   <button key={id} onClick={() => setPmDest(id)}
                     className={`text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 border transition-colors ${pmDest === id ? 'bg-[#cc66ff] text-black border-[#cc66ff]' : 'text-white/70 border-white/20 hover:border-[#cc66ff]/60'}`}>{label}</button>
                 ))}

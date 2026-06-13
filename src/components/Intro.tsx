@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { signInWithDiscord } from '@/lib/auth';
 
 // The cold-open: after the age gate, OURO (the Curator) boots up and inducts the new user into the
 // quest before they ever see the site. Shown once per device. Canon lives in /LORE.md.
 const SEEN = 'ouroo_intro_seen';
 const AGE = 'ouroo_age_ok';
+const ONBOARD = 'ouroo_onboard';   // shared with the page conductor (see page.tsx OnboardStep)
 
 const SCRIPT: string[] = [
   '> OUROO // SIGNAL DETECTED',
@@ -61,6 +63,10 @@ export function Intro() {
 
   const finish = () => { try { localStorage.setItem(SEEN, '1'); } catch {} setShow(false); };
   const skip = () => { if (timer.current) clearTimeout(timer.current); setLines(SCRIPT); setPartial(''); setDone(true); };
+  // Start now → a fresh player drops into the Induction sandbox (page defaults onboarding to 'play').
+  const startNew = () => finish();
+  // Already have an account → skip the tutorial; sign in and land straight in Town.
+  const haveAccount = () => { try { localStorage.setItem(ONBOARD, 'done'); } catch {} finish(); signInWithDiscord(); };
 
   return (
     <div className="fixed inset-0 z-[90] bg-black flex flex-col items-center justify-center px-6 overflow-hidden"
@@ -80,9 +86,10 @@ export function Intro() {
       </div>
 
       {done && (
-        <div className="relative mt-10 flex flex-col items-center gap-5 animate-[fadeIn_0.6s_ease]">
+        <div className="relative mt-10 flex flex-col items-center gap-4 animate-[fadeIn_0.6s_ease]">
           <p className="font-helvetica font-black text-5xl sm:text-6xl tracking-tighter text-white">OUROO<span className="text-brandRed">.</span></p>
-          <button onClick={finish} className="bg-brandRed text-black font-bold uppercase tracking-[0.3em] text-sm px-10 py-4 hover:bg-white transition-colors active:scale-95">Enter ▸</button>
+          <button onClick={startNew} className="bg-brandRed text-black font-bold uppercase tracking-[0.3em] text-sm px-10 py-4 hover:bg-white transition-colors active:scale-95">Start now ▸</button>
+          <button onClick={haveAccount} className="text-[12px] uppercase tracking-[0.25em] text-[#5865F2] hover:text-white transition-colors">I already have an account</button>
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">the loop runs warmer when someone is watching</p>
         </div>
       )}
