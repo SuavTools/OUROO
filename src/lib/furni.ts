@@ -93,6 +93,17 @@ export const FURNI: FurniDef[] = [
   { kind: 'pillar_stone',name: 'Stone Pillar',emoji: '🏛️', cat: 'constr', color: '#b8bcc4', h: 3, walk: false, foot: 0.5, special: 'wall' },
   { kind: 'roof_slate', name: 'Slate Roof',   emoji: '🛖', cat: 'constr', color: '#4a5560', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
   { kind: 'roof_thatch',name: 'Thatch Roof',  emoji: '🛖', cat: 'constr', color: '#c79a52', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
+  // ── More doors (rotatable, walk-through) — material + shape variants ──
+  { kind: 'door_metal', name: 'Metal Door',   emoji: '🚪', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'door_stone', name: 'Stone Door',   emoji: '🚪', cat: 'constr', color: '#8a8f98', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'door_glass', name: 'Glass Door',   emoji: '🚪', cat: 'constr', color: '#bfe6ff', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'door_arch',  name: 'Arch Door',    emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'door_double',name: 'Double Door',  emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  // ── More windows (rotatable) — material + shape variants ──
+  { kind: 'window_wood',name: 'Wood Window',  emoji: '🪟', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'window' },
+  { kind: 'window_metal',name:'Metal Window', emoji: '🪟', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'window' },
+  { kind: 'window_round',name:'Porthole',     emoji: '🪟', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'window' },
+  { kind: 'window_arch',name: 'Arch Window',  emoji: '🪟', cat: 'constr', color: '#cfd6e0', h: 2, walk: false, foot: 1, special: 'window' },
   // pisos / tapetes (walkable, 1-high — carpets have height!)
   { kind: 'tap_red',  name: 'Rug',     emoji: '🟥', cat: 'tapetes', color: '#b3242e', h: 0, walk: true, foot: 1, special: 'rug' },
   { kind: 'tap_blu',  name: 'Rug',     emoji: '🟦', cat: 'tapetes', color: '#2452b3', h: 0, walk: true, foot: 1, special: 'rug' },

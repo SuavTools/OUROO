@@ -63,12 +63,32 @@ const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: nu
   if (opening) {
     const F = (((dir % 4) + 4) % 4) % 2 === 1 ? R : L;   // rotate the opening between the two iso faces
     if (opening === 'door') {
-      fQuad(ctx, F, 0.3, 0.7, 0.0, 0.78, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
-      const hp = fp(F[0], F[1], F[2], F[3], 0.64, 0.4); ctx.fillStyle = shade(base, 1.4); ctx.beginPath(); ctx.arc(hp[0], hp[1], 1.6, 0, Math.PI * 2); ctx.fill();
+      const dbl = /double/.test(kind), arch = /arch/.test(kind), x0 = dbl ? 0.22 : 0.3, x1 = dbl ? 0.78 : 0.7;
+      if (arch) {   // rounded-top opening
+        const pts: number[][] = [fp(F[0], F[1], F[2], F[3], x0, 0), fp(F[0], F[1], F[2], F[3], x0, 0.5)];
+        for (let a = 0; a <= 7; a++) { const fx = x0 + (x1 - x0) * (a / 7), fy = 0.5 + 0.28 * Math.sin(Math.PI * (a / 7)); pts.push(fp(F[0], F[1], F[2], F[3], fx, fy)); }
+        pts.push(fp(F[0], F[1], F[2], F[3], x1, 0)); poly(ctx, pts, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
+      } else {
+        fQuad(ctx, F, x0, x1, 0.0, 0.78, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
+      }
+      if (dbl) fLine(ctx, F, 0.5, 0, 0.5, arch ? 0.62 : 0.78, hexA(accent, 0.45), 1.2);   // split line for double doors
+      ctx.fillStyle = shade(base, 1.4);
+      for (const hx of dbl ? [0.44, 0.56] : [0.64]) { const hp = fp(F[0], F[1], F[2], F[3], hx, 0.4); ctx.beginPath(); ctx.arc(hp[0], hp[1], 1.6, 0, Math.PI * 2); ctx.fill(); }
     } else {
-      fQuad(ctx, F, 0.18, 0.82, 0.34, 0.82, shade(base, 0.5));   // frame
-      fQuad(ctx, F, 0.22, 0.78, 0.38, 0.78, '#9fd0f0');           // glass
-      fLine(ctx, F, 0.5, 0.36, 0.5, 0.8, hexA('#fff', 0.7), 1.2); fLine(ctx, F, 0.22, 0.58, 0.78, 0.58, hexA('#fff', 0.7), 1.2);
+      const P = (fx: number, fy: number) => fp(F[0], F[1], F[2], F[3], fx, fy);
+      if (/round/.test(kind)) {   // porthole — circular pane
+        const ring = (rad: number, fill: string) => { const pts: number[][] = []; for (let a = 0; a < 16; a++) { const an = (a / 16) * Math.PI * 2; pts.push(P(0.5 + Math.cos(an) * rad, 0.58 + Math.sin(an) * rad * 1.5)); } poly(ctx, pts, fill); };
+        ring(0.3, shade(base, 0.5)); ring(0.24, '#9fd0f0');
+        fLine(ctx, F, 0.5, 0.34, 0.5, 0.82, hexA('#fff', 0.6), 1); fLine(ctx, F, 0.26, 0.58, 0.74, 0.58, hexA('#fff', 0.6), 1);
+      } else if (/arch/.test(kind)) {   // arched-top pane
+        const pane = (x0: number, x1: number, yb: number, top: number, fill: string) => { const pts: number[][] = [P(x0, yb), P(x0, top)]; for (let a = 0; a <= 6; a++) { const fx = x0 + (x1 - x0) * (a / 6); pts.push(P(fx, top + 0.16 * Math.sin(Math.PI * (a / 6)))); } pts.push(P(x1, top), P(x1, yb)); poly(ctx, pts, fill); };
+        pane(0.18, 0.82, 0.34, 0.72, shade(base, 0.5)); pane(0.24, 0.76, 0.4, 0.68, '#9fd0f0');
+        fLine(ctx, F, 0.5, 0.36, 0.5, 0.82, hexA('#fff', 0.7), 1.2);
+      } else {
+        fQuad(ctx, F, 0.18, 0.82, 0.34, 0.82, shade(base, 0.5));   // frame
+        fQuad(ctx, F, 0.22, 0.78, 0.38, 0.78, '#9fd0f0');           // glass
+        fLine(ctx, F, 0.5, 0.36, 0.5, 0.8, hexA('#fff', 0.7), 1.2); fLine(ctx, F, 0.22, 0.58, 0.78, 0.58, hexA('#fff', 0.7), 1.2);
+      }
     }
   }
 };
