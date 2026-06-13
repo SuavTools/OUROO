@@ -221,6 +221,18 @@ const encodePortal = (to: string, code: string, hidden = false) => `portal:${enc
 type LoreMode = 'enter' | 'tile';
 type LoreMarker = { id: string; mode: LoreMode; gx: number; gy: number; text: string; near?: boolean };
 const encodeLore = (mode: LoreMode, text: string) => `lore:${mode}:${encodeURIComponent(text)}`;
+// ROOM ATMOSPHERE — an admin-chosen backdrop layer, persisted as a `bg:<id>` row. 'auto' = the room's
+// built-in day/night. The rest override it for storytelling (sunny, rainy, Matrix-style code rain, a
+// glitched-out signal). The atmosphere paints the sky/void BEHIND the isometric room.
+type Atmo = 'auto' | 'day' | 'night' | 'rain' | 'coderain' | 'glitch';
+const ATMOS: { id: Atmo; label: string; sw: string }[] = [
+  { id: 'auto', label: 'Room default', sw: '#7a8090' },
+  { id: 'day', label: 'Sunny day', sw: '#aedcff' },
+  { id: 'night', label: 'Night', sw: '#0b0912' },
+  { id: 'rain', label: 'Rainy day', sw: '#6f7884' },
+  { id: 'coderain', label: 'Code rain', sw: '#1d7a3a' },
+  { id: 'glitch', label: 'Glitch', sw: '#cc44ff' },
+];
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
     const [, to = '', code = '', hidden = ''] = rawKind.split(':');
@@ -296,6 +308,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const delCuratedRef = useRef<Set<string>>(new Set());
   // Admin-authored Oracle lore markers in this room (on-enter + per-tile).
   const loreRef = useRef<LoreMarker[]>([]);
+  // Room atmosphere (backdrop layer). bgRef is read by the draw loop; bgAtmo mirrors it for the editor.
+  const bgRef = useRef<Atmo>('auto');
+  const bgIdRef = useRef<string | null>(null);   // room_items id of the `bg:` row (for update/delete)
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
   const isWater = (gx: number, gy: number) => gx >= 0 && gy >= 0 && gx < GRID && gy < GRID && waterRef.current[gy * GRID + gx] === 1;
   const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
@@ -359,6 +374,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [loreEditId, setLoreEditId] = useState<string | null>(null);   // marker being edited (null = new)
   const [placeLore, setPlaceLore] = useState(false);     // armed to drop a tile marker on the next tap
   const [loreCard, setLoreCard] = useState<string | null>(null);   // the Oracle lore currently being spoken
+  const [bgAtmo, setBgAtmo] = useState<Atmo>('auto');   // current room atmosphere (mirrors bgRef, for the editor)
+  const [atmoMode, setAtmoMode] = useState(false);      // showing the atmosphere palette in Decorate
   const [enterText, setEnterText] = useState('');   // editor: the on-enter lore textarea
   const pendingLoreRef = useRef('');                 // text waiting to be dropped on a tapped tile
   const [, setLoreVer] = useState(0);   // bump to re-render the editor list after loreRef mutations
@@ -387,7 +404,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setPlaceLore(false); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -620,16 +637,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = [];
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null;
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
       const m = raw.match(/^mat:(\d)$/);
       if (m) { const k = key(Number(d.x), Number(d.y)); matOverrideRef.current.set(k, Number(m[1])); matIdRef.current.set(k, String(d.id)); continue; }
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
+      if (raw.startsWith('bg:')) { const a = raw.slice(3) as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; bgIdRef.current = String(d.id); } continue; }
       if (raw.startsWith('lore:')) { const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = decodeURIComponent(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', gx: Number(d.x), gy: Number(d.y), text }); continue; }
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
     }
+    setBgAtmo(bgRef.current);
     itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length);
     if (delCuratedRef.current.size) decorRef.current = decorRef.current.filter(d => !delCuratedRef.current.has(d.id));   // hide removed curated decor
     setLoreVer(v => v + 1); rebuildHeight();
@@ -644,7 +663,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     planRef.current = planMask(plan);
     waterRef.current = planWaterMask(plan);
     matRef.current = planMaterialMask(plan);
-    matOverrideRef.current.clear(); matIdRef.current.clear(); loreRef.current = [];   // overrides + lore reload per room
+    matOverrideRef.current.clear(); matIdRef.current.clear(); loreRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null;   // overrides + lore + atmosphere reload per room
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' })).filter(d => !delCuratedRef.current.has(d.id));
     npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
@@ -783,7 +802,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').insert({ id, room, kind: encodeLore('tile', text), x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
     pendingLoreRef.current = ''; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Lore marker placed ✎');
   };
-  const openLoreEditor = () => { setEnterText(loreRef.current.find(l => l.mode === 'enter')?.text ?? ''); setLoreText(''); setLoreEditId(null); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); };
+  const openLoreEditor = () => { setEnterText(loreRef.current.find(l => l.mode === 'enter')?.text ?? ''); setLoreText(''); setLoreEditId(null); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); };
+  // Set the room's atmosphere (backdrop layer). 'auto' clears the override; otherwise upsert a `bg:` row.
+  const setAtmosphere = (a: Atmo) => {
+    bgRef.current = a; setBgAtmo(a);
+    channelRef.current?.send({ type: 'broadcast', event: 'bg', payload: { a } });   // live for others
+    const existing = bgIdRef.current;
+    if (a === 'auto') { bgIdRef.current = null; if (existing) supabase?.from('room_items').delete().eq('id', existing).then(undefined, () => {}); return; }
+    if (existing) supabase?.from('room_items').update({ kind: `bg:${a}` }).eq('id', existing).then(undefined, () => {});
+    else { const id = newId('bg'); bgIdRef.current = id; supabase?.from('room_items').insert({ id, room, kind: `bg:${a}`, x: 0, y: 0, created_by: deviceRef.current }).then(undefined, () => {}); }
+  };
 
   // ---- identity + realtime ----
   useEffect(() => {
@@ -864,6 +892,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'rotate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const it = itemsRef.current.find(i => i.id === id); if (it) it.dir = Number(pl.dir) || 0; })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
+        .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
         .on('broadcast', { event: 'delcurated' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { delCuratedRef.current.add(id); decorRef.current = decorRef.current.filter(d => d.id !== id); rebuildHeight(); } })   // admin removed a baked-in piece
         .on('broadcast', { event: 'leave' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id && remotesRef.current.delete(id)) setPopulation(remotesRef.current.size + 1); })   // someone left/refreshed → drop them now (don't wait for presence timeout)
         .subscribe(async status => {
@@ -1037,15 +1066,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
 
     const draw = () => {
-      const theme = themeRef.current; const t = framesRef.current; const day = !!theme.day;
+      const theme = themeRef.current; const t = framesRef.current;
+      const atmo: Atmo = bgRef.current === 'auto' ? (theme.day ? 'day' : 'night') : bgRef.current;
+      const day = atmo === 'day' || atmo === 'rain';   // "bright" atmospheres → sky + lighter vignette/veranda
       const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H);
-      if (day) { bg.addColorStop(0, '#aedcff'); bg.addColorStop(0.5, '#cfeaff'); bg.addColorStop(1, '#eaf6ef'); }
+      if (atmo === 'day') { bg.addColorStop(0, '#aedcff'); bg.addColorStop(0.5, '#cfeaff'); bg.addColorStop(1, '#eaf6ef'); }
+      else if (atmo === 'rain') { bg.addColorStop(0, '#4d555f'); bg.addColorStop(0.5, '#5f6873'); bg.addColorStop(1, '#727b86'); }
+      else if (atmo === 'coderain') { bg.addColorStop(0, '#020603'); bg.addColorStop(1, '#04140a'); }
+      else if (atmo === 'glitch') { bg.addColorStop(0, '#0a0612'); bg.addColorStop(0.5, '#120a1e'); bg.addColorStop(1, '#060410'); }
       else { bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610'); }
       ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
-      if (day) {   // soft sun glow + drifting clouds instead of dust motes
+      if (atmo === 'day') {   // soft sun glow + drifting clouds
         ctx.save(); const sun = ctx.createRadialGradient(STAGE_W * 0.78, 120, 10, STAGE_W * 0.78, 120, 230); sun.addColorStop(0, 'rgba(255,250,224,0.9)'); sun.addColorStop(1, 'rgba(255,250,224,0)'); ctx.fillStyle = sun; ctx.fillRect(0, 0, STAGE_W, 360);
         ctx.fillStyle = 'rgba(255,255,255,0.5)'; for (let i = 0; i < 5; i++) { const cx = ((i * 320 + t * 0.25) % (STAGE_W + 240)) - 120, cy = 60 + (i % 3) * 46; ctx.beginPath(); ctx.ellipse(cx, cy, 60, 17, 0, 0, Math.PI * 2); ctx.ellipse(cx + 40, cy + 6, 44, 14, 0, 0, Math.PI * 2); ctx.ellipse(cx - 36, cy + 7, 38, 12, 0, 0, Math.PI * 2); ctx.fill(); }
         ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,248,214,0.05)'; for (const bx of [STAGE_W * 0.34, STAGE_W * 0.62]) { ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx + 110, 0); ctx.lineTo(bx + 300, STAGE_H); ctx.lineTo(bx + 150, STAGE_H); ctx.closePath(); ctx.fill(); } ctx.restore();   // god-rays
+      } else if (atmo === 'rain') {   // overcast clouds + slanting rain
+        ctx.save(); ctx.fillStyle = 'rgba(28,32,38,0.55)'; for (let i = 0; i < 5; i++) { const cx = ((i * 300 + t * 0.5) % (STAGE_W + 260)) - 130, cy = 50 + (i % 3) * 40; ctx.beginPath(); ctx.ellipse(cx, cy, 74, 19, 0, 0, Math.PI * 2); ctx.ellipse(cx + 46, cy + 7, 52, 15, 0, 0, Math.PI * 2); ctx.ellipse(cx - 40, cy + 8, 44, 13, 0, 0, Math.PI * 2); ctx.fill(); }
+        ctx.strokeStyle = 'rgba(190,210,230,0.32)'; ctx.lineWidth = 1; for (let i = 0; i < 150; i++) { const x = (i * 97.3 + t * 11) % (STAGE_W + 40) - 20, y = (i * 53.7 + t * 26) % STAGE_H; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 5, y + 16); ctx.stroke(); } ctx.restore();
+      } else if (atmo === 'coderain') {   // Matrix-style green code falling
+        ctx.save(); ctx.font = '14px monospace'; ctx.textBaseline = 'top'; const cols = Math.floor(STAGE_W / 14);
+        for (let c = 0; c < cols; c++) { const x = c * 14, speed = 2 + (c % 5), head = (t * speed + c * 53) % (STAGE_H + 240);
+          for (let r = 0; r < 12; r++) { const y = head - r * 18; if (y < -16 || y > STAGE_H) continue; const ch = String.fromCharCode(0x30A0 + ((c * 7 + r * 13 + (t >> 3)) % 96)); ctx.fillStyle = r === 0 ? 'rgba(200,255,210,0.92)' : `rgba(60,220,90,${Math.max(0, 0.42 - r * 0.035)})`; ctx.fillText(ch, x, y); } } ctx.restore();
+      } else if (atmo === 'glitch') {   // jittering RGB-split bands + scanlines
+        ctx.save(); for (let i = 0; i < 7; i++) { const y = ((Math.sin(t * 0.045 + i * 1.7) * 0.5 + 0.5) * STAGE_H) | 0, h = 6 + (i % 3) * 12, off = Math.sin(t * 0.3 + i * 2.1) * 16; ctx.globalAlpha = 0.4; ctx.fillStyle = `hsl(${(t * 5 + i * 60) % 360},90%,55%)`; ctx.fillRect(off, y, STAGE_W, h); }
+        ctx.globalAlpha = 0.05; ctx.fillStyle = '#00cfff'; for (let y = 0; y < STAGE_H; y += 4) ctx.fillRect(0, y, STAGE_W, 1); ctx.restore();
       } else { ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore(); }
       ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· PERSONAL ROOM ·' : theme.locked ? '· CURATED ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
@@ -1359,7 +1403,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {CATS.map(c => {
                 const on = cat === c.id && !removeMode;
                 return (
-                  <button key={c.id} onClick={() => { setCat(c.id); setRemoveMode(false); setTileMode(false); }} title={c.name}
+                  <button key={c.id} onClick={() => { setCat(c.id); setRemoveMode(false); setTileMode(false); setAtmoMode(false); }} title={c.name}
                     className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${on ? 'bg-white/10' : 'hover:bg-white/5'}`}>
                     <CatIcon catId={c.id} size={22} color={on ? '#ffe65c' : '#cfd2dc'} />
                     <span className={`text-[7px] uppercase tracking-wide leading-none text-center ${on ? 'text-brandYellow' : 'text-white/50'}`}>{c.name.replace('★ ', '')}</span>
@@ -1367,24 +1411,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 );
               })}
               {(() => { const spin = !!(placingKind && isRotatable(placingKind)); const on = rotateMode || spin; return (
-                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); setTileMode(false); } }} title="Rotate"
+                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); setTileMode(false); setAtmoMode(false); } }} title="Rotate"
                   className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${on ? 'bg-[#00cfff]/15' : 'hover:bg-white/5'}`}>
                   <CatIcon catId="rotate" size={22} color={on ? '#00cfff' : '#cfd2dc'} />
                   <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Turn ${placeDir + 1}/4` : 'Rotate'}</span>
                 </button>
               ); })()}
-              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); setTileMode(false); }} title="Pick up"
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); setTileMode(false); setAtmoMode(false); }} title="Pick up"
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Pick up</span>
               </button>
-              <button onClick={() => { setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); }} title="Place a portal to another room"
+              <button onClick={() => { setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); }} title="Place a portal to another room"
                 className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#cc66ff]/15">
                 <span className="text-[18px] leading-none text-[#cc66ff]" style={{ marginTop: '-1px' }}>◎</span>
                 <span className="text-[7px] uppercase tracking-wide leading-none text-[#cc66ff]">Portal</span>
               </button>
               {isMod && (
-                <button onClick={() => { setTileMode(t => !t); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); }} title="Paint floor tiles (admin)"
+                <button onClick={() => { setTileMode(t => !t); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setAtmoMode(false); }} title="Paint floor tiles (admin)"
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${tileMode ? 'bg-[#1ED760]/20' : 'hover:bg-[#1ED760]/15'}`}>
                   <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: tileMode ? '#1ED760' : '#9fe0b3' }}>▦</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: tileMode ? '#1ED760' : '#9fe0b3' }}>Tiles</span>
@@ -1397,9 +1441,28 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   <span className="text-[7px] uppercase tracking-wide leading-none text-[#00cfff]">Lore</span>
                 </button>
               )}
+              {isMod && (
+                <button onClick={() => { setAtmoMode(a => !a); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); }} title="Room atmosphere (admin)"
+                  className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${atmoMode ? 'bg-[#cc66ff]/20' : 'hover:bg-[#cc66ff]/15'}`}>
+                  <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: atmoMode ? '#cc66ff' : '#c79fe0' }}>☁</span>
+                  <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: atmoMode ? '#cc66ff' : '#c79fe0' }}>Atmo</span>
+                </button>
+              )}
             </div>
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
-            {tileMode ? (
+            {atmoMode ? (
+              <div className="p-3">
+                <p className="text-[11px] text-[#cc66ff]/90 mb-2">Set the room&apos;s backdrop — a storytelling layer behind the world. Applies live for everyone.</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ATMOS.map(a => (
+                    <button key={a.id} onClick={() => setAtmosphere(a.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-[11px] transition-colors ${bgAtmo === a.id ? 'border-[#cc66ff] bg-[#cc66ff]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
+                      <span className="w-3.5 h-3.5 rounded-sm border border-white/20" style={{ background: a.sw }} />{a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : tileMode ? (
               <div className="p-3">
                 <p className="text-[11px] text-[#1ED760]/90 mb-2">Pick a floor and tap tiles to paint it. Furniture and triggers are untouched.</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -1425,7 +1488,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   return (
                     <button key={f.kind} onClick={() => {
                       if (!canPlace) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Bought ✦ — tap to place' : (r.error || 'Not enough Crystals')); return; }
-                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false); setTileMode(false);
+                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false);
                     }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : canPlace ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
                       <FurniSprite kind={f.kind} size={38} accent={roomMeta.accent} />
                       <span className="text-[7px] uppercase tracking-wide leading-none text-center text-white/65 truncate w-full px-0.5">{f.name}</span>
