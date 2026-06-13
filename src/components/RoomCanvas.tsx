@@ -79,6 +79,19 @@ const PORTALS: Record<string, Portal[]> = {
   // The Foundry and the Vault are the deepest rooms FOR NOW — the way further down (the core / endgame)
   // isn't built yet. Their NPCs tease it as sealed; we'll open it much later.
 };
+// ARCADE MACHINES — the games live INSIDE the world now. Walk CLOSE to a machine and a modal opens
+// listing the games on it; pick one to launch. Different machines (in different rooms / corners of
+// town) carry different games, so finding new games is part of exploring. `id` maps to a game view
+// up in the page conductor (see onLaunchGame). The Plaza machine is the tutorial's first game.
+type GameSlot = { id: string; name: string; tag: string };
+type Machine = { gx: number; gy: number; games: GameSlot[] };
+const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swarm · mine crystals' };
+const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
+const MACHINES: Record<string, Machine[]> = {
+  praca: [{ gx: 8, gy: 4, games: [GAME_OUROO, GAME_LEAP] }],
+};
+const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker
+
 // First-visit "you found it" modal: reward + a bit of lore + an onboarding nudge.
 const SECRET_INTRO: Record<string, { title: string; body: string }> = {
   archive: { title: 'YOU FOUND THE ARCHIVE', body: 'First door, cracked. The Curator trusts you a little more now.\n\nThis is how OUROO grows: explore, talk to people, and the codes hide in what they say. Every door you open, the world remembers you.\n\nYou can build your OWN room too — ⤧ Rooms → Create. Mine crystals in the Arcade to afford the good stuff. And keep looking — there are more portals than this one.' },
@@ -99,6 +112,7 @@ type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: nu
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
   praca: [
     ['teleporter', 2, 8, 0],   // the portal to The Archive (tap it, speak the code)
+    ['arcade', 8, 4, 0],       // the arcade machine — walk close to launch a game (see MACHINES)
     ['planta', 1, 1, 0], ['planta', 9, 1, 0],
     ['bench', 1, 9, 0], ['bench', 8, 9, 2],
     ['floorlamp', 5, 1, 0],
@@ -417,8 +431,8 @@ const parseIcon = (v: unknown): IconSpec | null => {
   return Array.isArray(o.layers) && o.layers.length ? (v as IconSpec) : null;
 };
 
-export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void }> = ({
-  stageScale = 1, isMobileStage = false, onExit,
+export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string) => void; onboarding?: 'play' | 'account' | 'design' | 'done'; onDesignDone?: () => void }> = ({
+  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onboarding = 'done', onDesignDone,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -518,6 +532,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
+  const [machinePrompt, setMachinePrompt] = useState<Machine | null>(null);   // game picker when you walk close to an arcade machine
+  const nearMachineRef = useRef(false);   // rising-edge guard so the picker pops once per approach
+  const onLaunchGameRef = useRef(onLaunchGame);
+  useEffect(() => { onLaunchGameRef.current = onLaunchGame; }, [onLaunchGame]);
   const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
   // Player portal-maker: pick a destination + optional access code, then drop the portal onto a tile.
   const [portalMaker, setPortalMaker] = useState(false);
@@ -555,9 +573,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // You can build if: you're a mod, the owner, an open ("everyone") room, or a granted handle.
   const canBuild = canBuildIn(roomMeta, myOwnerId, myHandle, isMod);
   const locked = !canBuild;
+  // During the tutorial (before an account + character exist) the world is stripped back to just the
+  // Oracle + the first game — the Rooms / wallet / Decorate tools unlock once onboarding is done.
+  const tutorial = onboarding !== 'done';
   // Same check from inside canvas closures (reads refs, not render state).
   const canBuildHere = () => canBuildIn(roomMetaRef.current, ownerIdRef.current, myHandleRef.current, modRef.current);
   const [invOpen, setInvOpen] = useState(false);
+  // Onboarding 'design' step → throw open the wardrobe so they style their character before entering town.
+  useEffect(() => { if (onboarding === 'design') setInvOpen(true); }, [onboarding]);
   const wallet = useWallet();
   // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in.
   const { user } = useUser();
@@ -908,6 +931,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelTo(pt); } }
         lastPortalKeyRef.current = pk;
       } else if (moving) lastPortalKeyRef.current = null;   // stepped off → re-arm
+      // ARCADE MACHINES — pop the game picker when you walk CLOSE (cabinets are solid, so it's proximity,
+      // not stepping onto the tile). Rising edge → opens once per approach; re-arms when you step away.
+      {
+        const ms = MACHINES[roomMetaRef.current.slug] ?? [];
+        let near: Machine | null = null;
+        for (const m of ms) { if (Math.hypot(m.gx - me.fx, m.gy - me.fy) < MACHINE_RANGE) { near = m; break; } }
+        if (near && !nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
+        nearMachineRef.current = !!near;
+      }
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
@@ -1139,11 +1171,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
-        <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>
-        <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>
+        {!tutorial && <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>}
+        {!tutorial && <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>}
         <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
-        {!locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
+        {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
+
+      {/* Tutorial steering — points the new player at the first game until they've played it. */}
+      {onboarding === 'play' && !machinePrompt && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-center">
+          <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#00cfff] bg-black/70 px-4 py-1.5 inline-block">🕹 walk to the arcade machine to play</p>
+        </div>
+      )}
 
       {(hint || placingKind || removeMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
@@ -1377,6 +1416,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </div>
       )}
 
+      {machinePrompt && (
+        <div className="absolute inset-0 z-[65] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setMachinePrompt(null)}>
+          <div className="w-full max-w-sm border border-brandYellow/40 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandYellow">🕹 arcade machine</p>
+              <button onClick={() => setMachinePrompt(null)} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <p className="text-sm text-white/60 leading-relaxed">Slot in. Pick a game — survive, score, walk away with crystals.</p>
+            <div className="flex flex-col gap-2">
+              {machinePrompt.games.map(g => (
+                <button key={g.id} onClick={() => { setMachinePrompt(null); nearMachineRef.current = true; (onLaunchGameRef.current ?? onLaunchGame)?.(g.id); }}
+                  className="group flex items-center justify-between gap-3 border border-white/15 hover:border-brandYellow bg-white/[0.03] hover:bg-brandYellow/10 px-4 py-3 text-left transition-colors">
+                  <span>
+                    <span className="block font-helvetica font-black text-lg text-white leading-none">{g.name}</span>
+                    <span className="block text-[11px] text-white/45 mt-1">{g.tag}</span>
+                  </span>
+                  <span className="text-brandYellow font-bold uppercase text-xs tracking-widest opacity-60 group-hover:opacity-100">Play ▸</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {portalMaker && (
         <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setPortalMaker(false)}>
           <div className="w-full max-w-sm border border-[#cc66ff]/40 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
@@ -1434,7 +1497,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <Oracle open={oracleOpen} onClose={() => setOracleOpen(false)} roomSlug={roomMeta.slug} roomName={roomMeta.name} />
 
-      <InventoryModal open={invOpen} onClose={() => setInvOpen(false)} onEquip={equipAppearance} title="Character" />
+      <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'design') onDesignDone?.(); }} onEquip={equipAppearance} title={onboarding === 'design' ? 'Design your character' : 'Character'} />
     </div>
   );
 };

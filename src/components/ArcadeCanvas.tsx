@@ -102,7 +102,8 @@ const PERK_DESC: Record<string, string> = {
 const perkLabel = (k: string) => PERK_LABEL[k] ?? k;
 
 // ---- COMPONENT ----
-export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean }> = ({ stageScale = 1, isMobileStage = false }) => {
+export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onFirstGameOver?: () => void }> = ({ stageScale = 1, isMobileStage = false, onFirstGameOver }) => {
+  const firstOverFiredRef = useRef(false);   // onboarding: fire onFirstGameOver exactly once, on the first death
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
   const synthRef    = useRef<ArcadeSynth | null>(null);
   const resumeAudioRef = useRef<(() => void) | null>(null);  // lets the mount-time unlock listener call the latest resumeAudio
@@ -182,6 +183,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   // Reset the guard whenever a fresh run starts.
   useEffect(() => {
     if (isPlaying) { submittedRef.current = false; setCristaisEarned(0); setLbState('idle'); setLbRank(null); setLbError(''); return; }
+    // First death of an onboarding run → hand control back so the world can ask them to make an account.
+    if (!showIntro && !firstOverFiredRef.current && onFirstGameOver) { firstOverFiredRef.current = true; onFirstGameOver(); }
     if (!showIntro && score > 0 && supabaseReady && !submittedRef.current) {
       submittedRef.current = true;
       // doSubmit() records the run, then reconciles the wallet from lifetime points (banking the
