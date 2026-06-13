@@ -1134,10 +1134,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
       const col = a.skinId && a.skinId.startsWith('person:') ? personPrimaryColor(parsePerson(a.skinId)) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       ctx.save(); ctx.font = '700 11px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const nw = ctx.measureText(a.handle).width + 12, ny = sy + 13;
-      ctx.fillStyle = 'rgba(8,8,14,0.72)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();
-      if (isSelf) { ctx.strokeStyle = hexA(col, 0.8); ctx.lineWidth = 1; ctx.stroke(); }
-      ctx.fillStyle = isSelf ? col : 'rgba(255,255,255,0.82)'; ctx.fillText(a.handle, sx, ny); ctx.restore();
+      const nw = ctx.measureText(a.handle).width + 14, ny = sy + 14;
+      ctx.fillStyle = 'rgba(6,6,10,0.9)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();   // solid plate so the name reads over any avatar/atmosphere
+      ctx.strokeStyle = isSelf ? hexA(col, 0.85) : 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = isSelf ? col : '#fff'; ctx.fillText(a.handle, sx, ny); ctx.restore();
       if (a.bubbleLife > 0 && a.bubble) {
         const alpha = Math.min(1, a.bubbleLife / 30); ctx.save(); ctx.globalAlpha = alpha; ctx.font = '600 15px Helvetica, Arial';
         const lines = wrapBubble(a.bubble); const lh = 19, padY = 7;

@@ -16,9 +16,9 @@ export type PersonSpec = {
 
 // ── option sets (labels drive the creator UI) ──
 export const TONES = ['#f3d6bd', '#e7b48f', '#cd8d5f', '#a06a43', '#6f4a2d', '#41291a'];   // white → black
-export const HAIR = ['Bald', 'Short', 'Long', 'Afro', 'Bun', 'Mohawk', 'Ponytail'];
+export const HAIR = ['Bald', 'Short', 'Long', 'Afro', 'Bun', 'Mohawk', 'Ponytail', 'Curly', 'Spiky'];
 export const HATS = ['None', 'Cap', 'Beanie', 'Top hat', 'Crown', 'Cowboy'];
-export const TOPS = ['Tee', 'Hoodie', 'Tank', 'Jacket', 'Dress'];
+export const TOPS = ['Tee', 'Hoodie', 'Tank', 'Jacket', 'Dress', 'Suit'];
 export const PANTS = ['Pants', 'Shorts', 'Skirt'];
 export const SHOES = ['Sneakers', 'Boots', 'Barefoot'];
 export const FACES = ['Neutral', 'Smile', 'Cool'];
@@ -65,7 +65,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
     if (short) { ctx.fillStyle = tone; rr(ctx, -4.2 * s, hipY + legLen, 3.2 * s, (legBot - hipY) - legLen, 1.4 * s); ctx.fill(); rr(ctx, 1 * s, hipY + legLen, 3.2 * s, (legBot - hipY) - legLen, 1.4 * s); ctx.fill(); }
   }
   // ── shoes ──
-  if (p.shoes !== 2) { ctx.fillStyle = p.shoeC; const sh = (p.shoes === 1 ? 5 : 3.2) * s; rr(ctx, -5 * s, legBot - 1 * s, 4.2 * s, sh, 1.6 * s); ctx.fill(); rr(ctx, 0.8 * s, legBot - 1 * s, 4.2 * s, sh, 1.6 * s); ctx.fill(); }
+  if (p.shoes !== 2) { const sh = (p.shoes === 1 ? 5 : 3.2) * s; for (const lx of [-5 * s, 0.8 * s]) { ctx.fillStyle = p.shoeC; rr(ctx, lx, legBot - 1 * s, 4.2 * s, sh, 1.6 * s); ctx.fill(); ctx.fillStyle = shadeC(p.shoeC, 0.6); rr(ctx, lx, legBot - 1 * s + sh - 1.4 * s, 4.4 * s, 1.6 * s, 0.8 * s); ctx.fill(); } }   // shoes + darker sole
   else { ctx.fillStyle = tone; rr(ctx, -4.6 * s, legBot - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); rr(ctx, 1 * s, legBot - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); }
 
   // ── arms (behind torso) ──
@@ -77,16 +77,24 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   }
 
   // ── torso / top ──
+  const topD = shadeC(p.topC, 0.76), topL = shadeC(p.topC, 1.12);
   ctx.fillStyle = p.topC;
   if (dress) { ctx.beginPath(); ctx.moveTo(-hbW, torsoTop); ctx.lineTo(hbW, torsoTop); ctx.lineTo(hbW * 0.9, hipY); ctx.lineTo(-hbW * 0.9, hipY); ctx.closePath(); ctx.fill(); }
   else { rr(ctx, -hbW, torsoTop, hbW * 2, torsoBot - torsoTop + 3 * s, 3 * s); ctx.fill(); }
-  if (p.top === 2) { ctx.fillStyle = tone; rr(ctx, -hbW * 0.5, torsoTop - 1 * s, hbW, 5 * s, 2 * s); ctx.fill(); ctx.fillStyle = p.topC; for (const sx of [-hbW * 0.7, hbW * 0.3]) { rr(ctx, sx, torsoTop - 1 * s, hbW * 0.4, 6 * s, 1.5 * s); ctx.fill(); } }   // tank: straps
-  if (p.top === 1) { ctx.fillStyle = shadeC(p.topC, 0.8); rr(ctx, -3.5 * s, torsoTop - 2.5 * s, 7 * s, 4 * s, 2 * s); ctx.fill(); ctx.strokeStyle = shadeC(p.topC, 0.6); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, torsoTop + 1 * s); ctx.lineTo(0, torsoBot); ctx.stroke(); }   // hoodie hood + zip
-  if (p.top === 3) { ctx.strokeStyle = shadeC(p.topC, 0.6); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(0, torsoBot + 2 * s); ctx.stroke(); }   // jacket zip
+  ctx.save(); ctx.beginPath(); rr(ctx, -hbW, torsoTop, hbW * 2, torsoBot - torsoTop + 3 * s, 3 * s); ctx.clip(); ctx.globalAlpha = 0.5; ctx.fillStyle = topD; rr(ctx, hbW * 0.35, torsoTop, hbW * 0.7, torsoBot - torsoTop + 3 * s, 0); ctx.fill(); ctx.restore();   // side shade for depth
+  ctx.strokeStyle = topD; ctx.lineWidth = 0.8 * s; if (!dress) { rr(ctx, -hbW, torsoTop, hbW * 2, torsoBot - torsoTop + 3 * s, 3 * s); ctx.stroke(); }   // outline
+  ctx.fillStyle = shadeC(tone, 0.95); rr(ctx, -2.4 * s, torsoTop - 0.5 * s, 4.8 * s, 1.6 * s, 0.8 * s); ctx.fill();   // collar gap of neck/skin
+  if (p.top === 2) { ctx.fillStyle = tone; rr(ctx, -hbW * 0.5, torsoTop - 1 * s, hbW, 5 * s, 2 * s); ctx.fill(); ctx.fillStyle = p.topC; for (const sx of [-hbW * 0.7, hbW * 0.3]) { rr(ctx, sx, torsoTop - 1 * s, hbW * 0.4, 6 * s, 1.5 * s); ctx.fill(); } }   // tank straps
+  else if (p.top === 1) { ctx.fillStyle = topD; rr(ctx, -3.6 * s, torsoTop - 2.5 * s, 7.2 * s, 4 * s, 2 * s); ctx.fill(); ctx.strokeStyle = topD; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, torsoTop + 1 * s); ctx.lineTo(0, torsoBot); ctx.stroke(); ctx.lineWidth = 1.4 * s; ctx.beginPath(); ctx.arc(0, torsoBot - 1 * s, hbW * 0.5, 0.15, Math.PI - 0.15); ctx.stroke(); }   // hoodie: hood, zip, kangaroo pocket
+  else if (p.top === 3) { ctx.fillStyle = topD; ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(-hbW * 0.45, torsoTop); ctx.lineTo(-1.5 * s, torsoTop + 6 * s); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(hbW * 0.45, torsoTop); ctx.lineTo(1.5 * s, torsoTop + 6 * s); ctx.closePath(); ctx.fill(); ctx.strokeStyle = topD; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, torsoTop + 5 * s); ctx.lineTo(0, torsoBot + 2 * s); ctx.stroke(); }   // jacket lapels + zip
+  else if (p.top === 5) { ctx.fillStyle = topL; rr(ctx, -2.6 * s, torsoTop, 5.2 * s, torsoBot - torsoTop, 1 * s); ctx.fill(); ctx.fillStyle = topD; ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(-hbW * 0.5, torsoTop); ctx.lineTo(-1.6 * s, torsoTop + 7 * s); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(hbW * 0.5, torsoTop); ctx.lineTo(1.6 * s, torsoTop + 7 * s); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#c02530'; ctx.beginPath(); ctx.moveTo(-1.2 * s, torsoTop + 1 * s); ctx.lineTo(1.2 * s, torsoTop + 1 * s); ctx.lineTo(0.7 * s, torsoBot - 1 * s); ctx.lineTo(-0.7 * s, torsoBot - 1 * s); ctx.closePath(); ctx.fill(); }   // suit: shirt + lapels + tie
 
-  // ── neck + head ──
+  // ── neck + head (+ ears, nose, jaw shading) ──
   ctx.fillStyle = tone; rr(ctx, -2.2 * s, headY + headR - 1 * s, 4.4 * s, 5 * s, 1.6 * s); ctx.fill();
-  ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = shadeC(tone, 0.9); ctx.beginPath(); ctx.arc(-headR + 0.4 * s, headY + 1 * s, 1.5 * s, 0, Math.PI * 2); ctx.arc(headR - 0.4 * s, headY + 1 * s, 1.5 * s, 0, Math.PI * 2); ctx.fill();   // ears
+  ctx.fillStyle = tone; ctx.beginPath(); ctx.ellipse(0, headY + 0.4 * s, headR, headR * 1.04, 0, 0, Math.PI * 2); ctx.fill();   // head (slightly oval)
+  ctx.strokeStyle = shadeC(tone, 0.78); ctx.lineWidth = 0.8 * s; ctx.beginPath(); ctx.ellipse(0, headY + 0.4 * s, headR, headR * 1.04, 0, 0, Math.PI * 2); ctx.stroke();   // soft outline
+  ctx.strokeStyle = shadeC(tone, 0.82); ctx.lineWidth = 1 * s; ctx.beginPath(); ctx.moveTo(0.3 * s, headY + 0.6 * s); ctx.lineTo(-0.4 * s, headY + 2 * s); ctx.stroke();   // nose
   if (p.acc === 4) { ctx.fillStyle = shadeC(p.hairC, 0.7); ctx.beginPath(); ctx.arc(0, headY + headR * 0.55, headR * 0.95, 0.15, Math.PI - 0.15); ctx.fill(); }   // beard
 
   // ── face ──
@@ -107,6 +115,8 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   else if (p.hair === 4) { ctx.beginPath(); ctx.arc(0, headY, headR + 0.8 * s, Math.PI, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(0, headY - headR - 1.5 * s, 2.6 * s, 0, Math.PI * 2); ctx.fill(); }   // bun
   else if (p.hair === 5) { rr(ctx, -1.4 * s, headY - headR - 3 * s, 2.8 * s, headR + 3 * s, 1 * s); ctx.fill(); }   // mohawk
   else if (p.hair === 6) { ctx.beginPath(); ctx.arc(0, headY, headR + 0.8 * s, Math.PI, Math.PI * 2); ctx.fill(); rr(ctx, headR - 1 * s, headY - 1 * s, 2.6 * s, 12 * s, 1.3 * s); ctx.fill(); }   // ponytail
+  else if (p.hair === 7) { for (let i = 0; i < 7; i++) { const a = Math.PI + (i / 6) * Math.PI; ctx.beginPath(); ctx.arc(Math.cos(a) * (headR - 0.5 * s), headY + Math.sin(a) * (headR - 0.5 * s), 2.3 * s, 0, Math.PI * 2); ctx.fill(); } }   // curly
+  else if (p.hair === 8) { for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(i * 1.9 * s - 1.4 * s, headY - headR + 1 * s); ctx.lineTo(i * 1.9 * s, headY - headR - 3.5 * s); ctx.lineTo(i * 1.9 * s + 1.4 * s, headY - headR + 1 * s); ctx.closePath(); ctx.fill(); } ctx.beginPath(); ctx.arc(0, headY, headR + 0.6 * s, Math.PI, Math.PI * 2); ctx.fill(); }   // spiky
   void hc;
 
   // ── hat ──
