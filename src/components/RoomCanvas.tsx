@@ -258,6 +258,19 @@ const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'cosmic', label: 'Cosmic', sw: '#5b3a8a' },
   { id: 'sunset', label: 'Sunset', sw: '#ff7e5f' },
 ];
+type RoomItemRow = { id: string; kind: string; x: number; y: number; created_by?: string | null };
+// Load EVERY row for a room — PostgREST caps a single select at ~1000 rows, so page through with range()
+// until a short page comes back. Without this a room silently stops loading past ~1000 pieces.
+async function fetchAllRoomItems(sb: NonNullable<typeof supabase>, room: string): Promise<RoomItemRow[]> {
+  const PAGE = 1000; const all: RoomItemRow[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at').range(from, from + PAGE - 1);
+    if (error || !data || !data.length) break;
+    all.push(...(data as RoomItemRow[]));
+    if (data.length < PAGE) break;
+  }
+  return all;
+}
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
     const [, to = '', code = '', hidden = ''] = rawKind.split(':');
@@ -400,6 +413,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placingPrefab, setPlacingPrefab] = useState<Prefab | null>(null);
   const placingPrefabRef = useRef<Prefab | null>(null);
   useEffect(() => { placingPrefabRef.current = placingPrefab; }, [placingPrefab]);
+  // Tap a placed object (while decorating, no tool armed) to SELECT it — a little popup offers rotate + pick-up.
+  const [editSel, setEditSel] = useState<{ id: string; kind: string } | null>(null);
+  const editSelRef = useRef<{ id: string; kind: string } | null>(null);
+  useEffect(() => { editSelRef.current = editSel; }, [editSel]);
+  // Click-drag painting: stamp floor/carpet (or admin tile-paint) across every tile the cursor sweeps.
+  const paintDragRef = useRef<{ on: boolean; kind: string | null; tile: number }>({ on: false, kind: null, tile: -1 });
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
   const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
@@ -444,7 +463,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -816,25 +835,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     flashHint(`${p.name} placed ✦`);
     supabase?.from('room_items').insert(rows).then(undefined, () => {});
   };
-  // Rotate the top item on a tile (own items / mods) one 90° step.
-  const rotateAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
-    if (!hit) return;
+  // The top editable player item on a tile (own items, or anything if you can build here).
+  const topItemAt = (gx: number, gy: number): Item | undefined =>
+    [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
+  // Rotate one specific placed item 90° (live + persisted).
+  const rotateItem = (hit: Item) => {
     if (!isRotatable(hit.kind)) { flashHint('This object doesn\'t rotate'); return; }
     hit.dir = ((hit.dir ?? 0) + 1) % 4;
     channelRef.current?.send({ type: 'broadcast', event: 'rotate', payload: { id: hit.id, dir: hit.dir } });
     supabase?.from('room_items').update({ kind: encodeKind(hit.kind, hit.dir, hit.elev || 0) }).eq('id', hit.id).then(undefined, () => {});
   };
+  // Pick one specific placed item back up (returns to inventory unless it's a portal / prefab piece).
+  const dropItem = (hit: Item) => {
+    if (!hit.portalTo && hit.createdBy !== 'prefab') returnFurni(hit.kind);
+    itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
+    if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
+    if (editSelRef.current?.id === hit.id) setEditSel(null);
+    channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
+    supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
+  };
+  // Rotate the top item on a tile (own items / mods) one 90° step.
+  const rotateAt = (gx: number, gy: number) => { const hit = topItemAt(gx, gy); if (hit) rotateItem(hit); };
   const removeAt = (gx: number, gy: number) => {
-    const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
-    if (hit) {
-      if (!hit.portalTo && hit.createdBy !== 'prefab') returnFurni(hit.kind);   // pick it up into MY inventory (portals + prefab pieces are free — don't gift them)
-      itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
-      if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
-      channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
-      supabase?.from('room_items').delete().eq('id', hit.id).then(undefined, () => {});
-      return;
-    }
+    const hit = topItemAt(gx, gy);
+    if (hit) { dropItem(hit); return; }
     // No player furni here — admins may also pick up baked-in (curated) decor. Persist a tombstone so
     // it stays gone for everyone; triggers (machine/door/terminal) are coords, so this only hides decor.
     if (modRef.current) {
@@ -933,7 +957,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       remotesRef.current.clear(); itemsRef.current = []; matOverrideRef.current.clear(); rebuildHeight(); setPopulation(1); setConnected(false);
       if (!supabase) return;
       let aliveTut = true;
-      supabase.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at').then(({ data }) => { if (aliveTut && data) ingestItemRows(data); });
+      fetchAllRoomItems(supabase, room).then(rows => { if (aliveTut) ingestItemRows(rows); });
       return () => { aliveTut = false; };
     }
     if (!supabase || !entered) return;   // wait for the lobby "Enter" so the join is deliberate + clean
@@ -993,8 +1017,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             setConnected(true);
             const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
             await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl });   // small payload only — no nested objects
-            const { data } = await sb.from('room_items').select('id,kind,x,y,created_by').eq('room', room).order('created_at');
-            if (data) ingestItemRows(data);
+            ingestItemRows(await fetchAllRoomItems(sb, room));
           } else {
             setConnected(false);
             if (alive && (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')) {   // self-heal: rebuild the channel
@@ -1356,6 +1379,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(col, 0.28); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; diamond(sx, sy, TW, TH); ctx.stroke();
         }
       } else if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode || ui.tileMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      // Selected-object highlight — a pulsing ring under the piece the edit popup is acting on.
+      if (ui.decorOpen && editSelRef.current) { const it = itemsRef.current.find(i => i.id === editSelRef.current!.id); if (it) { const [sw, sh] = effSpan(it.kind, it.dir || 0); const pulse = 0.4 + 0.25 * Math.sin(framesRef.current * 0.12); for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) { const { sx, sy } = iso(it.gx + du, it.gy + dv, Math.max(0, planLvl(it.gx + du, it.gy + dv))); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA('#ffe65c', 0.12); ctx.fill(); ctx.strokeStyle = hexA('#ffe65c', pulse); ctx.lineWidth = 2; diamond(sx, sy, TW, TH); ctx.stroke(); } } }
       // Lore tile markers — invisible to players; a small glyph only while an admin is decorating.
       if (ui.decorOpen) for (const lm of loreRef.current) { if (lm.mode !== 'tile') continue; const L = Math.max(0, planLvl(lm.gx, lm.gy)); const { sx, sy } = iso(lm.gx, lm.gy, L); const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#00cfff'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.6, TH * 0.6); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.9; ctx.fillStyle = '#00cfff'; ctx.font = '700 12px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✎', sx, sy - 1); ctx.restore(); }
 
@@ -1422,15 +1447,36 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       return;
     }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
-    if (tileMode) { paintTile(gx, gy); return; }
+    if (tileMode) { paintTile(gx, gy); startPaintDrag(e, null); return; }                                 // admin floor-paint (drag to sweep)
     if (placingPrefab) { placePrefab(placingPrefab, gx, gy); return; }
-    if (placingKind) { placeItem(placingKind, gx, gy); return; }
+    if (placingKind) { placeItem(placingKind, gx, gy); if (isFloorPaint(placingKind)) startPaintDrag(e, placingKind); return; }   // carpet/floor → drag to lay a swathe
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
+    // Decorating with no tool armed: tap an object to SELECT it (rotate/pick-up popup); tap empty to deselect + walk.
+    if (decorOpen && !portalMaker) {
+      const hit = topItemAt(gx, gy);
+      if (hit) { setEditSel(s => (s?.id === hit.id ? null : { id: hit.id, kind: hit.kind })); return; }
+      if (editSelRef.current) { setEditSel(null); return; }
+    }
     // Portals aren't tapped — you WALK onto them (see the movement loop). Tapping a portal tile just paths you there.
     const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
-  const onPointerMove = (e: React.PointerEvent) => { if (!decorOpen) { hoverRef.current = null; return; } const { gx, gy } = evtTile(e); hoverRef.current = planLvl(gx, gy) < 0 ? null : { gx, gy }; };
+  // ── Click-drag floor/carpet painting ──
+  const isFloorPaint = (kind: string): boolean => { const d = defOf(kind); const [sw, sh] = d.span ?? [1, 1]; return !!d.walk && (d.h ?? 0) <= 1 && sw === 1 && sh === 1 && d.special !== 'stair'; };
+  const startPaintDrag = (e: React.PointerEvent, kind: string | null) => {
+    const { gx, gy } = evtTile(e); paintDragRef.current = { on: true, kind, tile: key(gx, gy) };
+    try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } catch { /* ignore */ }
+  };
+  const endPaintDrag = (e: React.PointerEvent) => { paintDragRef.current = { on: false, kind: null, tile: -1 }; try { (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId); } catch { /* ignore */ } };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!decorOpen) { hoverRef.current = null; return; }
+    const { gx, gy } = evtTile(e); const off = planLvl(gx, gy) < 0; hoverRef.current = off ? null : { gx, gy };
+    const dr = paintDragRef.current;
+    if (dr.on && !off) { const k = key(gx, gy); if (k !== dr.tile) { dr.tile = k;
+      if (dr.kind === null) paintTile(gx, gy);
+      else if (modRef.current || isFurniFree(dr.kind) || furniCount(dr.kind) > 0) placeItem(dr.kind, gx, gy);   // skip silently when out of stock (no hint spam)
+    } }
+  };
 
   // ── Tutorial render state ── which Oracle speech to show, and the residual steer once it's dismissed.
   const tutKey = onboarding === 'arcade' ? (gamePlayed ? 'arcade_post' : 'arcade_pre') : onboarding;
@@ -1451,7 +1497,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     <div ref={outerRef} className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}>
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="relative shrink-0 origin-center" style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${fitScale})` }}>
-          <canvas ref={canvasRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} className="absolute inset-0 block w-full h-full" />
+          <canvas ref={canvasRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endPaintDrag} onPointerCancel={endPaintDrag} className="absolute inset-0 block w-full h-full" />
+          {/* Selected-object editor — a little popup over the piece with rotate + pick-up (drop, then edit right there). */}
+          {decorOpen && editSel && !placingKind && !placingPrefab && !removeMode && !rotateMode && !tileMode && !buildMode && !atmoMode && !placeLore && !portalMaker && (() => {
+            const it = itemsRef.current.find(i => i.id === editSel.id);
+            if (!it) return null;
+            const cam = camRef.current, d = defOf(it.kind), [sw, sh] = effSpan(it.kind, it.dir || 0);
+            const cz = Math.max(0, planLvl(it.gx, it.gy)) + (it.elev || 0) + (d.h || 0);
+            const a = iso(it.gx + (sw - 1) / 2, it.gy + (sh - 1) / 2, cz);
+            const px = cam.x + a.sx * cam.s, py = cam.y + a.sy * cam.s;
+            return (
+              <div className="absolute z-30 flex items-center gap-1 -translate-x-1/2 -translate-y-full bg-black/85 border border-white/20 rounded-lg px-1.5 py-1 shadow-2xl" style={{ left: px, top: py - 8 }}>
+                <span className="text-[10px] text-white/55 px-1 max-w-[6rem] truncate">{d.name}</span>
+                {isRotatable(it.kind) && <button onClick={() => rotateItem(it)} title="Rotate" className="w-8 h-8 flex items-center justify-center rounded-md bg-white/5 hover:bg-[#00cfff]/25 text-[#9fe3ff] text-lg leading-none">⟳</button>}
+                <button onClick={() => dropItem(it)} title="Pick up" className="w-8 h-8 flex items-center justify-center rounded-md bg-white/5 hover:bg-brandRed/30 text-base leading-none">🗑</button>
+                <button onClick={() => setEditSel(null)} title="Done" className="w-6 h-8 flex items-center justify-center rounded-md text-white/40 hover:text-white text-xs leading-none">✕</button>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
