@@ -25,6 +25,7 @@ import { RoomMusic } from '@/lib/roomMusic';
 import { Oracle } from '@/components/Oracle';
 import { MenuModal } from '@/components/MenuModal';
 import { GlitchSequence } from '@/components/GlitchSequence';
+import { AdminModal } from '@/components/AdminModal';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -492,6 +493,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false, tileMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode, tileMode }; }, [decorOpen, placingKind, removeMode, rotateMode, tileMode]);
   const [isMod, setIsMod] = useState(false);
+  const [isSuper, setIsSuper] = useState(false);   // super-admin → can open the Admin panel + grant admins
+  const [adminOpen, setAdminOpen] = useState(false);
   const [myCount, setMyCount] = useState(0);
   const [hint, setHint] = useState('');
   const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
@@ -848,7 +851,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     refreshWalletFromCloud();
     setMyOwnerId(deviceRef.current); ownerIdRef.current = deviceRef.current;
     getAuthIdentity().then(a => { if (a?.handle) { selfRef.current.handle = a.handle; myHandleRef.current = a.handle; setMyHandle(a.handle); } if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
-    Promise.all([amIModerator(), amISuperAdmin()]).then(([m, s]) => { const ok = m || s; modRef.current = ok; setIsMod(ok); });   // super-admins build in curated rooms too
+    Promise.all([amIModerator(), amISuperAdmin()]).then(([m, s]) => { const ok = m || s; modRef.current = ok; setIsMod(ok); setIsSuper(s); });   // super-admins build in curated rooms too
 
     // Tutorial rooms are SOLO instances — no presence/broadcast join (just you + the Oracle). We still
     // LOAD their furni from the DB so admins can dress them and the decor persists; placement/removal
@@ -1338,6 +1341,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         {!tutorial && <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>}
         {!tutorial && <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>}
         <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
+        {!tutorial && isSuper && <button onClick={() => setAdminOpen(true)} title="Admin panel" className="text-[11px] font-mono uppercase tracking-widest text-brandYellow border border-brandYellow/40 bg-black/50 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">📊</button>}
         {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
 
@@ -1848,6 +1852,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {glitchSeq !== null && <GlitchSequence text={glitchSeq} onClose={() => setGlitchSeq(null)} />}
 
       <MenuModal open={menuOpen} onClose={() => setMenuOpen(false)} />
+
+      {isSuper && <AdminModal open={adminOpen} onClose={() => setAdminOpen(false)} />}
 
       <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'character') finishCharacter(); }} onEquip={equipAppearance} title={onboarding === 'character' ? 'Design your character' : 'Character'} />
     </div>
