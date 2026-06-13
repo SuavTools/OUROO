@@ -9,6 +9,7 @@
 export type FurniDef = {
   kind: string; name: string; emoji: string; cat: string; color: string;
   h: number; walk: boolean; foot: number; special?: string; span?: [number, number];
+  pass?: boolean;   // walk-THROUGH (doorways): renders tall but never blocks the tile or raises the floor
 };
 
 export type FurniCat = { id: string; name: string; premium?: boolean };
@@ -73,6 +74,16 @@ export const FURNI: FurniDef[] = [
   { kind: 'parede',     name: 'Wall',      emoji: '🧱', cat: 'constr', color: '#3a2e2e', h: 2, walk: false, foot: 1, special: 'wall' },
   { kind: 'cerca',      name: 'Fence',     emoji: '🚧', cat: 'constr', color: '#6a5a2a', h: 1, walk: false, foot: 1, special: 'wall' },
   { kind: 'corrimao',   name: 'Railing',   emoji: '🪜', cat: 'constr', color: '#cfd6e0', h: 1, walk: false, foot: 0.5, special: 'ladder' },
+  // ── Building kit (houses): walkable floor blocks + solid walls in marble/wood/metal, doors, windows, roof ──
+  { kind: 'blk_marble', name: 'Marble Block', emoji: '⬜', cat: 'constr', color: '#d8d4c8', h: 1, walk: true,  foot: 1 },
+  { kind: 'blk_wood',   name: 'Wood Block',   emoji: '🟫', cat: 'constr', color: '#8a5a32', h: 1, walk: true,  foot: 1 },
+  { kind: 'blk_metal',  name: 'Metal Block',  emoji: '⬛', cat: 'constr', color: '#9aa3b0', h: 1, walk: true,  foot: 1 },
+  { kind: 'wall_marble',name: 'Marble Wall',  emoji: '🧱', cat: 'constr', color: '#d8d4c8', h: 2, walk: false, foot: 1, special: 'wall' },
+  { kind: 'wall_wood',  name: 'Wood Wall',    emoji: '🧱', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'wall' },
+  { kind: 'wall_metal', name: 'Metal Wall',   emoji: '🧱', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'wall' },
+  { kind: 'door',       name: 'Door',         emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'window',     name: 'Window',       emoji: '🪟', cat: 'constr', color: '#cfd6e0', h: 2, walk: false, foot: 1, special: 'window' },
+  { kind: 'roof',       name: 'Roof',         emoji: '🛖', cat: 'constr', color: '#9c3a2e', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
   // pisos / tapetes (walkable, 1-high — carpets have height!)
   { kind: 'tap_red',  name: 'Rug',     emoji: '🟥', cat: 'tapetes', color: '#b3242e', h: 0, walk: true, foot: 1, special: 'rug' },
   { kind: 'tap_blu',  name: 'Rug',     emoji: '🟦', cat: 'tapetes', color: '#2452b3', h: 0, walk: true, foot: 1, special: 'rug' },

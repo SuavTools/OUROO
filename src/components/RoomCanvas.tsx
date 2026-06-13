@@ -550,6 +550,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     lastPortalKeyRef.current = `${sp.gx},${sp.gy}`;   // don't auto-fire a portal we happen to spawn on; arm on the first step off
     setRoomMeta(def); setRoom(def.slug);
   };
+  const switchRoomRef = useRef(switchRoom); useEffect(() => { switchRoomRef.current = switchRoom; });   // latest switchRoom for the animation loop
   // Follow the onboarding step into its room — each tutorial step has its own solo room; 'town'/'done'
   // land in Town. (The fade/transition that motivates the move is played before the step is advanced.)
   useEffect(() => {
@@ -653,7 +654,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
         const k = key(gx, gy); const base = planRef.current[k]; if (base < 0) continue;   // can't sit on a void tile
-        if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
+        if (d.pass) { /* walk-through (doorways/roof): never blocks, never raises the floor */ }
+        else if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
         else if (sit != null) { surf[k].push(base + elev + sit); if (elev <= 0.01) grounded[k] = 1; }
         else S[k] = 1;
       }
@@ -1049,6 +1051,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         lm.near = near;
       }
+      // SPECIALTY TILE — LAVA: settle on a lava floor and it sends you back to Town (skip when already there).
+      if (!moving && me.path.length === 0 && roomMetaRef.current.slug !== 'town') {
+        const lk = key(clampTile(me.fx), clampTile(me.fy));
+        const matv = matOverrideRef.current.has(lk) ? matOverrideRef.current.get(lk)! : matRef.current[lk];
+        if (matv === 7) { flashHint('The lava takes you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
+      }
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
@@ -1243,6 +1251,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           else if (mat === 3) { ctx.fillStyle = '#9c1f29'; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)'; ctx.fill(); }   // carpet
           else if (mat === 4) { ctx.fillStyle = odd ? '#33333f' : '#1d1d27'; ctx.fill(); }                 // dark check
           else if (mat === 5) { const hue = (t * 2.4 + (gx * 41 + gy * 67)) % 360, lum = 44 + Math.sin(t * 0.13 + (gx + gy)) * 16; ctx.fillStyle = `hsl(${hue},88%,${lum}%)`; ctx.fill(); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `hsla(${(hue + 40) % 360},90%,70%,0.18)`; diamond(b.sx, b.sy, TW * 0.6, TH * 0.6); ctx.fill(); ctx.restore(); }   // animated dancefloor
+          else if (mat === 6) {   // water — animated ripples
+            const ph = Math.sin((gx * 0.7 + gy * 0.5) + t * 0.06) * 0.5 + 0.5; ctx.fillStyle = '#0c5e78'; ctx.fill();
+            ctx.fillStyle = hexA('#7fdcff', 0.14 + ph * 0.18); ctx.fill();
+            ctx.save(); ctx.globalAlpha = 0.22 + 0.13 * Math.sin(t * 0.09 + gx + gy); ctx.strokeStyle = '#cdf3ff'; ctx.lineWidth = 1; diamond(b.sx, b.sy, TW * 0.58, TH * 0.58); ctx.stroke(); ctx.restore();
+          }
+          else if (mat === 7) {   // bubbling lava — molten crust + glowing cracks + rising bubbles
+            const pulse = 0.5 + 0.5 * Math.sin(t * 0.08 + (gx * 1.3 + gy)); ctx.fillStyle = `hsl(${14 + pulse * 10}, 90%, ${24 + pulse * 14}%)`; ctx.fill();
+            ctx.save(); ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = `hsla(28, 100%, 60%, ${0.25 + pulse * 0.4})`; ctx.lineWidth = 1.5; diamond(b.sx, b.sy, TW * 0.8, TH * 0.8); ctx.stroke();   // glowing crack
+            for (let q = 0; q < 2; q++) { const bp = ((t * (0.9 + q * 0.5) + (gx * 53 + gy * 31) + q * 40) % 60) / 60; const by = b.sy + TH * 0.5 - bp * TH; const r = (1 - Math.abs(bp - 0.5) * 2) * 3.4; if (r > 0.3) { ctx.fillStyle = `hsla(${36 + q * 10},100%,${60 + bp * 20}%,${0.7 * (1 - bp)})`; ctx.beginPath(); ctx.arc(b.sx + (q ? 7 : -6), by, r, 0, Math.PI * 2); ctx.fill(); } }   // bubbles
+            ctx.restore();
+          }
           else { ctx.fillStyle = theme.floor; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill(); }
           if (mat === 3) { ctx.strokeStyle = hexA('#e8c66a', 0.5); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW * 0.84, TH * 0.84); ctx.stroke(); }   // carpet gold trim
           else if (mat === 2) { ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2c6e34'; for (let q = 0; q < 5; q++) { const gxp = b.sx + (q - 2) * 6, gyp = b.sy + ((q % 2) - 0.5) * 6; ctx.beginPath(); ctx.moveTo(gxp, gyp + 3); ctx.lineTo(gxp, gyp - 4); ctx.stroke(); } ctx.restore(); }   // grass blades
@@ -1559,7 +1579,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <div className="p-3">
                 <p className="text-[11px] text-[#1ED760]/90 mb-2">Pick a floor and tap tiles to paint it. Furniture and triggers are untouched.</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {([[-1, 'Default', '#2a2a36'], [2, 'Grass', '#358540'], [1, 'Marble', '#bdb6a6'], [3, 'Carpet', '#9c1f29'], [4, 'Dark', '#1d1d27'], [5, 'Disco', '#cc44ff']] as [number, string, string][]).map(([m, label, col]) => (
+                  {([[-1, 'Default', '#2a2a36'], [2, 'Grass', '#358540'], [1, 'Marble', '#bdb6a6'], [3, 'Carpet', '#9c1f29'], [4, 'Dark', '#1d1d27'], [5, 'Disco', '#cc44ff'], [6, 'Water', '#0c5e78'], [7, 'Lava', '#e0531e']] as [number, string, string][]).map(([m, label, col]) => (
                     <button key={m} onClick={() => setPaintMat(m)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-[11px] transition-colors ${paintMat === m ? 'border-[#1ED760] bg-[#1ED760]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
                       <span className="w-3.5 h-3.5 rounded-sm border border-white/20" style={{ background: col }} />{label}

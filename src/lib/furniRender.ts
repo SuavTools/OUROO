@@ -2031,6 +2031,24 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       break;
     }
     case 'wall': { block(ctx, sx, sy, d.h, d.color, accent, d.foot); break; }
+    case 'door': {   // a 2-high wall block with a doorway opening on the front (walk-through)
+      block(ctx, sx, sy, d.h, d.color, accent, 1);
+      const H = d.h * STACK_H, cyTop = sy - H, bot = sy + TH * 0.62, oTop = cyTop + 8, ow = 11;
+      ctx.fillStyle = 'rgba(8,8,12,0.92)'; ctx.beginPath(); ctx.moveTo(sx - ow, bot); ctx.lineTo(sx - ow, oTop + 6); ctx.quadraticCurveTo(sx, oTop - 6, sx + ow, oTop + 6); ctx.lineTo(sx + ow, bot); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = hexA(accent, 0.5); ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = shade(d.color, 1.35); ctx.beginPath(); ctx.arc(sx + ow - 3, (oTop + bot) / 2, 1.8, 0, Math.PI * 2); ctx.fill();   // handle
+      break;
+    }
+    case 'window': {   // a 2-high wall block with a glowing pane
+      block(ctx, sx, sy, d.h, d.color, accent, 1);
+      const H = d.h * STACK_H, cy = sy - H * 0.52, pw = 11, ph = 13;
+      ctx.fillStyle = shade(d.color, 0.6); poly(ctx, [[sx - pw - 2, cy - ph - 2], [sx + pw + 2, cy - ph - 2], [sx + pw + 2, cy + ph + 2], [sx - pw - 2, cy + ph + 2]]); ctx.fill();   // frame
+      const g = ctx.createLinearGradient(sx - pw, cy - ph, sx + pw, cy + ph); g.addColorStop(0, '#bfe6ff'); g.addColorStop(1, '#7fb4e0');
+      ctx.fillStyle = g; poly(ctx, [[sx - pw, cy - ph], [sx + pw, cy - ph], [sx + pw, cy + ph], [sx - pw, cy + ph]]); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx, cy - ph); ctx.lineTo(sx, cy + ph); ctx.moveTo(sx - pw, cy); ctx.lineTo(sx + pw, cy); ctx.stroke();   // mullions
+      break;
+    }
+    case 'roof': { hipRoof(ctx, sx, sy + TH * 0.7, 0.98, d.color, STACK_H * 0.7, 0.55, false); break; }
     case 'plant': { const top = block(ctx, sx, sy, 1, '#8a4f2a', accent, d.foot * 0.8); const lc = kind === 'flores' ? '#ff66aa' : '#1ED760'; const lvl = d.h; for (let r = 0; r < (lvl === 2 ? 5 : 3); r++) { const ox = (r - 1) * 7; ctx.fillStyle = lc; ctx.beginPath(); ctx.ellipse(sx + ox, top - 8 - (lvl === 2 ? r * 6 : 0), 6, 13, ox * 0.05, 0, Math.PI * 2); ctx.fill(); } break; }
     case 'lamp': { const top = block(ctx, sx, sy, d.h, '#2a2a30', accent, d.foot); ctx.save(); ctx.shadowColor = d.color; ctx.shadowBlur = 22; ctx.globalAlpha = 0.5 + Math.abs(Math.sin(t * 0.08)) * 0.4; ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(sx, top - 4, 7, 0, Math.PI * 2); ctx.fill(); ctx.restore(); break; }
     case 'lavalamp': drawLavaLamp(ctx, sx, sy, accent, d.color, t); break;
