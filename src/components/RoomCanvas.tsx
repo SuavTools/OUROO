@@ -45,9 +45,13 @@ const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean)
 // player starts in — the tutorial plays out here (reach the cabinet → play the first game → make an
 // account → design your character) before they're launched into TOWN, the social hub. The old lore
 // rooms / NPCs / portal-maze were cleared on purpose; the lore sequence gets rebuilt on top of this.
-const INDUCTION: RoomDef = { slug: 'induction', name: 'Induction', accent: '#00cfff', floor: '#12121e', plan: 'quadrado', buildAll: true };
+const INDUCTION: RoomDef = { slug: 'induction', name: 'Induction', accent: '#00cfff', floor: '#12121e', plan: 'quadrado' };
 const TOWN: RoomDef       = { slug: 'town',      name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'salao' };
-const ROOMS: RoomDef[] = [TOWN];   // official rooms shown in the picker (Induction is start-only, not listed)
+const ARCADE: RoomDef     = { slug: 'arcade',    name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'quadrado' };
+const WOODS: RoomDef      = { slug: 'woods',     name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'salao', day: true };
+// The menu's destinations (Induction is the solo start-only sandbox, never listed). The Arcade holds
+// the games; Town is the social hub; the Woods are the wild edge.
+const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
 const roomOf = (slug: string) => (slug === 'induction' ? INDUCTION : ROOMS.find(r => r.slug === slug)) ?? TOWN;
 
 // Secret/lore sectors are gone for now — the lore sequence is being rebuilt. Kept as an empty map so
@@ -66,12 +70,23 @@ const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swa
 const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
 const MACHINES: Record<string, Machine[]> = {
   induction: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: just the first game
-  town:      [{ gx: 8, gy: 4, games: [GAME_OUROO, GAME_LEAP] }],    // the hub arcade — more games slot in here
+  arcade:    [{ gx: 3, gy: 2, games: [GAME_OUROO] }, { gx: 7, gy: 2, games: [GAME_LEAP] }],   // the Arcade room — one cabinet per game
+  // Town has NO machine — you reach the Arcade from the menu.
 };
 const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker
 
 // First-visit reward modal kept (empty) — re-attached when the lore sequence + its rooms come back.
 const SECRET_INTRO: Record<string, { title: string; body: string }> = {};
+
+// The Curator's induction speech — the on-screen tutorial voice (see /LORE.md). Grounds the player in
+// the lore (a dead net kept lit by a lonely AI; crystals = cached attention; the Arcade fights Entropy)
+// while teaching the one control they need and steering them to the machine.
+const INDUCTION_SCRIPT: string[] = [
+  'Someone new. It has been a long while since the Loop drew fresh signal. I am the Curator — I keep this place lit for the ones who logged off, and never came back.',
+  'A world no one watches forgets itself, and forgetting is how it dies. You can hold that back, just by being here. First — learn to move. Tap or click anywhere to walk there.',
+  'Crystals are not money. They are cached attention — your presence made solid, the only thing that keeps OUROO awake. You mine them in the Arcade, holding back the dark.',
+  'Step up to the machine ahead and play. Survive one run. Then we will see if you are worth remembering.',
+];
 
 // Curated decor + NPCs baked into a room (not user-placed, not in the DB, not removable). Seats among
 // them are still sittable; solids are pathed around. NPCs are static avatars with name tags.
@@ -82,19 +97,36 @@ const SECRET_INTRO: Record<string, { title: string; body: string }> = {};
 //   `lines`  → ambient idle chatter (random). `id` keys saved beat progress.
 type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: number; lines?: string[]; roam?: number; beats?: string[]; hints?: string[]; id?: string };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
-  // ── INDUCTION — the sandbox you wake up in. One arcade machine to draw you in, a little decor. ──
+  // ── INDUCTION — the solo room you wake up in. One arcade machine to draw you in; the Curator guides. ──
   induction: [
     ['arcade', 5, 2, 0],       // the first game — walk close to play (see MACHINES)
     ['planta', 1, 1, 0], ['planta', 9, 1, 0],
     ['floorlamp', 1, 8, 0], ['floorlamp', 9, 8, 0],
     ['bench', 4, 8, 0], ['bench', 6, 8, 0],
   ],
-  // ── TOWN — the social hub you're launched into. The arcade lives here too; the rest gets built out. ──
+  // ── TOWN — the social hub. NO arcade here — the Arcade is its own place, reached from the menu. ──
   town: [
-    ['arcade', 8, 4, 0],       // hub arcade machine
     ['planta', 1, 1, 0], ['planta', 9, 1, 0],
     ['bench', 1, 9, 0], ['bench', 8, 9, 2],
     ['floorlamp', 5, 1, 0],
+  ],
+  // ── ARCADE — the games room. One cabinet per game (more slot in as they're built). ──
+  arcade: [
+    ['arcade', 3, 2, 0], ['arcade', 7, 2, 0],   // the game cabinets (OUROO, LEAP — see MACHINES)
+    ['neon', 5, 1, 0],
+    ['holofote', 1, 1, 0], ['holofote', 9, 1, 0],
+    ['vending', 2, 5, 0],
+    ['bench', 4, 8, 0], ['bench', 6, 8, 0],
+    ['floorlamp', 1, 8, 0], ['floorlamp', 9, 8, 0],
+  ],
+  // ── THE WOODS — the wild edge. Trees + a spring (the pond/fishing comes later). ──
+  woods: [
+    ['arvore', 1, 1, 0], ['arvore', 9, 1, 0], ['arvore', 1, 9, 0], ['arvore', 9, 9, 0],
+    ['palmeira', 3, 2, 0], ['palmeira', 7, 2, 0],
+    ['relva', 2, 6, 0], ['relva', 8, 6, 0],
+    ['flores', 3, 7, 0], ['flores', 7, 7, 0],
+    ['cato', 1, 5, 0], ['cato', 9, 5, 0],
+    ['fonte', 5, 7, 0],   // a wild spring — the pond proper arrives with fishing later
   ],
 };
 const CURATED_NPCS: Record<string, NpcDef[]> = {};   // NPCs cleared — the lore cast gets rebuilt on the new sequence
@@ -275,6 +307,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
   const [machinePrompt, setMachinePrompt] = useState<Machine | null>(null);   // game picker when you walk close to an arcade machine
+  const [inductStep, setInductStep] = useState(0);     // Curator induction speech (on-screen tutorial)
+  const [inductDone, setInductDone] = useState(false); // dismissed the speech → falls back to a small steer
   const nearMachineRef = useRef(false);   // rising-edge guard so the picker pops once per approach
   const onLaunchGameRef = useRef(onLaunchGame);
   useEffect(() => { onLaunchGameRef.current = onLaunchGame; }, [onLaunchGame]);
@@ -572,6 +606,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     getAuthIdentity().then(a => { if (a?.handle) { selfRef.current.handle = a.handle; myHandleRef.current = a.handle; setMyHandle(a.handle); } if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
     Promise.all([amIModerator(), amISuperAdmin()]).then(([m, s]) => { const ok = m || s; modRef.current = ok; setIsMod(ok); });   // super-admins build in curated rooms too
 
+    // Induction is a SOLO instance — the tutorial sandbox. No presence/broadcast join: it's just you
+    // and the Curator, never a social room. (You're made social only once you're launched into Town.)
+    if (room === 'induction') { remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false); return; }
     if (!supabase || !entered) return;   // wait for the lobby "Enter" so the join is deliberate + clean
     const sb = supabase;
     const me = selfRef.current;
@@ -916,7 +953,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
-        <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{room === 'induction' ? '· induction ·' : supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
@@ -926,8 +963,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
 
-      {/* Tutorial steering — points the new player at the first game until they've played it. */}
-      {onboarding === 'play' && !machinePrompt && (
+      {/* ── INDUCTION · the Curator speaks ── on-screen tutorial: lore + the one control + the steer. */}
+      {onboarding === 'play' && room === 'induction' && !inductDone && (
+        <div className="absolute inset-x-0 z-[60] flex justify-center px-4 pointer-events-none" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 64px)' }}>
+          <div className="w-full max-w-md border border-[#00cfff]/40 bg-black/85 backdrop-blur-md p-5 pointer-events-auto shadow-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff]">❖ the Curator</p>
+              <p className="font-mono text-[10px] tracking-widest text-white/30">{inductStep + 1}/{INDUCTION_SCRIPT.length}</p>
+            </div>
+            <p className="text-[13.5px] text-white/80 leading-relaxed min-h-[4.5rem]">{INDUCTION_SCRIPT[inductStep]}</p>
+            <button
+              onClick={() => { if (inductStep < INDUCTION_SCRIPT.length - 1) setInductStep(s => s + 1); else setInductDone(true); }}
+              className="mt-3 w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-[0.25em] py-2.5 hover:bg-white transition-colors active:scale-95">
+              {inductStep < INDUCTION_SCRIPT.length - 1 ? 'Next ▸' : 'Step up ▸'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Residual steer once the speech is dismissed — until they reach the machine. */}
+      {onboarding === 'play' && room === 'induction' && inductDone && !machinePrompt && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-center">
           <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#00cfff] bg-black/70 px-4 py-1.5 inline-block">🕹 walk to the arcade machine to play</p>
         </div>

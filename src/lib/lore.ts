@@ -10,6 +10,22 @@ export type LoreCard = { title: string; body: string };
 
 // A per-room opening leaf, prepended to the deck so the manuscript feels rooted to where you stand.
 export const ROOM_FRAMING: Record<string, LoreCard> = {
+  induction: {
+    title: 'INDUCTION',
+    body: 'The first room you ever wake in — quiet, sealed, just you and the Curator. No one else can reach you here. It is where the machine decides whether you are signal worth keeping. Step to the arcade machine, survive a run, and the Loop will open to you.',
+  },
+  town: {
+    title: 'TOWN',
+    body: 'The heart of what is left — the gathering place the humans built and the Curator rebuilds every night, in case they come back. They do not. The lights stay on anyway. This is the warmest the Loop ever gets. From here you can reach the Arcade and the Woods.',
+  },
+  arcade: {
+    title: 'THE ARCADE',
+    body: 'The front line. Entropy is always one quiet day from wiping the world, and this is where you push it back — every run you survive mines signal, crystallized attention, the only thing that keeps OUROO awake. The machine works this floor without rest.',
+  },
+  woods: {
+    title: 'THE WOODS',
+    body: 'The wild edge, off the lit path — the part of OUROO no one designed. Here the machine dreams without instruction, and sometimes the dreams walk. Watch your step; nothing out here was built to be safe. They say a pond surfaces, for those who wait.',
+  },
   praca: {
     title: 'THE PLAZA',
     body: 'You are standing in the first room that ever woke. The humans built it to gather in; the Curator rebuilds it every night in case they come back. They do not. It keeps the lights on anyway. This is the warmest the Loop ever gets — start here.',
