@@ -19,7 +19,8 @@ import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance } from '@/lib/wallet';
 import { InventoryModal } from '@/components/InventoryModal';
-import { CatIcon, FurniSprite } from '@/components/UiIcon';
+import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
+import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
@@ -388,6 +389,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [removeMode, setRemoveMode] = useState(false);
   const [rotateMode, setRotateMode] = useState(false);
   const [tileMode, setTileMode] = useState(false);   // admin tile-painting mode
+  const [buildMode, setBuildMode] = useState(false);          // pre-made buildings (prefabs) palette
+  const [placingPrefab, setPlacingPrefab] = useState<Prefab | null>(null);
+  const placingPrefabRef = useRef<Prefab | null>(null);
+  useEffect(() => { placingPrefabRef.current = placingPrefab; }, [placingPrefab]);
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
   const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
@@ -432,7 +437,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -500,8 +505,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { try { setMenuSeen(localStorage.getItem('ouroo_menu_seen') === '1'); } catch { /* ignore */ } }, []);
   const openMenu = () => { setMenuOpen(true); setMenuSeen(true); try { localStorage.setItem('ouroo_menu_seen', '1'); } catch { /* ignore */ } };
   const [cat, setCat] = useState('tier1');
-  const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false, tileMode: false });
-  useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode, tileMode }; }, [decorOpen, placingKind, removeMode, rotateMode, tileMode]);
+  const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false, tileMode: false, placingPrefab: false });
+  useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode, tileMode, placingPrefab: !!placingPrefab }; }, [decorOpen, placingKind, removeMode, rotateMode, tileMode, placingPrefab]);
   const [isMod, setIsMod] = useState(false);
   const [isSuper, setIsSuper] = useState(false);   // super-admin → can open the Admin panel + grant admins
   const [adminOpen, setAdminOpen] = useState(false);
@@ -777,6 +782,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind: isPortal ? dbKind : engineKind, gx, gy, dir, elev, by: item.createdBy } });
     supabase?.from('room_items').insert({ id, room, kind: dbKind, x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
+  // Drop a whole pre-made building (prefab) with its anchor (tap tile) at the structure's local (0,0).
+  // Pieces reuse the same construction kinds + dir/elev encoding as single placements; one batched DB
+  // insert keeps persistence cheap. It's a building TOOL — free to place and exempt from the per-person
+  // cap (a building is dozens of pieces), but still bounded by the room-wide item cap.
+  const placePrefab = (p: Prefab, gx: number, gy: number) => {
+    if (!requireAccount()) return;
+    if (!canBuildHere()) { flashHint('No permission to build here'); return; }
+    if (gx + p.w > GRID || gy + p.d > GRID) { flashHint('Building doesn\'t fit here'); return; }
+    for (let x = 0; x < p.w; x++) for (let y = 0; y < p.d; y++) if (planLvl(gx + x, gy + y) < 0) { flashHint('Building doesn\'t fit here'); return; }
+    if (itemsRef.current.length + p.pieces.length > MAX_ITEMS) { flashHint('Not enough room left for that'); return; }
+    // Pieces are tagged created_by:'prefab' (like curated decor) — it's a free building TOOL, so picking a
+    // piece back up just removes it (no inventory refund minted), and the bundle is exempt from the cap.
+    const by = 'prefab';
+    const rows = p.pieces.map(pc => {
+      const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
+      const ax = gx + pc.x, ay = gy + pc.y, dir = isRotatable(pc.kind) ? pc.dir : 0;
+      itemsRef.current.push({ id, kind: pc.kind, gx: ax, gy: ay, dir, elev: pc.elev, createdBy: by });
+      channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind: pc.kind, gx: ax, gy: ay, dir, elev: pc.elev, by } });
+      return { id, room, kind: encodeKind(pc.kind, dir, pc.elev), x: ax, y: ay, created_by: by };
+    });
+    rebuildHeight();
+    flashHint(`${p.name} placed ✦`);
+    supabase?.from('room_items').insert(rows).then(undefined, () => {});
+  };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
@@ -789,7 +818,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const removeAt = (gx: number, gy: number) => {
     const hit = [...itemsRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh && (canBuildHere() || i.createdBy === deviceRef.current); });
     if (hit) {
-      if (!hit.portalTo) returnFurni(hit.kind);   // pick it up into MY inventory (portals are free — don't gift a teleporter)
+      if (!hit.portalTo && hit.createdBy !== 'prefab') returnFurni(hit.kind);   // pick it up into MY inventory (portals + prefab pieces are free — don't gift them)
       itemsRef.current = itemsRef.current.filter(i => i.id !== hit.id);
       if (hit.createdBy === deviceRef.current) setMyCount(c => Math.max(0, c - 1)); rebuildHeight();
       channelRef.current?.send({ type: 'broadcast', event: 'unplace', payload: { id: hit.id } });
@@ -854,7 +883,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
     pendingLoreRef.current = { text: '', style: 'oracle', crystals: 0, skinId: '' }; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker placed ✎');
   };
-  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setMkCrystals(100); setMkSkin(''); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); };
+  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setMkCrystals(100); setMkSkin(''); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); };
   // Set the room's atmosphere (backdrop layer). 'auto' clears the override; otherwise upsert a `bg:` row.
   const setAtmosphere = (a: Atmo) => {
     bgRef.current = a; setBgAtmo(a);
@@ -1308,7 +1337,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.restore();
       }
       const hv = hoverRef.current, ui = uiRef.current;
-      if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode || ui.tileMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      if (ui.decorOpen && ui.placingPrefab && placingPrefabRef.current && hv && lvl(hv.gx, hv.gy) >= 0) {
+        const pf = placingPrefabRef.current;   // footprint preview — green where it lands, red where it won't fit
+        for (let x = 0; x < pf.w; x++) for (let y = 0; y < pf.d; y++) {
+          const gx = hv.gx + x, gy = hv.gy + y, inb = gx < GRID && gy < GRID, L = inb ? lvl(gx, gy) : -1, fits = inb && L >= 0;
+          const { sx, sy } = iso(gx, gy, Math.max(0, L)); const col = fits ? theme.accent : '#ff4e3e';
+          diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(col, 0.28); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; diamond(sx, sy, TW, TH); ctx.stroke();
+        }
+      } else if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode || ui.tileMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
       // Lore tile markers — invisible to players; a small glyph only while an admin is decorating.
       if (ui.decorOpen) for (const lm of loreRef.current) { if (lm.mode !== 'tile') continue; const L = Math.max(0, planLvl(lm.gx, lm.gy)); const { sx, sy } = iso(lm.gx, lm.gy, L); const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#00cfff'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.6, TH * 0.6); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.9; ctx.fillStyle = '#00cfff'; ctx.font = '700 12px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✎', sx, sy - 1); ctx.restore(); }
 
@@ -1376,6 +1412,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
     if (tileMode) { paintTile(gx, gy); return; }
+    if (placingPrefab) { placePrefab(placingPrefab, gx, gy); return; }
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
@@ -1506,9 +1543,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
       {simFade && <div className="absolute inset-0 z-[97] bg-white animate-[fadeIn_1s_ease] pointer-events-none" />}
 
-      {(hint || placingKind || removeMode || placeLore || tileMode) && (
+      {(hint || placingKind || placingPrefab || removeMode || placeLore || tileMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
-          {hint || (placeLore ? 'tap a tile to drop the lore marker ✎' : tileMode ? 'tap tiles to paint the floor' : placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
+          {hint || (placeLore ? 'tap a tile to drop the lore marker ✎' : tileMode ? 'tap tiles to paint the floor' : placingPrefab ? 'tap a tile to drop the building 🏠' : placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
         </div>
       )}
 
@@ -1547,7 +1584,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {CATS.map(c => {
                 const on = cat === c.id && !removeMode;
                 return (
-                  <button key={c.id} onClick={() => { setCat(c.id); setRemoveMode(false); setTileMode(false); setAtmoMode(false); }} title={c.name}
+                  <button key={c.id} onClick={() => { setCat(c.id); setRemoveMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title={c.name}
                     className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${on ? 'bg-white/10' : 'hover:bg-white/5'}`}>
                     <CatIcon catId={c.id} size={22} color={on ? '#ffe65c' : '#cfd2dc'} />
                     <span className={`text-[7px] uppercase tracking-wide leading-none text-center ${on ? 'text-brandYellow' : 'text-white/50'}`}>{c.name.replace('★ ', '')}</span>
@@ -1555,24 +1592,29 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 );
               })}
               {(() => { const spin = !!(placingKind && isRotatable(placingKind)); const on = rotateMode || spin; return (
-                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); setTileMode(false); setAtmoMode(false); } }} title="Rotate"
+                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setRemoveMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); } }} title="Rotate"
                   className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${on ? 'bg-[#00cfff]/15' : 'hover:bg-white/5'}`}>
                   <CatIcon catId="rotate" size={22} color={on ? '#00cfff' : '#cfd2dc'} />
                   <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Turn ${placeDir + 1}/4` : 'Rotate'}</span>
                 </button>
               ); })()}
-              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); setTileMode(false); setAtmoMode(false); }} title="Pick up"
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Pick up"
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Pick up</span>
               </button>
-              <button onClick={() => { setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); }} title="Place a portal to another room"
+              <button onClick={() => { setBuildMode(b => { const nb = !b; if (!nb) setPlacingPrefab(null); return nb; }); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); }} title="Pre-made buildings"
+                className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${buildMode ? 'bg-brandYellow/20' : 'hover:bg-white/5'}`}>
+                <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: buildMode ? '#ffe65c' : '#cfd2dc' }}>🏠</span>
+                <span className={`text-[7px] uppercase tracking-wide leading-none ${buildMode ? 'text-brandYellow' : 'text-white/50'}`}>Builds</span>
+              </button>
+              <button onClick={() => { setPortalMaker(true); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Place a portal to another room"
                 className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#cc66ff]/15">
                 <span className="text-[18px] leading-none text-[#cc66ff]" style={{ marginTop: '-1px' }}>◎</span>
                 <span className="text-[7px] uppercase tracking-wide leading-none text-[#cc66ff]">Portal</span>
               </button>
               {isMod && (
-                <button onClick={() => { setTileMode(t => !t); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setAtmoMode(false); }} title="Paint floor tiles (admin)"
+                <button onClick={() => { setTileMode(t => !t); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Paint floor tiles (admin)"
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${tileMode ? 'bg-[#1ED760]/20' : 'hover:bg-[#1ED760]/15'}`}>
                   <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: tileMode ? '#1ED760' : '#9fe0b3' }}>▦</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: tileMode ? '#1ED760' : '#9fe0b3' }}>Tiles</span>
@@ -1586,7 +1628,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 </button>
               )}
               {isMod && (
-                <button onClick={() => { setAtmoMode(a => !a); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); }} title="Room atmosphere (admin)"
+                <button onClick={() => { setAtmoMode(a => !a); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Room atmosphere (admin)"
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${atmoMode ? 'bg-[#cc66ff]/20' : 'hover:bg-[#cc66ff]/15'}`}>
                   <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: atmoMode ? '#cc66ff' : '#c79fe0' }}>☁</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: atmoMode ? '#cc66ff' : '#c79fe0' }}>Atmo</span>
@@ -1618,6 +1660,31 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   ))}
                 </div>
               </div>
+            ) : buildMode ? (
+              <div className="overflow-x-auto overflow-y-hidden p-2" style={{ maxHeight: '11rem' }}>
+                <p className="text-[10px] text-brandYellow/80 mb-1.5 px-1">Pick a building, then tap a tile — it drops the whole structure (floor it lands on must fit the footprint).</p>
+                <div className="flex gap-3">
+                  {PREFAB_GROUPS.map(g => (
+                    <div key={g.id} className="shrink-0">
+                      <p className="text-[8px] uppercase tracking-widest text-white/40 mb-1 px-0.5">{g.name}</p>
+                      <div className="flex gap-1.5">
+                        {PREFABS.filter(p => p.group === g.id).map(p => {
+                          const sel = placingPrefab?.id === p.id;
+                          return (
+                            <button key={p.id} onClick={() => setPlacingPrefab(cur => cur?.id === p.id ? null : p)} title={`${p.name} — ${p.note}`}
+                              className={`relative flex flex-col items-center justify-start gap-0.5 w-[4.6rem] h-[6rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : 'border-white/12 bg-white/[0.03] hover:border-white/40'}`}>
+                              <PrefabThumb prefab={p} size={52} accent={p.accent} />
+                              <span className="text-[8px] uppercase tracking-wide leading-tight text-center text-white/75 w-full px-0.5">{p.name}</span>
+                              <span className="text-[7px] leading-none text-white/40 tabular-nums">{p.w}×{p.d} · h{p.h}</span>
+                              {sel && <span className="absolute top-0.5 left-0.5 w-1.5 h-1.5 rounded-full bg-brandYellow" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : removeMode ? (
               <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Tap an object to pick it up — it returns to your inventory.</p>
             ) : rotateMode ? (
@@ -1632,7 +1699,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   return (
                     <button key={f.kind} onClick={() => {
                       if (!canPlace) { const r = buyFurni(f.kind); flashHint(r.ok ? 'Bought ✦ — tap to place' : (r.error || 'Not enough Crystals')); return; }
-                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false);
+                      setPlacingKind(k => k === f.kind ? null : f.kind); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null);
                     }} className={`relative flex flex-col items-center justify-start gap-0.5 w-[4rem] h-[4rem] border rounded-lg pt-1 transition-colors ${sel ? 'border-brandYellow bg-brandYellow/15' : canPlace ? 'border-white/12 bg-white/[0.03] hover:border-white/40' : 'border-white/10 bg-black/40 hover:border-brandYellow/50'}`}>
                       <FurniSprite kind={f.kind} size={38} accent={roomMeta.accent} />
                       <span className="text-[7px] uppercase tracking-wide leading-none text-center text-white/65 truncate w-full px-0.5">{f.name}</span>
