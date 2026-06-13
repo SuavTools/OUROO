@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getAdminStats, getRecentAccounts, type AdminStats, type AdminAccount } from '@/lib/admin';
+import { getAdminStats, getRecentAccounts, getSuperAdminIds, setSuperAdmin, type AdminStats, type AdminAccount } from '@/lib/admin';
 
 function when(iso: string): string {
   const d = new Date(iso);
@@ -15,13 +15,25 @@ function when(iso: string): string {
 export function AdminModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [accounts, setAccounts] = useState<AdminAccount[] | null>(null);
+  const [supers, setSupers] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setStats(null); setAccounts(null);
     getAdminStats().then(setStats);
     getRecentAccounts(40).then(setAccounts);
+    getSuperAdminIds().then(ids => setSupers(new Set(ids)));
   }, [open]);
+
+  const toggleAdmin = async (a: AdminAccount) => {
+    if (!a.userId) return;
+    const on = !supers.has(a.userId); setBusy(a.userId);
+    const res = await setSuperAdmin(a.userId, on);
+    setBusy(null);
+    if (!res.ok) { alert(res.error || 'Failed — are you signed in as a super-admin?'); return; }
+    setSupers(prev => { const n = new Set(prev); if (on) n.add(a.userId!); else n.delete(a.userId!); return n; });
+  };
 
   if (!open) return null;
 
@@ -59,8 +71,17 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
               <span className="flex items-center gap-2 min-w-0">
                 <span className="text-sm text-white truncate font-bold uppercase tracking-wide">{a.handle}</span>
                 <span className="text-[10px]">{a.discord ? '🟣' : '👤'}</span>
+                {a.userId && supers.has(a.userId) && <span className="text-[9px] font-mono uppercase tracking-wider text-brandYellow border border-brandYellow/40 px-1 rounded">admin</span>}
               </span>
-              <span className="text-[11px] text-white/40 shrink-0">{when(a.created_at)}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                {a.discord
+                  ? <button onClick={() => toggleAdmin(a)} disabled={busy === a.userId}
+                      className={`text-[10px] font-mono uppercase tracking-widest border px-2 py-1 transition-colors ${supers.has(a.userId!) ? 'text-white/50 border-white/20 hover:border-brandRed hover:text-brandRed' : 'text-brandYellow border-brandYellow/40 hover:bg-brandYellow hover:text-black'} ${busy === a.userId ? 'opacity-40' : ''}`}>
+                      {busy === a.userId ? '…' : supers.has(a.userId!) ? 'revoke' : 'make admin'}
+                    </button>
+                  : <span className="text-[10px] text-white/25">guest</span>}
+                <span className="text-[11px] text-white/40">{when(a.created_at)}</span>
+              </span>
             </li>
           ))}
         </ol>

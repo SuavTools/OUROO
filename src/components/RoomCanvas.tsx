@@ -32,7 +32,14 @@ const TILE_W = 64, TILE_H = 32, TW = TILE_W / 2, TH = TILE_H / 2;
 const STACK_H = 26;
 const WALL_H = 3;
 const WALK = 0.09;          // tiles per 60Hz step
-const BUBBLE_FRAMES = 60 * 6;
+const BUBBLE_FRAMES = 60 * 11;   // how long a speech bubble lingers (~11s)
+// Wrap bubble text into up to 3 lines, max 7 words per line, for readability.
+const wrapBubble = (text: string): string[] => {
+  const words = text.split(/\s+/).filter(Boolean); const lines: string[] = [];
+  for (let i = 0; i < words.length; i += 7) lines.push(words.slice(i, i + 7).join(' '));
+  if (lines.length > 3) { lines.length = 3; lines[2] = lines[2].replace(/\s*\S*$/, '') + '…'; }
+  return lines.length ? lines : [text];
+};
 const MAX_ITEMS = 200, PLACE_CAP = 20;
 
 type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean };
@@ -1066,10 +1073,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.fillStyle = isSelf ? col : 'rgba(255,255,255,0.82)'; ctx.fillText(a.handle, sx, ny); ctx.restore();
       if (a.bubbleLife > 0 && a.bubble) {
         const alpha = Math.min(1, a.bubbleLife / 30); ctx.save(); ctx.globalAlpha = alpha; ctx.font = '600 15px Helvetica, Arial';
-        const tw = ctx.measureText(a.bubble).width, bw = tw + 22, bh = 28, bx = sx - bw / 2, by = sy - 86;
+        const lines = wrapBubble(a.bubble); const lh = 19, padY = 7;
+        const tw = Math.max(...lines.map(l => ctx.measureText(l).width)), bw = tw + 22, bh = lines.length * lh + padY * 2;
+        const bx = sx - bw / 2, by = sy - 56 - bh;   // sit the whole box above the head regardless of line count
         ctx.fillStyle = 'rgba(10,10,18,0.94)'; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(sx - 6, by + bh); ctx.lineTo(sx + 6, by + bh); ctx.lineTo(sx, by + bh + 8); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(a.bubble, sx, by + bh / 2); ctx.restore();
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        lines.forEach((l, i) => ctx.fillText(l, sx, by + padY + lh / 2 + i * lh));
+        ctx.restore();
       }
     };
 

@@ -39,16 +39,36 @@ export async function getAdminStats(): Promise<AdminStats> {
   };
 }
 
-export type AdminAccount = { handle: string; created_at: string; discord: boolean };
+export type AdminAccount = { handle: string; created_at: string; discord: boolean; userId?: string };
 
 export async function getRecentAccounts(limit = 40): Promise<AdminAccount[]> {
   if (!supabase) return [];
   const { data } = await supabase
     .from('players').select('handle,created_at,device_token')
     .order('created_at', { ascending: false }).limit(limit);
-  return (data ?? []).map(r => ({
-    handle: r.handle as string,
-    created_at: r.created_at as string,
-    discord: String(r.device_token || '').startsWith('discord:'),
-  }));
+  return (data ?? []).map(r => {
+    const tok = String(r.device_token || ''); const discord = tok.startsWith('discord:');
+    return { handle: r.handle as string, created_at: r.created_at as string, discord, userId: discord ? tok.slice('discord:'.length) : undefined };
+  });
+}
+
+// Super-admins (the `moderators.is_super` rows). A Discord account's auth uuid === its device_token
+// minus the `discord:` prefix, so we grant/revoke by an account's userId.
+export async function getSuperAdminIds(): Promise<string[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from('moderators').select('user_id').eq('is_super', true);
+  return (data ?? []).map(r => String(r.user_id));
+}
+
+// Grant / revoke super-admin. RLS only lets an existing super-admin do this (insert/delete are gated
+// by is_super_mod(auth.uid())), so it must run while signed in as a super-admin.
+export async function setSuperAdmin(userId: string, on: boolean): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Offline.' };
+  if (on) {
+    const { error } = await supabase.from('moderators').insert({ user_id: userId, is_super: true });
+    if (error && !/duplicate|conflict|unique/i.test(error.message)) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+  const { error } = await supabase.from('moderators').delete().eq('user_id', userId);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }
