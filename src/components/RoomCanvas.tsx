@@ -23,6 +23,7 @@ import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, createRoom, deleteR
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
 import { RoomMusic } from '@/lib/roomMusic';
 import { Oracle } from '@/components/Oracle';
+import { MenuModal } from '@/components/MenuModal';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -414,6 +415,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { musicRef.current?.setRoom(roomMeta.slug); }, [roomMeta.slug]);
   const toggleMusic = () => setMusicOff(v => { const nv = !v; musicRef.current?.setMuted(nv); try { localStorage.setItem('ouroo_music_off', nv ? '1' : '0'); } catch { /* ignore */ } return nv; });
   const [oracleOpen, setOracleOpen] = useState(false);   // the lore codex + Oracle Q&A
+  const [menuOpen, setMenuOpen] = useState(false);       // the ☰ menu (account / leaderboard / about)
+  // First time you reach the world as a guest, nudge the menu button to make an account (sticky until
+  // you open the menu, so a stray tap-away doesn't lose the prompt).
+  const [menuSeen, setMenuSeen] = useState(true);
+  useEffect(() => { try { setMenuSeen(localStorage.getItem('ouroo_menu_seen') === '1'); } catch { /* ignore */ } }, []);
+  const openMenu = () => { setMenuOpen(true); setMenuSeen(true); try { localStorage.setItem('ouroo_menu_seen', '1'); } catch { /* ignore */ } };
   const [cat, setCat] = useState('tier1');
   const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false });
   useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode }; }, [decorOpen, placingKind, removeMode, rotateMode]);
@@ -1013,14 +1020,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatarBody(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatarBody(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
-      // Names + chat bubbles in a final pass so furniture never occludes them.
-      for (const n of npcsRef.current) drawAvatarLabel(n, false);
-      drawAvatarLabel(selfRef.current, true);
-      for (const r of remotesRef.current.values()) drawAvatarLabel(r, false);
       ctx.restore();
 
       const vig = ctx.createRadialGradient(STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.34, STAGE_W / 2, STAGE_H * 0.54, STAGE_H * 0.85);
       vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, day ? 'rgba(20,40,30,0.22)' : 'rgba(0,0,0,0.5)'); ctx.fillStyle = vig; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+
+      // Names + chat bubbles render DEAD LAST — over furniture, other avatars, AND the vignette — so a
+      // character's name is never occluded by anything. Re-apply the room camera for this pass only.
+      ctx.save(); ctx.translate(cam.x, cam.y); ctx.scale(cam.s, cam.s);
+      for (const n of npcsRef.current) drawAvatarLabel(n, false);
+      for (const r of remotesRef.current.values()) drawAvatarLabel(r, false);
+      drawAvatarLabel(selfRef.current, true);   // your own name on top of the pile
+      ctx.restore();
     };
 
     let last = 0, acc = 0; const STEP = 1000 / 60;
@@ -1084,6 +1095,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       </div>
 
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex gap-2">
+        {!tutorial && (
+          <div className="relative">
+            <button onClick={openMenu} title="Menu — account, leaderboard, about" className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${!menuSeen && !signedIn ? 'text-black bg-brandYellow border-brandYellow animate-pulse' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>☰ Menu</button>
+            {!menuSeen && !signedIn && (
+              <button onClick={openMenu} className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-max max-w-[70vw] border border-brandYellow/50 bg-black/90 px-3 py-2 text-left active:scale-95">
+                <span className="block text-[11px] font-bold text-brandYellow">Create an account to save your progress →</span>
+                <span className="block text-[10px] text-white/55 leading-snug">crystals, scores, skins & your room — tap here</span>
+              </button>
+            )}
+          </div>
+        )}
         {!tutorial && <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>}
         {!tutorial && <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>}
         <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
@@ -1468,6 +1490,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ EXIT ]</button>}
 
       <Oracle open={oracleOpen} onClose={() => setOracleOpen(false)} roomSlug={roomMeta.slug} roomName={roomMeta.name} />
+
+      <MenuModal open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'character') finishCharacter(); }} onEquip={equipAppearance} title={onboarding === 'character' ? 'Design your character' : 'Character'} />
     </div>
