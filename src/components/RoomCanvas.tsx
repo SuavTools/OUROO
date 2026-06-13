@@ -275,13 +275,17 @@ type Cam = { x: number; y: number; s: number };
 const worldToTile = (wx: number, wy: number) => { const a = wx / TW, b = wy / TH; return { gx: (a + b) / 2, gy: (b - a) / 2 }; };
 // Fit the plan's walkable footprint into the stage (leaving room for the title up top). Bigger rooms
 // → smaller scale (zoom out). Capped so tiny rooms don't balloon.
-const computeCam = (mask: Int8Array, grid: number): Cam => {
+// `headroom` is how many levels of vertical space to reserve above the floor — defaults to the room's
+// own wall height, but grows to fit the TALLEST placed build (towers, multi-storey shops) so nothing
+// gets clipped off the top of the stage.
+const computeCam = (mask: Int8Array, grid: number, headroom = WALL_H): Cam => {
+  const top = Math.max(WALL_H, headroom);
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, any = false;
   for (let gy = 0; gy < grid; gy++) for (let gx = 0; gx < grid; gx++) {
     const L = mask[gy * grid + gx]; if (L < 0) continue; any = true;
     const cx = (gx - gy) * TW, cy = (gx + gy) * TH - L * STACK_H;
     if (cx - TW < minX) minX = cx - TW; if (cx + TW > maxX) maxX = cx + TW;
-    if (cy - TH - WALL_H * STACK_H < minY) minY = cy - TH - WALL_H * STACK_H;   // wall above
+    if (cy - TH - top * STACK_H < minY) minY = cy - TH - top * STACK_H;        // tallest build above
     if (cy + TH + STACK_H > maxY) maxY = cy + TH + STACK_H;                     // riser below
   }
   if (!any) { minX = -TW; maxX = TW; minY = -TH; maxY = TH; }
@@ -337,6 +341,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
   const isWater = (gx: number, gy: number) => gx >= 0 && gy >= 0 && gx < GRID && gy < GRID && waterRef.current[gy * GRID + gx] === 1;
   const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
+  const peakRef = useRef(WALL_H);   // tallest build in the room (levels) — the camera zooms out to keep it in frame
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
   const framesRef = useRef(0);
   const posAccum = useRef(0);
@@ -655,18 +660,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const rebuildHeight = () => {
     const surf = surfRef.current, S = solidRef.current; S.fill(0);
     for (let i = 0; i < surf.length; i++) surf[i].length = 0;
-    const grounded = new Uint8Array(GRID * GRID);
+    const grounded = new Uint8Array(GRID * GRID); let peak = WALL_H;
     for (const it of (decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current)) {
       const d = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const elev = it.elev || 0; const sit = sitHeight(it.kind);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) {
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
         const k = key(gx, gy); const base = planRef.current[k]; if (base < 0) continue;   // can't sit on a void tile
+        if (base + elev + (d.h || 0) > peak) peak = base + elev + (d.h || 0);   // track the topmost point for the camera
         if (d.pass) { /* walk-through (doorways/roof): never blocks, never raises the floor */ }
         else if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
         else if (sit != null) { surf[k].push(base + elev + sit); if (elev <= 0.01) grounded[k] = 1; }
         else S[k] = 1;
       }
     }
+    // Keep the whole build in frame: if it grew taller than before, re-fit the camera (zoom out a touch).
+    if (Math.ceil(peak) !== Math.ceil(peakRef.current)) { peakRef.current = peak; camRef.current = computeCam(planRef.current, GRID, Math.ceil(peak) + 1); }
     for (let k = 0; k < surf.length; k++) {
       const base = planRef.current[k];
       if (base < 0) { S[k] = 1; surf[k].length = 0; continue; }   // void tile — no floor, blocked
@@ -782,22 +790,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind: isPortal ? dbKind : engineKind, gx, gy, dir, elev, by: item.createdBy } });
     supabase?.from('room_items').insert({ id, room, kind: dbKind, x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
-  // Drop a whole pre-made building (prefab) with its anchor (tap tile) at the structure's local (0,0).
+  // Drop a whole pre-made building (prefab) CENTERED on the tapped tile, so it lands where you point.
   // Pieces reuse the same construction kinds + dir/elev encoding as single placements; one batched DB
   // insert keeps persistence cheap. It's a building TOOL — free to place and exempt from the per-person
   // cap (a building is dozens of pieces), but still bounded by the room-wide item cap.
+  const prefabOrigin = (p: Prefab, gx: number, gy: number) => ({ ox: gx - ((p.w - 1) >> 1), oy: gy - ((p.d - 1) >> 1) });
   const placePrefab = (p: Prefab, gx: number, gy: number) => {
     if (!requireAccount()) return;
     if (!canBuildHere()) { flashHint('No permission to build here'); return; }
-    if (gx + p.w > GRID || gy + p.d > GRID) { flashHint('Building doesn\'t fit here'); return; }
-    for (let x = 0; x < p.w; x++) for (let y = 0; y < p.d; y++) if (planLvl(gx + x, gy + y) < 0) { flashHint('Building doesn\'t fit here'); return; }
+    const { ox, oy } = prefabOrigin(p, gx, gy);
+    if (ox < 0 || oy < 0 || ox + p.w > GRID || oy + p.d > GRID) { flashHint('Building doesn\'t fit here'); return; }
+    for (let x = 0; x < p.w; x++) for (let y = 0; y < p.d; y++) if (planLvl(ox + x, oy + y) < 0) { flashHint('Building doesn\'t fit here'); return; }
     if (itemsRef.current.length + p.pieces.length > MAX_ITEMS) { flashHint('Not enough room left for that'); return; }
     // Pieces are tagged created_by:'prefab' (like curated decor) — it's a free building TOOL, so picking a
     // piece back up just removes it (no inventory refund minted), and the bundle is exempt from the cap.
     const by = 'prefab';
     const rows = p.pieces.map(pc => {
       const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
-      const ax = gx + pc.x, ay = gy + pc.y, dir = isRotatable(pc.kind) ? pc.dir : 0;
+      const ax = ox + pc.x, ay = oy + pc.y, dir = isRotatable(pc.kind) ? pc.dir : 0;
       itemsRef.current.push({ id, kind: pc.kind, gx: ax, gy: ay, dir, elev: pc.elev, createdBy: by });
       channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind: pc.kind, gx: ax, gy: ay, dir, elev: pc.elev, by } });
       return { id, room, kind: encodeKind(pc.kind, dir, pc.elev), x: ax, y: ay, created_by: by };
@@ -1338,9 +1348,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       const hv = hoverRef.current, ui = uiRef.current;
       if (ui.decorOpen && ui.placingPrefab && placingPrefabRef.current && hv && lvl(hv.gx, hv.gy) >= 0) {
-        const pf = placingPrefabRef.current;   // footprint preview — green where it lands, red where it won't fit
+        const pf = placingPrefabRef.current;   // footprint preview (centered on the cursor) — green where it lands, red where it won't fit
+        const ox = hv.gx - ((pf.w - 1) >> 1), oy = hv.gy - ((pf.d - 1) >> 1);
         for (let x = 0; x < pf.w; x++) for (let y = 0; y < pf.d; y++) {
-          const gx = hv.gx + x, gy = hv.gy + y, inb = gx < GRID && gy < GRID, L = inb ? lvl(gx, gy) : -1, fits = inb && L >= 0;
+          const gx = ox + x, gy = oy + y, inb = gx >= 0 && gy >= 0 && gx < GRID && gy < GRID, L = inb ? lvl(gx, gy) : -1, fits = inb && L >= 0;
           const { sx, sy } = iso(gx, gy, Math.max(0, L)); const col = fits ? theme.accent : '#ff4e3e';
           diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(col, 0.28); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; diamond(sx, sy, TW, TH); ctx.stroke();
         }

@@ -23,14 +23,15 @@ export type Prefab = {
 const openDir = (x: number, y: number, w: number, d: number): number =>
   y === d - 1 ? 0 : x === w - 1 ? 1 : y === 0 ? 2 : 3;
 
-type Open = { x: number; y: number; kind: string };
-// One storey: a ring of `wall` around the w×d perimeter, with openings (doors/windows) swapped in.
+type Open = { x: number; y: number; kind: string };   // kind '' → leave the cell empty (e.g. the far tile a 2-wide gate already covers)
+// One storey: a ring of `wall` around the w×d perimeter, with openings (doors/windows/gates) swapped in.
 const storey = (w: number, d: number, wall: string, elev: number, opens: Open[] = []): PrefabPiece[] => {
   const oMap = new Map(opens.map(o => [`${o.x},${o.y}`, o.kind]));
   const out: PrefabPiece[] = [];
   for (let x = 0; x < w; x++) for (let y = 0; y < d; y++) {
     if (!(x === 0 || x === w - 1 || y === 0 || y === d - 1)) continue;   // perimeter only
     const ok = oMap.get(`${x},${y}`);
+    if (ok === '') continue;                                            // intentionally left open
     out.push(ok ? { kind: ok, x, y, dir: openDir(x, y, w, d), elev } : { kind: wall, x, y, dir: 0, elev });
   }
   return out;
@@ -44,14 +45,20 @@ const deck = (w: number, d: number, blk: string, elev: number, interiorOnly = tr
   }
   return out;
 };
-// A roof: hip-roof tiles over the footprint, with inner rings stepped UP so it reads as a pitched/hipped
-// roof (a peak on square plans, a ridge on long ones) rather than a flat tiled deck.
-const roofTop = (w: number, d: number, roof: string, elev: number): PrefabPiece[] => {
+// A roof: hip-roof tiles over the footprint. `pitch` steps inner rings UP so it reads as a pitched/hipped
+// roof (a peak on square plans, a ridge on long ones); pitch 0 = a flat roof flush with the wall top.
+const roofTop = (w: number, d: number, roof: string, elev: number, pitch = 0.7): PrefabPiece[] => {
   const out: PrefabPiece[] = [];
   for (let x = 0; x < w; x++) for (let y = 0; y < d; y++) {
     const inset = Math.min(x, y, w - 1 - x, d - 1 - y);   // 0 at the eaves, higher toward the ridge/peak
-    out.push({ kind: roof, x, y, dir: 0, elev: elev + inset * 0.7 });
+    out.push({ kind: roof, x, y, dir: 0, elev: elev + inset * pitch });
   }
+  return out;
+};
+// Walls on the BACK two edges only (x==0 / y==0) — leaves the camera-facing front open (market stalls).
+const backWalls = (w: number, d: number, wall: string, elev: number): PrefabPiece[] => {
+  const out: PrefabPiece[] = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < d; y++) if (x === 0 || y === 0) out.push({ kind: wall, x, y, dir: 0, elev });
   return out;
 };
 
@@ -74,6 +81,27 @@ export const PREFABS: Prefab[] = [
         { x: 3, y: 1, kind: 'window' }, { x: 3, y: 2, kind: 'window' },
       ]),
       ...roofTop(4, 4, 'roof_slate', 4),
+    ],
+  },
+  {
+    id: 'market_stall', name: 'Market Stall', group: 'shop', w: 4, d: 4, h: 3,
+    note: '4×4 · low open-front stall, counter + striped awning', accent: '#c79a52',
+    pieces: [
+      ...backWalls(4, 4, 'wall_wood', 0),                 // back + side walls; front left open to the street
+      { kind: 'bar', x: 1, y: 3, dir: 0, elev: 0 },       // shop counter across the open front
+      { kind: 'pillar_stone', x: 3, y: 3, dir: 0, elev: 0 },   // front post holding up the awning corner
+      ...roofTop(4, 4, 'roof_thatch', 2, 0.5),            // shallow striped awning
+    ],
+  },
+  {
+    id: 'minimart', name: 'Mini Mart', group: 'shop', w: 4, d: 4, h: 2,
+    note: '4×4 · single-floor shop, glass front + flat roof', accent: '#7bbf8a',
+    pieces: [
+      ...storey(4, 4, 'wall_wood', 0, [
+        { x: 1, y: 3, kind: 'door_glass' }, { x: 2, y: 3, kind: 'wall_glass' },
+        { x: 3, y: 1, kind: 'wall_glass' }, { x: 3, y: 2, kind: 'wall_glass' },
+      ]),
+      ...roofTop(4, 4, 'roof_slate', 2, 0),               // flat roof flush with the wall top (low, h2)
     ],
   },
   {
@@ -140,7 +168,7 @@ export const PREFABS: Prefab[] = [
     pieces: [
       // curtain wall (one storey, h2) with an arched double gate on the front-left edge
       ...storey(8, 8, 'wall_stone', 0, [
-        { x: 3, y: 7, kind: 'door_arch' }, { x: 4, y: 7, kind: 'door_arch' },
+        { x: 3, y: 7, kind: 'gate_stone' }, { x: 4, y: 7, kind: '' },   // 2-wide stone gate (covers 3,7 + 4,7)
         { x: 7, y: 3, kind: 'window' }, { x: 7, y: 4, kind: 'window' },
       ]),
       // crenellations — every other perimeter cell gets a stub on top (toothy battlement)

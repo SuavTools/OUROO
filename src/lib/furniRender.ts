@@ -63,13 +63,15 @@ const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: nu
   if (opening) {
     const F = (((dir % 4) + 4) % 4) % 2 === 1 ? R : L;   // rotate the opening between the two iso faces
     if (opening === 'door') {
-      const dbl = /double/.test(kind), arch = /arch/.test(kind), x0 = dbl ? 0.22 : 0.3, x1 = dbl ? 0.78 : 0.7;
+      // `full` = opening fills (nearly) the whole face — a full-block door/portal; `double` = wide twin doors.
+      const dbl = /double/.test(kind), arch = /arch/.test(kind), full = /full/.test(kind);
+      const x0 = full ? 0.12 : dbl ? 0.22 : 0.3, x1 = full ? 0.88 : dbl ? 0.78 : 0.7, yTop = full ? 0.94 : 0.78;
       if (arch) {   // rounded-top opening
-        const pts: number[][] = [fp(F[0], F[1], F[2], F[3], x0, 0), fp(F[0], F[1], F[2], F[3], x0, 0.5)];
-        for (let a = 0; a <= 7; a++) { const fx = x0 + (x1 - x0) * (a / 7), fy = 0.5 + 0.28 * Math.sin(Math.PI * (a / 7)); pts.push(fp(F[0], F[1], F[2], F[3], fx, fy)); }
+        const pts: number[][] = [fp(F[0], F[1], F[2], F[3], x0, 0), fp(F[0], F[1], F[2], F[3], x0, yTop - 0.28)];
+        for (let a = 0; a <= 7; a++) { const fx = x0 + (x1 - x0) * (a / 7), fy = (yTop - 0.28) + 0.28 * Math.sin(Math.PI * (a / 7)); pts.push(fp(F[0], F[1], F[2], F[3], fx, fy)); }
         pts.push(fp(F[0], F[1], F[2], F[3], x1, 0)); poly(ctx, pts, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
       } else {
-        fQuad(ctx, F, x0, x1, 0.0, 0.78, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
+        fQuad(ctx, F, x0, x1, 0.0, yTop, 'rgba(8,8,12,0.92)', hexA(accent, 0.5), 1.5);
       }
       if (dbl) fLine(ctx, F, 0.5, 0, 0.5, arch ? 0.62 : 0.78, hexA(accent, 0.45), 1.2);   // split line for double doors
       ctx.fillStyle = shade(base, 1.4);
@@ -120,6 +122,19 @@ const drawParts = (ctx: CanvasRenderingContext2D, sx: number, sy: number, dir: n
 const legs = (us: [number, number][], z1: number): IsoPart[] => us.map(([u, v]) => ({ u0: u - 0.05, u1: u + 0.05, v0: v - 0.05, v1: v + 0.05, z0: 0, z1, t: '#3a2616', r: '#2a1c10', l: '#1f140a' }));
 // True if a face whose local outward normal is (du,dv) points toward the camera under this dir.
 const faceVisible = (du: number, dv: number, dir: number): boolean => { let u = du, v = dv; const n = ((dir % 4) + 4) % 4; for (let i = 0; i < n; i++) { const tt = u; u = -v; v = tt; } return u + v > 0.001; };
+
+// 2-tile-wide GATE — two jambs + a top lintel spanning the full width, open in the middle and walk-through.
+// Built from rotatable iso parts so it turns to sit on either wall direction (span [2,1]).
+const drawGate = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number, h: number) => {
+  void _a; const t = shade(base, 1.2), r = shade(base, 0.82), l = shade(base, 0.62);
+  const jamb = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.4, v1: 0.4, z0: 0, z1: h, t, r, l });
+  const parts: IsoPart[] = [
+    jamb(-1.0, -0.58),                                                          // left post
+    jamb(0.58, 1.0),                                                            // right post
+    { u0: -1.0, u1: 1.0, v0: -0.4, v1: 0.4, z0: h - 0.55, z1: h, t, r, l },     // lintel beam across the top
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts);
+};
 
 const drawChair = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a; const cT = shade(base, 1.32), cR = shade(base, 0.98), cL = shade(base, 0.64);
@@ -2093,6 +2108,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'wall': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind); break; }
     case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir); break; }       // rotatable iso doorway
     case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir); break; }   // rotatable iso window
+    case 'gate': { drawGate(ctx, sx, sy, accent, d.color, dir, d.h); break; }                          // 2-tile-wide walk-through gate
     case 'roof': { hipRoof(ctx, sx, sy + TH * 0.7, 0.98, d.color, STACK_H * 0.7, 0.55, false); break; }
     case 'lavablock': {   // walkable molten block — hazard at its top level (handled in RoomCanvas)
       const hw = TW * 0.9, hh = TH * 0.9, cyT = sy - d.h * STACK_H, pulse = 0.5 + 0.5 * Math.sin(t * 0.08);

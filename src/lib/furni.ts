@@ -101,6 +101,12 @@ export const FURNI: FurniDef[] = [
   { kind: 'door_glass', name: 'Glass Door',   emoji: '🚪', cat: 'constr', color: '#bfe6ff', h: 2, walk: false, foot: 1, special: 'door', pass: true },
   { kind: 'door_arch',  name: 'Arch Door',    emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
   { kind: 'door_double',name: 'Double Door',  emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  // ── Full-block doors + 2-tile-wide gates (walk-through; the opening fills the block / a whole 2-wide span) ──
+  { kind: 'door_full',  name: 'Full Door',    emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'door_full_stone', name: 'Full Stone Door', emoji: '🚪', cat: 'constr', color: '#8a8f98', h: 2, walk: false, foot: 1, special: 'door', pass: true },
+  { kind: 'gate',       name: 'Gate (2-wide)', emoji: '🚪', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'gate', pass: true, span: [2, 1] },
+  { kind: 'gate_stone', name: 'Stone Gate (2-wide)', emoji: '🏰', cat: 'constr', color: '#8a8f98', h: 3, walk: false, foot: 1, special: 'gate', pass: true, span: [2, 1] },
+  { kind: 'gate_metal', name: 'Metal Gate (2-wide)', emoji: '🚪', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'gate', pass: true, span: [2, 1] },
   // ── More windows (rotatable) — material + shape variants ──
   { kind: 'window_wood',name: 'Wood Window',  emoji: '🪟', cat: 'constr', color: '#8a5a32', h: 2, walk: false, foot: 1, special: 'window' },
   { kind: 'window_metal',name:'Metal Window', emoji: '🪟', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'window' },
@@ -347,8 +353,8 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights',
   // more benches + glass table
   'woodbench', 'stonebench', 'modernbench', 'glasstable',
-  // building kit — doors + windows rotate to face either iso wall direction
-  'door', 'window']);
+  // building kit — doors + windows + gates rotate to face either iso wall direction
+  'door', 'window', 'gate']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
