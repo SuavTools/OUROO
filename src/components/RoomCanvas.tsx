@@ -24,6 +24,7 @@ import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask
 import { RoomMusic } from '@/lib/roomMusic';
 import { Oracle } from '@/components/Oracle';
 import { MenuModal } from '@/components/MenuModal';
+import { GlitchSequence } from '@/components/GlitchSequence';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -219,12 +220,14 @@ const encodePortal = (to: string, code: string, hidden = false) => `portal:${enc
 //   mode 'enter' → spoken once per player when they arrive in the room (tile ignored).
 //   mode 'tile'  → spoken when a player walks close to the marker's tile (re-fires per approach).
 type LoreMode = 'enter' | 'tile';
-type LoreMarker = { id: string; mode: LoreMode; gx: number; gy: number; text: string; near?: boolean };
-const encodeLore = (mode: LoreMode, text: string) => `lore:${mode}:${encodeURIComponent(text)}`;
+type LoreStyle = 'oracle' | 'glitch';   // oracle = a spoken card; glitch = a full-screen terminal takeover
+type LoreMarker = { id: string; mode: LoreMode; style: LoreStyle; gx: number; gy: number; text: string; near?: boolean };
+// oracle markers persist as `lore:<mode>:<text>`, glitch ones as `seq:<mode>:<text>`.
+const encodeMarker = (style: LoreStyle, mode: LoreMode, text: string) => `${style === 'glitch' ? 'seq' : 'lore'}:${mode}:${encodeURIComponent(text)}`;
 // ROOM ATMOSPHERE — an admin-chosen backdrop layer, persisted as a `bg:<id>` row. 'auto' = the room's
 // built-in day/night. The rest override it for storytelling (sunny, rainy, Matrix-style code rain, a
 // glitched-out signal). The atmosphere paints the sky/void BEHIND the isometric room.
-type Atmo = 'auto' | 'day' | 'night' | 'rain' | 'coderain' | 'glitch';
+type Atmo = 'auto' | 'day' | 'night' | 'rain' | 'coderain' | 'glitch' | 'lava' | 'purplehaze' | 'swamp' | 'cosmic' | 'sunset';
 const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'auto', label: 'Room default', sw: '#7a8090' },
   { id: 'day', label: 'Sunny day', sw: '#aedcff' },
@@ -232,6 +235,11 @@ const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'rain', label: 'Rainy day', sw: '#6f7884' },
   { id: 'coderain', label: 'Code rain', sw: '#1d7a3a' },
   { id: 'glitch', label: 'Glitch', sw: '#cc44ff' },
+  { id: 'lava', label: 'Lava land', sw: '#ff5a1e' },
+  { id: 'purplehaze', label: 'Purple haze', sw: '#9b4dff' },
+  { id: 'swamp', label: 'Green swamp', sw: '#3f6e3a' },
+  { id: 'cosmic', label: 'Cosmic', sw: '#5b3a8a' },
+  { id: 'sunset', label: 'Sunset', sw: '#ff7e5f' },
 ];
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
@@ -374,10 +382,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [loreEditId, setLoreEditId] = useState<string | null>(null);   // marker being edited (null = new)
   const [placeLore, setPlaceLore] = useState(false);     // armed to drop a tile marker on the next tap
   const [loreCard, setLoreCard] = useState<string | null>(null);   // the Oracle lore currently being spoken
+  const [glitchSeq, setGlitchSeq] = useState<string | null>(null); // the full-screen glitch/terminal takeover
   const [bgAtmo, setBgAtmo] = useState<Atmo>('auto');   // current room atmosphere (mirrors bgRef, for the editor)
   const [atmoMode, setAtmoMode] = useState(false);      // showing the atmosphere palette in Decorate
-  const [enterText, setEnterText] = useState('');   // editor: the on-enter lore textarea
-  const pendingLoreRef = useRef('');                 // text waiting to be dropped on a tapped tile
+  const [mkMode, setMkMode] = useState<LoreMode>('enter');     // editor: trigger of the marker being authored
+  const [mkStyle, setMkStyle] = useState<LoreStyle>('oracle'); // editor: presentation of the marker
+  const pendingLoreRef = useRef<{ text: string; style: LoreStyle }>({ text: '', style: 'oracle' });   // marker waiting to drop on a tap
   const [, setLoreVer] = useState(0);   // bump to re-render the editor list after loreRef mutations
   const [placeDir, setPlaceDir] = useState(0);
   const placeDirRef = useRef(0);
@@ -645,16 +655,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (m) { const k = key(Number(d.x), Number(d.y)); matOverrideRef.current.set(k, Number(m[1])); matIdRef.current.set(k, String(d.id)); continue; }
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
       if (raw.startsWith('bg:')) { const a = raw.slice(3) as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; bgIdRef.current = String(d.id); } continue; }
-      if (raw.startsWith('lore:')) { const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = decodeURIComponent(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', gx: Number(d.x), gy: Number(d.y), text }); continue; }
+      if (raw.startsWith('lore:') || raw.startsWith('seq:')) { const style: LoreStyle = raw.startsWith('seq:') ? 'glitch' : 'oracle'; const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = decodeURIComponent(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', style, gx: Number(d.x), gy: Number(d.y), text }); continue; }
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
     }
     setBgAtmo(bgRef.current);
     itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length);
     if (delCuratedRef.current.size) decorRef.current = decorRef.current.filter(d => !delCuratedRef.current.has(d.id));   // hide removed curated decor
     setLoreVer(v => v + 1); rebuildHeight();
-    // On-enter lore: speak it once per player (per marker id).
+    // On-enter markers: fire once per player (per marker id) — Oracle card or glitch sequence.
     const enter = loreRef.current.find(l => l.mode === 'enter');
-    if (enter) { try { if (localStorage.getItem(`ouroo_lore_${enter.id}`) !== '1') { setLoreCard(enter.text); localStorage.setItem(`ouroo_lore_${enter.id}`, '1'); } } catch { setLoreCard(enter.text); } }
+    if (enter) { let unseen = true; try { unseen = localStorage.getItem(`ouroo_lore_${enter.id}`) !== '1'; localStorage.setItem(`ouroo_lore_${enter.id}`, '1'); } catch { /* ignore */ } if (unseen) { if (enter.style === 'glitch') setGlitchSeq(enter.text); else setLoreCard(enter.text); } }
   };
   // Apply the current room's floor plan (shape + base levels), then rebuild walkability. Repositions
   // you to the plan's spawn if your tile became void after a shape change.
@@ -781,28 +791,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     loreRef.current = loreRef.current.filter(l => l.id !== id); setLoreVer(v => v + 1);
     supabase?.from('room_items').delete().eq('id', id).then(undefined, () => {});
   };
-  const saveEnterLore = () => {
-    const text = enterText.trim(); const existing = loreRef.current.find(l => l.mode === 'enter');
-    if (!text) { if (existing) removeLore(existing.id); flashHint('On-enter lore cleared'); return; }
-    if (existing) { existing.text = text; supabase?.from('room_items').update({ kind: encodeLore('enter', text) }).eq('id', existing.id).then(undefined, () => {}); }
-    else { const id = newId('lore'); loreRef.current.push({ id, mode: 'enter', gx: 0, gy: 0, text }); supabase?.from('room_items').insert({ id, room, kind: encodeLore('enter', text), x: 0, y: 0, created_by: deviceRef.current }).then(undefined, () => {}); }
-    setLoreVer(v => v + 1); flashHint('On-enter lore saved ✦');
-  };
-  const saveTileLore = () => {
-    const text = loreText.trim(); if (!text) { flashHint('Write some lore first'); return; }
-    if (loreEditId) {   // editing an existing tile marker in place
-      const m = loreRef.current.find(l => l.id === loreEditId); if (m) { m.text = text; supabase?.from('room_items').update({ kind: encodeLore('tile', text) }).eq('id', m.id).then(undefined, () => {}); }
-      setLoreEditId(null); setLoreText(''); setLoreVer(v => v + 1); flashHint('Lore updated ✦'); return;
+  const saveMarker = () => {
+    const text = loreText.trim(); if (!text) { flashHint('Write something first'); return; }
+    if (loreEditId) {   // edit an existing marker in place (keep its mode + tile; allow style change)
+      const m = loreRef.current.find(l => l.id === loreEditId); if (m) { m.text = text; m.style = mkStyle; supabase?.from('room_items').update({ kind: encodeMarker(mkStyle, m.mode, text) }).eq('id', m.id).then(undefined, () => {}); }
+      setLoreEditId(null); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker updated ✦'); return;
     }
-    pendingLoreRef.current = text; setPlaceLore(true); setLoreEditor(false); flashHint('Tap a tile to drop the lore marker ✎');
+    if (mkMode === 'enter') {   // on-enter marker — saved immediately (tile ignored)
+      const id = newId('lore'); loreRef.current.push({ id, mode: 'enter', style: mkStyle, gx: 0, gy: 0, text });
+      supabase?.from('room_items').insert({ id, room, kind: encodeMarker(mkStyle, 'enter', text), x: 0, y: 0, created_by: deviceRef.current }).then(undefined, () => {});
+      setLoreText(''); setLoreVer(v => v + 1); flashHint('On-enter marker saved ✦'); return;
+    }
+    pendingLoreRef.current = { text, style: mkStyle }; setPlaceLore(true); setLoreEditor(false); flashHint('Tap a tile to drop the marker ✎');
   };
   const placeTileLoreAt = (gx: number, gy: number) => {
-    const text = pendingLoreRef.current; if (!text) { setPlaceLore(false); return; }
-    const id = newId('lore'); loreRef.current.push({ id, mode: 'tile', gx, gy, text });
-    supabase?.from('room_items').insert({ id, room, kind: encodeLore('tile', text), x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
-    pendingLoreRef.current = ''; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Lore marker placed ✎');
+    const { text, style } = pendingLoreRef.current; if (!text) { setPlaceLore(false); return; }
+    const id = newId('lore'); loreRef.current.push({ id, mode: 'tile', style, gx, gy, text });
+    supabase?.from('room_items').insert({ id, room, kind: encodeMarker(style, 'tile', text), x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
+    pendingLoreRef.current = { text: '', style: 'oracle' }; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker placed ✎');
   };
-  const openLoreEditor = () => { setEnterText(loreRef.current.find(l => l.mode === 'enter')?.text ?? ''); setLoreText(''); setLoreEditId(null); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); };
+  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); };
   // Set the room's atmosphere (backdrop layer). 'auto' clears the override; otherwise upsert a `bg:` row.
   const setAtmosphere = (a: Atmo) => {
     bgRef.current = a; setBgAtmo(a);
@@ -993,7 +1001,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const lm of loreRef.current) {
         if (lm.mode !== 'tile') continue;
         const near = Math.hypot(lm.gx - me.fx, lm.gy - me.fy) < MACHINE_RANGE;
-        if (near && !lm.near) { musicRef.current?.chime(); setLoreCard(lm.text); }
+        if (near && !lm.near) { musicRef.current?.chime(); if (lm.style === 'glitch') setGlitchSeq(lm.text); else setLoreCard(lm.text); }
         lm.near = near;
       }
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
@@ -1068,12 +1076,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const draw = () => {
       const theme = themeRef.current; const t = framesRef.current;
       const atmo: Atmo = bgRef.current === 'auto' ? (theme.day ? 'day' : 'night') : bgRef.current;
-      const day = atmo === 'day' || atmo === 'rain';   // "bright" atmospheres → sky + lighter vignette/veranda
+      const day = atmo === 'day' || atmo === 'rain' || atmo === 'sunset';   // "bright" → sky + lighter vignette/veranda
       const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H);
       if (atmo === 'day') { bg.addColorStop(0, '#aedcff'); bg.addColorStop(0.5, '#cfeaff'); bg.addColorStop(1, '#eaf6ef'); }
       else if (atmo === 'rain') { bg.addColorStop(0, '#4d555f'); bg.addColorStop(0.5, '#5f6873'); bg.addColorStop(1, '#727b86'); }
       else if (atmo === 'coderain') { bg.addColorStop(0, '#020603'); bg.addColorStop(1, '#04140a'); }
       else if (atmo === 'glitch') { bg.addColorStop(0, '#0a0612'); bg.addColorStop(0.5, '#120a1e'); bg.addColorStop(1, '#060410'); }
+      else if (atmo === 'lava') { bg.addColorStop(0, '#1a0603'); bg.addColorStop(0.55, '#3a0e05'); bg.addColorStop(1, '#7a1c06'); }
+      else if (atmo === 'purplehaze') { bg.addColorStop(0, '#1a0a2e'); bg.addColorStop(0.5, '#3a1a5e'); bg.addColorStop(1, '#5a2a7a'); }
+      else if (atmo === 'swamp') { bg.addColorStop(0, '#0a1408'); bg.addColorStop(0.55, '#13230f'); bg.addColorStop(1, '#1d3318'); }
+      else if (atmo === 'cosmic') { bg.addColorStop(0, '#03020a'); bg.addColorStop(0.6, '#0a0820'); bg.addColorStop(1, '#140a2e'); }
+      else if (atmo === 'sunset') { bg.addColorStop(0, '#2a2a6e'); bg.addColorStop(0.45, '#c8527a'); bg.addColorStop(0.7, '#ff9a5a'); bg.addColorStop(1, '#ffd27a'); }
       else { bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610'); }
       ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
       if (atmo === 'day') {   // soft sun glow + drifting clouds
@@ -1090,7 +1103,28 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       } else if (atmo === 'glitch') {   // jittering RGB-split bands + scanlines
         ctx.save(); for (let i = 0; i < 7; i++) { const y = ((Math.sin(t * 0.045 + i * 1.7) * 0.5 + 0.5) * STAGE_H) | 0, h = 6 + (i % 3) * 12, off = Math.sin(t * 0.3 + i * 2.1) * 16; ctx.globalAlpha = 0.4; ctx.fillStyle = `hsl(${(t * 5 + i * 60) % 360},90%,55%)`; ctx.fillRect(off, y, STAGE_W, h); }
         ctx.globalAlpha = 0.05; ctx.fillStyle = '#00cfff'; for (let y = 0; y < STAGE_H; y += 4) ctx.fillRect(0, y, STAGE_W, 1); ctx.restore();
-      } else { ctx.save(); ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore(); }
+      } else if (atmo === 'lava') {   // molten glow at the base + rising embers
+        ctx.save(); const glow = ctx.createRadialGradient(STAGE_W / 2, STAGE_H, 20, STAGE_W / 2, STAGE_H, STAGE_H * 0.8); glow.addColorStop(0, 'rgba(255,120,30,0.5)'); glow.addColorStop(0.5, 'rgba(220,60,10,0.18)'); glow.addColorStop(1, 'rgba(220,60,10,0)'); ctx.fillStyle = glow; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+        ctx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 36; i++) { const x = (i * 113.7 + Math.sin(t * 0.02 + i) * 30) % STAGE_W, y = STAGE_H - ((i * 67 + t * (1.4 + (i % 4) * 0.5)) % (STAGE_H + 80)); const s = 1 + (i % 3); ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 0.1 + i); ctx.fillStyle = i % 3 ? '#ff9a3a' : '#ffd24a'; ctx.fillRect(x, y, s, s); } ctx.restore();
+      } else if (atmo === 'purplehaze') {   // drifting magenta haze blobs
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 6; i++) { const cx = ((i * 260 + t * (0.3 + i * 0.05)) % (STAGE_W + 320)) - 160, cy = 80 + (i % 3) * 90 + Math.sin(t * 0.02 + i) * 24; const g = ctx.createRadialGradient(cx, cy, 10, cx, cy, 180); const hue = 270 + (i % 3) * 18; g.addColorStop(0, `hsla(${hue},80%,60%,0.16)`); g.addColorStop(1, `hsla(${hue},80%,60%,0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 180, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+      } else if (atmo === 'swamp') {   // low mist + drifting spores / fireflies
+        ctx.save(); ctx.fillStyle = 'rgba(120,160,90,0.05)'; for (let i = 0; i < 4; i++) { const my = STAGE_H * 0.5 + i * 60 + Math.sin(t * 0.02 + i) * 10; ctx.fillRect(0, my, STAGE_W, 50); }
+        ctx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 26; i++) { const x = (i * 151.3 + Math.sin(t * 0.03 + i) * 40) % STAGE_W, y = (i * 89 + Math.cos(t * 0.025 + i) * 30 + t * 0.2) % STAGE_H; ctx.globalAlpha = 0.3 + 0.4 * Math.sin(t * 0.08 + i * 1.3); ctx.fillStyle = '#aef07a'; ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+      } else if (atmo === 'cosmic') {   // starfield + a soft nebula
+        ctx.save(); const neb = ctx.createRadialGradient(STAGE_W * 0.7, 160, 20, STAGE_W * 0.7, 160, 320); neb.addColorStop(0, 'rgba(120,70,200,0.22)'); neb.addColorStop(1, 'rgba(120,70,200,0)'); ctx.fillStyle = neb; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+        for (let i = 0; i < 90; i++) { const x = (i * 137.5) % STAGE_W, y = (i * 79.3) % STAGE_H; ctx.globalAlpha = 0.3 + 0.6 * Math.abs(Math.sin(t * 0.04 + i)); ctx.fillStyle = i % 7 ? '#fff' : '#bfd0ff'; const s = i % 11 === 0 ? 2 : 1; ctx.fillRect(x, y, s, s); } ctx.restore();
+      } else if (atmo === 'sunset') {   // low sun + warm haze bands
+        ctx.save(); const sun = ctx.createRadialGradient(STAGE_W * 0.5, STAGE_H * 0.72, 8, STAGE_W * 0.5, STAGE_H * 0.72, 200); sun.addColorStop(0, 'rgba(255,240,200,0.95)'); sun.addColorStop(0.5, 'rgba(255,180,120,0.5)'); sun.addColorStop(1, 'rgba(255,180,120,0)'); ctx.fillStyle = sun; ctx.beginPath(); ctx.arc(STAGE_W * 0.5, STAGE_H * 0.72, 200, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(120,60,90,0.18)'; for (let i = 0; i < 4; i++) { const cy = 70 + i * 50 + Math.sin(t * 0.02 + i) * 6; ctx.beginPath(); ctx.ellipse(((i * 360 + t * 0.3) % (STAGE_W + 280)) - 140, cy, 90, 14, 0, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+      } else {   // night — moon glow + crescent + twinkling stars + drifting dust
+        ctx.save(); const moonX = STAGE_W * 0.8, moonY = 110;
+        const moon = ctx.createRadialGradient(moonX, moonY, 6, moonX, moonY, 135); moon.addColorStop(0, 'rgba(210,224,255,0.45)'); moon.addColorStop(0.5, 'rgba(170,190,255,0.12)'); moon.addColorStop(1, 'rgba(170,190,255,0)'); ctx.fillStyle = moon; ctx.fillRect(0, 0, STAGE_W, 330);
+        for (let i = 0; i < 70; i++) { const x = (i * 149.3) % STAGE_W, y = (i * 83.7) % (STAGE_H * 0.55); ctx.globalAlpha = 0.2 + 0.55 * Math.abs(Math.sin(t * 0.03 + i * 1.3)); ctx.fillStyle = i % 9 ? '#fff' : '#bcd0ff'; const s = i % 13 === 0 ? 2 : 1; ctx.fillRect(x, y, s, s); }
+        ctx.globalAlpha = 1; ctx.fillStyle = '#e7edff'; ctx.beginPath(); ctx.arc(moonX, moonY, 24, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#0b0912'; ctx.beginPath(); ctx.arc(moonX + 11, moonY - 3, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff'; for (let i = 0; i < 22; i++) { const mx = (i * 197.3) % STAGE_W; const my = (i * 71 + t * (0.12 + (i % 4) * 0.05)) % 210; ctx.globalAlpha = 0.03 + (i % 5) * 0.012; ctx.fillRect(mx, 200 - my, 2, 2); } ctx.restore();
+      }
       ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 58px Helvetica, Arial'; ctx.shadowColor = theme.accent; ctx.shadowBlur = 30; ctx.fillStyle = hexA(theme.accent, 0.92); ctx.fillText(theme.name.toUpperCase(), STAGE_W / 2, 70); ctx.shadowBlur = 0; ctx.font = '700 12px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillText(theme.owner ? '· PERSONAL ROOM ·' : theme.locked ? '· CURATED ·' : '· S U A V ·', STAGE_W / 2, 102); ctx.restore();
 
       // camera: scale + position the whole room so its footprint fits the stage (bigger rooms zoom out)
@@ -1741,40 +1775,66 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
 
       {/* ── Lore editor (admin) ── author / edit / remove the room's on-enter + spot lore. ── */}
-      {loreEditor && (
+      {loreEditor && (() => {
+        const markers = loreRef.current;
+        return (
         <div className="absolute inset-0 z-[76] bg-black/85 backdrop-blur-sm flex justify-center overflow-y-auto px-4 py-8" onClick={() => setLoreEditor(false)}>
           <div className="w-full max-w-md bg-black border border-[#00cfff]/30 h-fit p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="font-helvetica font-black uppercase tracking-widest text-white">Oracle lore · {roomMeta.name}</p>
+              <p className="font-helvetica font-black uppercase tracking-widest text-white">Lore &amp; events · {roomMeta.name}</p>
               <button onClick={() => setLoreEditor(false)} className="text-white/40 hover:text-white text-xl leading-none">✕</button>
             </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-[#00cfff]/80 mb-1.5">On entering this room <span className="text-white/30 normal-case tracking-normal">— once per player</span></p>
-              <textarea value={enterText} onChange={e => setEnterText(e.target.value)} rows={3} placeholder="The Oracle's words when someone arrives… (blank + Save to clear)" className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff] resize-none" />
-              <button onClick={saveEnterLore} className="mt-2 w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2 hover:bg-white transition-colors active:scale-95">Save on-enter lore</button>
+
+            {/* existing markers */}
+            <div className="flex flex-col gap-1.5">
+              {markers.length === 0 && <p className="text-[11px] text-white/35">No markers yet. Add one below.</p>}
+              {markers.map(l => (
+                <div key={l.id} className="flex items-center gap-2 border border-white/12 bg-white/[0.03] px-3 py-2">
+                  <span className={`shrink-0 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded ${l.style === 'glitch' ? 'bg-[#cc44ff]/20 text-[#cc44ff]' : 'bg-[#00cfff]/15 text-[#00cfff]'}`}>{l.mode === 'enter' ? 'enter' : `${l.gx},${l.gy}`}</span>
+                  <span className="flex-1 min-w-0 text-[12px] text-white/70 truncate">{l.text}</span>
+                  <button onClick={() => { setLoreText(l.text); setLoreEditId(l.id); setMkStyle(l.style); setMkMode(l.mode); }} className="text-[#00cfff]/70 hover:text-[#00cfff] text-[11px] uppercase tracking-widest">edit</button>
+                  <button onClick={() => removeLore(l.id)} title="Remove" className="text-white/30 hover:text-brandRed text-lg leading-none">✕</button>
+                </div>
+              ))}
             </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-[#00cfff]/80 mb-1.5">Spot markers <span className="text-white/30 normal-case tracking-normal">— spoken near a tile</span></p>
-              <div className="flex flex-col gap-1.5 mb-2">
-                {loreRef.current.filter(l => l.mode === 'tile').map(l => (
-                  <div key={l.id} className="flex items-center gap-2 border border-white/12 bg-white/[0.03] px-3 py-2">
-                    <span className="flex-1 min-w-0 text-[12px] text-white/70 truncate">({l.gx},{l.gy}) {l.text}</span>
-                    <button onClick={() => { setLoreText(l.text); setLoreEditId(l.id); }} className="text-[#00cfff]/70 hover:text-[#00cfff] text-[11px] uppercase tracking-widest">edit</button>
-                    <button onClick={() => removeLore(l.id)} title="Remove" className="text-white/30 hover:text-brandRed text-lg leading-none">✕</button>
+
+            {/* author / edit */}
+            <div className="border-t border-white/10 pt-3 space-y-2">
+              <p className="text-[11px] uppercase tracking-widest text-white/45">{loreEditId ? 'Edit marker' : 'New marker'}</p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Trigger</p>
+                  <div className="flex gap-1">
+                    {(['enter', 'tile'] as LoreMode[]).map(m => (
+                      <button key={m} disabled={!!loreEditId} onClick={() => setMkMode(m)} className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 border transition-colors ${mkMode === m ? 'bg-white/10 text-white border-white/40' : 'text-white/50 border-white/15'} ${loreEditId ? 'opacity-40' : ''}`}>{m === 'enter' ? 'On enter' : 'On a tile'}</button>
+                    ))}
                   </div>
-                ))}
-                {loreRef.current.filter(l => l.mode === 'tile').length === 0 && <p className="text-[11px] text-white/35">No spot markers yet.</p>}
+                </div>
+                <div className="flex-1">
+                  <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Style</p>
+                  <div className="flex gap-1">
+                    {(['oracle', 'glitch'] as LoreStyle[]).map(s => (
+                      <button key={s} onClick={() => setMkStyle(s)} className={`flex-1 text-[10px] uppercase tracking-wider py-1.5 border transition-colors ${mkStyle === s ? (s === 'glitch' ? 'bg-[#cc44ff]/20 text-[#cc44ff] border-[#cc44ff]/50' : 'bg-[#00cfff]/15 text-[#00cfff] border-[#00cfff]/50') : 'text-white/50 border-white/15'}`}>{s === 'glitch' ? 'Glitch seq' : 'Oracle'}</button>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <textarea value={loreText} onChange={e => setLoreText(e.target.value)} rows={2} placeholder={loreEditId ? 'Editing this marker…' : 'New spot lore…'} className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff] resize-none" />
-              <div className="flex gap-2 mt-2">
-                <button onClick={saveTileLore} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2 hover:bg-white transition-colors active:scale-95">{loreEditId ? 'Update marker' : 'Place on a tile ▸'}</button>
+              <textarea value={loreText} onChange={e => setLoreText(e.target.value)} rows={mkStyle === 'glitch' ? 4 : 3}
+                placeholder={mkStyle === 'glitch' ? '> terminal lines…\n> one per line — typed out over the glitch' : 'The Oracle’s words…'}
+                className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff] resize-none font-mono" />
+              <div className="flex gap-2">
+                <button onClick={saveMarker} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2 hover:bg-white transition-colors active:scale-95">{loreEditId ? 'Update' : mkMode === 'enter' ? 'Save on-enter' : 'Place on a tile ▸'}</button>
                 {loreEditId && <button onClick={() => { setLoreEditId(null); setLoreText(''); }} className="px-3 border border-white/20 text-white/50 hover:text-white text-[11px] uppercase tracking-widest active:scale-95">Cancel</button>}
               </div>
+              {mkStyle === 'glitch' && <button onClick={() => setGlitchSeq(loreText || '> preview…')} className="w-full text-[10px] uppercase tracking-widest text-[#cc44ff]/70 hover:text-[#cc44ff] py-1">▶ preview sequence</button>}
             </div>
             <p className="text-[10px] text-white/35">Markers persist for everyone. Players see new/changed lore on their next visit to the room.</p>
           </div>
         </div>
-      )}
+        );
+      })()}
+
+      {glitchSeq !== null && <GlitchSequence text={glitchSeq} onClose={() => setGlitchSeq(null)} />}
 
       <MenuModal open={menuOpen} onClose={() => setMenuOpen(false)} />
 
