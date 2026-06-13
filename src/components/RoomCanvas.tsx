@@ -27,6 +27,7 @@ import { Oracle } from '@/components/Oracle';
 import { MenuModal } from '@/components/MenuModal';
 import { GlitchSequence } from '@/components/GlitchSequence';
 import { AdminModal } from '@/components/AdminModal';
+import { SkinPreview } from '@/components/SkinPreview';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -395,6 +396,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placeLore, setPlaceLore] = useState(false);     // armed to drop a tile marker on the next tap
   const [loreCard, setLoreCard] = useState<string | null>(null);   // the Oracle lore currently being spoken
   const [glitchSeq, setGlitchSeq] = useState<string | null>(null); // the full-screen glitch/terminal takeover
+  const [rewardReveal, setRewardReveal] = useState<{ crystals: number; skinId: string } | null>(null);   // screen-takeover reward celebration
   const [bgAtmo, setBgAtmo] = useState<Atmo>('auto');   // current room atmosphere (mirrors bgRef, for the editor)
   const [atmoMode, setAtmoMode] = useState(false);      // showing the atmosphere palette in Decorate
   const [mkMode, setMkMode] = useState<LoreMode>('enter');     // editor: trigger of the marker being authored
@@ -666,11 +668,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Pay out a reward marker: crystals to the wallet + (if set) unlock a skin on the account.
   const claimReward = (mk: LoreMarker) => {
-    const sk = mk.skinId ? skinById(mk.skinId) : null;
     if (mk.crystals && mk.crystals > 0) addBalance(mk.crystals);
     if (mk.skinId) grantSkin(mk.skinId);   // signed-in only; degrades silently otherwise
     musicRef.current?.chime();
-    flashHint(`✦ +${mk.crystals || 0}${sk ? ` · ${sk.name} unlocked` : ''}`);
+    setRewardReveal({ crystals: mk.crystals || 0, skinId: mk.skinId || '' });   // screen-takeover celebration
   };
   // Present/claim a marker by style (caller handles once-per-player gating where relevant).
   const fireMarker = (mk: LoreMarker) => {
@@ -1909,6 +1910,42 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       })()}
 
       {glitchSeq !== null && <GlitchSequence text={glitchSeq} onClose={() => setGlitchSeq(null)} />}
+
+      {/* ── Reward reveal ── a screen-takeover congratulating the player on what they just won. ── */}
+      {rewardReveal && (() => { const sk = rewardReveal.skinId ? skinById(rewardReveal.skinId) : null; return (
+        <div className="fixed inset-0 z-[115] flex items-center justify-center p-6 overflow-hidden" onClick={() => setRewardReveal(null)}
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}>
+          <div className="absolute inset-0 bg-black/92" />
+          {/* radiant burst */}
+          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[140vmin] h-[140vmin]"
+            style={{ background: 'radial-gradient(circle, rgba(255,210,60,0.18), rgba(255,210,60,0.04) 35%, transparent 65%)', animation: 'rwd-spin 18s linear infinite' }} />
+          <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vmin] h-[120vmin] opacity-40"
+            style={{ background: 'repeating-conic-gradient(from 0deg, rgba(255,210,60,0.10) 0deg 6deg, transparent 6deg 12deg)', animation: 'rwd-spin 24s linear infinite reverse' }} />
+
+          <div className="relative text-center" style={{ animation: 'rwd-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) both' }} onClick={e => e.stopPropagation()}>
+            <p className="font-mono text-[11px] uppercase tracking-[0.5em] text-brandYellow/80 mb-2">Reward unlocked</p>
+            <p className="font-helvetica font-black uppercase tracking-tight text-4xl sm:text-5xl text-white mb-6" style={{ textShadow: '0 0 24px rgba(255,210,60,0.5)' }}>Congratulations!</p>
+
+            {sk && (
+              <div className="mb-6 flex flex-col items-center gap-3">
+                <div className="relative" style={{ animation: 'rwd-float 2.6s ease-in-out infinite' }}>
+                  <div className="absolute inset-0 -m-6 rounded-full" style={{ background: `radial-gradient(circle, ${sk.color}55, transparent 70%)` }} />
+                  <div className="relative"><SkinPreview skin={sk} size={120} /></div>
+                </div>
+                <p className="font-helvetica font-black text-2xl text-white">{sk.name}</p>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-brandYellow/80">new skin</p>
+              </div>
+            )}
+
+            {rewardReveal.crystals > 0 && (
+              <p className="font-mono font-bold text-3xl sm:text-4xl text-brandYellow mb-6" style={{ textShadow: '0 0 18px rgba(255,210,60,0.55)' }}>✦ +{rewardReveal.crystals.toLocaleString('pt-PT')}</p>
+            )}
+
+            <button onClick={() => setRewardReveal(null)} className="bg-brandYellow text-black font-bold uppercase tracking-[0.3em] text-sm px-10 py-3.5 hover:bg-white transition-colors active:scale-95">Claim ▸</button>
+          </div>
+          <style>{`@keyframes rwd-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}@keyframes rwd-pop{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}@keyframes rwd-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}`}</style>
+        </div>
+      ); })()}
 
       <MenuModal open={menuOpen} onClose={() => setMenuOpen(false)} />
 
