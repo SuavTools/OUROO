@@ -215,6 +215,12 @@ const decodeKind = (raw: string): { kind: string; dir: number; elev: number } =>
 //   visible teleporter sprite — a disguised floor trigger). encodeURIComponent escapes any @ / ^ / :
 //   in the dest/code, so the segments stay clean; we hydrate it into a `teleporter` item with the link.
 const encodePortal = (to: string, code: string, hidden = false) => `portal:${encodeURIComponent(to)}:${encodeURIComponent(code)}${hidden ? ':1' : ''}`;
+// LORE MARKERS — admin-authored Oracle lore, persisted in room_items as `lore:<mode>:<encoded text>`.
+//   mode 'enter' → spoken once per player when they arrive in the room (tile ignored).
+//   mode 'tile'  → spoken when a player walks close to the marker's tile (re-fires per approach).
+type LoreMode = 'enter' | 'tile';
+type LoreMarker = { id: string; mode: LoreMode; gx: number; gy: number; text: string; near?: boolean };
+const encodeLore = (mode: LoreMode, text: string) => `lore:${mode}:${encodeURIComponent(text)}`;
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
     const [, to = '', code = '', hidden = ''] = rawKind.split(':');
@@ -288,6 +294,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Admins can pick up baked-in (curated) furniture too; removals persist as `del:<curatedId>` tombstone
   // rows in room_items so the piece stays gone for everyone.
   const delCuratedRef = useRef<Set<string>>(new Set());
+  // Admin-authored Oracle lore markers in this room (on-enter + per-tile).
+  const loreRef = useRef<LoreMarker[]>([]);
   const planLvl = (gx: number, gy: number) => (gx < 0 || gy < 0 || gx >= GRID || gy >= GRID ? -1 : planRef.current[gy * GRID + gx]);
   const isWater = (gx: number, gy: number) => gx >= 0 && gy >= 0 && gx < GRID && gy < GRID && waterRef.current[gy * GRID + gx] === 1;
   const camRef = useRef<Cam>(computeCam(planRef.current, GRID));            // fits the room footprint into the stage
@@ -343,9 +351,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [rotateMode, setRotateMode] = useState(false);
   const [tileMode, setTileMode] = useState(false);   // admin tile-painting mode
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
-  const tileModeRef = useRef(false); const paintMatRef = useRef(2);
-  useEffect(() => { tileModeRef.current = tileMode; }, [tileMode]);
+  const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
+  // ── Lore authoring + display ──
+  const [loreEditor, setLoreEditor] = useState(false);   // the admin lore editor modal
+  const [loreText, setLoreText] = useState('');          // textarea contents (new / editing)
+  const [loreEditId, setLoreEditId] = useState<string | null>(null);   // marker being edited (null = new)
+  const [placeLore, setPlaceLore] = useState(false);     // armed to drop a tile marker on the next tap
+  const [loreCard, setLoreCard] = useState<string | null>(null);   // the Oracle lore currently being spoken
+  const [enterText, setEnterText] = useState('');   // editor: the on-enter lore textarea
+  const pendingLoreRef = useRef('');                 // text waiting to be dropped on a tapped tile
+  const [, setLoreVer] = useState(0);   // bump to re-render the editor list after loreRef mutations
   const [placeDir, setPlaceDir] = useState(0);
   const placeDirRef = useRef(0);
   useEffect(() => { placeDirRef.current = placeDir; }, [placeDir]);
@@ -371,7 +387,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setPlaceLore(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -604,18 +620,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear();
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = [];
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
       const m = raw.match(/^mat:(\d)$/);
       if (m) { const k = key(Number(d.x), Number(d.y)); matOverrideRef.current.set(k, Number(m[1])); matIdRef.current.set(k, String(d.id)); continue; }
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
+      if (raw.startsWith('lore:')) { const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = decodeURIComponent(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', gx: Number(d.x), gy: Number(d.y), text }); continue; }
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
     }
     itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length);
     if (delCuratedRef.current.size) decorRef.current = decorRef.current.filter(d => !delCuratedRef.current.has(d.id));   // hide removed curated decor
-    rebuildHeight();
+    setLoreVer(v => v + 1); rebuildHeight();
+    // On-enter lore: speak it once per player (per marker id).
+    const enter = loreRef.current.find(l => l.mode === 'enter');
+    if (enter) { try { if (localStorage.getItem(`ouroo_lore_${enter.id}`) !== '1') { setLoreCard(enter.text); localStorage.setItem(`ouroo_lore_${enter.id}`, '1'); } } catch { setLoreCard(enter.text); } }
   };
   // Apply the current room's floor plan (shape + base levels), then rebuild walkability. Repositions
   // you to the plan's spawn if your tile became void after a shape change.
@@ -624,7 +644,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     planRef.current = planMask(plan);
     waterRef.current = planWaterMask(plan);
     matRef.current = planMaterialMask(plan);
-    matOverrideRef.current.clear(); matIdRef.current.clear();   // tile-paint overrides reload per room
+    matOverrideRef.current.clear(); matIdRef.current.clear(); loreRef.current = [];   // overrides + lore reload per room
     camRef.current = computeCam(planRef.current, GRID);
     decorRef.current = (CURATED_ITEMS[roomMeta.slug] ?? []).map(([kind, gx, gy, dir, elev], i) => ({ id: `c_${roomMeta.slug}_${i}`, kind, gx, gy, dir: dir ?? 0, elev: elev ?? 0, createdBy: 'curated' })).filter(d => !delCuratedRef.current.has(d.id));
     npcsRef.current = (CURATED_NPCS[roomMeta.slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
@@ -736,6 +756,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (existing) supabase?.from('room_items').update({ kind: `mat:${n}` }).eq('id', existing).then(undefined, () => {});
     else { const id = (crypto?.randomUUID?.() ?? `mat_${Date.now()}_${Math.floor(Math.random() * 1e9)}`); matIdRef.current.set(k, id); supabase?.from('room_items').insert({ id, room, kind: `mat:${n}`, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {}); }
   };
+  // ── Lore-marker authoring (admins) ──
+  const newId = (p: string) => (crypto?.randomUUID?.() ?? `${p}_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
+  const removeLore = (id: string) => {
+    loreRef.current = loreRef.current.filter(l => l.id !== id); setLoreVer(v => v + 1);
+    supabase?.from('room_items').delete().eq('id', id).then(undefined, () => {});
+  };
+  const saveEnterLore = () => {
+    const text = enterText.trim(); const existing = loreRef.current.find(l => l.mode === 'enter');
+    if (!text) { if (existing) removeLore(existing.id); flashHint('On-enter lore cleared'); return; }
+    if (existing) { existing.text = text; supabase?.from('room_items').update({ kind: encodeLore('enter', text) }).eq('id', existing.id).then(undefined, () => {}); }
+    else { const id = newId('lore'); loreRef.current.push({ id, mode: 'enter', gx: 0, gy: 0, text }); supabase?.from('room_items').insert({ id, room, kind: encodeLore('enter', text), x: 0, y: 0, created_by: deviceRef.current }).then(undefined, () => {}); }
+    setLoreVer(v => v + 1); flashHint('On-enter lore saved ✦');
+  };
+  const saveTileLore = () => {
+    const text = loreText.trim(); if (!text) { flashHint('Write some lore first'); return; }
+    if (loreEditId) {   // editing an existing tile marker in place
+      const m = loreRef.current.find(l => l.id === loreEditId); if (m) { m.text = text; supabase?.from('room_items').update({ kind: encodeLore('tile', text) }).eq('id', m.id).then(undefined, () => {}); }
+      setLoreEditId(null); setLoreText(''); setLoreVer(v => v + 1); flashHint('Lore updated ✦'); return;
+    }
+    pendingLoreRef.current = text; setPlaceLore(true); setLoreEditor(false); flashHint('Tap a tile to drop the lore marker ✎');
+  };
+  const placeTileLoreAt = (gx: number, gy: number) => {
+    const text = pendingLoreRef.current; if (!text) { setPlaceLore(false); return; }
+    const id = newId('lore'); loreRef.current.push({ id, mode: 'tile', gx, gy, text });
+    supabase?.from('room_items').insert({ id, room, kind: encodeLore('tile', text), x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
+    pendingLoreRef.current = ''; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Lore marker placed ✎');
+  };
+  const openLoreEditor = () => { setEnterText(loreRef.current.find(l => l.mode === 'enter')?.text ?? ''); setLoreText(''); setLoreEditId(null); setLoreEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); };
 
   // ---- identity + realtime ----
   useEffect(() => {
@@ -912,6 +960,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           else { const nx = step === 'arcade' ? 'terminal' : 'town'; onSetStepRef.current?.(nx as OnboardStep); }
         } else if (!onDoor) tutPortalArmRef.current = false;   // re-arm when you step off the door
       }
+      // LORE MARKERS — speak the Oracle's authored lore when you walk close to a tile marker (rising edge).
+      for (const lm of loreRef.current) {
+        if (lm.mode !== 'tile') continue;
+        const near = Math.hypot(lm.gx - me.fx, lm.gy - me.fy) < MACHINE_RANGE;
+        if (near && !lm.near) { musicRef.current?.chime(); setLoreCard(lm.text); }
+        lm.near = near;
+      }
       for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // idle life + gentle roaming for NPCs
@@ -1076,6 +1131,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       const hv = hoverRef.current, ui = uiRef.current;
       if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode || ui.tileMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      // Lore tile markers — invisible to players; a small glyph only while an admin is decorating.
+      if (ui.decorOpen) for (const lm of loreRef.current) { if (lm.mode !== 'tile') continue; const L = Math.max(0, planLvl(lm.gx, lm.gy)); const { sx, sy } = iso(lm.gx, lm.gy, L); const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#00cfff'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.6, TH * 0.6); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.9; ctx.fillStyle = '#00cfff'; ctx.font = '700 12px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✎', sx, sy - 1); ctx.restore(); }
 
       // support posts under a floating deck (so it reads as a bridge)
       const drawSupports = (it: Item, z: number, sw: number, sh: number) => {
@@ -1139,6 +1196,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       flashHint(`The wall gives. ${CURRENCY_SYMBOL}+${EASTER_EGG_REWARD} ✦`);
       return;
     }
+    if (placeLore) { placeTileLoreAt(gx, gy); return; }
     if (tileMode) { paintTile(gx, gy); return; }
     if (placingKind) { placeItem(placingKind, gx, gy); return; }
     if (removeMode) { removeAt(gx, gy); return; }
@@ -1260,9 +1318,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       )}
       {simFade && <div className="absolute inset-0 z-[97] bg-white animate-[fadeIn_1s_ease] pointer-events-none" />}
 
-      {(hint || placingKind || removeMode) && (
+      {(hint || placingKind || removeMode || placeLore || tileMode) && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 pointer-events-none text-[11px] font-mono uppercase tracking-widest bg-black/70 px-3 py-1" style={{ color: hint ? '#ff4e3e' : '#ffe65c' }}>
-          {hint || (placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
+          {hint || (placeLore ? 'tap a tile to drop the lore marker ✎' : tileMode ? 'tap tiles to paint the floor' : placingKind ? 'tap a tile · tap again to stack' : 'tap to pick up (returns to your inventory)')}
         </div>
       )}
 
@@ -1330,6 +1388,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${tileMode ? 'bg-[#1ED760]/20' : 'hover:bg-[#1ED760]/15'}`}>
                   <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: tileMode ? '#1ED760' : '#9fe0b3' }}>▦</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: tileMode ? '#1ED760' : '#9fe0b3' }}>Tiles</span>
+                </button>
+              )}
+              {isMod && (
+                <button onClick={openLoreEditor} title="Author Oracle lore (admin)"
+                  className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#00cfff]/15">
+                  <span className="text-[16px] leading-none text-[#00cfff]" style={{ marginTop: '-1px' }}>✎</span>
+                  <span className="text-[7px] uppercase tracking-wide leading-none text-[#00cfff]">Lore</span>
                 </button>
               )}
             </div>
@@ -1600,6 +1665,53 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {onExit && <button onClick={onExit} className="absolute top-3 right-4 z-40 text-[11px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">[ EXIT ]</button>}
 
       <Oracle open={oracleOpen} onClose={() => setOracleOpen(false)} roomSlug={roomMeta.slug} roomName={roomMeta.name} />
+
+      {/* ── Oracle lore — spoken to ANY player when a marker triggers (on-enter / walking onto a spot). ── */}
+      {loreCard && (
+        <div className="absolute inset-x-0 z-[78] flex justify-center px-4" style={{ bottom: 'calc(max(0.75rem, env(safe-area-inset-bottom)) + 64px)' }} onClick={() => setLoreCard(null)}>
+          <div className="w-full max-w-md border border-[#00cfff]/40 bg-black/90 backdrop-blur-md p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#00cfff] mb-2">❖ the Oracle</p>
+            <p className="text-[13.5px] text-white/85 leading-relaxed whitespace-pre-line">{loreCard}</p>
+            <button onClick={() => setLoreCard(null)} className="mt-3 w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-[0.25em] py-2.5 hover:bg-white transition-colors active:scale-95">Close ▸</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Lore editor (admin) ── author / edit / remove the room's on-enter + spot lore. ── */}
+      {loreEditor && (
+        <div className="absolute inset-0 z-[76] bg-black/85 backdrop-blur-sm flex justify-center overflow-y-auto px-4 py-8" onClick={() => setLoreEditor(false)}>
+          <div className="w-full max-w-md bg-black border border-[#00cfff]/30 h-fit p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-helvetica font-black uppercase tracking-widest text-white">Oracle lore · {roomMeta.name}</p>
+              <button onClick={() => setLoreEditor(false)} className="text-white/40 hover:text-white text-xl leading-none">✕</button>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-[#00cfff]/80 mb-1.5">On entering this room <span className="text-white/30 normal-case tracking-normal">— once per player</span></p>
+              <textarea value={enterText} onChange={e => setEnterText(e.target.value)} rows={3} placeholder="The Oracle's words when someone arrives… (blank + Save to clear)" className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff] resize-none" />
+              <button onClick={saveEnterLore} className="mt-2 w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2 hover:bg-white transition-colors active:scale-95">Save on-enter lore</button>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-[#00cfff]/80 mb-1.5">Spot markers <span className="text-white/30 normal-case tracking-normal">— spoken near a tile</span></p>
+              <div className="flex flex-col gap-1.5 mb-2">
+                {loreRef.current.filter(l => l.mode === 'tile').map(l => (
+                  <div key={l.id} className="flex items-center gap-2 border border-white/12 bg-white/[0.03] px-3 py-2">
+                    <span className="flex-1 min-w-0 text-[12px] text-white/70 truncate">({l.gx},{l.gy}) {l.text}</span>
+                    <button onClick={() => { setLoreText(l.text); setLoreEditId(l.id); }} className="text-[#00cfff]/70 hover:text-[#00cfff] text-[11px] uppercase tracking-widest">edit</button>
+                    <button onClick={() => removeLore(l.id)} title="Remove" className="text-white/30 hover:text-brandRed text-lg leading-none">✕</button>
+                  </div>
+                ))}
+                {loreRef.current.filter(l => l.mode === 'tile').length === 0 && <p className="text-[11px] text-white/35">No spot markers yet.</p>}
+              </div>
+              <textarea value={loreText} onChange={e => setLoreText(e.target.value)} rows={2} placeholder={loreEditId ? 'Editing this marker…' : 'New spot lore…'} className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff] resize-none" />
+              <div className="flex gap-2 mt-2">
+                <button onClick={saveTileLore} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2 hover:bg-white transition-colors active:scale-95">{loreEditId ? 'Update marker' : 'Place on a tile ▸'}</button>
+                {loreEditId && <button onClick={() => { setLoreEditId(null); setLoreText(''); }} className="px-3 border border-white/20 text-white/50 hover:text-white text-[11px] uppercase tracking-widest active:scale-95">Cancel</button>}
+              </div>
+            </div>
+            <p className="text-[10px] text-white/35">Markers persist for everyone. Players see new/changed lore on their next visit to the room.</p>
+          </div>
+        </div>
+      )}
 
       <MenuModal open={menuOpen} onClose={() => setMenuOpen(false)} />
 
