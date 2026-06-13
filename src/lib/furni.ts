@@ -30,7 +30,7 @@ export const CATS: FurniCat[] = [
   { id: 'beach',    name: 'Beach' },
   { id: 'garage',   name: 'Garage' },
   { id: 'festive',  name: 'Festive' },
-  { id: 'boutique', name: 'Boutique' },
+  { id: 'boutique', name: 'Splucci' },
   { id: 'constr',   name: 'Construction' },
   { id: 'tapetes',  name: 'Floors' },
   { id: 'assentos', name: 'Seats' },
@@ -305,14 +305,19 @@ export const FURNI: FurniDef[] = [
   { kind: 'gaspump',    name: 'Gas Pump',    emoji: '⛽', cat: 'garage', color: '#b3242e', h: 2, walk: false, foot: 0.5, special: 'gaspump' },
   { kind: 'oildrum',    name: 'Oil Drum',    emoji: '🛢️', cat: 'garage', color: '#2e7d4a', h: 1, walk: false, foot: 0.5, special: 'oildrum' },
   { kind: 'welder',     name: 'Welding Cart',emoji: '🔥', cat: 'garage', color: '#3a3e46', h: 1, walk: false, foot: 0.5, special: 'welder' },
-  // Boutique / Clothes shop — rails, racks, mannequins, fitting room, checkout
-  { kind: 'clorack',   name: 'Round Rack',   emoji: '🧥', cat: 'boutique', color: '#9aa3b0', h: 2, walk: false, foot: 0.9, special: 'clorack' },
-  { kind: 'clorail',   name: 'Clothing Rail', emoji: '👕', cat: 'boutique', color: '#b8bcc4', h: 2, walk: false, foot: 1, special: 'clorail', span: [2, 1] },
-  { kind: 'mannequin', name: 'Mannequin',    emoji: '🧍', cat: 'boutique', color: '#d8d2c8', h: 2, walk: false, foot: 0.5, special: 'mannequin' },
-  { kind: 'clotable',  name: 'Display Table', emoji: '👖', cat: 'boutique', color: '#7a5230', h: 1, walk: false, foot: 1, special: 'clotable', span: [2, 1] },
-  { kind: 'shoewall',  name: 'Shoe Display', emoji: '👟', cat: 'boutique', color: '#6a4a2e', h: 2, walk: false, foot: 0.6, special: 'shoewall' },
-  { kind: 'fitroom',   name: 'Fitting Room', emoji: '🚪', cat: 'boutique', color: '#7b2d3a', h: 3, walk: false, foot: 1, special: 'fitroom' },
-  { kind: 'clocounter',name: 'Checkout',     emoji: '🛍️', cat: 'boutique', color: '#3a4450', h: 2, walk: false, foot: 1, special: 'clocounter', span: [2, 1] },
+  // Splucci — high-end boutique (beige / black / white / brass): rails, racks, mannequins, fitting room, checkout
+  { kind: 'clorack',   name: 'Round Rack',   emoji: '🧥', cat: 'boutique', color: '#bfa468', h: 2, walk: false, foot: 0.9, special: 'clorack' },
+  { kind: 'clorail',   name: 'Clothing Rail', emoji: '👔', cat: 'boutique', color: '#bfa468', h: 2, walk: false, foot: 1, special: 'clorail', span: [2, 1] },
+  { kind: 'mannequin', name: 'Mannequin',    emoji: '🧍', cat: 'boutique', color: '#d8cdb5', h: 2, walk: false, foot: 0.5, special: 'mannequin' },
+  { kind: 'clotable',  name: 'Display Table', emoji: '🧣', cat: 'boutique', color: '#2a2620', h: 1, walk: false, foot: 1, special: 'clotable', span: [2, 1] },
+  { kind: 'shoewall',  name: 'Shoe Display', emoji: '👞', cat: 'boutique', color: '#2a2620', h: 2, walk: false, foot: 0.6, special: 'shoewall' },
+  { kind: 'fitroom',   name: 'Fitting Room', emoji: '🚪', cat: 'boutique', color: '#1c1c20', h: 3, walk: false, foot: 1, special: 'fitroom' },
+  { kind: 'clocounter',name: 'Checkout',     emoji: '🛍️', cat: 'boutique', color: '#1f1f24', h: 2, walk: false, foot: 1, special: 'clocounter', span: [2, 1] },
+  { kind: 'plinth',    name: 'Display Plinth', emoji: '👜', cat: 'boutique', color: '#e6ddca', h: 2, walk: false, foot: 0.6, special: 'plinth' },
+  { kind: 'perfume',   name: 'Perfume Stand',  emoji: '🧴', cat: 'boutique', color: '#1c1c20', h: 1, walk: false, foot: 0.9, special: 'perfume' },
+  { kind: 'jewelcase', name: 'Jewellery Case', emoji: '💍', cat: 'boutique', color: '#1c1c20', h: 1, walk: false, foot: 1, special: 'jewelcase', span: [2, 1] },
+  { kind: 'goldmirror',name: 'Gilt Mirror',    emoji: '🪞', cat: 'boutique', color: '#bfa468', h: 3, walk: false, foot: 0.5, special: 'goldmirror' },
+  { kind: 'velvetbench',name:'Velvet Bench',   emoji: '🛋️', cat: 'boutique', color: '#262230', h: 1, walk: false, foot: 1, special: 'velvetbench', span: [2, 1] },
   // Festive / Seasonal
   { kind: 'xmastree',   name: 'Christmas Tree',emoji: '🎄', cat: 'festive', color: '#1f7a3a', h: 3, walk: false, foot: 0.7, special: 'xmastree' },
   { kind: 'giftpile',   name: 'Gift Pile',   emoji: '🎁', cat: 'festive', color: '#b3242e', h: 1, walk: false, foot: 0.6, special: 'giftpile' },
@@ -340,7 +345,7 @@ const CAT_INDEX: Record<string, number> = (() => {
 
 // Seats you can sit on: walking onto the tile rests the avatar at this z (sit height in levels),
 // keyed by the renderer `special`. Non-seats return null (they stay solid blockers).
-const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5, peacock: 0.7, cloud: 0.55, pit: 0.42, officechair: 0.66, dinerbooth: 0.5, swingbench: 0.85, woodbench: 0.5, stonebench: 0.56, modernbench: 0.5 };
+const SEAT_SIT: Record<string, number> = { chair: 0.72, sofa: 0.66, stool: 0.7, throne: 0.7, puff: 0.45, armchair: 0.72, couch: 0.78, couch_hc: 0.8, bench: 0.6, lounger: 0.5, canopy: 0.5, eggchair: 0.6, chaise: 0.5, peacock: 0.7, cloud: 0.55, pit: 0.42, officechair: 0.66, dinerbooth: 0.5, swingbench: 0.85, woodbench: 0.5, stonebench: 0.56, modernbench: 0.5, velvetbench: 0.6 };
 export const sitHeight = (kind: string): number | null => { const s = defOf(kind).special; return s && s in SEAT_SIT ? SEAT_SIT[s] : null; };
 
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
@@ -359,8 +364,9 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'toilet', 'vanity', 'shower', 'towelrail', 'washer', 'mirror',
   'officechair', 'filecab', 'copier', 'watercooler', 'whiteboard', 'serverrack',
   'pooltable', 'foosball', 'clawmachine', 'pinball', 'airhockey', 'toychest', 'pacman', 'cashvault',
-  // boutique — rails/tables/shelves/booth/counter face a direction (the round rack stays symmetric)
+  // boutique — rails/tables/shelves/booth/counter/displays face a direction (the round rack stays symmetric)
   'clorail', 'clotable', 'shoewall', 'fitroom', 'clocounter', 'mannequin',
+  'plinth', 'perfume', 'jewelcase', 'goldmirror', 'velvetbench',
   // café / sci-fi / beach / garage / festive — the directional ones (round decorations stay symmetric)
   'pastrycase', 'winerack', 'kegtap', 'cocktailcart', 'coffeebar', 'neonarch', 'console', 'cryopod',
   'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights',

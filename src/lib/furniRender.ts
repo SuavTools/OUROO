@@ -2106,7 +2106,8 @@ const hangGarment = (ctx: CanvasRenderingContext2D, top: number[], bot: number[]
   ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(top[0] - w, top[1]); ctx.lineTo(top[0] + w, top[1]); ctx.lineTo(bot[0] + w * 0.8, bot[1]); ctx.lineTo(bot[0] - w * 0.8, bot[1]); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = shade(col, 0.72); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo((top[0] + bot[0]) / 2, top[1]); ctx.lineTo((top[0] + bot[0]) / 2, bot[1]); ctx.stroke();
 };
-const GARMENTS = ['#b3242e', '#caa24a', '#2e6e6a', '#34507a', '#8a44cc', '#1f7a3a', '#d76a1f', '#c0306a'];
+// Splucci palette — muted luxe neutrals (cream / black / taupe / charcoal), no loud colour.
+const GARMENTS = ['#e6ddca', '#1c1c20', '#c7b89c', '#3a3a40', '#f0ebdd', '#8c7e64', '#26262c', '#d4c8ac'];
 // Round rack — circular rail on a post with garments hanging all the way around (symmetric).
 const drawCloRack = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string) => {
   void _a; const yz = (z: number) => sy - z * STACK_H, ringRx = TW * 0.62, ringRy = TH * 0.62, ringY = yz(1.62);
@@ -2129,7 +2130,7 @@ const drawCloRail = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
 // Mannequin — a dress form (draped in a colour) on a slim pole + base.
 const drawMannequin = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a; const form = base, cT = shade(form, 1.18), cR = shade(form, 0.9), cL = shade(form, 0.58);
-  const dr = '#2e6e6a', dT = shade(dr, 1.2), dR = shade(dr, 0.92), dL = shade(dr, 0.6);
+  const dr = '#1c1c20', dT = shade(dr, 1.5), dR = shade(dr, 1.1), dL = shade(dr, 0.7);   // a sleek black drape
   const parts: IsoPart[] = [
     { u0: -0.18, u1: 0.18, v0: -0.18, v1: 0.18, z0: 0, z1: 0.08, t: shade(form, 0.7), r: shade(form, 0.6), l: shade(form, 0.45) },
     { u0: -0.04, u1: 0.04, v0: -0.04, v1: 0.04, z0: 0.08, z1: 0.95, t: '#3a3a44', r: '#2a2a32', l: '#1e1e24' },
@@ -2145,7 +2146,7 @@ const drawCloTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a:
   void _a; const w = base, cT = shade(w, 1.2), cR = shade(w, 0.9), cL = shade(w, 0.56);
   const parts: IsoPart[] = [...legs([[-0.78, -0.32], [0.78, -0.32], [-0.78, 0.32], [0.78, 0.32]], 0.55).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.9, u1: 0.9, v0: -0.4, v1: 0.4, z0: 0.55, z1: 0.7, t: cT, r: cR, l: cL }];
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
-    const stacks: [number, string][] = [[-0.55, '#b3242e'], [-0.18, '#caa24a'], [0.2, '#2e6e6a'], [0.58, '#34507a']];
+    const stacks: [number, string][] = [[-0.55, '#e6ddca'], [-0.18, '#1c1c20'], [0.2, '#c7b89c'], [0.58, '#f0ebdd']];
     for (const [u, col] of stacks) for (let k = 0; k < 3; k++) {
       const z = 0.72 + k * 0.12, a = P(u - 0.15, -0.15, z), b = P(u + 0.15, -0.15, z), c = P(u + 0.15, 0.15, z), e = P(u - 0.15, 0.15, z);
       ctx.fillStyle = k % 2 ? shade(col, 0.82) : col; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.lineTo(e[0], e[1]); ctx.closePath(); ctx.fill();
@@ -2156,7 +2157,7 @@ const drawCloTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a:
 const drawShoeWall = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a; const w = base, cT = shade(w, 1.2), cR = shade(w, 0.9), cL = shade(w, 0.56);
   drawParts(ctx, sx, sy, dir, 0, 0, [{ u0: -0.4, u1: 0.4, v0: -0.16, v1: 0.16, z0: 0, z1: 2.0, t: cT, r: cR, l: cL }], (P) => {
-    if (!faceVisible(0, 1, dir)) return; const F = 0.17, cols = ['#b3242e', '#dfe3ea', '#34507a', '#caa24a'];
+    if (!faceVisible(0, 1, dir)) return; const F = 0.17, cols = ['#1c1c20', '#f0ebdd', '#c7b89c', '#8c7e64'];
     for (let r = 0; r < 4; r++) { const z0 = 0.2 + r * 0.45; const a = P(-0.38, F, z0), b = P(0.38, F, z0); ctx.strokeStyle = shade(w, 0.62); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
       for (let s = 0; s < 2; s++) { const c = P(-0.2 + s * 0.4, F, z0 + 0.13); ctx.fillStyle = cols[(r + s) % cols.length]; ctx.beginPath(); ctx.ellipse(c[0] - 3, c[1], 3, 2, 0, 0, Math.PI * 2); ctx.ellipse(c[0] + 3, c[1], 3, 2, 0, 0, Math.PI * 2); ctx.fill(); } }
   });
@@ -2181,15 +2182,82 @@ const drawFitRoom = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
 };
 // Checkout counter — a 2-tile desk with a register + a shopping bag on top.
 const drawCloCounter = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
-  const w = base, cT = shade(w, 1.2), cR = shade(w, 0.9), cL = shade(w, 0.56);
+  void accent; const gold = '#bfa468', cream = '#e6ddca';   // brass + cream, ignore room accent (Splucci is its own palette)
+  const w = base, cT = shade(w, 1.4), cR = shade(w, 1.05), cL = shade(w, 0.7);
   const parts: IsoPart[] = [
     { u0: -0.9, u1: 0.9, v0: -0.34, v1: 0.34, z0: 0, z1: 0.95, t: cT, r: cR, l: cL },
-    { u0: -0.95, u1: 0.95, v0: -0.4, v1: 0.4, z0: 0.95, z1: 1.08, t: shade(w, 1.3), r: cR, l: cL },
+    { u0: -0.95, u1: 0.95, v0: -0.4, v1: 0.4, z0: 0.95, z1: 1.08, t: shade(w, 1.7), r: cR, l: cL },
   ];
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
-    const reg = P(-0.4, -0.05, 1.08); ctx.fillStyle = '#23262e'; ctx.fillRect(reg[0] - 7, reg[1] - 12, 14, 12); ctx.fillStyle = accent; ctx.fillRect(reg[0] - 5, reg[1] - 10, 10, 5);
-    const bag = P(0.45, 0, 1.08); ctx.fillStyle = accent; ctx.beginPath(); ctx.roundRect(bag[0] - 6, bag[1] - 13, 12, 13, 1.5); ctx.fill(); ctx.strokeStyle = shade(accent, 0.6); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(bag[0] - 3, bag[1] - 13, 2, Math.PI, 0); ctx.arc(bag[0] + 3, bag[1] - 13, 2, Math.PI, 0); ctx.stroke();
-    if (faceVisible(0, 1, dir)) { const a = P(-0.9, 0.34, 0.5), b = P(0.9, 0.34, 0.5); ctx.strokeStyle = hexA(accent, 0.5); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    const reg = P(-0.4, -0.05, 1.08); ctx.fillStyle = '#161619'; ctx.fillRect(reg[0] - 7, reg[1] - 12, 14, 12); ctx.fillStyle = gold; ctx.fillRect(reg[0] - 5, reg[1] - 10, 10, 5);
+    const bag = P(0.45, 0, 1.08); ctx.fillStyle = cream; ctx.beginPath(); ctx.roundRect(bag[0] - 6, bag[1] - 13, 12, 13, 1.5); ctx.fill(); ctx.fillStyle = gold; ctx.fillRect(bag[0] - 6, bag[1] - 9, 12, 1.6); ctx.strokeStyle = gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(bag[0] - 3, bag[1] - 13, 2, Math.PI, 0); ctx.arc(bag[0] + 3, bag[1] - 13, 2, Math.PI, 0); ctx.stroke();
+    if (faceVisible(0, 1, dir)) { const a = P(-0.9, 0.34, 0.5), b = P(0.9, 0.34, 0.5); ctx.strokeStyle = hexA(gold, 0.7); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+  });
+};
+
+const GOLD = '#bfa468', CREAM = '#e6ddca';
+// Display plinth — a podium with a luxury handbag on top.
+const drawPlinth = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const col = base, cT = shade(col, 1.3), cR = shade(col, 1.0), cL = shade(col, 0.66), gT = shade(GOLD, 1.2), gR = shade(GOLD, 0.92), gL = shade(GOLD, 0.6);
+  const parts: IsoPart[] = [
+    { u0: -0.28, u1: 0.28, v0: -0.28, v1: 0.28, z0: 0, z1: 0.1, t: gT, r: gR, l: gL },
+    { u0: -0.2, u1: 0.2, v0: -0.2, v1: 0.2, z0: 0.1, z1: 1.3, t: cT, r: cR, l: cL },
+    { u0: -0.24, u1: 0.24, v0: -0.24, v1: 0.24, z0: 1.3, z1: 1.42, t: gT, r: gR, l: gL },
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const c = P(0, 0, 1.42);
+    ctx.fillStyle = CREAM; ctx.beginPath(); ctx.roundRect(c[0] - 8, c[1] - 14, 16, 12, 2); ctx.fill();
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(c[0] - 4, c[1] - 14, 3.2, Math.PI, 0); ctx.arc(c[0] + 4, c[1] - 14, 3.2, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = GOLD; ctx.fillRect(c[0] - 1.5, c[1] - 9, 3, 3);
+  });
+};
+// Perfume stand — a slim console on gold legs with gold-capped bottles.
+const drawPerfume = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const col = base, cT = shade(col, 1.35), cR = shade(col, 1.05), cL = shade(col, 0.62);
+  const parts: IsoPart[] = [...legs([[-0.4, -0.16], [0.4, -0.16], [-0.4, 0.16], [0.4, 0.16]], 0.7).map(p => ({ ...p, t: GOLD, r: shade(GOLD, 0.8), l: shade(GOLD, 0.55) })), { u0: -0.46, u1: 0.46, v0: -0.2, v1: 0.2, z0: 0.7, z1: 0.82, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    const cols = [CREAM, '#c7b89c', '#f0ebdd'];
+    for (let i = 0; i < 3; i++) { const b = P(-0.28 + i * 0.28, 0, 0.82); ctx.fillStyle = hexA(cols[i], 0.85); ctx.beginPath(); ctx.roundRect(b[0] - 3, b[1] - 10, 6, 10, 1.5); ctx.fill(); ctx.fillStyle = GOLD; ctx.fillRect(b[0] - 1.5, b[1] - 14, 3, 4); }
+  });
+};
+// Jewelry case — a 2-tile glass display cabinet with a velvet pad, gold sparkles + gold trim.
+const drawJewelCase = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const col = base, cT = shade(col, 1.3), cR = shade(col, 1.0), cL = shade(col, 0.62);
+  drawParts(ctx, sx, sy, dir, 0, 0, [{ u0: -0.85, u1: 0.85, v0: -0.3, v1: 0.3, z0: 0, z1: 0.72, t: cT, r: cR, l: cL }], (P) => {
+    const pad = [P(-0.8, -0.26, 0.72), P(0.8, -0.26, 0.72), P(0.8, 0.26, 0.72), P(-0.8, 0.26, 0.72)];
+    poly(ctx, pad, '#2a2620');
+    ctx.fillStyle = GOLD; for (let i = 0; i < 6; i++) { const c = P(-0.6 + i * 0.24, 0, 0.74); ctx.beginPath(); ctx.arc(c[0], c[1], 1.8, 0, Math.PI * 2); ctx.fill(); }
+    const z0 = 0.72, z1 = 1.12, hu = 0.85, hv = 0.3;
+    poly(ctx, [P(hu, -hv, z1), P(hu, hv, z1), P(hu, hv, z0), P(hu, -hv, z0)], 'rgba(205,224,238,0.12)');
+    poly(ctx, [P(-hu, hv, z1), P(hu, hv, z1), P(hu, hv, z0), P(-hu, hv, z0)], 'rgba(205,224,238,0.15)');
+    poly(ctx, [P(-hu, -hv, z1), P(hu, -hv, z1), P(hu, hv, z1), P(-hu, hv, z1)], 'rgba(215,230,242,0.1)');
+    ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; const e = [P(-hu, hv, z1), P(hu, hv, z1), P(hu, -hv, z1), P(hu, hv, z0)];
+    ctx.beginPath(); ctx.moveTo(e[0][0], e[0][1]); ctx.lineTo(e[1][0], e[1][1]); ctx.lineTo(e[2][0], e[2][1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(e[1][0], e[1][1]); ctx.lineTo(e[3][0], e[3][1]); ctx.stroke();
+  });
+};
+// Gilt mirror — a tall ornate gold-framed standing mirror.
+const drawGoldMirror = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const gold = base, gT = shade(gold, 1.3), gR = shade(gold, 1.0), gL = shade(gold, 0.62);
+  const parts: IsoPart[] = [
+    { u0: -0.04, u1: 0.04, v0: -0.18, v1: 0.18, z0: 0, z1: 0.12, t: gT, r: gR, l: gL },
+    { u0: -0.3, u1: 0.3, v0: -0.06, v1: 0.06, z0: 0.12, z1: 2.6, t: gT, r: gR, l: gL },
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return; const F = 0.07;
+    const tl = P(-0.24, F, 2.45), tr = P(0.24, F, 2.45), br = P(0.24, F, 0.22), bl = P(-0.24, F, 0.22);
+    const g = ctx.createLinearGradient(tl[0], tl[1], br[0], br[1]); g.addColorStop(0, '#dfe6ec'); g.addColorStop(0.5, '#aeb8c2'); g.addColorStop(1, '#cfd8e0');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(tl[0], tl[1]); ctx.lineTo(tr[0], tr[1]); ctx.lineTo(br[0], br[1]); ctx.lineTo(bl[0], bl[1]); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 3; const s1 = P(-0.1, F, 2.2), s2 = P(0.14, F, 1.2); ctx.beginPath(); ctx.moveTo(s1[0], s1[1]); ctx.lineTo(s2[0], s2[1]); ctx.stroke();
+    ctx.fillStyle = gold; const ft = P(0, F, 2.55); ctx.beginPath(); ctx.arc(ft[0], ft[1], 4, 0, Math.PI * 2); ctx.fill();
+  });
+};
+// Velvet bench — a tufted 2-tile seat on gold legs.
+const drawVelvetBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; const v = base, cT = shade(v, 1.3), cR = shade(v, 1.0), cL = shade(v, 0.62);
+  const parts: IsoPart[] = [...legs([[-0.72, -0.26], [0.72, -0.26], [-0.72, 0.26], [0.72, 0.26]], 0.4).map(p => ({ ...p, t: GOLD, r: shade(GOLD, 0.8), l: shade(GOLD, 0.55) })), { u0: -0.82, u1: 0.82, v0: -0.32, v1: 0.32, z0: 0.4, z1: 0.64, t: cT, r: cR, l: cL }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.fillStyle = shade(v, 0.78); for (const u of [-0.5, -0.17, 0.17, 0.5]) for (const vv of [-0.12, 0.12]) { const c = P(u, vv, 0.64); ctx.beginPath(); ctx.arc(c[0], c[1], 1.6, 0, Math.PI * 2); ctx.fill(); }
   });
 };
 
@@ -2392,6 +2460,11 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'shoewall': drawShoeWall(ctx, sx, sy, accent, d.color, dir); break;
     case 'fitroom': drawFitRoom(ctx, sx, sy, accent, d.color, dir); break;
     case 'clocounter': drawCloCounter(ctx, sx, sy, accent, d.color, dir); break;
+    case 'plinth': drawPlinth(ctx, sx, sy, accent, d.color, dir); break;
+    case 'perfume': drawPerfume(ctx, sx, sy, accent, d.color, dir); break;
+    case 'jewelcase': drawJewelCase(ctx, sx, sy, accent, d.color, dir); break;
+    case 'goldmirror': drawGoldMirror(ctx, sx, sy, accent, d.color, dir); break;
+    case 'velvetbench': drawVelvetBench(ctx, sx, sy, accent, d.color, dir); break;
     case 'laptop': drawLaptop(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'sign': { const top = block(ctx, sx, sy, 1, d.color, accent, d.foot); if (showDet) { ctx.fillStyle = accent; ctx.font = '900 10px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SUAV', sx, top); } break; }
     case 'disco': { const cy = sy - 2.6 * STACK_H; ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(sx, cy - 22); ctx.lineTo(sx, cy - 56); ctx.stroke(); ctx.save(); ctx.translate(sx, cy); ctx.rotate(t * 0.04); const grd = ctx.createRadialGradient(-6, -6, 3, 0, 0, 20); grd.addColorStop(0, '#fff'); grd.addColorStop(1, '#8893b8'); ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + t * 0.04; ctx.fillStyle = `hsla(${(t * 4 + i * 60) % 360},90%,65%,0.9)`; ctx.beginPath(); ctx.arc(Math.cos(a) * 12, Math.sin(a) * 12, 3.5, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); break; }
