@@ -112,7 +112,7 @@ const GAMES: GameSlot[] = [GAME_OUROO, GAME_LEAP];
 const gameById = (id: string): GameSlot => GAMES.find(g => g.id === id) ?? { id, name: id.toUpperCase(), tag: '' };
 const MACHINES: Record<string, Machine[]> = {
   t_arcade: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: the single machine
-  arcade:   [{ gx: 5, gy: 3, games: [GAME_OUROO] }, { gx: 12, gy: 3, games: [GAME_LEAP] }],   // the Arcade room — one cabinet per game
+  // arcade: triggers are admin-placed via the Games tab, not hardcoded here
   // Town has NO machine — you reach the Arcade from the menu.
 };
 const MACHINE_RANGE = 1.9;   // tiles — "walk close" radius that pops the game picker / terminal
