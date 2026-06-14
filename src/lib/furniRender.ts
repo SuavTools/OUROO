@@ -15,12 +15,12 @@ const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16)
 
 const diamond = (ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
 
-const block = (ctx: CanvasRenderingContext2D, cx: number, cyBase: number, h: number, base: string, accent: string, foot: number, emoji?: string) => {
+const block = (ctx: CanvasRenderingContext2D, cx: number, cyBase: number, h: number, base: string, accent: string, foot: number, emoji?: string, noAccent?: boolean) => {
   const hw = TW * foot * 0.9, hh = TH * foot * 0.9, Hh = h * STACK_H, cyTop = cyBase - Hh;
   ctx.fillStyle = shade(base, 0.55); ctx.beginPath(); ctx.moveTo(cx - hw, cyBase); ctx.lineTo(cx, cyBase + hh); ctx.lineTo(cx, cyTop + hh); ctx.lineTo(cx - hw, cyTop); ctx.closePath(); ctx.fill();
   ctx.fillStyle = shade(base, 0.8); ctx.beginPath(); ctx.moveTo(cx, cyBase + hh); ctx.lineTo(cx + hw, cyBase); ctx.lineTo(cx + hw, cyTop); ctx.lineTo(cx, cyTop + hh); ctx.closePath(); ctx.fill();
   ctx.fillStyle = shade(base, 1.25); diamond(ctx, cx, cyTop, hw, hh); ctx.fill();
-  ctx.strokeStyle = hexA(accent, 0.35); ctx.lineWidth = 1; diamond(ctx, cx, cyTop, hw, hh); ctx.stroke();
+  if (!noAccent) { ctx.strokeStyle = hexA(accent, 0.35); ctx.lineWidth = 1; diamond(ctx, cx, cyTop, hw, hh); ctx.stroke(); }
   if (emoji) { ctx.font = `${Math.round(13 * foot + 4)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(emoji, cx, cyTop); }
   return cyTop;
 };
@@ -53,12 +53,12 @@ const faceTex = (ctx: CanvasRenderingContext2D, F: number[][], tex: string | nul
   ctx.restore();
 };
 // A full-tile iso cube with material texture; optional doorway / window carved on a chosen face (dir).
-const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: number, base: string, accent: string, foot: number, kind: string, opening: 'door' | 'window' | null = null, dir = 0) => {
+const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: number, base: string, accent: string, foot: number, kind: string, opening: 'door' | 'window' | null = null, dir = 0, noAccent = false) => {
   const hw = TW * foot * 0.9, hh = TH * foot * 0.9, cyT = cyB - h * STACK_H, tex = texOf(kind), rows = Math.max(3, Math.round(h * 3));
   const L = [[cx - hw, cyB], [cx, cyB + hh], [cx, cyT + hh], [cx - hw, cyT]];   // left face A,B,C,D
   const R = [[cx, cyB + hh], [cx + hw, cyB], [cx + hw, cyT], [cx, cyT + hh]];   // right face
   poly(ctx, L, shade(base, 0.62)); poly(ctx, R, shade(base, 0.82));
-  ctx.fillStyle = shade(base, 1.2); diamond(ctx, cx, cyT, hw, hh); ctx.fill(); ctx.strokeStyle = hexA(accent, 0.3); ctx.lineWidth = 1; diamond(ctx, cx, cyT, hw, hh); ctx.stroke();
+  ctx.fillStyle = shade(base, 1.2); diamond(ctx, cx, cyT, hw, hh); ctx.fill(); if (!noAccent) { ctx.strokeStyle = hexA(accent, 0.3); ctx.lineWidth = 1; diamond(ctx, cx, cyT, hw, hh); ctx.stroke(); }
   faceTex(ctx, L, tex, base, rows); faceTex(ctx, R, tex, base, rows);
   if (opening) {
     const F = (((dir % 4) + 4) % 4) % 2 === 1 ? R : L;   // rotate the opening between the two iso faces
@@ -2323,12 +2323,12 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
         poly(ctx, [Pl(-0.5, v1, z), Pl(0.5, v1, z), Pl(0.5, v1, 0), Pl(-0.5, v1, 0)], l); // +v riser
         poly(ctx, [Pl(-0.5, v0, z), Pl(0.5, v0, z), Pl(0.5, v1, z), Pl(-0.5, v1, z)], t); // tread
       }
-      ctx.strokeStyle = hexA(accent, 0.25); ctx.lineWidth = 1; diamond(ctx, sx, sy - STACK_H, TW, TH); ctx.stroke();
+      if (d.cat !== 'constr') { ctx.strokeStyle = hexA(accent, 0.25); ctx.lineWidth = 1; diamond(ctx, sx, sy - STACK_H, TW, TH); ctx.stroke(); }
       break;
     }
-    case 'wall': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind); break; }
-    case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir); break; }       // rotatable iso doorway
-    case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir); break; }   // rotatable iso window
+    case 'wall': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr'); break; }
+    case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir, d.cat === 'constr'); break; }       // rotatable iso doorway
+    case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir, d.cat === 'constr'); break; }   // rotatable iso window
     case 'gate': { drawGate(ctx, sx, sy, accent, d.color, dir, d.h); break; }                          // 2-tile-wide walk-through gate
     case 'roof': { hipRoof(ctx, sx, sy + TH * 0.7, 0.98, d.color, STACK_H * 0.7, 0.55, false); break; }
     case 'lavablock': {   // walkable molten block — hazard at its top level (handled in RoomCanvas)
@@ -2523,7 +2523,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'duck': drawDuck(ctx, sx, sy, accent, d.color, dir); break;
     case 'cone': { const cy = sy - 2; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx, cy - 28); ctx.lineTo(sx + 10, cy); ctx.lineTo(sx - 10, cy); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx - 6, cy - 13); ctx.lineTo(sx + 6, cy - 13); ctx.lineTo(sx + 5, cy - 9); ctx.lineTo(sx - 5, cy - 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(d.color, 0.8); ctx.fillRect(sx - 12, cy - 2, 24, 4); break; }
     case 'statue': drawStatue(ctx, sx, sy, accent, d.color, dir); break;
-    default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind) : block(ctx, sx, sy, d.h, d.color, accent, d.foot);
+    default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr') : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr');
   }
 }
 
