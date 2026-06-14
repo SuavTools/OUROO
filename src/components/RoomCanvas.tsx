@@ -384,7 +384,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming)
   const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
@@ -972,8 +972,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Rebuild the live NPC roster = curated cast + admin-placed NPCs (called on room load + on add/remove).
   const rebuildNpcs = () => {
     const slug = roomMetaRef.current.slug;
-    const curated = (CURATED_NPCS[slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, path: [] as { gx: number; gy: number; z: number }[], beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
-    const placed = placedNpcsRef.current.map(p => { const lvl = Math.max(0, planLvl(p.gx, p.gy)); return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines: p.data.l, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0 }; });
+    const curated = (CURATED_NPCS[slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
+    const placed = placedNpcsRef.current.map(p => { const lvl = Math.max(0, planLvl(p.gx, p.gy)); return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines: p.data.l, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0 }; });
     npcsRef.current = [...curated, ...placed];
   };
   // Drop a designed NPC at a tile (admin). Persists as an `npc:` row + live-broadcasts to the room.
@@ -1330,13 +1330,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             n.af += 1;
           } else {
             n.af += 0.4;   // idle breathe while waiting
-            if (Math.random() < 0.008) {   // ~once every 2.5 s — pick a new destination
+            if (n.wanderCool > 0) { n.wanderCool--; }
+            else if (Math.hypot(n.fx - sf.fx, n.fy - sf.fy) >= 2) {   // only wander when no player is within 2 tiles
               const ang = Math.random() * 6.283, dist = Math.random() * 4;
               const hx = n.hx, hy = n.hy;
               const tx = Math.max(hx - 4, Math.min(hx + 4, Math.round(hx + Math.cos(ang) * dist)));
               const ty = Math.max(hy - 4, Math.min(hy + 4, Math.round(hy + Math.sin(ang) * dist)));
               const p = findPath(clampTile(n.fx), clampTile(n.fy), n.lvl, tx, ty);
-              if (p && p.length) n.path = p;
+              if (p && p.length) { n.path = p; n.wanderCool = 540 + Math.floor(Math.random() * 301); }   // 9–14 s at 60 Hz
+              else n.wanderCool = 60;   // short retry if no path found
             }
           }
         } else n.af += 0.5;
