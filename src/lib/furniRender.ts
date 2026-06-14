@@ -1395,6 +1395,51 @@ const drawMailbox = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
   });
 };
 
+// ═══════════ FENCES ═══════════
+// Classic wooden picket fence — two posts with five narrow pickets between them.
+const drawFencePicket = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  const t = shade(base, 1.22), r = shade(base, 0.88), l = shade(base, 0.58);
+  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.07, v1: 0.07, z0: 0, z1: 1.1, t, r, l });
+  const pk   = (u: number): IsoPart           => ({ u0: u - 0.038, u1: u + 0.038, v0: -0.055, v1: 0.055, z0: 0, z1: 0.92, t, r, l });
+  drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.46, -0.36), post(0.36, 0.46), pk(-0.24), pk(-0.12), pk(0), pk(0.12), pk(0.24)]);
+};
+
+// Wrought-iron fence — square posts, thin vertical bars capped with spear tips, two horizontal rails.
+const drawFenceIron = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  const t = shade(base, 1.2), r = shade(base, 0.85), l = shade(base, 0.58);
+  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.07, v1: 0.07, z0: 0, z1: 1.35, t, r, l });
+  const rail = (z0: number, z1: number): IsoPart => ({ u0: -0.44, u1: 0.44, v0: -0.045, v1: 0.045, z0, z1, t, r, l });
+  const bar  = (u: number): IsoPart              => ({ u0: u - 0.028, u1: u + 0.028, v0: -0.04, v1: 0.04, z0: 0.1, z1: 1.2, t, r, l });
+  const tip  = (u: number): IsoPart              => ({ u0: u - 0.042, u1: u + 0.042, v0: -0.042, v1: 0.042, z0: 1.18, z1: 1.34, t: shade(base, 1.35), r, l });
+  drawParts(ctx, sx, sy, dir, 0, 0, [
+    post(-0.46, -0.36), post(0.36, 0.46),
+    rail(0.08, 0.16), rail(0.92, 1.0),
+    bar(-0.26), bar(-0.13), bar(0), bar(0.13), bar(0.26),
+    tip(-0.26), tip(-0.13), tip(0), tip(0.13), tip(0.26),
+  ]);
+};
+
+// Horizontal rail fence — two posts with three stacked rails (ranch / paddock style).
+const drawFenceRail = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  const t = shade(base, 1.2), r = shade(base, 0.85), l = shade(base, 0.58);
+  const post = (u: number): IsoPart              => ({ u0: u - 0.07, u1: u + 0.07, v0: -0.07, v1: 0.07, z0: 0, z1: 1.0, t, r, l });
+  const rail = (z0: number, z1: number): IsoPart => ({ u0: -0.46, u1: 0.46, v0: -0.048, v1: 0.048, z0, z1, t, r, l });
+  drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.42), post(0.42), rail(0.14, 0.24), rail(0.48, 0.58), rail(0.78, 0.88)]);
+};
+
+// Solid board privacy fence — darker posts, full-height panel, cap rail on top.
+const drawFenceSolid = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  const t = shade(base, 1.18), r = shade(base, 0.85), l = shade(base, 0.58);
+  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.07, v1: 0.07, z0: 0, z1: 1.12, t: shade(base, 0.72), r: shade(base, 0.52), l: shade(base, 0.4) });
+  const panel: IsoPart = { u0: -0.38, u1: 0.38, v0: -0.05, v1: 0.05, z0: 0, z1: 1.0, t, r, l };
+  const cap:   IsoPart = { u0: -0.47, u1: 0.47, v0: -0.07, v1: 0.07, z0: 1.0, z1: 1.08, t: shade(base, 1.3), r: shade(base, 0.9), l: shade(base, 0.62) };
+  drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.46, -0.36), post(0.36, 0.46), panel, cap]);
+};
+
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2383,6 +2428,10 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'swingbench': drawSwingBench(ctx, sx, sy, accent, d.color, dir); break;
     case 'streetlamp': drawStreetLamp(ctx, sx, sy, accent, d.color, dir); break;
     case 'mailbox': drawMailbox(ctx, sx, sy, accent, d.color, dir); break;
+    case 'fence_picket': drawFencePicket(ctx, sx, sy, accent, d.color, dir); break;
+    case 'fence_iron':   drawFenceIron(ctx, sx, sy, accent, d.color, dir); break;
+    case 'fence_rail':   drawFenceRail(ctx, sx, sy, accent, d.color, dir); break;
+    case 'fence_solid':  drawFenceSolid(ctx, sx, sy, accent, d.color, dir); break;
     case 'drumkit': drawDrumkit(ctx, sx, sy, accent, d.color, dir); break;
     case 'ampstack': drawAmpStack(ctx, sx, sy, accent, d.color, dir); break;
     case 'mixer': drawMixer(ctx, sx, sy, accent, d.color, dir); break;
