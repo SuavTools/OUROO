@@ -1528,6 +1528,47 @@ const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
   ctx.restore();
 };
 
+// ═══════════ DIAMOND PINE ═══════════
+const drawDiamondPine = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, _dir: number) => {
+  void _a; void _dir;
+
+  // Ground shadow
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.42, TH * 0.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+  // Trunk — two flat isometric faces, no gradients
+  const trunkH = STACK_H * 0.48, tw = 4;
+  ctx.fillStyle = '#3d1a06';
+  ctx.beginPath(); ctx.moveTo(sx - tw, sy); ctx.lineTo(sx - tw, sy - trunkH); ctx.lineTo(sx, sy - trunkH); ctx.lineTo(sx, sy); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#7a3a10';
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy - trunkH); ctx.lineTo(sx + tw, sy - trunkH); ctx.lineTo(sx + tw, sy); ctx.closePath(); ctx.fill();
+
+  // Diamond canopy — wide teardrop, two flat faces split at center ridge
+  const H = STACK_H * 2.85;
+  const WL = TW * 0.88;  // left face half-width
+  const WR = TW * 0.70;  // right face half-width (narrower depth cue)
+  const baseY = sy - trunkH;
+  const tipY  = baseY - H;
+  const midY  = baseY - H * 0.44; // widest point 44% from base
+
+  // Left face — bright lit side; closePath draws the straight center ridge back to tip
+  ctx.fillStyle = shade(base, 1.34);
+  ctx.beginPath();
+  ctx.moveTo(sx, tipY);
+  ctx.bezierCurveTo(sx - WL * 0.42, tipY + H * 0.18, sx - WL, midY - H * 0.04, sx - WL, midY);
+  ctx.bezierCurveTo(sx - WL, midY + H * 0.07, sx - WL * 0.22, baseY - H * 0.04, sx, baseY);
+  ctx.closePath(); ctx.fill();
+
+  // Right face — shadow side; lineTo draws the center ridge, closePath is degenerate at tip
+  ctx.fillStyle = shade(base, 0.80);
+  ctx.beginPath();
+  ctx.moveTo(sx, tipY);
+  ctx.lineTo(sx, baseY);
+  ctx.bezierCurveTo(sx + WR * 0.22, baseY - H * 0.04, sx + WR, midY + H * 0.07, sx + WR, midY);
+  ctx.bezierCurveTo(sx + WR, midY - H * 0.04, sx + WR * 0.42, tipY + H * 0.18, sx, tipY);
+  ctx.closePath(); ctx.fill();
+};
+
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2420,6 +2461,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pine': drawPineTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'hedge': drawHedge(ctx, sx, sy, accent, d.color, dir); break;
     case 'shrub': drawShrub(ctx, sx, sy, accent, d.color, dir); break;
+    case 'diamond_pine': drawDiamondPine(ctx, sx, sy, accent, d.color, dir); break;
     case 'palm': drawPalm(ctx, sx, sy, accent, d.color, dir); break;
     case 'torii': drawTorii(ctx, sx, sy, accent, d.color, dir); break;
     case 'pagoda': drawPagoda(ctx, sx, sy, accent, d.color, dir); break;
