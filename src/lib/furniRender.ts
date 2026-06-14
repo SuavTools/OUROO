@@ -1529,44 +1529,63 @@ const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
 };
 
 // ═══════════ DIAMOND PINE ═══════════
+// 8-face low-poly canopy: 4-face pyramid top + 4-face bulge bottom, same face shading throughout.
+// Faces 1–4 left→right: back-left (bright), front-left (brightest), front-right (med), back-right (dark).
 const drawDiamondPine = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, _dir: number) => {
   void _a; void _dir;
 
   // Ground shadow
   ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.42, TH * 0.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.52, TH * 0.36, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 
-  // Trunk — two flat isometric faces, no gradients
-  const trunkH = STACK_H * 0.48, tw = 4;
-  ctx.fillStyle = '#3d1a06';
-  ctx.beginPath(); ctx.moveTo(sx - tw, sy); ctx.lineTo(sx - tw, sy - trunkH); ctx.lineTo(sx, sy - trunkH); ctx.lineTo(sx, sy); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#7a3a10';
-  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, sy - trunkH); ctx.lineTo(sx + tw, sy - trunkH); ctx.lineTo(sx + tw, sy); ctx.closePath(); ctx.fill();
+  const trunkH = STACK_H * 0.50;
+  const H      = STACK_H * 2.90;
+  const WL     = TW * 0.94;   // left half-width at equator
+  const WR     = TW * 0.69;   // right half-width (narrower — perspective depth cue)
+  const baseY  = sy - trunkH;
+  const tipY   = baseY - H;
+  const eqY    = baseY - H * 0.55;  // equatorial ring — 55% up from base
 
-  // Diamond canopy — wide teardrop, two flat faces split at center ridge
-  const H = STACK_H * 2.85;
-  const WL = TW * 0.88;  // left face half-width
-  const WR = TW * 0.70;  // right face half-width (narrower depth cue)
-  const baseY = sy - trunkH;
-  const tipY  = baseY - H;
-  const midY  = baseY - H * 0.44; // widest point 44% from base
+  // Equatorial ridge x-positions (all sit at eqY)
+  const e1 = sx - WL;           // far left outer edge
+  const e2 = sx - WL * 0.46;    // left internal ridge
+  const e3 = sx;                 // centre ridge
+  const e4 = sx + WR * 0.52;    // right internal ridge
+  const e5 = sx + WR;            // far right outer edge
 
-  // Left face — bright lit side; closePath draws the straight center ridge back to tip
-  ctx.fillStyle = shade(base, 1.34);
-  ctx.beginPath();
-  ctx.moveTo(sx, tipY);
-  ctx.bezierCurveTo(sx - WL * 0.42, tipY + H * 0.18, sx - WL, midY - H * 0.04, sx - WL, midY);
-  ctx.bezierCurveTo(sx - WL, midY + H * 0.07, sx - WL * 0.22, baseY - H * 0.04, sx, baseY);
-  ctx.closePath(); ctx.fill();
+  // Trunk-level taper points (bottom of canopy = top of trunk)
+  const b1 = sx - WL * 0.58;
+  const b2 = sx - 6;
+  const b3 = sx;
+  const b4 = sx + 5;
+  const b5 = sx + WR * 0.50;
 
-  // Right face — shadow side; lineTo draws the center ridge, closePath is degenerate at tip
-  ctx.fillStyle = shade(base, 0.80);
-  ctx.beginPath();
-  ctx.moveTo(sx, tipY);
-  ctx.lineTo(sx, baseY);
-  ctx.bezierCurveTo(sx + WR * 0.22, baseY - H * 0.04, sx + WR, midY + H * 0.07, sx + WR, midY);
-  ctx.bezierCurveTo(sx + WR, midY - H * 0.04, sx + WR * 0.42, tipY + H * 0.18, sx, tipY);
-  ctx.closePath(); ctx.fill();
+  // Extra mid-points to make outer silhouette slightly convex below equator
+  const bmY  = eqY + (baseY - eqY) * 0.42;
+  const bm1  = sx - WL * 0.90;
+  const bm5  = sx + WR * 0.90;
+
+  // Per-face flat shading: back-left | front-left (brightest) | front-right | back-right (darkest)
+  const C1 = shade(base, 1.30);
+  const C2 = shade(base, 1.44);
+  const C3 = shade(base, 0.90);
+  const C4 = shade(base, 0.70);
+
+  // TOP PYRAMID — 4 triangular faces, all share the tip
+  poly(ctx, [[sx, tipY], [e1, eqY], [e2, eqY]], C1);
+  poly(ctx, [[sx, tipY], [e2, eqY], [e3, eqY]], C2);
+  poly(ctx, [[sx, tipY], [e3, eqY], [e4, eqY]], C3);
+  poly(ctx, [[sx, tipY], [e4, eqY], [e5, eqY]], C4);
+
+  // BOTTOM BULGE — 4 faces tapering from equator to trunk-top
+  poly(ctx, [[e1, eqY], [bm1, bmY], [b1, baseY], [b2, baseY], [e2, eqY]], C1);
+  poly(ctx, [[e2, eqY], [e3, eqY], [b3, baseY], [b2, baseY]], C2);
+  poly(ctx, [[e3, eqY], [e4, eqY], [b4, baseY], [b3, baseY]], C3);
+  poly(ctx, [[e4, eqY], [e5, eqY], [bm5, bmY], [b5, baseY], [b4, baseY]], C4);
+
+  // TRUNK — 2 flat faces
+  ctx.fillStyle = '#3d1a06'; ctx.fillRect(sx - 4, baseY, 4, trunkH);
+  ctx.fillStyle = '#7a3a10'; ctx.fillRect(sx,     baseY, 4, trunkH);
 };
 
 // ═══════════ STUDIO ═══════════
