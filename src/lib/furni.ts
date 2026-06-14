@@ -69,7 +69,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'bloco',      name: 'Block',     emoji: '🧊', cat: 'constr', color: '#303048', h: 1, walk: true,  foot: 1 },
   { kind: 'meio',       name: 'Cube',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
   { kind: 'plataforma',        name: 'Platform',        emoji: '⬛', cat: 'constr', color: '#303048', h: 1, walk: true, foot: 1 },
-  { kind: 'block-gold',   name: 'Block Gold',   emoji: '🟫', cat: 'constr', color: '#303048', h: 1, walk: false, foot: 1, special: 'goldblock' },
+  { kind: 'block-gold',   name: 'Block Gold Line',   emoji: '🟫', cat: 'constr', color: '#303048', h: 1, walk: false, foot: 1, special: 'goldblock' },
   { kind: 'block-cream',  name: 'Block Cream',  emoji: '⬜', cat: 'constr', color: '#f0ece0', h: 1, walk: false, foot: 1 },
   { kind: 'block-yellow', name: 'Block Yellow', emoji: '🟨', cat: 'constr', color: '#f5e876', h: 1, walk: false, foot: 1 },
   { kind: 'block-blue',   name: 'Block Blue',   emoji: '🟦', cat: 'constr', color: '#89b4dc', h: 1, walk: false, foot: 1 },
