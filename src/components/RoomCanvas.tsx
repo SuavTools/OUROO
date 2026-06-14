@@ -832,6 +832,32 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           }
       }
     }
+    // Cavity guard: if spawn is enclosed by furniture (not in the largest walkable region), move to the
+    // nearest tile of the largest open area so the player can never be trapped on load.
+    { const me = selfRef.current; const ox = clampTile(me.fx), oy = clampTile(me.fy);
+      const S = solidRef.current, surf = surfRef.current, k0 = key(ox, oy);
+      const vis = new Uint8Array(GRID * GRID); let myComp: Set<number> | null = null, bestComp = new Set<number>();
+      for (let i = 0; i < GRID * GRID; i++) {
+        if (vis[i] || S[i] || !surf[i].length) continue;
+        const comp = new Set<number>(); const q = [i]; vis[i] = 1;
+        while (q.length) {
+          const c = q.shift()!; comp.add(c);
+          const cx = c % GRID, cy = (c / GRID) | 0;
+          for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+            const nx = cx+dx, ny = cy+dy; if (nx<0||ny<0||nx>=GRID||ny>=GRID) continue;
+            const k2 = key(nx,ny); if (vis[k2]||S[k2]||!surf[k2].length) continue;
+            vis[k2]=1; q.push(k2);
+          }
+        }
+        if (comp.has(k0)) myComp = comp;
+        if (comp.size > bestComp.size) bestComp = comp;
+      }
+      if (myComp !== bestComp && bestComp.size) {
+        let nk = -1, nd = Infinity;
+        for (const k of bestComp) { const d=(k%GRID-ox)**2+(((k/GRID)|0)-oy)**2; if(d<nd){nd=d;nk=k;} }
+        if (nk>=0) { me.fx=nk%GRID; me.fy=(nk/GRID)|0; me.tx=me.fx; me.ty=me.fy; me.path=[]; }
+      }
+    }
     rebuildNpcs();
     // On-enter markers: fire once per player (per marker id) — Oracle card / glitch sequence / reward.
     for (const mk of loreRef.current.filter(l => l.mode === 'enter')) {
