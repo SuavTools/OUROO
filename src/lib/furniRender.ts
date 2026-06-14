@@ -2910,6 +2910,14 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'duck': drawDuck(ctx, sx, sy, accent, d.color, dir); break;
     case 'cone': { const cy = sy - 2; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx, cy - 28); ctx.lineTo(sx + 10, cy); ctx.lineTo(sx - 10, cy); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx - 6, cy - 13); ctx.lineTo(sx + 6, cy - 13); ctx.lineTo(sx + 5, cy - 9); ctx.lineTo(sx - 5, cy - 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(d.color, 0.8); ctx.fillRect(sx - 12, cy - 2, 24, 4); break; }
     case 'statue': drawStatue(ctx, sx, sy, accent, d.color, dir); break;
+    case 'goldblock': {
+      const hw = TW * d.foot, hh = TH * d.foot, cyTop = sy - d.h * STACK_H;
+      block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, true);
+      ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5;
+      diamond(ctx, sx, cyTop, hw, hh); ctx.stroke();
+      diamond(ctx, sx, sy, hw, hh); ctx.stroke();
+      break;
+    }
     default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr') : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr');
   }
 }
