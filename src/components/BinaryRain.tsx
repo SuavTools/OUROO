@@ -75,10 +75,10 @@ export function BinaryRain({ visible }: { visible: boolean }) {
   return (
     <div
       className="fixed inset-0 z-[150] bg-black pointer-events-none"
-      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.55s ease-in-out' }}
+      style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.9s ease-in-out' }}
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
-      <div className="absolute inset-x-0 bottom-10 flex justify-center">
+      <div className="absolute inset-0 flex items-center justify-center">
         <p className="font-mono text-[11px] uppercase tracking-[0.4em] text-[#ffd23c]/50 animate-pulse">
           connecting
         </p>
