@@ -10,7 +10,8 @@ type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorTyp
 const MOODS: Record<string, Mood> = {
   praca:   { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 900,  wave: 'triangle', cutoff: 760, bass: false, gain: 0.5 },  // calm, hopeful
   jardim:  { scale: [0, 2, 4, 7, 9],  root: 196, beatMs: 1100, wave: 'sine',     cutoff: 640, bass: false, gain: 0.46 }, // serene, koto-ish
-  clube:   { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 980, bass: true,  gain: 0.4 },  // loudest signal — a pulse
+  clube:   { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 980,  bass: true,  gain: 0.4 },  // loudest signal — a pulse
+  sweat:   { scale: [0, 3, 7, 10],   root: 110, beatMs: 460,  wave: 'sawtooth', cutoff: 1100, bass: true,  gain: 0.38 }, // dark techno — A2 root, minor-7th, 130 BPM, bright and heavy
   archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 520, bass: false, gain: 0.42 }, // sparse, melancholy
   foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 620, bass: true,  gain: 0.42 }, // warm, industrial drone
   default: { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 950,  wave: 'triangle', cutoff: 700, bass: false, gain: 0.44 },
