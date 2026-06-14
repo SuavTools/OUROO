@@ -1951,6 +1951,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                     {gTab === 'set' ? 'Place event ▸' : 'Place cabinet ▸'}
                   </button>
                 </div>
+                <div className="pt-1 border-t border-white/10">
+                  <button
+                    onClick={() => {
+                      const games = itemsRef.current.filter(i => i.kind === 'arcade' || i.kind === 'setgame');
+                      if (games.length === 0) { flashHint('No game objects in this room'); return; }
+                      games.forEach(dropItem);
+                      flashHint(`Cleared ${games.length} game object${games.length === 1 ? '' : 's'}`);
+                    }}
+                    className="w-full px-3 py-1.5 border border-brandRed/40 rounded-lg text-[11px] text-brandRed/70 hover:border-brandRed hover:text-brandRed transition-colors text-left"
+                  >
+                    Clear all games in room
+                  </button>
+                </div>
               </div>
             ) : atmoMode ? (
               <div className="p-3">
