@@ -102,7 +102,9 @@ const PERK_DESC: Record<string, string> = {
 const perkLabel = (k: string) => PERK_LABEL[k] ?? k;
 
 // ---- COMPONENT ----
-export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onFirstGameOver?: () => void }> = ({ stageScale = 1, isMobileStage = false, onFirstGameOver }) => {
+// gameMods: special-rule flags this run launched with (e.g. { doubleCrystals: true }). Accepted but
+// not yet acted on — the launch path (placed game triggers) forwards them for a future pass.
+export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; gameMods?: Record<string, boolean> | null; onFirstGameOver?: () => void }> = ({ stageScale = 1, isMobileStage = false, gameMods: _gameMods = null, onFirstGameOver }) => {
   const firstOverFiredRef = useRef(false);   // onboarding: fire onFirstGameOver exactly once, on the first death
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
   const synthRef    = useRef<ArcadeSynth | null>(null);
