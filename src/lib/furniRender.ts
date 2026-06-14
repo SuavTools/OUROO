@@ -1914,7 +1914,7 @@ const drawClawMachine = (ctx: CanvasRenderingContext2D, sx: number, sy: number, 
     poly(ctx, [P(0.4, -0.3, 2.4), P(0.4, 0.3, 2.4), P(0.4, 0.3, 0.9), P(0.4, -0.3, 0.9)], 'rgba(160,190,215,0.14)');
     const cols = ['#f4b8d0', '#7fe39a', '#caa24a', '#3a7bd0', '#e07b1f']; for (let i = 0; i < 7; i++) { const c = P(-0.3 + ((i * 7) % 5) * 0.14, 0.0 + ((i * 3) % 3 - 1) * 0.12, 1.05); ctx.fillStyle = cols[i % 5]; ctx.beginPath(); ctx.arc(c[0], c[1], 4, 0, Math.PI * 2); ctx.fill(); }
     const rail = P(0, -0.2, 2.3), claw = P(0.0, -0.1, 1.7); ctx.strokeStyle = '#888f9e'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(claw[0], claw[1]); ctx.lineTo(claw[0], rail[1]); ctx.stroke(); ctx.fillStyle = '#cfd6e2'; ctx.beginPath(); ctx.moveTo(claw[0] - 5, claw[1]); ctx.lineTo(claw[0], claw[1] + 8); ctx.lineTo(claw[0] + 5, claw[1]); ctx.closePath(); ctx.fill();
-    if (faceVisible(0, 1, dir)) { const mq = P(0, 0.3, 2.55); ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = hexA(accent, 0.8); ctx.fillRect(mq[0] - 22, mq[1] - 6, 44, 12); ctx.restore(); ctx.fillStyle = '#fff'; ctx.font = '900 7px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('PRIZES', mq[0], mq[1]); }
+    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.4, 0.3, 2.7), P(0.4, 0.3, 2.7), P(0.4, 0.3, 2.4), P(-0.4, 0.3, 2.4)], hexA(accent, 0.5)); }
   });
 };
 // Squid-Game prize vault — a slim column topped by a glass cube that fills with green cash at the bottom.
@@ -2055,7 +2055,7 @@ const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
     const z = 0.72; poly(ctx, [P(-0.32, -0.55, z), P(0.32, -0.55, z), P(0.32, 0.55, z), P(-0.32, 0.55, z)], shade(m, 1.5));
     ctx.fillStyle = hexA(accent, 0.85); for (const [u, v] of [[-0.12, -0.2], [0.14, -0.1], [0, 0.0]] as [number, number][]) { const c = P(u, v, z); ctx.beginPath(); ctx.arc(c[0], c[1], 4, 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = '#fff'; for (const u of [-0.12, 0.12]) { const c = P(u, 0.42, z); ctx.fillRect(c[0] - 5, c[1] - 1.5, 10, 3); }
-    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.32, -0.5, 1.75), P(0.32, -0.5, 1.75), P(0.32, -0.5, 0.8), P(-0.32, -0.5, 0.8)], hexA(accent, 0.5)); const c = P(0, -0.5, 1.3); ctx.fillStyle = '#fff'; ctx.font = '900 8px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('OUROO', c[0], c[1]); }
+    if (faceVisible(0, 1, dir)) { poly(ctx, [P(-0.32, -0.5, 1.75), P(0.32, -0.5, 1.75), P(0.32, -0.5, 0.8), P(-0.32, -0.5, 0.8)], hexA(accent, 0.5)); }
   });
 };
 const drawAirHockey = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
