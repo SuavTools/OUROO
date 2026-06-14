@@ -542,7 +542,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [charDone, setCharDone] = useState(false);  // finished the character creator (account + design)
   const [guestChosen, setGuestChosen] = useState(false);   // chose "continue as guest" in the creator
   const [eggClaimed, setEggClaimed] = useState(false);     // hidden-wall easter egg taken (this room)
-  const nearMachineRef = useRef(false);   // rising-edge guard so the picker pops once per approach
+  const nearMachineRef = useRef<string | null>(null);   // key of the machine currently in range (null = none); changes trigger the picker
   const machineOverrideRef = useRef<{ gameId: string; rules: GameRules } | null>(null);   // a placed set-game event retargets this room's machines
   const nearTermRef = useRef(false);      // rising-edge guard for the terminal
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
@@ -554,7 +554,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const writeOrigin = () => { const slug = roomMetaRef.current.slug; if (isTutRoom(slug)) return; try { localStorage.setItem(ORIGIN_KEY, JSON.stringify({ slug, gx: clampTile(selfRef.current.fx), gy: clampTile(selfRef.current.fy) })); } catch { /* ignore */ } };
   // One-shot: an origin we consumed on mount is cleared so a later plain "enter the Plaza" doesn't
   // teleport to a stale tile; arm the machine guard so the picker doesn't instantly re-fire under us.
-  useEffect(() => { if (origin) { try { localStorage.removeItem(ORIGIN_KEY); } catch { /* ignore */ } nearMachineRef.current = true; } }, [origin]);
+  useEffect(() => { if (origin) { try { localStorage.removeItem(ORIGIN_KEY); } catch { /* ignore */ } nearMachineRef.current = 'origin'; } }, [origin]);
   const onSetStepRef = useRef(onSetStep);
   useEffect(() => { onSetStepRef.current = onSetStep; }, [onSetStep]);
   const gamePlayedRef = useRef(gamePlayed);
@@ -564,7 +564,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const charDoneRef = useRef(false);
   useEffect(() => { charDoneRef.current = charDone; }, [charDone]);
   // Reset the per-room tutorial state whenever the step changes (new room = fresh speech, guards re-armed).
-  useEffect(() => { setTutLine(0); setTutCardDone(false); setSimConfirm(false); nearMachineRef.current = false; nearTermRef.current = false; tutPortalArmRef.current = false; }, [onboarding]);
+  useEffect(() => { setTutLine(0); setTutCardDone(false); setSimConfirm(false); nearMachineRef.current = null; nearTermRef.current = false; tutPortalArmRef.current = false; }, [onboarding]);
   // Persisted character-creator progress (survives the Discord OAuth round-trip mid-tutorial).
   useEffect(() => {
     try { setCharDone(localStorage.getItem('ouroo_tut_char') === '1'); setGuestChosen(localStorage.getItem('ouroo_tut_guest') === '1'); } catch { /* ignore */ }
@@ -1213,8 +1213,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         for (const m of ms) { if (adjTo(m.gx, m.gy)) { near = override ? { gx: m.gx, gy: m.gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
         // admin-placed play-triggers (hydrated as `arcade` items carrying a gameId) — each is its own machine
         if (!near) for (const it of itemsRef.current) { if (it.kind === 'arcade' && it.gameId && adjTo(it.gx, it.gy)) { near = { gx: it.gx, gy: it.gy, games: [gameById(it.gameId)], rules: it.gameRules }; break; } }
-        if (near && !nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
-        nearMachineRef.current = !!near;
+        const nearKey = near ? `${near.gx},${near.gy}` : null;
+        if (near && nearKey !== nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
+        nearMachineRef.current = nearKey;
       }
       // ── TUTORIAL flow ── the onward door (TUT_PORTAL_TILE) + the terminal, gated by the current step.
       {
@@ -2200,7 +2201,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             <p className="text-sm text-white/60 leading-relaxed">Slot in. Pick a game — survive, score, walk away with crystals.</p>
             <div className="flex flex-col gap-2">
               {machinePrompt.games.map(g => (
-                <button key={g.id} onClick={() => { const rules = machinePrompt.rules; setMachinePrompt(null); nearMachineRef.current = true; writeOrigin(); (onLaunchGameRef.current ?? onLaunchGame)?.(g.id, rules); }}
+                <button key={g.id} onClick={() => { const rules = machinePrompt.rules; setMachinePrompt(null); nearMachineRef.current = 'launched'; writeOrigin(); (onLaunchGameRef.current ?? onLaunchGame)?.(g.id, rules); }}
                   className="group flex items-center justify-between gap-3 border border-white/15 hover:border-brandYellow bg-white/[0.03] hover:bg-brandYellow/10 px-4 py-3 text-left transition-colors">
                   <span>
                     <span className="block font-helvetica font-black text-lg text-white leading-none">{g.name}</span>
