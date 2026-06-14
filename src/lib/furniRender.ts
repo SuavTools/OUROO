@@ -2394,7 +2394,6 @@ const drawGlassTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, a
     poly(ctx, [P(-0.82, -0.3, z), P(0.82, -0.3, z), P(0.82, 0.34, z), P(-0.82, 0.34, z)], 'rgba(190,220,235,0.22)');
     poly(ctx, [P(-0.82, -0.3, z), P(0.82, -0.3, z), P(0.82, 0.34, z), P(-0.82, 0.34, z)], undefined, hexA('#dff4f8', 0.5), 1.5);
     poly(ctx, [P(-0.5, -0.1, z), P(-0.2, -0.1, z), P(0.0, 0.2, z), P(-0.3, 0.2, z)], 'rgba(255,255,255,0.12)');
-    const vz = P(0.3, 0.05, z); ctx.fillStyle = hexA(accent, 0.8); ctx.beginPath(); ctx.moveTo(vz[0] - 4, vz[1]); ctx.quadraticCurveTo(vz[0] - 6, vz[1] - 12, vz[0], vz[1] - 16); ctx.quadraticCurveTo(vz[0] + 6, vz[1] - 12, vz[0] + 4, vz[1]); ctx.closePath(); ctx.fill();
   });
 };
 
