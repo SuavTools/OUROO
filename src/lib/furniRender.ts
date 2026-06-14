@@ -1443,6 +1443,91 @@ const drawFenceSolid = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
   drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.46, -0.36), post(0.36, 0.46), panel, cap]);
 };
 
+// ═══════════ NEW PLANTS ═══════════
+
+// Pine tree: narrow bark trunk + four stacked triangular tiers tapering to a spike.
+const drawPineTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.38, TH * 0.38, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 1.0, tw = TW * 0.1;
+  const tg = ctx.createLinearGradient(sx - tw, 0, sx + tw, 0); tg.addColorStop(0, shade(base, 0.5)); tg.addColorStop(0.5, shade(base, 1.05)); tg.addColorStop(1, shade(base, 0.63));
+  ctx.fillStyle = tg; ctx.fillRect(sx - tw, sy - trunkH, tw * 2, trunkH);
+  const greens = ['#1a4d28', '#225e34', '#1d5530', '#297840'];
+  const tiers = 4, step = STACK_H * 0.68;
+  for (let i = 0; i < tiers; i++) {
+    const rw = TW * (0.80 - i * 0.15);
+    const btmY = sy - trunkH - i * step * 0.58;
+    const tipY = btmY - STACK_H * (0.94 - i * 0.12);
+    const g = ctx.createLinearGradient(sx - rw, 0, sx + rw, 0);
+    g.addColorStop(0, shade(greens[i], 0.54)); g.addColorStop(0.42, shade(greens[i], 1.28)); g.addColorStop(1, shade(greens[i], 0.68));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx, tipY); ctx.lineTo(sx + rw, btmY); ctx.lineTo(sx - rw, btmY); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA('#000', 0.07); ctx.lineWidth = 0.5; ctx.stroke();
+  }
+};
+
+// Cubic hedge: a tight-trimmed box of foliage with light speckle on the top face. Rotatable.
+const drawHedge = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  const t = shade(base, 1.1), r = shade(base, 0.76), l = shade(base, 0.5);
+  const parts: IsoPart[] = [{ u0: -0.48, u1: 0.48, v0: -0.48, v1: 0.48, z0: 0, z1: 1.0, t, r, l }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    ctx.save(); ctx.globalAlpha = 0.22;
+    for (let i = 0; i < 12; i++) {
+      const u = -0.34 + (i % 4) * 0.22, v = -0.34 + Math.floor(i / 4) * 0.34;
+      const c = P(u, v, 1.0); ctx.fillStyle = shade(base, 1.5); ctx.beginPath(); ctx.arc(c[0], c[1], 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  });
+};
+
+// Shrub: low cluster of rounded leafy blobs with no visible trunk, sits flat on the ground.
+const drawShrub = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.15; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.54, TH * 0.54, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const greens = ['#2a7a40', '#338c4e', '#1f6432', '#3aa05a'];
+  const cy = sy - 10;
+  const blob = (ox: number, oy: number, r: number, col: string) => {
+    const g = ctx.createRadialGradient(sx + ox - r * 0.3, cy + oy - r * 0.36, 1, sx + ox, cy + oy, r);
+    g.addColorStop(0, shade(col, 1.36)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, 0.64));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill();
+  };
+  blob(0, TH * 0.5, TW * 0.7, greens[3]);
+  blob(-TW * 0.44, TH * 0.1, TW * 0.44, greens[1]); blob(TW * 0.44, TH * 0.1, TW * 0.44, greens[1]);
+  blob(-TW * 0.2, -TH * 0.85, TW * 0.42, greens[2]); blob(TW * 0.24, -TH * 0.78, TW * 0.44, greens[0]);
+  blob(0, -TH * 1.55, TW * 0.34, greens[3]);
+  ctx.save(); ctx.globalAlpha = 0.36; ctx.fillStyle = '#cdfaa8';
+  for (let i = 0; i < 8; i++) { const a = i * 2.4; ctx.beginPath(); ctx.arc(sx + Math.cos(a) * TW * 0.22, cy - 6 + Math.sin(a) * TW * 0.16, 1.4, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+};
+
+// Oak tree: short wide trunk with root flares + a broad spreading canopy with more spread than the default tree.
+const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.78, TH * 0.78, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 1.4, tw = TW * 0.2;
+  const tg = ctx.createLinearGradient(sx - tw, 0, sx + tw, 0); tg.addColorStop(0, shade(base, 0.5)); tg.addColorStop(0.5, shade(base, 1.18)); tg.addColorStop(1, shade(base, 0.62));
+  ctx.fillStyle = tg; ctx.beginPath();
+  ctx.moveTo(sx - tw, sy); ctx.quadraticCurveTo(sx - tw * 0.55, sy - trunkH * 0.5, sx - tw * 0.55, sy - trunkH);
+  ctx.lineTo(sx + tw * 0.55, sy - trunkH); ctx.quadraticCurveTo(sx + tw * 0.55, sy - trunkH * 0.5, sx + tw, sy);
+  ctx.lineTo(sx + tw * 2.0, sy + 3); ctx.lineTo(sx - tw * 2.0, sy + 3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA('#000', 0.14); ctx.lineWidth = 1; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(sx + i * tw * 0.45, sy - 4); ctx.lineTo(sx + i * tw * 0.32, sy - trunkH + 4); ctx.stroke(); }
+  const cy = sy - trunkH - TH * 0.4;
+  const greens = ['#1e6634', '#27824a', '#30985a', '#176028', '#3aaa60'];
+  const blob = (ox: number, oy: number, r: number, col: string) => {
+    const g = ctx.createRadialGradient(sx + ox - r * 0.32, cy + oy - r * 0.36, r * 0.1, sx + ox, cy + oy, r);
+    g.addColorStop(0, shade(col, 1.38)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, 0.65));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill();
+  };
+  blob(0, TH * 0.55, TW * 1.04, greens[3]);
+  blob(-TW * 0.70, TH * 0.15, TW * 0.64, greens[1]); blob(TW * 0.70, TH * 0.15, TW * 0.64, greens[1]);
+  blob(-TW * 0.42, -TH * 0.5, TW * 0.58, greens[2]); blob(TW * 0.42, -TH * 0.42, TW * 0.60, greens[0]);
+  blob(-TW * 0.80, -TH * 0.08, TW * 0.44, greens[4]); blob(TW * 0.80, -TH * 0.08, TW * 0.44, greens[4]);
+  blob(0, -TH * 0.9, TW * 0.54, greens[2]);
+  ctx.save(); ctx.globalAlpha = 0.42; ctx.fillStyle = '#cdfaa8';
+  for (let i = 0; i < 18; i++) { const a = i * 2.39917 + dir * 1.571, rr = TW * (0.26 + (i % 5) * 0.15); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * rr, cy - TH * 0.15 + Math.sin(a) * rr * 0.58, 1.7, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+};
+
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2331,6 +2416,10 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'throne': drawThroneR(ctx, sx, sy, accent, d.color, dir); break;
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
     case 'tree': drawTree(ctx, sx, sy, accent, d.color, dir); break;
+    case 'oak':  drawOakTree(ctx, sx, sy, accent, d.color, dir); break;
+    case 'pine': drawPineTree(ctx, sx, sy, accent, d.color, dir); break;
+    case 'hedge': drawHedge(ctx, sx, sy, accent, d.color, dir); break;
+    case 'shrub': drawShrub(ctx, sx, sy, accent, d.color, dir); break;
     case 'palm': drawPalm(ctx, sx, sy, accent, d.color, dir); break;
     case 'torii': drawTorii(ctx, sx, sy, accent, d.color, dir); break;
     case 'pagoda': drawPagoda(ctx, sx, sy, accent, d.color, dir); break;

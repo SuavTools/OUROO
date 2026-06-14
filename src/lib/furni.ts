@@ -168,6 +168,10 @@ export const FURNI: FurniDef[] = [
   { kind: 'topiary',  name: 'Topiary',  emoji: '🌳', cat: 'plantas', color: '#2a8a44', h: 2, walk: false, foot: 0.7, special: 'topiary' },
   { kind: 'sakura',   name: 'Sakura',   emoji: '🌸', cat: 'plantas', color: '#ff9ec7', h: 3, walk: false, foot: 0.9, special: 'sakura' },
   { kind: 'bonsai_lux', name: 'Luxe Bonsai', emoji: '🎋', cat: 'plantas', color: '#2f9a4c', h: 1, walk: false, foot: 0.7, special: 'bonsai_lux' },
+  { kind: 'pine',       name: 'Pine Tree',   emoji: '🌲', cat: 'plantas', color: '#5a3a1a', h: 3, walk: false, foot: 0.6, special: 'pine' },
+  { kind: 'hedge',      name: 'Hedge',       emoji: '🌿', cat: 'plantas', color: '#2a7a3a', h: 1, walk: false, foot: 1,   special: 'hedge' },
+  { kind: 'shrub',      name: 'Shrub',       emoji: '🌿', cat: 'plantas', color: '#2a6a36', h: 1, walk: false, foot: 0.8, special: 'shrub' },
+  { kind: 'oak',        name: 'Oak Tree',    emoji: '🌳', cat: 'plantas', color: '#5a3a18', h: 3, walk: false, foot: 0.9, special: 'oak' },
   // luzes
   { kind: 'candeeiro',name: 'Lamp',     emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'neon',     name: 'Neon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
@@ -360,7 +364,8 @@ export const sitHeight = (kind: string): number | null => { const s = defOf(kind
 // Pieces that have proper 4-way directional art (rotate visibly). Others ignore direction.
 const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch', 'peacock', 'cloud', 'stool', 'puff', 'eggchair', 'pit',
   // garden pieces — now procedural iso with 4-way directional art
-  'tree', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux',
+  'tree', 'oak', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux',
+  'hedge',
   'vespa',
   // home pieces — all turn (front doors/headboard/taps face the camera correctly)
   'bed', 'wardrobe', 'bookcase', 'desk', 'kitchen', 'bathtub', 'clock', 'dresser',
