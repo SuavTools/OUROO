@@ -1622,7 +1622,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (editSelRef.current) { setEditSel(null); return; }
     }
     // Portals aren't tapped — you WALK onto them (see the movement loop). Tapping a portal tile just paths you there.
-    const me = selfRef.current; const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
+    const me = selfRef.current;
+    // Tapping a retrocab or pacman cabinet routes the player to the tile directly in front of it.
+    const cab = [...itemsRef.current, ...decorRef.current].find(it => (it.kind === 'retrocab' || it.kind === 'pacman') && it.gx === gx && it.gy === gy);
+    if (cab) {
+      const [dx, dy] = ([[0, 1], [-1, 0], [0, -1], [1, 0]] as [number, number][])[((cab.dir ?? 0) % 4 + 4) % 4];
+      const tx = gx + dx, ty = gy + dy;
+      if (planLvl(tx, ty) >= 0) { const fp = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, tx, ty); if (fp && fp.length) { me.path = fp; return; } }
+    }
+    const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
   };
   // ── Click-drag floor/carpet painting ──
   const isFloorPaint = (kind: string): boolean => { const d = defOf(kind); const [sw, sh] = d.span ?? [1, 1]; return !!d.walk && (d.h ?? 0) <= 1 && sw === 1 && sh === 1 && d.special !== 'stair'; };
