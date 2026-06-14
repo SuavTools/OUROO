@@ -96,6 +96,10 @@ export const FURNI: FurniDef[] = [
   { kind: 'pillar_stone',name: 'Stone Pillar',emoji: '🏛️', cat: 'constr', color: '#b8bcc4', h: 3, walk: false, foot: 0.5, special: 'wall' },
   { kind: 'roof_slate', name: 'Slate Roof',   emoji: '🛖', cat: 'constr', color: '#4a5560', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
   { kind: 'roof_thatch',name: 'Thatch Roof',  emoji: '🛖', cat: 'constr', color: '#c79a52', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
+  { kind: 'roof_black', name: 'Black Roof',   emoji: '🛖', cat: 'constr', color: '#1a1a1a', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
+  { kind: 'roof_blue',  name: 'Blue Roof',    emoji: '🛖', cat: 'constr', color: '#1e4db7', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
+  { kind: 'roof_white', name: 'White Roof',   emoji: '🛖', cat: 'constr', color: '#e8e8e8', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
+  { kind: 'roof_green', name: 'Green Roof',   emoji: '🛖', cat: 'constr', color: '#2a7a3b', h: 1, walk: false, foot: 1, special: 'roof', pass: true },
   // ── More doors (rotatable, walk-through) — material + shape variants ──
   { kind: 'door_metal', name: 'Metal Door',   emoji: '🚪', cat: 'constr', color: '#9aa3b0', h: 2, walk: false, foot: 1, special: 'door', pass: true },
   { kind: 'door_stone', name: 'Stone Door',   emoji: '🚪', cat: 'constr', color: '#8a8f98', h: 2, walk: false, foot: 1, special: 'door', pass: true },
