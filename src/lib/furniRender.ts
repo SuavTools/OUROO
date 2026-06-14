@@ -2047,8 +2047,6 @@ const drawRetroArcadeCab = (ctx: CanvasRenderingContext2D, sx: number, sy: numbe
     // marquee band
     const mq = P(0, 0.28, 2.35);
     ctx.fillStyle = yellow; ctx.fillRect(mq[0] - 24, mq[1] - 7, 48, 13);
-    ctx.fillStyle = '#1a0800'; ctx.font = '900 7px Helvetica'; ctx.textAlign = 'center';
-    ctx.fillText('ARCADE', mq[0], mq[1] + 3);
   });
 };
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
