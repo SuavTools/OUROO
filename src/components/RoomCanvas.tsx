@@ -384,7 +384,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming)
   const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
@@ -1315,8 +1315,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             let p = 0; try { p = Number(localStorage.getItem(k) || 0); } catch { /* ignore */ }
             if (p < n.beats.length) { n.bubble = n.beats[p]; try { localStorage.setItem(k, String(p + 1)); } catch { /* ignore */ } said = true; }
           }
-          if (!said && n.lines && n.lines.length) { n.bubble = n.lines[Math.floor(Math.random() * n.lines.length)]; said = true; }
-          if (said) { n.bubbleLife = 240; n.cool = 300; }
+          if (!said && n.lines && n.lines.length) { const pool = n.lines.length > 1 ? n.lines.filter(l => l !== n.lastLine) : n.lines; const picked = pool[Math.floor(Math.random() * pool.length)]; n.bubble = picked; n.lastLine = picked; said = true; }
+          if (said) { n.bubbleLife = 240; n.cool = 540 + Math.floor(Math.random() * 121); }
         }
         n.near = near;
       }
