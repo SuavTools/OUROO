@@ -1963,10 +1963,9 @@ const drawPacman = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
     // screen
     poly(ctx, [P(-0.26, F, 2.05), P(0.26, F, 2.05), P(0.26, F, 1.4), P(-0.26, F, 1.4)], '#05060a');
     poly(ctx, [P(-0.24, F, 2.0), P(0.24, F, 2.0), P(0.24, F, 1.45), P(-0.24, F, 1.45)], '#0a0e2a');
-    // pac-man chomping a single dot
-    const chomp = 0.18 + 0.16 * Math.abs(Math.sin(t * 0.18));
-    const pac = P(-0.06, F, 1.72); ctx.fillStyle = '#ffe23a'; ctx.beginPath(); ctx.arc(pac[0], pac[1], 6, chomp, Math.PI * 2 - chomp); ctx.lineTo(pac[0], pac[1]); ctx.closePath(); ctx.fill();
-    const dot = P(0.08, F, 1.72); ctx.fillStyle = '#ffe23a'; ctx.beginPath(); ctx.arc(dot[0], dot[1], 2, 0, Math.PI * 2); ctx.fill();
+    // pac-man centred on screen, slow wide chomp
+    const chomp = 0.65 * Math.abs(Math.sin(t * 0.06));
+    const pac = P(0, F, 1.72); ctx.fillStyle = '#ffe23a'; ctx.beginPath(); ctx.arc(pac[0], pac[1], 4, chomp, Math.PI * 2 - chomp); ctx.lineTo(pac[0], pac[1]); ctx.closePath(); ctx.fill();
     // control panel + joystick + buttons
     poly(ctx, [P(-0.26, F, 1.32), P(0.26, F, 1.32), P(0.26, F, 1.1), P(-0.26, F, 1.1)], shade(m, 0.78));
     const js = P(-0.1, F, 1.22); ctx.strokeStyle = '#15171b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(js[0], js[1] + 3); ctx.lineTo(js[0], js[1] - 3); ctx.stroke(); ctx.fillStyle = '#e0457b'; ctx.beginPath(); ctx.arc(js[0], js[1] - 4, 2.5, 0, Math.PI * 2); ctx.fill();
