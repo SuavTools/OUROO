@@ -416,7 +416,7 @@ const drawBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: st
   drawParts(ctx, sx, sy, dir, 0, 0, parts);
 };
 
-// Reception desk (3 tiles): tall wood body, marble counter-top overhang, accent strip + CLUBE logo.
+// Reception desk (3 tiles): tall wood body, marble counter-top overhang, accent strip.
 const drawReception = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const cT = shade(base, 1.24), cR = shade(base, 0.92), cL = shade(base, 0.6), top = '#dfe3ea';
   const parts: IsoPart[] = [{ u0: -1.42, u1: 1.42, v0: -0.16, v1: 0.34, z0: 0, z1: 1.5, t: cT, r: cR, l: cL }];
