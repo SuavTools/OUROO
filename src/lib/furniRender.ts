@@ -16,7 +16,8 @@ const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16)
 const diamond = (ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
 
 const block = (ctx: CanvasRenderingContext2D, cx: number, cyBase: number, h: number, base: string, accent: string, foot: number, emoji?: string, noAccent?: boolean) => {
-  const hw = TW * foot * 0.9, hh = TH * foot * 0.9, Hh = h * STACK_H, cyTop = cyBase - Hh;
+  const f = noAccent ? 1.0 : 0.9;
+  const hw = TW * foot * f, hh = TH * foot * f, Hh = h * STACK_H, cyTop = cyBase - Hh;
   ctx.fillStyle = shade(base, 0.55); ctx.beginPath(); ctx.moveTo(cx - hw, cyBase); ctx.lineTo(cx, cyBase + hh); ctx.lineTo(cx, cyTop + hh); ctx.lineTo(cx - hw, cyTop); ctx.closePath(); ctx.fill();
   ctx.fillStyle = shade(base, 0.8); ctx.beginPath(); ctx.moveTo(cx, cyBase + hh); ctx.lineTo(cx + hw, cyBase); ctx.lineTo(cx + hw, cyTop); ctx.lineTo(cx, cyTop + hh); ctx.closePath(); ctx.fill();
   ctx.fillStyle = shade(base, 1.25); diamond(ctx, cx, cyTop, hw, hh); ctx.fill();
@@ -54,7 +55,8 @@ const faceTex = (ctx: CanvasRenderingContext2D, F: number[][], tex: string | nul
 };
 // A full-tile iso cube with material texture; optional doorway / window carved on a chosen face (dir).
 const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: number, base: string, accent: string, foot: number, kind: string, opening: 'door' | 'window' | null = null, dir = 0, noAccent = false) => {
-  const hw = TW * foot * 0.9, hh = TH * foot * 0.9, cyT = cyB - h * STACK_H, tex = texOf(kind), rows = Math.max(3, Math.round(h * 3));
+  const f = noAccent ? 1.0 : 0.9;
+  const hw = TW * foot * f, hh = TH * foot * f, cyT = cyB - h * STACK_H, tex = texOf(kind), rows = Math.max(3, Math.round(h * 3));
   const L = [[cx - hw, cyB], [cx, cyB + hh], [cx, cyT + hh], [cx - hw, cyT]];   // left face A,B,C,D
   const R = [[cx, cyB + hh], [cx + hw, cyB], [cx + hw, cyT], [cx, cyT + hh]];   // right face
   poly(ctx, L, shade(base, 0.62)); poly(ctx, R, shade(base, 0.82));
