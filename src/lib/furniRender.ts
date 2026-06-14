@@ -1977,6 +1977,80 @@ const drawPacman = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
     const mq = P(0, 0.28, 2.32); ctx.fillStyle = hexA(accent, 0.85); ctx.fillRect(mq[0] - 22, mq[1] - 6, 44, 12); ctx.fillStyle = '#1a1a22'; ctx.font = '900 8px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('PAC', mq[0], mq[1] + 3);
   });
 };
+// Red-and-yellow retro upright arcade cabinet with animated space-invaders screen.
+const drawRetroArcadeCab = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _accent: string, _base: string, t: number, dir: number) => {
+  void _accent; void _base;
+  const red = '#cc1a0a', yellow = '#f5c518';
+  const cT = shade(red, 1.22), cR = shade(red, 0.9), cL = shade(red, 0.55);
+  const parts: IsoPart[] = [
+    { u0: -0.34, u1: 0.34, v0: -0.26, v1: 0.26, z0: 0,    z1: 2.15, t: cT, r: cR, l: cL },
+    { u0: -0.37, u1: 0.37, v0: -0.28, v1: 0.28, z0: 2.15, z1: 2.55, t: shade(red, 1.28), r: shade(red, 0.94), l: shade(red, 0.6) },
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    if (!faceVisible(0, 1, dir)) return;
+    const F = 0.27;
+    // screen bezel + glass
+    poly(ctx, [P(-0.26, F, 2.06), P(0.26, F, 2.06), P(0.26, F, 1.37), P(-0.26, F, 1.37)], '#1a0800');
+    poly(ctx, [P(-0.23, F, 2.01), P(0.23, F, 2.01), P(0.23, F, 1.41), P(-0.23, F, 1.41)], '#050810');
+    // scanlines
+    ctx.save(); ctx.globalAlpha = 0.07;
+    for (let r = 0; r < 9; r++) { const z = 1.42 + r * 0.065; poly(ctx, [P(-0.22, F, z), P(0.22, F, z), P(0.22, F, z+0.038), P(-0.22, F, z+0.038)], '#ffffff'); }
+    ctx.restore();
+    // space-invader grid (2 rows × 4 cols, alternating yellow/orange blink)
+    const invColors = ['#f5c518', '#ff7718'];
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 4; col++) {
+        const blink = ((t >> 4) + col + row) % 2 === 0;
+        const inv = P(-0.16 + col * 0.105, F, 1.94 - row * 0.15);
+        ctx.fillStyle = blink ? invColors[row % 2] : shade(invColors[row % 2], 0.5);
+        ctx.fillRect(inv[0] - 3, inv[1] - 2, 5, 3);
+        ctx.fillRect(inv[0] - 4, inv[1] + 1, 2, 2);
+        ctx.fillRect(inv[0] + 2, inv[1] + 1, 2, 2);
+      }
+    }
+    // player ship at bottom of screen, drifts left/right
+    const shipU = 0.0 + Math.sin(t * 0.03) * 0.12;
+    const ship = P(shipU, F, 1.47);
+    ctx.fillStyle = '#44ff88';
+    ctx.fillRect(ship[0] - 3, ship[1] - 2, 6, 3);
+    ctx.fillRect(ship[0] - 1, ship[1] - 4, 2, 2);
+    // laser bolt
+    if ((t % 36) < 18) {
+      const prog = (t % 36) / 36;
+      const lz = 1.47 + prog * 0.5;
+      const bolt = P(shipU, F, lz);
+      ctx.fillStyle = yellow;
+      ctx.fillRect(bolt[0] - 0.8, bolt[1] - 4, 1.6, 5);
+    }
+    // score line at top of screen
+    const sc = P(0, F, 1.99);
+    ctx.fillStyle = yellow; ctx.font = '600 5px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(`${String(((t >> 3) % 1000)).padStart(5, '0')}`, sc[0], sc[1] - 1);
+    // control panel
+    poly(ctx, [P(-0.26, F, 1.29), P(0.26, F, 1.29), P(0.26, F, 1.09), P(-0.26, F, 1.09)], shade(red, 0.72));
+    // joystick
+    const js = P(-0.12, F, 1.20);
+    ctx.strokeStyle = '#1a0800'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(js[0], js[1] + 3); ctx.lineTo(js[0], js[1] - 3); ctx.stroke();
+    ctx.fillStyle = yellow; ctx.beginPath(); ctx.arc(js[0], js[1] - 3, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = shade(yellow, 1.3); ctx.beginPath(); ctx.arc(js[0] - 1, js[1] - 4, 1.2, 0, Math.PI * 2); ctx.fill();
+    // buttons (three yellow, one orange accent)
+    for (const [u, col] of [[0.04, yellow], [0.12, yellow], [0.20, '#ff8c00']] as [number, string][]) {
+      const b = P(u, F, 1.20);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(b[0], b[1], 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = shade(col, 1.35); ctx.beginPath(); ctx.arc(b[0] - 0.8, b[1] - 0.8, 1, 0, Math.PI * 2); ctx.fill();
+    }
+    // coin door slot
+    const coin = P(0, F, 0.54);
+    ctx.fillStyle = '#1a0800'; ctx.fillRect(coin[0] - 5, coin[1] - 7, 10, 14);
+    ctx.fillStyle = shade(red, 0.58); ctx.fillRect(coin[0] - 4, coin[1] - 1, 8, 2);
+    // marquee band
+    const mq = P(0, 0.28, 2.35);
+    ctx.fillStyle = yellow; ctx.fillRect(mq[0] - 24, mq[1] - 7, 48, 13);
+    ctx.fillStyle = '#1a0800'; ctx.font = '900 7px Helvetica'; ctx.textAlign = 'center';
+    ctx.fillText('ARCADE', mq[0], mq[1] + 3);
+  });
+};
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
   const parts: IsoPart[] = [...legs([[-0.3, -0.5], [0.3, -0.5], [-0.3, 0.5], [0.3, 0.5]], 0.55).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.36, u1: 0.36, v0: -0.6, v1: 0.6, z0: 0.55, z1: 0.72, t: cT, r: cR, l: cL }, { u0: -0.36, u1: 0.36, v0: -0.66, v1: -0.5, z0: 0.72, z1: 1.8, t: cT, r: cR, l: cL }];
@@ -2721,6 +2795,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'pacman': drawPacman(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'retrocab': drawRetroArcadeCab(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'cashvault': drawCashVault(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'clorack': drawCloRack(ctx, sx, sy, accent, d.color); break;
     case 'clorail': drawCloRail(ctx, sx, sy, accent, d.color, dir); break;
@@ -2803,7 +2878,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
