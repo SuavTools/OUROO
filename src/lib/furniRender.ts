@@ -1396,12 +1396,15 @@ const drawMailbox = (ctx: CanvasRenderingContext2D, sx: number, sy: number, acce
 };
 
 // ═══════════ FENCES ═══════════
+// All fences sit at the BACK edge of their tile (v = -0.5) so they land on the tile boundary.
+// Rotating 90° moves the fence to the right edge, 180° to the front, 270° to the left.
+
 // Classic wooden picket fence — two posts with five narrow pickets between them.
 const drawFencePicket = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a;
   const t = shade(base, 1.22), r = shade(base, 0.88), l = shade(base, 0.58);
-  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.07, v1: 0.07, z0: 0, z1: 1.1, t, r, l });
-  const pk   = (u: number): IsoPart           => ({ u0: u - 0.038, u1: u + 0.038, v0: -0.055, v1: 0.055, z0: 0, z1: 0.92, t, r, l });
+  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.57, v1: -0.43, z0: 0, z1: 1.1, t, r, l });
+  const pk   = (u: number): IsoPart           => ({ u0: u - 0.038, u1: u + 0.038, v0: -0.555, v1: -0.445, z0: 0, z1: 0.92, t, r, l });
   drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.46, -0.36), post(0.36, 0.46), pk(-0.24), pk(-0.12), pk(0), pk(0.12), pk(0.24)]);
 };
 
@@ -1409,10 +1412,10 @@ const drawFencePicket = (ctx: CanvasRenderingContext2D, sx: number, sy: number, 
 const drawFenceIron = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a;
   const t = shade(base, 1.2), r = shade(base, 0.85), l = shade(base, 0.58);
-  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.07, v1: 0.07, z0: 0, z1: 1.35, t, r, l });
-  const rail = (z0: number, z1: number): IsoPart => ({ u0: -0.44, u1: 0.44, v0: -0.045, v1: 0.045, z0, z1, t, r, l });
-  const bar  = (u: number): IsoPart              => ({ u0: u - 0.028, u1: u + 0.028, v0: -0.04, v1: 0.04, z0: 0.1, z1: 1.2, t, r, l });
-  const tip  = (u: number): IsoPart              => ({ u0: u - 0.042, u1: u + 0.042, v0: -0.042, v1: 0.042, z0: 1.18, z1: 1.34, t: shade(base, 1.35), r, l });
+  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.57, v1: -0.43, z0: 0, z1: 1.35, t, r, l });
+  const rail = (z0: number, z1: number): IsoPart => ({ u0: -0.44, u1: 0.44, v0: -0.545, v1: -0.455, z0, z1, t, r, l });
+  const bar  = (u: number): IsoPart              => ({ u0: u - 0.028, u1: u + 0.028, v0: -0.54, v1: -0.46, z0: 0.1, z1: 1.2, t, r, l });
+  const tip  = (u: number): IsoPart              => ({ u0: u - 0.042, u1: u + 0.042, v0: -0.542, v1: -0.458, z0: 1.18, z1: 1.34, t: shade(base, 1.35), r, l });
   drawParts(ctx, sx, sy, dir, 0, 0, [
     post(-0.46, -0.36), post(0.36, 0.46),
     rail(0.08, 0.16), rail(0.92, 1.0),
@@ -1425,8 +1428,8 @@ const drawFenceIron = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a
 const drawFenceRail = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a;
   const t = shade(base, 1.2), r = shade(base, 0.85), l = shade(base, 0.58);
-  const post = (u: number): IsoPart              => ({ u0: u - 0.07, u1: u + 0.07, v0: -0.07, v1: 0.07, z0: 0, z1: 1.0, t, r, l });
-  const rail = (z0: number, z1: number): IsoPart => ({ u0: -0.46, u1: 0.46, v0: -0.048, v1: 0.048, z0, z1, t, r, l });
+  const post = (u: number): IsoPart              => ({ u0: u - 0.07, u1: u + 0.07, v0: -0.57, v1: -0.43, z0: 0, z1: 1.0, t, r, l });
+  const rail = (z0: number, z1: number): IsoPart => ({ u0: -0.46, u1: 0.46, v0: -0.548, v1: -0.452, z0, z1, t, r, l });
   drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.42), post(0.42), rail(0.14, 0.24), rail(0.48, 0.58), rail(0.78, 0.88)]);
 };
 
@@ -1434,9 +1437,9 @@ const drawFenceRail = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a
 const drawFenceSolid = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a;
   const t = shade(base, 1.18), r = shade(base, 0.85), l = shade(base, 0.58);
-  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.07, v1: 0.07, z0: 0, z1: 1.12, t: shade(base, 0.72), r: shade(base, 0.52), l: shade(base, 0.4) });
-  const panel: IsoPart = { u0: -0.38, u1: 0.38, v0: -0.05, v1: 0.05, z0: 0, z1: 1.0, t, r, l };
-  const cap:   IsoPart = { u0: -0.47, u1: 0.47, v0: -0.07, v1: 0.07, z0: 1.0, z1: 1.08, t: shade(base, 1.3), r: shade(base, 0.9), l: shade(base, 0.62) };
+  const post = (u0: number, u1: number): IsoPart => ({ u0, u1, v0: -0.57, v1: -0.43, z0: 0, z1: 1.12, t: shade(base, 0.72), r: shade(base, 0.52), l: shade(base, 0.4) });
+  const panel: IsoPart = { u0: -0.38, u1: 0.38, v0: -0.55, v1: -0.45, z0: 0, z1: 1.0, t, r, l };
+  const cap:   IsoPart = { u0: -0.47, u1: 0.47, v0: -0.57, v1: -0.43, z0: 1.0, z1: 1.08, t: shade(base, 1.3), r: shade(base, 0.9), l: shade(base, 0.62) };
   drawParts(ctx, sx, sy, dir, 0, 0, [post(-0.46, -0.36), post(0.36, 0.46), panel, cap]);
 };
 
