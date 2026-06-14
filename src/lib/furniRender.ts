@@ -1528,17 +1528,9 @@ const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
   ctx.restore();
 };
 
-// Wildflower patch: isometric grass/soil tile with species-specific blooms.
+// Wildflower patch: free-standing blooms with no base tile.
 const drawWildflowerPatch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, kind: string) => {
-  const soil = '#7a4e2a', gTop = '#3a9e34';
-  const hw = TW * 0.82, hh = TH * 0.82, pH = 8, top = sy - pH;
-  ctx.save(); ctx.globalAlpha = 0.13; ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.6, TH * 0.55, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-  poly(ctx, [[sx-hw,sy],[sx,sy+hh],[sx,top+hh],[sx-hw,top]], shade(soil, 0.55));
-  poly(ctx, [[sx,sy+hh],[sx+hw,sy],[sx+hw,top],[sx,top+hh]], shade(soil, 0.74));
-  ctx.fillStyle = gTop; diamond(ctx, sx, top, hw, hh); ctx.fill();
-  ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = '#80d850';
-  ctx.beginPath(); ctx.moveTo(sx-hw*0.42,top); ctx.lineTo(sx,top-hh*0.38); ctx.lineTo(sx+hw*0.42,top); ctx.lineTo(sx,top+hh*0.38); ctx.closePath(); ctx.fill(); ctx.restore();
+  const top = sy;
   const G = '#2e8c40', GD = '#1a5c28';
   const pts: [number,number][] = [[-12,-4],[14,-5],[-6,5],[10,5],[0,-1]];
   switch (kind) {
