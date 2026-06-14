@@ -245,6 +245,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'streetlamp', name: 'Street Lamp',     emoji: '💡', cat: 'outdoor', color: '#2a2e36', h: 4, walk: false, foot: 0.3, special: 'streetlamp' },
   { kind: 'mailbox',    name: 'Mailbox',         emoji: '📫', cat: 'outdoor', color: '#3f6b8a', h: 1, walk: false, foot: 0.3, special: 'mailbox' },
   { kind: 'fence_picket', name: 'Picket Fence',   emoji: '🏡', cat: 'outdoor', color: '#c8a060', h: 1.1, walk: false, foot: 1, special: 'fence_picket' },
+  { kind: 'fence_picket_white', name: 'White Picket Fence', emoji: '🏡', cat: 'outdoor', color: '#e8ece8', h: 1.1, walk: false, foot: 1, special: 'fence_picket' },
   { kind: 'fence_iron',   name: 'Iron Fence',     emoji: '⚙️', cat: 'outdoor', color: '#2a2e3a', h: 1.4, walk: false, foot: 1, special: 'fence_iron' },
   { kind: 'fence_rail',   name: 'Rail Fence',     emoji: '🤠', cat: 'outdoor', color: '#8b6340', h: 1,   walk: false, foot: 1, special: 'fence_rail' },
   { kind: 'fence_solid',  name: 'Board Fence',    emoji: '🪵', cat: 'outdoor', color: '#7a5230', h: 1.1, walk: false, foot: 1, special: 'fence_solid' },
