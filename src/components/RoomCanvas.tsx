@@ -1306,8 +1306,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         n.near = near;
       }
-      // Ambient chatter — only NPCs WITHOUT lore beats (so a beat is never talked over).
-      if (npcsRef.current.length && framesRef.current % 80 === 0) { const pool = npcsRef.current.filter(s => (!s.beats || !s.beats.length) && s.lines && s.lines.length); const sp = pool[Math.floor(Math.random() * pool.length)]; if (sp && sp.bubbleLife <= 0) { sp.bubble = sp.lines![Math.floor(Math.random() * sp.lines!.length)]; sp.bubbleLife = 210; } }
     };
 
     const diamond = (cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
