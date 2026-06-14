@@ -1528,6 +1528,167 @@ const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
   ctx.restore();
 };
 
+// ═══════════ ISOMETRIC VECTOR PLANTS (reference set) ═══════════
+// Clean low-poly aesthetic: flat face shading, geometric silhouettes, highlight spots.
+
+// Shared: tapered brown trunk with 4-stop gradient.
+const isoTrunk = (ctx: CanvasRenderingContext2D, sx: number, sy: number, h: number, tw = 5) => {
+  const tg = ctx.createLinearGradient(sx - tw * 1.4, 0, sx + tw * 1.4, 0);
+  tg.addColorStop(0, '#3a1c08'); tg.addColorStop(0.32, '#7a4820'); tg.addColorStop(0.62, '#985828'); tg.addColorStop(1, '#3a1c08');
+  ctx.fillStyle = tg; ctx.beginPath();
+  ctx.moveTo(sx - tw * 0.85, sy); ctx.quadraticCurveTo(sx - tw * 0.6, sy - h * 0.55, sx - tw * 0.42, sy - h);
+  ctx.lineTo(sx + tw * 0.42, sy - h); ctx.quadraticCurveTo(sx + tw * 0.6, sy - h * 0.55, sx + tw * 0.85, sy);
+  ctx.closePath(); ctx.fill();
+};
+
+// Shared: sphere with dark shadow ring, gradient fill, highlight ellipse + bright spot.
+const isoSphere = (ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, dk: string, mid: string, hi: string, sp: string) => {
+  ctx.fillStyle = dk; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(cx, cy - r * 0.14, r * 0.86, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.88; ctx.fillStyle = hi; ctx.beginPath(); ctx.ellipse(cx - r * 0.27, cy - r * 0.30, r * 0.36, r * 0.26, -0.42, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.globalAlpha = 0.52; ctx.fillStyle = sp; ctx.beginPath(); ctx.ellipse(cx - r * 0.31, cy - r * 0.37, r * 0.16, r * 0.11, -0.42, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+};
+
+// 1. Sphere bush — 6 overlapping spheres, no trunk.
+const drawBushSphere = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.52, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const dk = shade(base, 0.58), mid = base, hi = shade(base, 1.38), sp = shade(base, 1.72);
+  const by = sy - 14;
+  isoSphere(ctx, sx - TW * 0.34, by + 4, TW * 0.32, dk, mid, hi, sp);
+  isoSphere(ctx, sx + TW * 0.34, by + 4, TW * 0.32, dk, mid, hi, sp);
+  isoSphere(ctx, sx, by + 2, TW * 0.35, dk, mid, hi, sp);
+  isoSphere(ctx, sx - TW * 0.46, by - TH * 0.52, TW * 0.28, dk, mid, hi, sp);
+  isoSphere(ctx, sx + TW * 0.38, by - TH * 0.56, TW * 0.30, dk, mid, hi, sp);
+  isoSphere(ctx, sx, by - TH * 0.98, TW * 0.28, dk, mid, hi, sp);
+};
+
+// 2. Spire tree — tall diamond/spindle with lit left face and shadow right face.
+const drawTreeSpire = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.3, TH * 0.22, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 0.45;
+  isoTrunk(ctx, sx, sy, trunkH, 4.5);
+  const H = STACK_H * 2.85, W = TW * 0.50, baseY = sy - trunkH, wideY = baseY - H * 0.60, tipY = baseY - H;
+  const lg = ctx.createLinearGradient(sx - W, 0, sx, 0); lg.addColorStop(0, shade(base, 1.44)); lg.addColorStop(1, shade(base, 1.10));
+  ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(sx, tipY); ctx.lineTo(sx - W, wideY); ctx.lineTo(sx, baseY); ctx.closePath(); ctx.fill();
+  const rg = ctx.createLinearGradient(sx, 0, sx + W, 0); rg.addColorStop(0, shade(base, 0.86)); rg.addColorStop(1, shade(base, 0.58));
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(sx, tipY); ctx.lineTo(sx + W, wideY); ctx.lineTo(sx, baseY); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.48; ctx.strokeStyle = shade(base, 1.62); ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(sx, tipY + 8); ctx.lineTo(sx, wideY - 6); ctx.stroke(); ctx.restore();
+};
+
+// 3. Oval tree — smooth egg-shaped canopy, top-left gradient highlight.
+const drawTreeOval = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.46, TH * 0.36, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 0.65;
+  isoTrunk(ctx, sx, sy, trunkH, 5);
+  const cW = TW * 0.68, cH = STACK_H * 2.0, cy = sy - trunkH - cH;
+  const g = ctx.createLinearGradient(sx, cy - cH, sx, cy + cH * 0.7);
+  g.addColorStop(0, shade(base, 1.22)); g.addColorStop(0.48, base); g.addColorStop(1, shade(base, 0.60));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, cW, cH, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.72; ctx.fillStyle = shade(base, 1.48); ctx.beginPath(); ctx.ellipse(sx - cW * 0.22, cy - cH * 0.28, cW * 0.36, cH * 0.26, -0.18, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.globalAlpha = 0.46; ctx.fillStyle = shade(base, 1.76); ctx.beginPath(); ctx.ellipse(sx - cW * 0.28, cy - cH * 0.38, cW * 0.15, cH * 0.10, -0.18, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+};
+
+// 4. Column tree — tall isometric box canopy on a thin trunk. Rotates with dir.
+const drawTreeColumn = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.38, TH * 0.28, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 0.75;
+  isoTrunk(ctx, sx, sy, trunkH, 5);
+  const zBase = trunkH / STACK_H;
+  drawParts(ctx, sx, sy, dir, 0, 0, [{
+    u0: -0.36, u1: 0.36, v0: -0.36, v1: 0.36,
+    z0: zBase, z1: zBase + 2.35,
+    t: shade(base, 1.24), r: shade(base, 0.86), l: shade(base, 0.58),
+  }]);
+};
+
+// 5. Poly tree — wide low-poly canopy with 5 distinct flat-shaded faces.
+const drawTreePoly = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.70, TH * 0.50, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  isoTrunk(ctx, sx, sy, STACK_H * 0.9, 7);
+  const by = sy - STACK_H * 0.9, W = TW * 0.88, H = STACK_H * 1.85, tipY = by - H;
+  const dk = shade(base, 0.54), md = shade(base, 0.82), lt = shade(base, 1.08), hi = shade(base, 1.34);
+  ctx.fillStyle = dk;  ctx.beginPath(); ctx.moveTo(sx, by); ctx.lineTo(sx + W, by - H * 0.35); ctx.lineTo(sx + W * 0.38, tipY + H * 0.26); ctx.lineTo(sx + W * 0.10, tipY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = md;  ctx.beginPath(); ctx.moveTo(sx, by); ctx.lineTo(sx - W, by - H * 0.35); ctx.lineTo(sx - W * 0.32, tipY + H * 0.30); ctx.lineTo(sx, tipY + H * 0.16); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = lt;  ctx.beginPath(); ctx.moveTo(sx - W * 0.32, tipY + H * 0.30); ctx.lineTo(sx - W, by - H * 0.35); ctx.lineTo(sx - W * 0.22, by - H * 0.70); ctx.lineTo(sx - W * 0.08, tipY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = hi;  ctx.beginPath(); ctx.moveTo(sx, tipY); ctx.lineTo(sx - W * 0.08, tipY); ctx.lineTo(sx - W * 0.22, by - H * 0.70); ctx.lineTo(sx, by - H * 0.58); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = md;  ctx.beginPath(); ctx.moveTo(sx, tipY); ctx.lineTo(sx + W * 0.10, tipY); ctx.lineTo(sx + W * 0.38, tipY + H * 0.26); ctx.lineTo(sx, by - H * 0.58); ctx.closePath(); ctx.fill();
+};
+
+// 6. Lobe tree — 6 sphere clusters on a forked trunk.
+const drawTreeLobe = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.68, TH * 0.50, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 1.1;
+  const tg = ctx.createLinearGradient(sx - 9, 0, sx + 9, 0); tg.addColorStop(0, '#3a1c08'); tg.addColorStop(0.36, '#7a4820'); tg.addColorStop(0.64, '#985828'); tg.addColorStop(1, '#3a1c08');
+  ctx.fillStyle = tg;
+  // Main stem
+  ctx.beginPath(); ctx.moveTo(sx - 6, sy); ctx.quadraticCurveTo(sx - 4, sy - trunkH * 0.42, sx - 2, sy - trunkH * 0.52); ctx.lineTo(sx + 2, sy - trunkH * 0.52); ctx.quadraticCurveTo(sx + 4, sy - trunkH * 0.42, sx + 6, sy); ctx.closePath(); ctx.fill();
+  // Left fork
+  ctx.beginPath(); ctx.moveTo(sx - 3, sy - trunkH * 0.50); ctx.quadraticCurveTo(sx - 8, sy - trunkH * 0.72, sx - 10, sy - trunkH); ctx.lineTo(sx - 6, sy - trunkH); ctx.quadraticCurveTo(sx - 4, sy - trunkH * 0.68, sx + 1, sy - trunkH * 0.50); ctx.closePath(); ctx.fill();
+  // Right fork
+  ctx.beginPath(); ctx.moveTo(sx - 1, sy - trunkH * 0.50); ctx.quadraticCurveTo(sx + 5, sy - trunkH * 0.68, sx + 7, sy - trunkH); ctx.lineTo(sx + 11, sy - trunkH); ctx.quadraticCurveTo(sx + 8, sy - trunkH * 0.68, sx + 3, sy - trunkH * 0.50); ctx.closePath(); ctx.fill();
+  const dk = shade(base, 0.58), mid = base, hi = shade(base, 1.38), sp = shade(base, 1.72);
+  const cy = sy - trunkH - TH * 0.3;
+  isoSphere(ctx, sx - TW * 0.46, cy + TH * 0.28, TW * 0.36, dk, mid, hi, sp);
+  isoSphere(ctx, sx + TW * 0.46, cy + TH * 0.28, TW * 0.36, dk, mid, hi, sp);
+  isoSphere(ctx, sx, cy + TH * 0.12, TW * 0.38, dk, mid, hi, sp);
+  isoSphere(ctx, sx - TW * 0.28, cy - TH * 0.52, TW * 0.33, dk, mid, hi, sp);
+  isoSphere(ctx, sx + TW * 0.28, cy - TH * 0.52, TW * 0.33, dk, mid, hi, sp);
+  isoSphere(ctx, sx, cy - TH * 1.08, TW * 0.30, dk, mid, hi, sp);
+};
+
+// 7. Triple cone — 3 triangular conifers (centre tallest) on individual thin trunks.
+const drawTreeTriple = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.62, TH * 0.44, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const tCol = '#5a3018';
+  const cones: [number, number, number, number, boolean][] = [
+    [sx - TW * 0.30, STACK_H * 0.80, TW * 0.30, STACK_H * 1.15, false],
+    [sx,             STACK_H * 1.00, TW * 0.36, STACK_H * 1.60, true ],
+    [sx + TW * 0.30, STACK_H * 0.80, TW * 0.30, STACK_H * 1.15, false],
+  ];
+  // Trunks first
+  cones.forEach(([cx, th]) => {
+    ctx.fillStyle = tCol; ctx.beginPath();
+    ctx.moveTo(cx - 3, sy); ctx.lineTo(cx + 3, sy); ctx.lineTo(cx + 2.5, sy - th); ctx.lineTo(cx - 2.5, sy - th);
+    ctx.closePath(); ctx.fill();
+  });
+  // Cones back-to-front
+  cones.forEach(([cx, th, W2, H2, isCenter]) => {
+    const btmY = sy - th, tipY = btmY - H2;
+    const lBright = isCenter ? shade(base, 1.40) : shade(base, 1.16);
+    const rDark   = isCenter ? shade(base, 0.76) : shade(base, 0.60);
+    const lg = ctx.createLinearGradient(cx - W2, 0, cx, 0); lg.addColorStop(0, lBright); lg.addColorStop(1, shade(base, 1.06));
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(cx, tipY); ctx.lineTo(cx - W2, btmY); ctx.lineTo(cx, btmY); ctx.closePath(); ctx.fill();
+    const rg = ctx.createLinearGradient(cx, 0, cx + W2, 0); rg.addColorStop(0, shade(base, 0.96)); rg.addColorStop(1, rDark);
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(cx, tipY); ctx.lineTo(cx + W2, btmY); ctx.lineTo(cx, btmY); ctx.closePath(); ctx.fill();
+    if (isCenter) {
+      ctx.save(); ctx.globalAlpha = 0.40; ctx.strokeStyle = shade(base, 1.60); ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx - 1, tipY + 6); ctx.lineTo(cx - 1, btmY - 5); ctx.stroke(); ctx.restore();
+    }
+  });
+};
+
+// 8. Pill topiary — smooth compact oval with inner highlight ellipse, short trunk.
+const drawTreePill = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void dir;
+  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.40, TH * 0.30, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const trunkH = STACK_H * 0.5;
+  isoTrunk(ctx, sx, sy, trunkH, 4.5);
+  const cW = TW * 0.52, cH = STACK_H * 1.85, cy = sy - trunkH - cH;
+  const g = ctx.createLinearGradient(sx - cW * 0.5, cy - cH * 0.8, sx + cW * 0.5, cy + cH * 0.6);
+  g.addColorStop(0, shade(base, 1.18)); g.addColorStop(0.45, base); g.addColorStop(1, shade(base, 0.60));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, cy, cW, cH, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.70; ctx.fillStyle = shade(base, 1.46); ctx.beginPath(); ctx.ellipse(sx - cW * 0.16, cy - cH * 0.25, cW * 0.40, cH * 0.30, -0.12, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.globalAlpha = 0.44; ctx.fillStyle = shade(base, 1.76); ctx.beginPath(); ctx.ellipse(sx - cW * 0.22, cy - cH * 0.36, cW * 0.16, cH * 0.10, -0.12, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+};
+
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2420,6 +2581,14 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pine': drawPineTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'hedge': drawHedge(ctx, sx, sy, accent, d.color, dir); break;
     case 'shrub': drawShrub(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_bush':   drawBushSphere(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_spire':  drawTreeSpire(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_oval':   drawTreeOval(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_column': drawTreeColumn(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_poly':   drawTreePoly(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_lobe':   drawTreeLobe(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_triple': drawTreeTriple(ctx, sx, sy, accent, d.color, dir); break;
+    case 'ref_pill':   drawTreePill(ctx, sx, sy, accent, d.color, dir); break;
     case 'palm': drawPalm(ctx, sx, sy, accent, d.color, dir); break;
     case 'torii': drawTorii(ctx, sx, sy, accent, d.color, dir); break;
     case 'pagoda': drawPagoda(ctx, sx, sy, accent, d.color, dir); break;

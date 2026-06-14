@@ -172,6 +172,14 @@ export const FURNI: FurniDef[] = [
   { kind: 'hedge',      name: 'Hedge',       emoji: '🌿', cat: 'plantas', color: '#2a7a3a', h: 1, walk: false, foot: 1,   special: 'hedge' },
   { kind: 'shrub',      name: 'Shrub',       emoji: '🌿', cat: 'plantas', color: '#2a6a36', h: 1, walk: false, foot: 0.8, special: 'shrub' },
   { kind: 'oak',        name: 'Oak Tree',    emoji: '🌳', cat: 'plantas', color: '#5a3a18', h: 3, walk: false, foot: 0.9, special: 'oak' },
+  { kind: 'ref_bush',   name: 'Sphere Bush',  emoji: '🌿', cat: 'plantas', color: '#4da832', h: 1.5, walk: false, foot: 0.8, special: 'ref_bush' },
+  { kind: 'ref_spire',  name: 'Spire Tree',   emoji: '🌲', cat: 'plantas', color: '#4da832', h: 3,   walk: false, foot: 0.5, special: 'ref_spire' },
+  { kind: 'ref_oval',   name: 'Oval Tree',    emoji: '🌳', cat: 'plantas', color: '#4da832', h: 2.5, walk: false, foot: 0.6, special: 'ref_oval' },
+  { kind: 'ref_column', name: 'Column Tree',  emoji: '🌳', cat: 'plantas', color: '#4da832', h: 3,   walk: false, foot: 0.5, special: 'ref_column' },
+  { kind: 'ref_poly',   name: 'Poly Tree',    emoji: '🌳', cat: 'plantas', color: '#4da832', h: 2.5, walk: false, foot: 0.9, special: 'ref_poly' },
+  { kind: 'ref_lobe',   name: 'Canopy Tree',  emoji: '🌳', cat: 'plantas', color: '#4da832', h: 2.5, walk: false, foot: 0.8, special: 'ref_lobe' },
+  { kind: 'ref_triple', name: 'Triple Pine',  emoji: '🌲', cat: 'plantas', color: '#4da832', h: 2.5, walk: false, foot: 0.8, special: 'ref_triple' },
+  { kind: 'ref_pill',   name: 'Round Topiary',emoji: '🌿', cat: 'plantas', color: '#4da832', h: 2,   walk: false, foot: 0.5, special: 'ref_pill' },
   // luzes
   { kind: 'candeeiro',name: 'Lamp',     emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'neon',     name: 'Neon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },
@@ -365,7 +373,7 @@ export const sitHeight = (kind: string): number | null => { const s = defOf(kind
 const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couch_hc', 'tv', 'laptop', 'counter', 'fridge', 'vending', 'speaker', 'shelf', 'sign', 'table', 'bench', 'reception', 'pa', 'ladder', 'rope', 'bartop', 'booth', 'lounger', 'canopy', 'chaise', 'arch', 'peacock', 'cloud', 'stool', 'puff', 'eggchair', 'pit',
   // garden pieces — now procedural iso with 4-way directional art
   'tree', 'oak', 'palm', 'topiary', 'fountain', 'lantern', 'statue', 'duck', 'torii', 'pagoda', 'toro', 'sakura', 'bonsai_lux',
-  'hedge',
+  'hedge', 'ref_column',
   'vespa',
   // home pieces — all turn (front doors/headboard/taps face the camera correctly)
   'bed', 'wardrobe', 'bookcase', 'desk', 'kitchen', 'bathtub', 'clock', 'dresser',
