@@ -66,7 +66,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'coluna_gr', name: 'Greek Column', emoji: '🏛️', cat: 'tier1', color: '#e8e8ee', h: 4, walk: false, foot: 0.5,  special: 'greekcol' },
   { kind: 'arco_gr',   name: 'Greek Arch',  emoji: '🏛️', cat: 'tier1', color: '#e8e8ee', h: 3, walk: true,  foot: 1,    special: 'arch', span: [3, 1] },
   // construção (walkable build pieces + solid walls)
-  { kind: 'bloco',      name: 'Block',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
+  { kind: 'bloco',      name: 'Block',     emoji: '🧊', cat: 'constr', color: '#303048', h: 1, walk: true,  foot: 1 },
   { kind: 'meio',       name: 'Cube',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
   { kind: 'plataforma',        name: 'Platform',        emoji: '⬛', cat: 'constr', color: '#303048', h: 1, walk: true, foot: 1 },
   { kind: 'block-cream',  name: 'Block Cream',  emoji: '⬜', cat: 'constr', color: '#f0ece0', h: 1, walk: false, foot: 1 },
