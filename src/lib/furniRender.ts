@@ -2913,9 +2913,13 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'goldblock': {
       const hw = TW * d.foot, hh = TH * d.foot, cyTop = sy - d.h * STACK_H;
       block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, true);
-      ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = GOLD; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
       diamond(ctx, sx, cyTop, hw, hh); ctx.stroke();
-      diamond(ctx, sx, sy, hw, hh); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(sx - hw, cyTop); ctx.lineTo(sx - hw, sy);   // left outer edge
+      ctx.lineTo(sx, sy + hh); ctx.lineTo(sx + hw, sy);       // bottom front V
+      ctx.lineTo(sx + hw, cyTop);                              // right outer edge
+      ctx.stroke();
       break;
     }
     default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr') : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr');
