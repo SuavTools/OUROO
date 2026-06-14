@@ -427,7 +427,6 @@ const drawReception = (ctx: CanvasRenderingContext2D, sx: number, sy: number, ac
     poly(ctx, [P(1.5, -0.26, z), P(1.5, 0.42, z), P(1.5, 0.42, z - 0.14), P(1.5, -0.26, z - 0.14)], shade(top, 0.7));    // right lip
     if (faceVisible(0, 1, dir)) {
       poly(ctx, [P(-1.3, 0.34, 1.18), P(1.3, 0.34, 1.18), P(1.3, 0.34, 0.86), P(-1.3, 0.34, 0.86)], hexA(accent, 0.85));   // accent strip
-      const c = P(0, 0.34, 1.02); ctx.save(); ctx.fillStyle = '#fff'; ctx.font = '900 11px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('CLUBE', c[0], c[1]); ctx.restore();
     }
   });
 };
