@@ -746,7 +746,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
-      const m = raw.match(/^mat:(\d)$/);
+      const m = raw.match(/^mat:(\d+)$/);   // \d+ — Wood/Neon/Void are 10/11/12; \d alone dropped them (→ unknown furni "blue block")
       if (m) { const k = key(Number(d.x), Number(d.y)); matOverrideRef.current.set(k, Number(m[1])); matIdRef.current.set(k, String(d.id)); continue; }
       if (raw.startsWith('npc:')) { const nd = decodeNpc(raw); if (nd) placedNpcsRef.current.push({ id: String(d.id), gx: Number(d.x), gy: Number(d.y), data: nd }); continue; }   // admin-placed NPC
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
