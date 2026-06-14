@@ -2671,7 +2671,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'bonsai_lux': drawBonsai(ctx, sx, sy, accent, d.color, dir); break;
     case 'bench': drawBench(ctx, sx, sy, accent, d.color, dir); break;
     case 'reception': drawReception(ctx, sx, sy, accent, d.color, dir); break;
-    case 'pa': drawPA(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'pa': { const beat = Math.pow(Math.abs(Math.sin(t * 0.2)), 3); ctx.save(); ctx.translate(Math.sin(t * 0.63) * 0.9, -beat * 2.5); drawPA(ctx, sx, sy, accent, d.color, t, dir); ctx.restore(); break; }
     case 'ladder': drawLadder(ctx, sx, sy, accent, d.color, dir); break;
     case 'rope': drawRope(ctx, sx, sy, accent, d.color, dir); break;
     case 'booth': drawBooth(ctx, sx, sy, accent, d.color, t, dir); break;
@@ -2835,7 +2835,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'floorlamp': drawFloorLamp(ctx, sx, sy, accent, d.color, dir); break;
     case 'candle': drawCandle(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'firepit': drawFirePit(ctx, sx, sy, accent, d.color, t, dir); break;
-    case 'speaker': { const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); break; }
+    case 'speaker': { const beat = Math.pow(Math.abs(Math.sin(t * 0.2)), 3); ctx.save(); ctx.translate(Math.sin(t * 0.63) * 0.9, -beat * 2.5); const top = block(ctx, sx, sy, 2, '#23232f', accent, 0.7); faceWrap(() => { ctx.fillStyle = hexA(accent, 0.6 + Math.abs(Math.sin(t * 0.15)) * 0.4); ctx.beginPath(); ctx.arc(sx + 8, top + 26, 6, 0, Math.PI * 2); ctx.fill(); }); ctx.restore(); break; }
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'pacman': drawPacman(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'retrocab': drawRetroArcadeCab(ctx, sx, sy, accent, d.color, t, dir); break;
