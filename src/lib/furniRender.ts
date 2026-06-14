@@ -390,14 +390,13 @@ const drawTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: str
   const cy = sy - trunkH - TH * 0.2;
   const greens = ['#1a6030', '#22783c', '#2c9450', '#185828', '#3ab064'];
 
-  // Smooth organic silhouette: 28 gently perturbed points joined by midpoint-quadratic curves.
-  // Low amplitude + low frequency = soft rounded lobes rather than jagged spikes.
+  // Smooth organic silhouette: 20 perturbed points joined by midpoint-quadratic curves.
   const lobedPath = (bx: number, by: number, r: number, seed: number) => {
-    const n = 28;
+    const n = 20;
     const pts: [number, number][] = [];
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + seed;
-      const rr = r * (1 + 0.09 * Math.sin(i * 1.4 + seed * 3.2) + 0.04 * Math.cos(i * 2.8 + seed * 1.6));
+      const rr = r * (1 + 0.24 * Math.sin(i * 2.72 + seed * 4.4) + 0.1 * Math.cos(i * 5.1 + seed * 1.9));
       pts.push([bx + Math.cos(a) * rr, by + Math.sin(a) * rr * 0.6]);
     }
     ctx.beginPath();
