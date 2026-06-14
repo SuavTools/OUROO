@@ -46,8 +46,8 @@ function accentColor(level: number, ticks: number): string {
   return `hsl(${hue}, ${sat}%, 58%)`;
 }
 
-export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void }> = ({
-  stageScale = 1, isMobileStage = false, onExit,
+export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; gameMods?: Record<string, boolean> | null; onExit?: () => void }> = ({
+  stageScale = 1, isMobileStage = false, gameMods: _gameMods = null, onExit,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const synthRef = useRef<ArcadeSynth | null>(null);

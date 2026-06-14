@@ -35,6 +35,9 @@ export default function Home() {
   const [gamePlayed, setGamePlayed] = useState<boolean>(() => { if (typeof window === 'undefined') return false; try { return localStorage.getItem(TUT_PLAYED_KEY) === '1'; } catch { return false; } });
   const markGamePlayed = () => { setGamePlayed(true); try { localStorage.setItem(TUT_PLAYED_KEY, '1'); } catch { /* ignore */ } };
   const { user } = useUser();   // Discord login state (null when logged out)
+  // Special-rule modifiers a game launches with (e.g. double crystals) — set at launch, forwarded
+  // to the game component. Inert for now; the games accept the prop but don't act on it yet.
+  const [gameMods, setGameMods] = useState<Record<string, boolean> | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -107,8 +110,9 @@ export default function Home() {
     setTimeout(() => { setView('lobby'); setIsZooming(false); }, 550);
   };
 
-  // Launch a game from inside the world (walking up to an arcade machine). Returns to the world on exit.
-  const launchGame = (id: string) => setView(id === 'leap' ? 'leap' : 'arcade');
+  // Launch a game from inside the world (walking up to an arcade machine or a placed game trigger).
+  // RoomCanvas records where you launched from (ouroo_game_origin) so exit returns you there.
+  const launchGame = (id: string, mods?: Record<string, boolean>) => { setGameMods(mods ?? null); setView(id === 'leap' ? 'leap' : 'arcade'); };
 
   // ==========================================================================
   // THE ARCADE
@@ -116,7 +120,7 @@ export default function Home() {
   if (view === 'arcade') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onFirstGameOver={onboard === 'arcade' ? () => { markGamePlayed(); setView('lobby'); } : undefined} />
+        <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} gameMods={gameMods} onFirstGameOver={onboard === 'arcade' ? () => { markGamePlayed(); setView('lobby'); } : undefined} />
         {/* In-app-browser users hit the no-rotate wall here — float the "open in browser" nudge on top. */}
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
         <button
@@ -136,10 +140,10 @@ export default function Home() {
   if (view === 'leap') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <LeapCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />
+        <LeapCanvas stageScale={stage.scale} isMobileStage={stage.mobile} gameMods={gameMods} onExit={() => setView('lobby')} />
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
         <button
-          onClick={() => setView('landing')}
+          onClick={() => setView('lobby')}
           style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           className="absolute left-1/2 -translate-x-1/2 z-50 text-[10px] font-mono text-brandYellow border border-brandYellow bg-black/60 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all"
         >
