@@ -1528,6 +1528,139 @@ const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
   ctx.restore();
 };
 
+// Wildflower patch: isometric grass/soil tile with species-specific blooms.
+const drawWildflowerPatch = (ctx: CanvasRenderingContext2D, sx: number, sy: number, kind: string) => {
+  const soil = '#7a4e2a', gTop = '#3a9e34';
+  const hw = TW * 0.82, hh = TH * 0.82, pH = 8, top = sy - pH;
+  ctx.save(); ctx.globalAlpha = 0.13; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.6, TH * 0.55, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  poly(ctx, [[sx-hw,sy],[sx,sy+hh],[sx,top+hh],[sx-hw,top]], shade(soil, 0.55));
+  poly(ctx, [[sx,sy+hh],[sx+hw,sy],[sx+hw,top],[sx,top+hh]], shade(soil, 0.74));
+  ctx.fillStyle = gTop; diamond(ctx, sx, top, hw, hh); ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = '#80d850';
+  ctx.beginPath(); ctx.moveTo(sx-hw*0.42,top); ctx.lineTo(sx,top-hh*0.38); ctx.lineTo(sx+hw*0.42,top); ctx.lineTo(sx,top+hh*0.38); ctx.closePath(); ctx.fill(); ctx.restore();
+  const G = '#2e8c40', GD = '#1a5c28';
+  const pts: [number,number][] = [[-12,-4],[14,-5],[-6,5],[10,5],[0,-1]];
+  switch (kind) {
+    case 'hyacinth': {
+      for (const [dx,dy] of pts) {
+        const fx = sx+dx, fy = top+dy;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-24); ctx.stroke();
+        for (let b = 0; b < 9; b++) {
+          const pct = b/8, ang = (b-4)*0.55;
+          ctx.fillStyle = pct < 0.5 ? '#7c3cc4' : '#b885e2';
+          ctx.beginPath(); ctx.ellipse(fx+Math.sin(ang)*3.5*(1-pct*0.3), fy-6-pct*16, 2, 2.8, ang*0.2, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      break;
+    }
+    case 'tulip': {
+      for (const [dx,dy] of pts.slice(0,4)) {
+        const fx = sx+dx, fy = top+dy, sH = 22;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-sH); ctx.stroke();
+        ctx.fillStyle = GD; ctx.beginPath(); ctx.ellipse(fx-3,fy-sH*0.5,2.5,6,-0.45,0,Math.PI*2); ctx.fill();
+        const hd = fy-sH;
+        ctx.fillStyle = '#c8253c';
+        ctx.beginPath(); ctx.moveTo(fx,hd-8); ctx.bezierCurveTo(fx+5,hd-5,fx+5,hd+1,fx+3,hd+3); ctx.lineTo(fx-3,hd+3); ctx.bezierCurveTo(fx-5,hd+1,fx-5,hd-5,fx,hd-8); ctx.fill();
+        ctx.fillStyle = '#ea6070'; ctx.beginPath(); ctx.ellipse(fx,hd+3,3,1.5,0,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'sunflower': {
+      for (const [dx,dy] of pts.slice(0,3)) {
+        const fx = sx+dx, fy = top+dy, sH = 28;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-sH); ctx.stroke();
+        ctx.fillStyle = GD; ctx.beginPath(); ctx.ellipse(fx-4,fy-sH*0.55,2,5,-0.4,0,Math.PI*2); ctx.fill();
+        const hd = fy-sH;
+        for (let p = 0; p < 8; p++) {
+          const pa = p*Math.PI/4;
+          ctx.fillStyle = p%2 ? '#f9ca24' : '#e8b800';
+          ctx.beginPath(); ctx.ellipse(fx+Math.cos(pa)*7, hd+Math.sin(pa)*5, 4, 2, pa, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#5c3a0e'; ctx.beginPath(); ctx.arc(fx,hd,5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7a5020'; ctx.beginPath(); ctx.arc(fx,hd,3,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'poppy': {
+      for (const [dx,dy] of pts) {
+        const fx = sx+dx, fy = top+dy, sH = 20;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(fx,fy); ctx.quadraticCurveTo(fx+3,fy-sH*0.5,fx,fy-sH); ctx.stroke();
+        const hd = fy-sH;
+        for (let p = 0; p < 4; p++) {
+          const pa = p*Math.PI/2+Math.PI/4;
+          ctx.fillStyle = p%2 ? '#c81a28' : '#e03040';
+          ctx.beginPath(); ctx.ellipse(fx+Math.cos(pa)*5, hd+Math.sin(pa)*3.5, 5, 3.5, pa, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(fx,hd,2.8,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'violet': {
+      for (const [dx,dy] of pts) {
+        const fx = sx+dx, fy = top+dy, sH = 12;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-sH); ctx.stroke();
+        const hd = fy-sH;
+        for (let p = 0; p < 5; p++) {
+          const pa = p*Math.PI*2/5 - Math.PI/2;
+          ctx.fillStyle = p < 2 ? '#7b1fa2' : '#ba68c8';
+          ctx.beginPath(); ctx.ellipse(fx+Math.cos(pa)*4, hd+Math.sin(pa)*3, 4, 3, pa, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#fff176'; ctx.beginPath(); ctx.arc(fx,hd,1.8,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'buttercup': {
+      for (const [dx,dy] of pts) {
+        const fx = sx+dx, fy = top+dy, sH = 14;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-sH); ctx.stroke();
+        ctx.fillStyle = GD; ctx.beginPath(); ctx.ellipse(fx-2,fy-sH*0.4,2,4,-0.4,0,Math.PI*2); ctx.fill();
+        const hd = fy-sH;
+        for (let p = 0; p < 5; p++) {
+          const pa = p*Math.PI*2/5;
+          ctx.fillStyle = '#fdd835';
+          ctx.beginPath(); ctx.ellipse(fx+Math.cos(pa)*4, hd+Math.sin(pa)*3, 4, 2.5, pa, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#f57f00'; ctx.beginPath(); ctx.arc(fx,hd,2.5,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'rose': {
+      for (const [dx,dy] of pts.slice(0,4)) {
+        const fx = sx+dx, fy = top+dy, sH = 22;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-sH); ctx.stroke();
+        ctx.fillStyle = GD; ctx.beginPath(); ctx.ellipse(fx+3,fy-sH*0.45,2.5,6,0.5,0,Math.PI*2); ctx.fill();
+        const hd = fy-sH, rc = '#b71c2e';
+        ctx.fillStyle = shade(rc,0.6); ctx.beginPath(); ctx.ellipse(fx+1,hd+1,6,5,0.2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = rc; ctx.beginPath(); ctx.ellipse(fx,hd-1,5,4,-0.2,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = shade(rc,1.2); ctx.beginPath(); ctx.ellipse(fx-1,hd-2,3,2.5,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle = shade(rc,1.45); ctx.beginPath(); ctx.arc(fx,hd-3,1.5,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    }
+    case 'lily': {
+      for (const [dx,dy] of pts.slice(0,4)) {
+        const fx = sx+dx, fy = top+dy, sH = 24;
+        ctx.strokeStyle = G; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(fx,fy-sH); ctx.stroke();
+        ctx.fillStyle = GD; ctx.beginPath(); ctx.ellipse(fx-4,fy-sH*0.4,2,5,-0.55,0,Math.PI*2); ctx.fill();
+        const hd = fy-sH;
+        for (let p = 0; p < 6; p++) {
+          const pa = p*Math.PI/3;
+          ctx.fillStyle = p%2 ? '#f0ece8' : '#e8e2dc';
+          ctx.beginPath(); ctx.ellipse(fx+Math.cos(pa)*6, hd+Math.sin(pa)*4, 5, 2.5, pa, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.fillStyle = '#ffe57a';
+        for (let s = 0; s < 3; s++) {
+          const sa = s*Math.PI*2/3;
+          ctx.beginPath(); ctx.arc(fx+Math.cos(sa)*2.5, hd+Math.sin(sa)*1.8, 1.2, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      break;
+    }
+  }
+};
+
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2417,6 +2550,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
     case 'tree': drawTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'oak':  drawOakTree(ctx, sx, sy, accent, d.color, dir); break;
+    case 'wildflower': drawWildflowerPatch(ctx, sx, sy, kind); break;
     case 'pine': drawPineTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'hedge': drawHedge(ctx, sx, sy, accent, d.color, dir); break;
     case 'shrub': drawShrub(ctx, sx, sy, accent, d.color, dir); break;
