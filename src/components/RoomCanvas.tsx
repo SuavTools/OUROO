@@ -1524,22 +1524,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
       const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
-      // Build a lookup of construction block Z-ranges keyed by tile position, used to suppress visible
-      // face shadows on the shared edge between adjacent construction blocks.
-      type ZRange = { z: number; h: number };
-      const constrMap = new Map<string, ZRange[]>();
-      for (const it of allItems) {
-        if (defOf(it.kind).cat !== 'constr') continue;
-        const k = `${it.gx},${it.gy}`;
-        const z = Math.max(0, planLvl(it.gx, it.gy)) + (it.elev || 0);
-        const h = defOf(it.kind).h || 1;
-        const existing = constrMap.get(k);
-        if (existing) existing.push({ z, h }); else constrMap.set(k, [{ z, h }]);
-      }
-      const hasConstrAdj = (gx: number, gy: number, myZ: number, myH: number) => {
-        const adj = constrMap.get(`${gx},${gy}`);
-        return !!adj && adj.some(a => a.z < myZ + myH && a.z + a.h > myZ);
-      };
       for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => {
         const { sx, sy } = iso(ii.gx, ii.gy, z);
         // disguised triggers — invisible to players, but ADMINS always see a soft glow (stronger while
@@ -1556,14 +1540,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           return;
         }
         if (lift > 0 && dd.walk && dd.cat !== 'constr') drawSupports(ii, z, sw, sh);
-        let hideL = false, hideR = false;
-        if (dd.cat === 'constr') {
-          const myH = dd.h || 1;
-          // L face borders blocks at (gx-1,gy) and (gx,gy+1); R face borders (gx+1,gy) and (gx,gy-1)
-          hideL = hasConstrAdj(ii.gx - 1, ii.gy, z, myH) || hasConstrAdj(ii.gx, ii.gy + 1, z, myH);
-          hideR = hasConstrAdj(ii.gx + 1, ii.gy, z, myH) || hasConstrAdj(ii.gx, ii.gy - 1, z, myH);
-        }
-        drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0, hideL, hideR);
+        drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0);
       } }); }
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
       // sort by their front corner, so add a boost when standing on a seat's footprint.

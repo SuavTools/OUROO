@@ -15,10 +15,10 @@ const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16)
 
 const diamond = (ctx: CanvasRenderingContext2D, cx: number, cy: number, hw: number, hh: number) => { ctx.beginPath(); ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath(); };
 
-const block = (ctx: CanvasRenderingContext2D, cx: number, cyBase: number, h: number, base: string, accent: string, foot: number, emoji?: string, noAccent?: boolean, hideL = false, hideR = false) => {
+const block = (ctx: CanvasRenderingContext2D, cx: number, cyBase: number, h: number, base: string, accent: string, foot: number, emoji?: string, noAccent?: boolean) => {
   const hw = TW * foot * 0.9, hh = TH * foot * 0.9, Hh = h * STACK_H, cyTop = cyBase - Hh;
-  ctx.fillStyle = hideL ? base : shade(base, 0.55); ctx.beginPath(); ctx.moveTo(cx - hw, cyBase); ctx.lineTo(cx, cyBase + hh); ctx.lineTo(cx, cyTop + hh); ctx.lineTo(cx - hw, cyTop); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = hideR ? base : shade(base, 0.8); ctx.beginPath(); ctx.moveTo(cx, cyBase + hh); ctx.lineTo(cx + hw, cyBase); ctx.lineTo(cx + hw, cyTop); ctx.lineTo(cx, cyTop + hh); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(base, 0.55); ctx.beginPath(); ctx.moveTo(cx - hw, cyBase); ctx.lineTo(cx, cyBase + hh); ctx.lineTo(cx, cyTop + hh); ctx.lineTo(cx - hw, cyTop); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = shade(base, 0.8); ctx.beginPath(); ctx.moveTo(cx, cyBase + hh); ctx.lineTo(cx + hw, cyBase); ctx.lineTo(cx + hw, cyTop); ctx.lineTo(cx, cyTop + hh); ctx.closePath(); ctx.fill();
   ctx.fillStyle = shade(base, 1.25); diamond(ctx, cx, cyTop, hw, hh); ctx.fill();
   if (!noAccent) { ctx.strokeStyle = hexA(accent, 0.35); ctx.lineWidth = 1; diamond(ctx, cx, cyTop, hw, hh); ctx.stroke(); }
   if (emoji) { ctx.font = `${Math.round(13 * foot + 4)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(emoji, cx, cyTop); }
@@ -53,11 +53,11 @@ const faceTex = (ctx: CanvasRenderingContext2D, F: number[][], tex: string | nul
   ctx.restore();
 };
 // A full-tile iso cube with material texture; optional doorway / window carved on a chosen face (dir).
-const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: number, base: string, accent: string, foot: number, kind: string, opening: 'door' | 'window' | null = null, dir = 0, noAccent = false, hideL = false, hideR = false) => {
+const drawBuilt = (ctx: CanvasRenderingContext2D, cx: number, cyB: number, h: number, base: string, accent: string, foot: number, kind: string, opening: 'door' | 'window' | null = null, dir = 0, noAccent = false) => {
   const hw = TW * foot * 0.9, hh = TH * foot * 0.9, cyT = cyB - h * STACK_H, tex = texOf(kind), rows = Math.max(3, Math.round(h * 3));
   const L = [[cx - hw, cyB], [cx, cyB + hh], [cx, cyT + hh], [cx - hw, cyT]];   // left face A,B,C,D
   const R = [[cx, cyB + hh], [cx + hw, cyB], [cx + hw, cyT], [cx, cyT + hh]];   // right face
-  poly(ctx, L, hideL ? base : shade(base, 0.62)); poly(ctx, R, hideR ? base : shade(base, 0.82));
+  poly(ctx, L, shade(base, 0.62)); poly(ctx, R, shade(base, 0.82));
   ctx.fillStyle = shade(base, 1.2); diamond(ctx, cx, cyT, hw, hh); ctx.fill(); if (!noAccent) { ctx.strokeStyle = hexA(accent, 0.3); ctx.lineWidth = 1; diamond(ctx, cx, cyT, hw, hh); ctx.stroke(); }
   faceTex(ctx, L, tex, base, rows); faceTex(ctx, R, tex, base, rows);
   if (opening) {
@@ -2263,7 +2263,7 @@ const drawVelvetBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, 
 
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
-function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0, hideL = false, hideR = false) {
+function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
   // Multi-tile pieces draw in a centered local frame — shift the anchor to the footprint centre.
   const [esw, esh] = effSpan(kind, dir);
@@ -2326,9 +2326,9 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       if (d.cat !== 'constr') { ctx.strokeStyle = hexA(accent, 0.25); ctx.lineWidth = 1; diamond(ctx, sx, sy - STACK_H, TW, TH); ctx.stroke(); }
       break;
     }
-    case 'wall': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr', hideL, hideR); break; }
-    case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir, d.cat === 'constr', hideL, hideR); break; }       // rotatable iso doorway
-    case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir, d.cat === 'constr', hideL, hideR); break; }   // rotatable iso window
+    case 'wall': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr'); break; }
+    case 'door': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'door', dir, d.cat === 'constr'); break; }       // rotatable iso doorway
+    case 'window': { drawBuilt(ctx, sx, sy, d.h, d.color, accent, 1, kind, 'window', dir, d.cat === 'constr'); break; }   // rotatable iso window
     case 'gate': { drawGate(ctx, sx, sy, accent, d.color, dir, d.h); break; }                          // 2-tile-wide walk-through gate
     case 'roof': { hipRoof(ctx, sx, sy + TH * 0.7, 0.98, d.color, STACK_H * 0.7, 0.55, false); break; }
     case 'lavablock': {   // walkable molten block — hazard at its top level (handled in RoomCanvas)
@@ -2523,7 +2523,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'duck': drawDuck(ctx, sx, sy, accent, d.color, dir); break;
     case 'cone': { const cy = sy - 2; ctx.fillStyle = d.color; ctx.beginPath(); ctx.moveTo(sx, cy - 28); ctx.lineTo(sx + 10, cy); ctx.lineTo(sx - 10, cy); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx - 6, cy - 13); ctx.lineTo(sx + 6, cy - 13); ctx.lineTo(sx + 5, cy - 9); ctx.lineTo(sx - 5, cy - 9); ctx.closePath(); ctx.fill(); ctx.fillStyle = shade(d.color, 0.8); ctx.fillRect(sx - 12, cy - 2, 24, 4); break; }
     case 'statue': drawStatue(ctx, sx, sy, accent, d.color, dir); break;
-    default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr', hideL, hideR) : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr', hideL, hideR);
+    default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr') : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr');
   }
 }
 
@@ -2539,10 +2539,10 @@ const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
 
-function buildSprite(kind: string, accent: string, dir: number, hideL = false, hideR = false): HTMLCanvasElement {
+function buildSprite(kind: string, accent: string, dir: number): HTMLCanvasElement {
   const W = SPR_W * SS, H = SPR_H * SS;
   // 1) the art on its own layer
-  const art = mkCanvas(W, H); const ax = art.getContext('2d')!; ax.scale(SS, SS); drawRaw(ax, kind, OX, OY, accent, 0, dir, hideL, hideR);
+  const art = mkCanvas(W, H); const ax = art.getContext('2d')!; ax.scale(SS, SS); drawRaw(ax, kind, OX, OY, accent, 0, dir);
   // 2) a solid dark silhouette of the art (for the outline)
   const sil = mkCanvas(W, H); const sc = sil.getContext('2d')!; sc.drawImage(art, 0, 0); sc.globalCompositeOperation = 'source-in'; sc.fillStyle = 'rgba(12,10,16,0.95)'; sc.fillRect(0, 0, W, H);
   // 3) compose: contact shadow → outline (silhouette stamped around) → art on top
@@ -2553,15 +2553,15 @@ function buildSprite(kind: string, accent: string, dir: number, hideL = false, h
   return out;
 }
 
-function getSprite(kind: string, accent: string, dir: number, hideL = false, hideR = false): HTMLCanvasElement {
-  const key = `${kind}|${accent}|${dir}|${hideL ? 1 : 0}${hideR ? 1 : 0}`;
+function getSprite(kind: string, accent: string, dir: number): HTMLCanvasElement {
+  const key = `${kind}|${accent}|${dir}`;
   let c = spriteCache.get(key);
-  if (!c) { c = buildSprite(kind, accent, dir, hideL, hideR); spriteCache.set(key, c); spriteOrder.push(key); if (spriteOrder.length > SPRITE_CAP) { const old = spriteOrder.shift(); if (old) spriteCache.delete(old); } }
+  if (!c) { c = buildSprite(kind, accent, dir); spriteCache.set(key, c); spriteOrder.push(key); if (spriteOrder.length > SPRITE_CAP) { const old = spriteOrder.shift(); if (old) spriteCache.delete(old); } }
   return c;
 }
 
 // Public entry: cached blit for static pieces (with baked outline + shadow); live draw for animated ones.
-export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0, hideL = false, hideR = false) {
+export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
   // Hand-authored raster (PNG) or SVG art (with a soft contact shadow). Multi-tile pieces centre on
   // their footprint. PNGs already bake their own outline/shadow, so no extra contact ellipse for them.
@@ -2578,8 +2578,8 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
   }
   if (ANIMATED.has(d.special ?? '')) {
     if (d.cat !== 'constr') { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
-    drawRaw(ctx, kind, sx, sy, accent, t, dir, hideL, hideR); return;
+    drawRaw(ctx, kind, sx, sy, accent, t, dir); return;
   }
-  try { ctx.drawImage(getSprite(kind, accent, dir, hideL, hideR), 0, 0, SPR_W * SS, SPR_H * SS, sx - OX, sy - OY, SPR_W, SPR_H); }
-  catch { drawRaw(ctx, kind, sx, sy, accent, t, dir, hideL, hideR); }   // fall back to live draw if offscreen canvas is unavailable
+  try { ctx.drawImage(getSprite(kind, accent, dir), 0, 0, SPR_W * SS, SPR_H * SS, sx - OX, sy - OY, SPR_W, SPR_H); }
+  catch { drawRaw(ctx, kind, sx, sy, accent, t, dir); }   // fall back to live draw if offscreen canvas is unavailable
 }
