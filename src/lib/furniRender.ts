@@ -1652,6 +1652,55 @@ const drawWildflowerPatch = (ctx: CanvasRenderingContext2D, sx: number, sy: numb
   }
 };
 
+// White ceramic flower pot with pink roses.
+const drawFlores = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _accent: string) => {
+  void _accent;
+  const cx = sx;
+  const pot = '#f4f4f4';
+  const ptw = TW * 0.44, pbw = TW * 0.28, ph = STACK_H * 0.68;
+  const topY = sy - ph + TH * 0.38;
+
+  // pot body – horizontal gradient fakes a curved ceramic surface
+  const g = ctx.createLinearGradient(cx - ptw, 0, cx + ptw, 0);
+  g.addColorStop(0,    shade(pot, 0.68));
+  g.addColorStop(0.38, shade(pot, 1.0));
+  g.addColorStop(0.58, shade(pot, 1.06));
+  g.addColorStop(1,    shade(pot, 0.75));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(cx - pbw, sy); ctx.lineTo(cx + pbw, sy); ctx.lineTo(cx + ptw, topY); ctx.lineTo(cx - ptw, topY); ctx.closePath(); ctx.fill();
+
+  // decorative band near rim
+  const bandY = topY + ph * 0.1;
+  ctx.strokeStyle = shade(pot, 0.82); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx - ptw * 0.9, bandY); ctx.lineTo(cx + ptw * 0.9, bandY); ctx.stroke();
+
+  // rim ellipse top – lighter than sides
+  ctx.fillStyle = shade(pot, 1.14);
+  ctx.beginPath(); ctx.ellipse(cx, topY, ptw, TH * 0.46, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = shade(pot, 0.78); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(cx, topY, ptw, TH * 0.46, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // soil
+  ctx.fillStyle = '#2c1a0e';
+  ctx.beginPath(); ctx.ellipse(cx, topY, ptw * 0.82, TH * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+
+  // stems + rose heads
+  const stems: [number, number, number][] = [[-8, 24, 0.95], [1, 28, 1.1], [9, 21, 0.92], [-2, 17, 0.78]];
+  const rc = '#e8407a', G = '#2a7a3a', GD = '#1a5c28';
+  for (const [dx, sH, sc] of stems) {
+    const fx = cx + dx, fy = topY;
+    ctx.strokeStyle = G; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.quadraticCurveTo(fx + dx * 0.25, fy - sH * 0.55, fx, fy - sH); ctx.stroke();
+    ctx.fillStyle = GD; ctx.beginPath(); ctx.ellipse(fx + 3, fy - sH * 0.48, 3.5 * sc, 5.5 * sc, 0.48, 0, Math.PI * 2); ctx.fill();
+    const hd = fy - sH;
+    ctx.fillStyle = shade(rc, 0.58); ctx.beginPath(); ctx.ellipse(fx + 1, hd + 1.5, 7 * sc, 5.5 * sc, 0.18, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = shade(rc, 0.8);  ctx.beginPath(); ctx.ellipse(fx, hd, 5.8 * sc, 4.8 * sc, -0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rc;               ctx.beginPath(); ctx.ellipse(fx - 0.5, hd - 1, 4.2 * sc, 3.6 * sc, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = shade(rc, 1.28); ctx.beginPath(); ctx.ellipse(fx, hd - 1.8, 2.5 * sc, 2.2 * sc, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = shade(rc, 1.55); ctx.beginPath(); ctx.arc(fx, hd - 2.5, 1.3 * sc, 0, Math.PI * 2); ctx.fill();
+  }
+};
+
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2609,6 +2658,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'coffee': drawCoffee(ctx, sx, sy, accent, d.color); break;
     case 'tree': drawTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'oak':  drawOakTree(ctx, sx, sy, accent, d.color, dir); break;
+    case 'flores':     drawFlores(ctx, sx, sy, accent); break;
     case 'wildflower': drawWildflowerPatch(ctx, sx, sy, kind); break;
     case 'pine': drawPineTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'hedge': drawHedge(ctx, sx, sy, accent, d.color, dir); break;

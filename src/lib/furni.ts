@@ -164,7 +164,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'bonsai',   name: 'Bonsai',   emoji: '🎍', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.7, special: 'plant' },
   { kind: 'arvore',   name: 'Tree',     emoji: '🌳', cat: 'plantas', color: '#6a4326', h: 3, walk: false, foot: 0.85, special: 'tree' },
   { kind: 'palmeira', name: 'Palm',     emoji: '🌴', cat: 'plantas', color: '#7a5230', h: 3, walk: false, foot: 0.7, special: 'palm' },
-  { kind: 'flores',   name: 'Flowers',  emoji: '🌷', cat: 'plantas', color: '#8a4f2a', h: 1, walk: false, foot: 0.6, special: 'plant' },
+  { kind: 'flores',   name: 'Flowers',  emoji: '🌷', cat: 'plantas', color: '#f4f4f4', h: 1, walk: false, foot: 0.6, special: 'flores' },
   { kind: 'topiary',  name: 'Topiary',  emoji: '🌳', cat: 'plantas', color: '#2a8a44', h: 2, walk: false, foot: 0.7, special: 'topiary' },
   { kind: 'sakura',   name: 'Sakura',   emoji: '🌸', cat: 'plantas', color: '#ff9ec7', h: 3, walk: false, foot: 0.9, special: 'sakura' },
   { kind: 'bonsai_lux', name: 'Luxe Bonsai', emoji: '🎋', cat: 'plantas', color: '#2f9a4c', h: 1, walk: false, foot: 0.7, special: 'bonsai_lux' },
