@@ -172,7 +172,6 @@ export const FURNI: FurniDef[] = [
   { kind: 'hedge',      name: 'Hedge',       emoji: '🌿', cat: 'plantas', color: '#2a7a3a', h: 1, walk: false, foot: 1,   special: 'hedge' },
   { kind: 'shrub',      name: 'Shrub',       emoji: '🌿', cat: 'plantas', color: '#2a6a36', h: 1, walk: false, foot: 0.8, special: 'shrub' },
   { kind: 'oak',        name: 'Oak Tree',    emoji: '🌳', cat: 'plantas', color: '#5a3a18', h: 3, walk: false, foot: 0.9, special: 'oak' },
-  { kind: 'diamond_pine', name: 'Diamond Pine', emoji: '🌲', cat: 'plantas', color: '#4da832', h: 4, walk: false, foot: 1.2, special: 'diamond_pine' },
   // luzes
   { kind: 'candeeiro',name: 'Lamp',     emoji: '💡', cat: 'luzes', color: '#ffe65c', h: 2, walk: false, foot: 0.4, special: 'lamp' },
   { kind: 'neon',     name: 'Neon',     emoji: '🔆', cat: 'luzes', color: '#ff44aa', h: 1, walk: false, foot: 0.8, special: 'lamp' },

@@ -1528,69 +1528,6 @@ const drawOakTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
   ctx.restore();
 };
 
-// ═══════════ DIAMOND PINE ═══════════
-// 8-face low-poly canopy: 4-face pyramid top + 4-face rounded bulge bottom.
-// Faces left→right: back-left / front-left (brightest) / front-right / back-right (darkest).
-const drawDiamondPine = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, _dir: number) => {
-  void _a; void _dir;
-
-  // Ground shadow
-  ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.9, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-
-  const trunkH = STACK_H * 0.55;
-  const H      = STACK_H * 4.4;    // tall — face polygons need room to read
-  const WL     = TW * 1.55;        // left half-width at equator
-  const WR     = TW * 1.15;        // right half-width (narrower perspective cue)
-  const baseY  = sy - trunkH;
-  const tipY   = baseY - H;
-  const eqY    = baseY - H * 0.54; // equatorial ring 54% up from base
-
-  // Equatorial ridge x-positions
-  const e1 = sx - WL;           // far-left outer edge
-  const e2 = sx - WL * 0.45;    // left internal ridge
-  const e3 = sx;                 // centre ridge
-  const e4 = sx + WR * 0.50;    // right internal ridge
-  const e5 = sx + WR;            // far-right outer edge
-
-  // Bottom-taper x-positions — converge close to trunk width so bottom really tapers
-  const b1 = sx - 14;
-  const b2 = sx - 5;
-  const b3 = sx;
-  const b4 = sx + 4;
-  const b5 = sx + 10;
-
-  // Outer-curve mid-points keep silhouette wide just below equator before tapering
-  const bm1Y = eqY + (baseY - eqY) * 0.35;
-  const bm2Y = eqY + (baseY - eqY) * 0.72;
-  const omL1 = sx - WL * 0.92;     // left outer: stays wide at 35% down
-  const omL2 = sx - WL * 0.52;     // left outer: still wide at 72% down
-  const omR1 = sx + WR * 0.92;     // right outer: stays wide at 35% down
-  const omR2 = sx + WR * 0.50;     // right outer: still wide at 72% down
-
-  // Per-face flat shading
-  const C1 = shade(base, 1.28);  // back-left
-  const C2 = shade(base, 1.44);  // front-left — brightest
-  const C3 = shade(base, 0.90);  // front-right
-  const C4 = shade(base, 0.68);  // back-right — darkest
-
-  // TOP PYRAMID — 4 triangles sharing the tip
-  poly(ctx, [[sx, tipY], [e1, eqY], [e2, eqY]], C1);
-  poly(ctx, [[sx, tipY], [e2, eqY], [e3, eqY]], C2);
-  poly(ctx, [[sx, tipY], [e3, eqY], [e4, eqY]], C3);
-  poly(ctx, [[sx, tipY], [e4, eqY], [e5, eqY]], C4);
-
-  // BOTTOM BULGE — outer faces use two extra mid-points for the rounded silhouette
-  poly(ctx, [[e1, eqY], [omL1, bm1Y], [omL2, bm2Y], [b1, baseY], [b2, baseY], [e2, eqY]], C1);
-  poly(ctx, [[e2, eqY], [e3, eqY], [b3, baseY], [b2, baseY]], C2);
-  poly(ctx, [[e3, eqY], [e4, eqY], [b4, baseY], [b3, baseY]], C3);
-  poly(ctx, [[e4, eqY], [e5, eqY], [omR1, bm1Y], [omR2, bm2Y], [b5, baseY], [b4, baseY]], C4);
-
-  // TRUNK — 2 flat faces, left darker / right lighter
-  ctx.fillStyle = '#3d1a06'; ctx.fillRect(sx - 5, baseY, 5, trunkH);
-  ctx.fillStyle = '#7a3a10'; ctx.fillRect(sx,     baseY, 5, trunkH);
-};
-
 // ═══════════ STUDIO ═══════════
 const drawDrumkit = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const sh = base;
@@ -2483,7 +2420,6 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pine': drawPineTree(ctx, sx, sy, accent, d.color, dir); break;
     case 'hedge': drawHedge(ctx, sx, sy, accent, d.color, dir); break;
     case 'shrub': drawShrub(ctx, sx, sy, accent, d.color, dir); break;
-    case 'diamond_pine': drawDiamondPine(ctx, sx, sy, accent, d.color, dir); break;
     case 'palm': drawPalm(ctx, sx, sy, accent, d.color, dir); break;
     case 'torii': drawTorii(ctx, sx, sy, accent, d.color, dir); break;
     case 'pagoda': drawPagoda(ctx, sx, sy, accent, d.color, dir); break;
