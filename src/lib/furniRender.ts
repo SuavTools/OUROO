@@ -361,24 +361,101 @@ const drawLaptop = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
 
 // ═══════════ HI-FI garden / lobby pieces (trees, palm, park bench, reception desk) ═══════════
 
-// Leafy tree: tapered bark trunk with root flare + a layered, gradient-shaded canopy and speckle light.
+// Leafy tree: tapered bark trunk with organic leafy canopy blobs — each blob has a jagged
+// silhouette, clipped leaf-stroke texture, sun dapple highlights, and a base shadow.
 const drawTree = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a;
-  ctx.save(); ctx.globalAlpha = 0.24; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.7, TH * 0.7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+  // Ground shadow
+  ctx.save(); ctx.globalAlpha = 0.26; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.74, TH * 0.74, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+  // Trunk — 5-stop gradient + root flare
   const trunkH = STACK_H * 1.7, tw = TW * 0.17;
-  const tg = ctx.createLinearGradient(sx - tw, 0, sx + tw, 0); tg.addColorStop(0, shade(base, 0.5)); tg.addColorStop(0.5, shade(base, 1.18)); tg.addColorStop(1, shade(base, 0.62));
+  const tg = ctx.createLinearGradient(sx - tw * 1.8, 0, sx + tw * 1.8, 0);
+  tg.addColorStop(0, shade(base, 0.44)); tg.addColorStop(0.28, shade(base, 0.68));
+  tg.addColorStop(0.5, shade(base, 1.22)); tg.addColorStop(0.72, shade(base, 0.74)); tg.addColorStop(1, shade(base, 0.5));
   ctx.fillStyle = tg; ctx.beginPath();
-  ctx.moveTo(sx - tw, sy); ctx.quadraticCurveTo(sx - tw * 0.5, sy - trunkH * 0.5, sx - tw * 0.5, sy - trunkH);
-  ctx.lineTo(sx + tw * 0.5, sy - trunkH); ctx.quadraticCurveTo(sx + tw * 0.5, sy - trunkH * 0.5, sx + tw, sy);
-  ctx.lineTo(sx + tw * 1.7, sy + 3); ctx.lineTo(sx - tw * 1.7, sy + 3); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = hexA('#000', 0.16); ctx.lineWidth = 1; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(sx + i * tw * 0.45, sy - 4); ctx.lineTo(sx + i * tw * 0.45, sy - trunkH + 4); ctx.stroke(); }
-  const cy = sy - trunkH - TH * 0.2; const greens = ['#1c6e34', '#268a45', '#2fa356', '#185f2c', '#37b561'];
-  const blob = (ox: number, oy: number, r: number, col: string) => { const g = ctx.createRadialGradient(sx + ox - r * 0.3, cy + oy - r * 0.35, r * 0.1, sx + ox, cy + oy, r); g.addColorStop(0, shade(col, 1.36)); g.addColorStop(0.6, col); g.addColorStop(1, shade(col, 0.68)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill(); };
-  blob(0, TH * 0.4, TW * 0.95, greens[3]);
-  blob(-TW * 0.52, 0, TW * 0.56, greens[1]); blob(TW * 0.52, 0, TW * 0.56, greens[1]);
-  blob(-TW * 0.26, -TH * 0.7, TW * 0.56, greens[2]); blob(TW * 0.32, -TH * 0.62, TW * 0.6, greens[2]);
-  blob(0, -TH * 1.1, TW * 0.62, greens[4]);
-  ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#cdfaa8'; for (let i = 0; i < 16; i++) { const a = i * 2.39917 + dir * 1.571, rr = TW * (0.2 + (i % 5) * 0.13); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * rr, cy - TH * 0.3 + Math.sin(a) * rr * 0.6, 1.8, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
+  ctx.moveTo(sx - tw, sy); ctx.quadraticCurveTo(sx - tw * 0.52, sy - trunkH * 0.5, sx - tw * 0.52, sy - trunkH);
+  ctx.lineTo(sx + tw * 0.52, sy - trunkH); ctx.quadraticCurveTo(sx + tw * 0.52, sy - trunkH * 0.5, sx + tw, sy);
+  ctx.lineTo(sx + tw * 2.0, sy + 3); ctx.lineTo(sx - tw * 2.0, sy + 3); ctx.closePath(); ctx.fill();
+
+  // Bark fissures (wavy bezier lines) + knot
+  ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = hexA('#000', 0.14); ctx.lineWidth = 1;
+  for (let i = -2; i <= 2; i++) { const ux = sx + i * tw * 0.38; ctx.beginPath(); ctx.moveTo(ux + i, sy - 6); ctx.bezierCurveTo(ux + i * 2.5, sy - trunkH * 0.28, ux - i * 2, sy - trunkH * 0.62, ux, sy - trunkH + 7); ctx.stroke(); }
+  ctx.beginPath(); ctx.ellipse(sx - tw * 0.12, sy - trunkH * 0.36, 3.8, 2.8, 0.25, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+
+  // Canopy
+  const cy = sy - trunkH - TH * 0.2;
+  const greens = ['#1a6030', '#22783c', '#2c9450', '#185828', '#3ab064'];
+
+  // Smooth organic silhouette: 20 perturbed points joined by midpoint-quadratic curves.
+  const lobedPath = (bx: number, by: number, r: number, seed: number) => {
+    const n = 20;
+    const pts: [number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + seed;
+      const rr = r * (1 + 0.24 * Math.sin(i * 2.72 + seed * 4.4) + 0.1 * Math.cos(i * 5.1 + seed * 1.9));
+      pts.push([bx + Math.cos(a) * rr, by + Math.sin(a) * rr * 0.6]);
+    }
+    ctx.beginPath();
+    ctx.moveTo((pts[0][0] + pts[n - 1][0]) / 2, (pts[0][1] + pts[n - 1][1]) / 2);
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[j][0]) / 2, (pts[i][1] + pts[j][1]) / 2);
+    }
+    ctx.closePath();
+  };
+
+  const richBlob = (bx: number, by: number, r: number, col: string, seed: number) => {
+    // Base radial gradient fill
+    const g = ctx.createRadialGradient(bx - r * 0.28, by - r * 0.34, r * 0.06, bx, by, r * 1.1);
+    g.addColorStop(0, shade(col, 1.44)); g.addColorStop(0.45, col); g.addColorStop(1, shade(col, 0.6));
+    ctx.fillStyle = g; lobedPath(bx, by, r, seed); ctx.fill();
+
+    // Clip and draw texture inside the blob
+    ctx.save(); lobedPath(bx, by, r, seed); ctx.clip();
+
+    // Leaf strokes — short curved lines at varied angles and distances from centre
+    ctx.lineCap = 'round'; ctx.globalAlpha = 0.16;
+    for (let i = 0; i < 24; i++) {
+      const a = i * 2.39917 + seed * 2.3, rr = r * (0.1 + (i % 6) * 0.14);
+      const lx = bx + Math.cos(a) * rr, ly = by + Math.sin(a) * rr * 0.6, la = a + 0.65;
+      ctx.strokeStyle = i % 4 === 0 ? shade(col, 1.65) : shade(col, 0.45);
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.quadraticCurveTo(lx + Math.cos(la) * 3, ly + Math.sin(la) * 1.8, lx + Math.cos(la) * 6.5, ly + Math.sin(la) * 3.8); ctx.stroke();
+    }
+
+    // Sun dapples — bright soft ellipses in upper-left (light direction)
+    ctx.globalAlpha = 0.30; ctx.fillStyle = shade(col, 1.85);
+    for (let i = 0; i < 6; i++) {
+      const a = i * 1.08 + seed * 1.7, rr = r * (0.08 + (i % 3) * 0.12);
+      ctx.beginPath(); ctx.ellipse(bx - r * 0.22 + Math.cos(a) * rr, by - r * 0.30 + Math.sin(a) * rr * 0.55, 3.5, 2.2, a * 0.35, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Base shadow — dark ellipse at bottom of blob gives volume/roundness
+    ctx.globalAlpha = 0.24; ctx.fillStyle = shade(col, 0.28);
+    ctx.beginPath(); ctx.ellipse(bx, by + r * 0.48, r * 0.82, r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+
+    // Subtle dark outline
+    ctx.save(); ctx.globalAlpha = 0.11; ctx.strokeStyle = shade(col, 0.35); ctx.lineWidth = 1.2;
+    lobedPath(bx, by, r, seed); ctx.stroke(); ctx.restore();
+  };
+
+  richBlob(sx, cy + TH * 0.4, TW * 0.95, greens[3], 0.3);
+  richBlob(sx - TW * 0.52, cy, TW * 0.56, greens[1], 1.1);
+  richBlob(sx + TW * 0.52, cy, TW * 0.56, greens[1], 2.2);
+  richBlob(sx - TW * 0.26, cy - TH * 0.7, TW * 0.56, greens[2], 1.7);
+  richBlob(sx + TW * 0.32, cy - TH * 0.62, TW * 0.6, greens[2], 0.8);
+  richBlob(sx, cy - TH * 1.1, TW * 0.62, greens[4], 2.5);
+
+  // Bright light speckle (top highlight pass)
+  ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#cdfaa8';
+  for (let i = 0; i < 16; i++) { const a = i * 2.39917 + dir * 1.571, rr = TW * (0.2 + (i % 5) * 0.13); ctx.beginPath(); ctx.arc(sx + Math.cos(a) * rr, cy - TH * 0.3 + Math.sin(a) * rr * 0.6, 1.8, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
 };
 
 // Palm: curved segmented trunk + a crown of arcing gradient fronds with midribs and coconuts.
