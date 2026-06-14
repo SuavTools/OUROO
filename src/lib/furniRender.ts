@@ -1962,12 +1962,23 @@ const drawPacman = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
     const F = 0.27;   // front plane (v)
     // screen
     poly(ctx, [P(-0.26, F, 2.05), P(0.26, F, 2.05), P(0.26, F, 1.4), P(-0.26, F, 1.4)], '#05060a');
-    poly(ctx, [P(-0.24, F, 2.0), P(0.24, F, 2.0), P(0.24, F, 1.45), P(-0.24, F, 1.45)], '#0a0e2a');   // maze-blue glow
-    const pac = P(-0.08, F, 1.72), chomp = 0.18 + 0.16 * Math.abs(Math.sin(t * 0.12));
-    ctx.fillStyle = '#ffe23a'; ctx.beginPath(); ctx.arc(pac[0], pac[1], 6, chomp, Math.PI * 2 - chomp); ctx.lineTo(pac[0], pac[1]); ctx.closePath(); ctx.fill();   // pac-man
-    ctx.fillStyle = '#ffffff'; for (let i = 0; i < 3; i++) { const d = P(0.02 + i * 0.08, F, 1.72); ctx.beginPath(); ctx.arc(d[0], d[1], 1.6, 0, Math.PI * 2); ctx.fill(); }   // dots
-    const gh = P(0.2, F, 1.72); ctx.fillStyle = '#ff6ad0'; ctx.beginPath(); ctx.arc(gh[0], gh[1], 5, Math.PI, 0); ctx.lineTo(gh[0] + 5, gh[1] + 5); ctx.lineTo(gh[0] - 5, gh[1] + 5); ctx.closePath(); ctx.fill();   // ghost
-    ctx.fillStyle = '#fff'; for (const ex of [-2, 2]) { const ey = gh[1] - 1; ctx.beginPath(); ctx.arc(gh[0] + ex, ey, 1.5, 0, Math.PI * 2); ctx.fill(); }
+    poly(ctx, [P(-0.24, F, 2.0), P(0.24, F, 2.0), P(0.24, F, 1.45), P(-0.24, F, 1.45)], '#0a0e2a');
+    ctx.save(); ctx.globalAlpha = 0.07; for (let r = 0; r < 8; r++) { const z = 1.46 + r * 0.068; poly(ctx, [P(-0.23, F, z), P(0.23, F, z), P(0.23, F, z + 0.04), P(-0.23, F, z + 0.04)], '#fff'); } ctx.restore();
+    // pac-man traverses left→right over 160 frames, ghost chases
+    const dotUs = [-0.15, -0.07, 0.01, 0.09, 0.17];
+    const pacU = -0.2 + ((t % 160) / 160) * 0.44;
+    const ghostU = Math.min(pacU + 0.19, 0.22);
+    const chomp = 0.18 + 0.16 * Math.abs(Math.sin(t * 0.18));
+    // dots — vanish as pac-man passes
+    ctx.fillStyle = '#ffe23a'; for (const du of dotUs) { if (du > pacU + 0.04) { const d = P(du, F, 1.72); ctx.beginPath(); ctx.arc(d[0], d[1], 1.8, 0, Math.PI * 2); ctx.fill(); } }
+    // pac-man
+    const pac = P(pacU, F, 1.72); ctx.fillStyle = '#ffe23a'; ctx.beginPath(); ctx.arc(pac[0], pac[1], 6, chomp, Math.PI * 2 - chomp); ctx.lineTo(pac[0], pac[1]); ctx.closePath(); ctx.fill();
+    // ghost
+    const gh = P(ghostU, F, 1.72 + Math.sin(t * 0.15) * 0.015); ctx.fillStyle = '#ff6ad0'; ctx.beginPath(); ctx.arc(gh[0], gh[1], 5, Math.PI, 0); ctx.lineTo(gh[0] + 5, gh[1] + 5); ctx.lineTo(gh[0] - 5, gh[1] + 5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff'; for (const ex of [-2, 2]) { ctx.beginPath(); ctx.arc(gh[0] + ex, gh[1] - 1, 1.5, 0, Math.PI * 2); ctx.fill(); }
+    // score ticker
+    const dotsEaten = dotUs.filter(du => du <= pacU + 0.04).length;
+    const sc = P(0, F, 1.99); ctx.fillStyle = '#ffe23a'; ctx.font = '600 5px monospace'; ctx.textAlign = 'center'; ctx.fillText(String(dotsEaten * 10).padStart(4, '0'), sc[0], sc[1] - 1);
     // control panel + joystick + buttons
     poly(ctx, [P(-0.26, F, 1.32), P(0.26, F, 1.32), P(0.26, F, 1.1), P(-0.26, F, 1.1)], shade(m, 0.78));
     const js = P(-0.1, F, 1.22); ctx.strokeStyle = '#15171b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(js[0], js[1] + 3); ctx.lineTo(js[0], js[1] - 3); ctx.stroke(); ctx.fillStyle = '#e0457b'; ctx.beginPath(); ctx.arc(js[0], js[1] - 4, 2.5, 0, Math.PI * 2); ctx.fill();
@@ -2875,7 +2886,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
