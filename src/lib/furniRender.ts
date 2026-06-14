@@ -2045,7 +2045,7 @@ const drawRetroArcadeCab = (ctx: CanvasRenderingContext2D, sx: number, sy: numbe
     ctx.fillStyle = '#1a0800'; ctx.fillRect(coin[0] - 5, coin[1] - 7, 10, 14);
     ctx.fillStyle = shade(red, 0.58); ctx.fillRect(coin[0] - 4, coin[1] - 1, 8, 2);
     // marquee band — iso front face of the marquee box
-    poly(ctx, [P(-0.37, F, 2.55), P(0.37, F, 2.55), P(0.37, F, 2.15), P(-0.37, F, 2.15)], yellow);
+    poly(ctx, [P(-0.37, F, 2.55), P(0.37, F, 2.55), P(0.37, F, 2.15), P(-0.37, F, 2.15)], red);
   });
 };
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
