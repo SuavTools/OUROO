@@ -381,7 +381,9 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   // more benches + glass table
   'woodbench', 'stonebench', 'modernbench', 'glasstable',
   // building kit — doors + windows + gates rotate to face either iso wall direction
-  'door', 'window', 'gate']);
+  'door', 'window', 'gate',
+  // outdoor fences — all 4-way directional
+  'fence_picket', 'fence_iron', 'fence_rail', 'fence_solid']);
 export const isRotatable = (kind: string): boolean => ROTATABLE.has(defOf(kind).special ?? '');
 
 // Is this furniture from a paid collection? (Hi-Fi today; more later.)
