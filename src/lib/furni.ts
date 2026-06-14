@@ -68,7 +68,11 @@ export const FURNI: FurniDef[] = [
   // construção (walkable build pieces + solid walls)
   { kind: 'bloco',      name: 'Block',     emoji: '🧊', cat: 'constr', color: '#3a3a5a', h: 1, walk: true,  foot: 1 },
   { kind: 'meio',       name: 'Cube',      emoji: '🔲', cat: 'constr', color: '#45455f', h: 1, walk: true,  foot: 0.7 },
-  { kind: 'plataforma', name: 'Platform',  emoji: '⬛', cat: 'constr', color: '#303048', h: 1, walk: true,  foot: 1 },
+  { kind: 'plataforma',        name: 'Platform',        emoji: '⬛', cat: 'constr', color: '#303048', h: 1, walk: true, foot: 1 },
+  { kind: 'block-cream',  name: 'Block Cream',  emoji: '⬜', cat: 'constr', color: '#f0ece0', h: 1, walk: false, foot: 1 },
+  { kind: 'block-yellow', name: 'Block Yellow', emoji: '🟨', cat: 'constr', color: '#f5e876', h: 1, walk: false, foot: 1 },
+  { kind: 'block-blue',   name: 'Block Blue',   emoji: '🟦', cat: 'constr', color: '#89b4dc', h: 1, walk: false, foot: 1 },
+  { kind: 'block-red',    name: 'Block Red',    emoji: '🟥', cat: 'constr', color: '#cc3333', h: 1, walk: false, foot: 1 },
   { kind: 'escada',     name: 'Stairs',    emoji: '🪜', cat: 'constr', color: '#4a4a66', h: 1, walk: true,  foot: 1, special: 'stair' },
   { kind: 'rampa',      name: 'Ramp',      emoji: '📐', cat: 'constr', color: '#40405a', h: 1, walk: true,  foot: 1, special: 'stair' },
   { kind: 'pilar',      name: 'Pillar',    emoji: '🏛️', cat: 'constr', color: '#2e2e3e', h: 2, walk: false, foot: 0.55 },
