@@ -2548,7 +2548,7 @@ function buildSprite(kind: string, accent: string, dir: number): HTMLCanvasEleme
   // 3) compose: contact shadow → outline (silhouette stamped around) → art on top
   const out = mkCanvas(W, H); const cx = out.getContext('2d')!;
   if (defOf(kind).cat !== 'constr') { cx.save(); cx.globalAlpha = 0.26; cx.fillStyle = '#000'; cx.beginPath(); cx.ellipse(OX * SS, OY * SS, TW * 0.82 * SS, TH * 0.72 * SS, 0, 0, Math.PI * 2); cx.fill(); cx.restore(); }
-  const k = Math.round(1.6 * SS); for (let a = 0; a < 8; a++) cx.drawImage(sil, Math.round(Math.cos(a * Math.PI / 4) * k), Math.round(Math.sin(a * Math.PI / 4) * k));
+  if (defOf(kind).cat !== 'constr') { const k = Math.round(1.6 * SS); for (let a = 0; a < 8; a++) cx.drawImage(sil, Math.round(Math.cos(a * Math.PI / 4) * k), Math.round(Math.sin(a * Math.PI / 4) * k)); }
   cx.drawImage(art, 0, 0);
   return out;
 }
