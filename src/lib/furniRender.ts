@@ -1973,8 +1973,8 @@ const drawPacman = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accen
     const js = P(-0.1, F, 1.22); ctx.strokeStyle = '#15171b'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(js[0], js[1] + 3); ctx.lineTo(js[0], js[1] - 3); ctx.stroke(); ctx.fillStyle = '#e0457b'; ctx.beginPath(); ctx.arc(js[0], js[1] - 4, 2.5, 0, Math.PI * 2); ctx.fill();
     for (const [u, col] of [[0.06, '#ff5a5a'], [0.16, '#3a7bd0']] as [number, string][]) { const b = P(u, F, 1.22); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(b[0], b[1], 2.2, 0, Math.PI * 2); ctx.fill(); }
     const coin = P(0, F, 0.55); ctx.fillStyle = '#15171b'; ctx.fillRect(coin[0] - 3, coin[1] - 5, 6, 10);   // coin door
-    // marquee text
-    const mq = P(0, 0.28, 2.32); ctx.fillStyle = hexA(accent, 0.85); ctx.fillRect(mq[0] - 22, mq[1] - 6, 44, 12); ctx.fillStyle = '#1a1a22'; ctx.font = '900 8px Helvetica'; ctx.textAlign = 'center'; ctx.fillText('PAC', mq[0], mq[1] + 3);
+    // marquee band — iso front face
+    poly(ctx, [P(-0.36, F, 2.5), P(0.36, F, 2.5), P(0.36, F, 2.15), P(-0.36, F, 2.15)], hexA(accent, 0.85));
   });
 };
 // Red-and-yellow retro upright arcade cabinet with animated space-invaders screen.
