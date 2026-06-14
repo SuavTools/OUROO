@@ -28,6 +28,7 @@ import { RoomMusic } from '@/lib/roomMusic';
 import { Oracle } from '@/components/Oracle';
 import { MenuModal } from '@/components/MenuModal';
 import { GlitchSequence } from '@/components/GlitchSequence';
+import { BinaryRain } from '@/components/BinaryRain';
 import { AdminModal } from '@/components/AdminModal';
 import { SkinPreview } from '@/components/SkinPreview';
 import { NpcEditor, type NpcData } from '@/components/NpcEditor';
@@ -421,6 +422,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [msg, setMsg] = useState('');
   const [population, setPopulation] = useState(1);
   const [connected, setConnected] = useState(false);
+  const [roomReady, setRoomReady] = useState(false);
   const [feed, setFeed] = useState<{ id: number; handle: string; text: string }[]>([]);
   const feedId = useRef(0);
   // New players start in the tutorial's first room; returning-from-a-game players land back at their
@@ -822,6 +824,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       let unseen = true; try { unseen = localStorage.getItem(`ouroo_lore_${mk.id}`) !== '1'; localStorage.setItem(`ouroo_lore_${mk.id}`, '1'); } catch { /* ignore */ }
       if (unseen) fireMarker(mk);
     }
+    setRoomReady(true);
   };
   // Apply the current room's floor plan (shape + base levels), then rebuild walkability. Repositions
   // you to the plan's spawn if your tile became void after a shape change.
@@ -1074,6 +1077,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     getAuthIdentity().then(a => { if (a?.handle) { selfRef.current.handle = a.handle; myHandleRef.current = a.handle; setMyHandle(a.handle); } if (a?.device) { setMyOwnerId(a.device); ownerIdRef.current = a.device; } });
     Promise.all([amIModerator(), amISuperAdmin()]).then(([m, s]) => { const ok = m || s; modRef.current = ok; setIsMod(ok); setIsSuper(s); });   // super-admins build in curated rooms too
 
+    setRoomReady(false);
     // Tutorial rooms are SOLO instances — no presence/broadcast join (just you + the Oracle). We still
     // LOAD their furni from the DB so admins can dress them and the decor persists; placement/removal
     // writes straight to room_items (channel sends are no-ops without a channel).
@@ -2421,6 +2425,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {isSuper && <AdminModal open={adminOpen} onClose={() => setAdminOpen(false)} />}
 
       <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'character') finishCharacter(); }} onEquip={equipAppearance} title={onboarding === 'character' ? 'Design your character' : 'Character'} />
+
+      <BinaryRain visible={!roomReady} />
     </div>
   );
 };
