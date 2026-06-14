@@ -818,7 +818,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     itemsRef.current = items; setMyCount(items.filter(i => i.createdBy === deviceRef.current).length);
     const setg = items.find(i => i.gameSet && i.gameId); machineOverrideRef.current = setg ? { gameId: setg.gameId!, rules: setg.gameRules ?? {} } : null;   // retarget machines if a set-game event sits in the room
     if (delCuratedRef.current.size) decorRef.current = decorRef.current.filter(d => !delCuratedRef.current.has(d.id));   // hide removed curated decor
-    setLoreVer(v => v + 1); rebuildHeight(); rebuildNpcs();
+    setLoreVer(v => v + 1); rebuildHeight();
+    // If the player spawned on a furniture-blocked tile, nudge them to the nearest clear tile.
+    { const me = selfRef.current; const ox = clampTile(me.fx), oy = clampTile(me.fy);
+      if (solidRef.current[key(ox, oy)]) {
+        let placed = false;
+        for (let r = 1; r < GRID && !placed; r++)
+          for (let dx = -r; dx <= r && !placed; dx++) for (let dy = -r; dy <= r && !placed; dy++) {
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+            const nx = ox + dx, ny = oy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+            const k = key(nx, ny);
+            if (!solidRef.current[k] && surfRef.current[k].length) { me.fx = nx; me.fy = ny; me.tx = nx; me.ty = ny; me.path = []; placed = true; }
+          }
+      }
+    }
+    rebuildNpcs();
     // On-enter markers: fire once per player (per marker id) — Oracle card / glitch sequence / reward.
     for (const mk of loreRef.current.filter(l => l.mode === 'enter')) {
       let unseen = true; try { unseen = localStorage.getItem(`ouroo_lore_${mk.id}`) !== '1'; localStorage.setItem(`ouroo_lore_${mk.id}`, '1'); } catch { /* ignore */ }
