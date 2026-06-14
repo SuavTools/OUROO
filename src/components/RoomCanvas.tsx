@@ -1202,15 +1202,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           lastPortalKeyRef.current = pk;
         }
       }
-      // ARCADE MACHINES — pop the game picker when you walk CLOSE (cabinets are solid, so it's proximity,
-      // not stepping onto the tile). Rising edge → opens once per approach; re-arms when you step away.
+      // ARCADE MACHINES — pop the game picker when the player steps onto a tile adjacent to the cabinet.
+      // Rising edge → opens once per approach; re-arms when you step away.
       {
         const override = machineOverrideRef.current;   // a set-game event retargets every hardcoded cabinet in the room
         const ms = MACHINES[roomMetaRef.current.slug] ?? [];
+        const px = clampTile(me.fx), py = clampTile(me.fy);
+        const adjTo = (gx: number, gy: number) => Math.max(Math.abs(px - gx), Math.abs(py - gy)) === 1;
         let near: Machine | null = null;
-        for (const m of ms) { if (Math.hypot(m.gx - me.fx, m.gy - me.fy) < MACHINE_RANGE) { near = override ? { gx: m.gx, gy: m.gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
+        for (const m of ms) { if (adjTo(m.gx, m.gy)) { near = override ? { gx: m.gx, gy: m.gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
         // admin-placed play-triggers (hydrated as `arcade` items carrying a gameId) — each is its own machine
-        if (!near) for (const it of itemsRef.current) { if (it.kind === 'arcade' && it.gameId && Math.hypot(it.gx - me.fx, it.gy - me.fy) < MACHINE_RANGE) { near = { gx: it.gx, gy: it.gy, games: [gameById(it.gameId)], rules: it.gameRules }; break; } }
+        if (!near) for (const it of itemsRef.current) { if (it.kind === 'arcade' && it.gameId && adjTo(it.gx, it.gy)) { near = { gx: it.gx, gy: it.gy, games: [gameById(it.gameId)], rules: it.gameRules }; break; } }
         if (near && !nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
         nearMachineRef.current = !!near;
       }
