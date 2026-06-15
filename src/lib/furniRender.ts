@@ -2101,9 +2101,6 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
   const u0 = -0.48, u1 = 0.48, v0 = -0.48, v1 = -0.38, zBot = 0.52, zTop = 3.0;
   const parts: IsoPart[] = [{ u0, u1, v0, v1, z0: zBot, z1: zTop, t: '#141018', r: shade(yel, 0.86), l: shade(red, 0.62) }];
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
-    // downward-arrow chevron
-    if (faceVisible(0, 1, dir)) poly(ctx, [P(u0, v1, zBot), P(u1, v1, zBot), P(0, v1, 0)], shade(red, 0.82));
-    if (faceVisible(1, 0, dir)) poly(ctx, [P(u1, v0, zBot), P(u1, v1, zBot), P(0, v1, 0), P(0, v0, 0)], shade(yel, 0.72));
     if (!faceVisible(0, 1, dir)) return;
     // red panel background
     poly(ctx, [P(u0, v1, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u0, v1, zBot)], red);
