@@ -178,7 +178,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
           ctx.fillStyle = '#1c1c22';
           ctx.beginPath(); ctx.arc(sx, eyeY, 0.85 * s, 0, Math.PI * 2); ctx.fill();
           ctx.strokeStyle = shadeC(tone, 0.72); ctx.lineWidth = 0.55 * s;
-          ctx.beginPath(); ctx.arc(sx, eyeY + 2.0 * s, 1.4 * s, 0.15, Math.PI - 0.15); ctx.stroke();
+          ctx.beginPath(); ctx.arc(sx, eyeY + 0.8 * s, 1.4 * s, 0.15, Math.PI - 0.15); ctx.stroke();
           ctx.fillStyle = '#1c1c22';
           break;
         }
