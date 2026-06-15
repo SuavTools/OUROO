@@ -2740,6 +2740,69 @@ const drawVelvetBench = (ctx: CanvasRenderingContext2D, sx: number, sy: number, 
 
 export const effSpan = (kind: string, dir: number): [number, number] => { const [sw, sh] = defOf(kind).span ?? [1, 1]; return dir % 2 ? [sh, sw] : [sw, sh]; };
 
+const drawVending = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a;
+  const half = 0.35, u0 = -half, u1 = half, v0 = -half, v1 = half, zTop = 1.95;
+  const parts: IsoPart[] = [{ u0, u1, v0, v1, z0: 0, z1: zTop, t: shade(base, 1.12), r: shade(base, 0.88), l: shade(base, 0.58) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    // ── Front face (+v): glass display ──
+    if (faceVisible(0, 1, dir)) {
+      const gU0 = u0 + 0.04, gU1 = u1 - 0.04, gZT = zTop - 0.06, gZB = 0.13;
+      poly(ctx, [P(gU0, v1, gZT), P(gU1, v1, gZT), P(gU1, v1, gZB), P(gU0, v1, gZB)], '#09131e');
+      // glass shimmer
+      poly(ctx, [P(gU0, v1, gZT), P(gU0 + 0.03, v1, gZT), P(gU0 + 0.03, v1, gZB), P(gU0, v1, gZB)], 'rgba(255,255,255,0.07)');
+      // 3 shelf bars
+      const sZ = [0.46, 0.90, 1.34];
+      for (const sz of sZ) poly(ctx, [P(gU0, v1, sz + 0.025), P(gU1, v1, sz + 0.025), P(gU1, v1, sz), P(gU0, v1, sz)], '#182430');
+      const cols = 3, step = (gU1 - gU0 - 0.04) / cols;
+      // Bottom shelf: white snack packs
+      for (let i = 0; i < cols; i++) {
+        const pu = gU0 + 0.02 + i * step, bz = sZ[0] + 0.03, pw = step - 0.03;
+        poly(ctx, [P(pu, v1, bz + 0.20), P(pu + pw, v1, bz + 0.20), P(pu + pw, v1, bz), P(pu, v1, bz)], '#c8d4dc');
+        poly(ctx, [P(pu, v1, bz + 0.20), P(pu + 0.025, v1, bz + 0.20), P(pu + 0.025, v1, bz), P(pu, v1, bz)], 'rgba(255,255,255,0.2)');
+        poly(ctx, [P(pu, v1, bz + 0.14), P(pu + pw, v1, bz + 0.14), P(pu + pw, v1, bz + 0.10), P(pu, v1, bz + 0.10)], 'rgba(100,140,180,0.5)');
+      }
+      // Middle shelf: blue cans
+      for (let i = 0; i < cols; i++) {
+        const pu = gU0 + 0.02 + i * step, bz = sZ[1] + 0.03, pw = step - 0.03;
+        poly(ctx, [P(pu, v1, bz + 0.25), P(pu + pw, v1, bz + 0.25), P(pu + pw, v1, bz), P(pu, v1, bz)], '#3a68a0');
+        poly(ctx, [P(pu, v1, bz + 0.25), P(pu + pw, v1, bz + 0.25), P(pu + pw, v1, bz + 0.21), P(pu, v1, bz + 0.21)], '#7ab0d8');
+        poly(ctx, [P(pu, v1, bz + 0.06), P(pu + pw, v1, bz + 0.06), P(pu + pw, v1, bz + 0.02), P(pu, v1, bz + 0.02)], '#7ab0d8');
+        poly(ctx, [P(pu, v1, bz + 0.25), P(pu + 0.02, v1, bz + 0.25), P(pu + 0.02, v1, bz), P(pu, v1, bz)], 'rgba(255,255,255,0.15)');
+      }
+      // Top shelf: pink water bottles
+      for (let i = 0; i < cols; i++) {
+        const pu = gU0 + 0.03 + i * step, bz = sZ[2] + 0.03, pw = step - 0.05;
+        // body
+        poly(ctx, [P(pu, v1, bz + 0.30), P(pu + pw, v1, bz + 0.30), P(pu + pw, v1, bz), P(pu, v1, bz)], '#b85060');
+        // cap
+        poly(ctx, [P(pu + 0.01, v1, bz + 0.37), P(pu + pw - 0.01, v1, bz + 0.37), P(pu + pw - 0.01, v1, bz + 0.30), P(pu + 0.01, v1, bz + 0.30)], '#8a2840');
+        // highlight
+        poly(ctx, [P(pu, v1, bz + 0.30), P(pu + 0.025, v1, bz + 0.30), P(pu + 0.025, v1, bz), P(pu, v1, bz)], 'rgba(255,255,255,0.22)');
+      }
+      // Dispensing slot
+      poly(ctx, [P(gU0, v1, 0.11), P(gU1, v1, 0.11), P(gU1, v1, 0), P(gU0, v1, 0)], '#050d16');
+      poly(ctx, [P(gU0 + 0.02, v1, 0.08), P(gU1 - 0.02, v1, 0.08), P(gU1 - 0.02, v1, 0.02), P(gU0 + 0.02, v1, 0.02)], '#0d1e2c');
+    }
+    // ── Right face (+u): control panel ──
+    if (faceVisible(1, 0, dir)) {
+      // Screen
+      poly(ctx, [P(u1, v0 + 0.04, 1.62), P(u1, v0 + 0.26, 1.62), P(u1, v0 + 0.26, 1.32), P(u1, v0 + 0.04, 1.32)], '#0e2a3a');
+      poly(ctx, [P(u1, v0 + 0.05, 1.60), P(u1, v0 + 0.25, 1.60), P(u1, v0 + 0.25, 1.34), P(u1, v0 + 0.05, 1.34)], '#287080');
+      // Keypad (3×4 grid of buttons)
+      ctx.fillStyle = shade(base, 0.62);
+      for (let row = 0; row < 4; row++) for (let col = 0; col < 3; col++) {
+        const pt = P(u1, v0 + 0.06 + col * 0.09, 1.26 - row * 0.16);
+        ctx.beginPath(); ctx.arc(pt[0], pt[1], 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+      // Card/coin slot
+      poly(ctx, [P(u1, v0 + 0.06, 0.42), P(u1, v0 + 0.28, 0.42), P(u1, v0 + 0.28, 0.36), P(u1, v0 + 0.06, 0.36)], '#06101a');
+      // Return tray
+      poly(ctx, [P(u1, v0 + 0.10, 0.22), P(u1, v0 + 0.26, 0.22), P(u1, v0 + 0.26, 0.16), P(u1, v0 + 0.10, 0.16)], '#06101a');
+    }
+  });
+};
+
 function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number, accent: string, t: number, dir = 0) {
   const d = defOf(kind);
   // Multi-tile pieces draw in a centered local frame — shift the anchor to the footprint centre.
@@ -2994,14 +3057,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       });
       break;
     }
-    case 'vending': {
-      const top = boxAt(ctx, sx, sy, d.foot, d.foot, 2, d.color, accent);
-      faceWrap(() => {
-        ctx.fillStyle = 'rgba(10,20,30,0.7)'; ctx.beginPath(); ctx.moveTo(sx + 4, top + TH * d.foot * 0.3); ctx.lineTo(sx + TW * d.foot * 0.72, top); ctx.lineTo(sx + TW * d.foot * 0.72, top + 1.6 * STACK_H); ctx.lineTo(sx + 4, top + TH * d.foot * 0.3 + 1.6 * STACK_H); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = hexA(accent, 0.6); ctx.fillRect(sx - TW * d.foot * 0.55, top + 5, TW * d.foot * 0.5, 4);
-      });
-      break;
-    }
+    case 'vending': drawVending(ctx, sx, sy, accent, d.color, dir); break;
     case 'jukebox': {
       const top = boxAt(ctx, sx, sy, d.foot, d.foot, 2, d.color, accent);
       faceWrap(() => { ctx.fillStyle = shade(d.color, 1.4); ctx.beginPath(); ctx.ellipse(sx, top, TW * d.foot, TH * d.foot, 0, Math.PI, 0); ctx.fill(); for (let i = 0; i < 5; i++) { ctx.fillStyle = `hsl(${(t * 4 + i * 70) % 360},90%,62%)`; ctx.beginPath(); ctx.arc(sx - 12 + i * 6, top + 10, 2, 0, Math.PI * 2); ctx.fill(); } });
