@@ -2770,15 +2770,16 @@ const drawVending = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
         poly(ctx, [P(pu, v1, bz + 0.06), P(pu + pw, v1, bz + 0.06), P(pu + pw, v1, bz + 0.02), P(pu, v1, bz + 0.02)], '#7ab0d8');
         poly(ctx, [P(pu, v1, bz + 0.25), P(pu + 0.02, v1, bz + 0.25), P(pu + 0.02, v1, bz), P(pu, v1, bz)], 'rgba(255,255,255,0.15)');
       }
-      // Top shelf: pink water bottles
+      // Top shelf: Coke-style bottles — wide body, sharp waist, narrow neck
       for (let i = 0; i < cols; i++) {
-        const pu = gU0 + 0.03 + i * step, bz = sZ[2] + 0.03, pw = step - 0.05;
-        // body
-        poly(ctx, [P(pu, v1, bz + 0.30), P(pu + pw, v1, bz + 0.30), P(pu + pw, v1, bz), P(pu, v1, bz)], '#b85060');
-        // cap
-        poly(ctx, [P(pu + 0.01, v1, bz + 0.37), P(pu + pw - 0.01, v1, bz + 0.37), P(pu + pw - 0.01, v1, bz + 0.30), P(pu + 0.01, v1, bz + 0.30)], '#8a2840');
-        // highlight
-        poly(ctx, [P(pu, v1, bz + 0.30), P(pu + 0.025, v1, bz + 0.30), P(pu + 0.025, v1, bz), P(pu, v1, bz)], 'rgba(255,255,255,0.22)');
+        const cx = gU0 + 0.005 + (i + 0.5) * step, bz = sZ[2] + 0.03;
+        const col = '#b85060', cap = '#8a2840';
+        poly(ctx, [P(cx-0.034, v1, bz+0.06), P(cx+0.034, v1, bz+0.06), P(cx+0.034, v1, bz    ), P(cx-0.034, v1, bz    )], col); // base
+        poly(ctx, [P(cx-0.040, v1, bz+0.17), P(cx+0.040, v1, bz+0.17), P(cx+0.034, v1, bz+0.06), P(cx-0.034, v1, bz+0.06)], col); // lower body (widest)
+        poly(ctx, [P(cx-0.018, v1, bz+0.23), P(cx+0.018, v1, bz+0.23), P(cx+0.040, v1, bz+0.17), P(cx-0.040, v1, bz+0.17)], col); // shoulder taper
+        poly(ctx, [P(cx-0.016, v1, bz+0.33), P(cx+0.016, v1, bz+0.33), P(cx+0.018, v1, bz+0.23), P(cx-0.018, v1, bz+0.23)], col); // neck
+        poly(ctx, [P(cx-0.021, v1, bz+0.38), P(cx+0.021, v1, bz+0.38), P(cx+0.016, v1, bz+0.33), P(cx-0.016, v1, bz+0.33)], cap); // cap
+        poly(ctx, [P(cx-0.040, v1, bz+0.17), P(cx-0.025, v1, bz+0.17), P(cx-0.020, v1, bz), P(cx-0.034, v1, bz)], 'rgba(255,255,255,0.20)'); // highlight
       }
       // Dispensing area — red base, dark slot with red border
       poly(ctx, [P(gU0, v1, 0.11), P(gU1, v1, 0.11), P(gU1, v1, 0), P(gU0, v1, 0)], shade(base, 0.58));
