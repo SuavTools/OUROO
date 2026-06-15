@@ -2149,6 +2149,54 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     }
   });
 };
+const drawNeonSignArcade = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _b: string, t: number, dir: number) => {
+  void _a; void _b;
+  // 4-tile wide × 2-tile tall horizontal neon sign; back-wall mounted
+  const u0 = -0.46, u1 = 3.46, v0 = -0.48, v1 = -0.38, zBot = 0.15, zTop = 1.85;
+  const P = proj(sx, sy, dir);
+  const bkDark = '#04050e';
+  // Solid box faces
+  poly(ctx, [P(u0, v0, zTop), P(u1, v0, zTop), P(u1, v1, zTop), P(u0, v1, zTop)], bkDark);
+  if (faceVisible(1, 0, dir)) poly(ctx, [P(u1, v0, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u1, v0, zBot)], bkDark);
+  if (!faceVisible(0, 1, dir)) return;
+  poly(ctx, [P(u0, v1, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u0, v1, zBot)], bkDark);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // Blue neon border
+  const blue = '#2244dd';
+  const pad = 0.06, zpad = 0.09;
+  const borderPts = (): [number, number][] => [
+    P(u0 + pad, v1, zTop - zpad), P(u1 - pad, v1, zTop - zpad),
+    P(u1 - pad, v1, zBot + zpad), P(u0 + pad, v1, zBot + zpad),
+  ] as [number, number][];
+  const strokeFrame = (lw: number, color: string, blur: number) => {
+    const pts = borderPts();
+    ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.shadowColor = blue; ctx.shadowBlur = blur;
+    ctx.beginPath(); pts.forEach((p, i) => i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1])); ctx.closePath(); ctx.stroke();
+  };
+  strokeFrame(3.5, hexA(blue, 0.7), 18);
+  strokeFrame(1.4, 'rgba(160,185,255,0.6)', 6);
+  // Red-pink neon "ARCADE" letters
+  const nRed = '#ff1833';
+  const flicker = 0.88 + 0.12 * Math.abs(Math.sin(t * 0.07));
+  ctx.font = '900 italic 14px Arial,Helvetica,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const zMid = (zBot + zTop) / 2;
+  const iU0 = u0 + 0.22, iU1 = u1 - 0.22;
+  const lStep = (iU1 - iU0) / 6;
+  for (let i = 0; i < 6; i++) {
+    const u = iU0 + (i + 0.5) * lStep;
+    const [px, py] = P(u, v1, zMid);
+    ctx.shadowColor = nRed; ctx.shadowBlur = 22 * flicker;
+    ctx.fillStyle = hexA(nRed, 0.35 * flicker); ctx.fillText('ARCADE'[i], px, py);
+    ctx.shadowBlur = 11 * flicker;
+    ctx.fillStyle = hexA('#ff4455', 0.75 * flicker); ctx.fillText('ARCADE'[i], px, py);
+    ctx.shadowBlur = 3;
+    ctx.fillStyle = hexA('#ffbcc4', Math.min(1, flicker)); ctx.fillText('ARCADE'[i], px, py);
+  }
+  ctx.restore();
+};
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
   const parts: IsoPart[] = [...legs([[-0.3, -0.5], [0.3, -0.5], [-0.3, 0.5], [0.3, 0.5]], 0.55).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.36, u1: 0.36, v0: -0.6, v1: 0.6, z0: 0.55, z1: 0.72, t: cT, r: cR, l: cL }, { u0: -0.36, u1: 0.36, v0: -0.66, v1: -0.5, z0: 0.72, z1: 1.8, t: cT, r: cR, l: cL }];
@@ -2895,6 +2943,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'pacman': drawPacman(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'retrocab': drawRetroArcadeCab(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'arcsign': drawArcadeSign(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'neonsign': drawNeonSignArcade(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'cashvault': drawCashVault(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'clorack': drawCloRack(ctx, sx, sy, accent, d.color); break;
     case 'clorail': drawCloRail(ctx, sx, sy, accent, d.color, dir); break;
@@ -2988,7 +3037,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign', 'neonsign']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -3031,7 +3080,7 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     if (drawSvgFurni(ctx, kind, cx, cy)) return;   // fall through to procedural only until the image loads
   }
   if (ANIMATED.has(d.special ?? '')) {
-    if (d.cat !== 'constr' && kind !== 'arcsign') { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    if (d.cat !== 'constr' && kind !== 'arcsign' && kind !== 'neonsign') { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
     drawRaw(ctx, kind, sx, sy, accent, t, dir); return;
   }
   try { ctx.drawImage(getSprite(kind, accent, dir), 0, 0, SPR_W * SS, SPR_H * SS, sx - OX, sy - OY, SPR_W, SPR_H); }
