@@ -2152,7 +2152,7 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
 const drawNeonSignArcade = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _b: string, t: number, dir: number) => {
   void _a; void _b;
   // left edge flush with tile boundary; extends ~4 tiles to the right
-  const u0 = -0.50, u1 = 3.42, v0 = -0.48, v1 = -0.38, zBot = 0.15, zTop = 1.85;
+  const u0 = -0.55, u1 = 3.42, v0 = -0.48, v1 = -0.38, zBot = 0.15, zTop = 1.85;
   const P = proj(sx, sy, dir);
   const bkDark = '#04050e';
   if (faceVisible(1, 0, dir)) poly(ctx, [P(u1, v0, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u1, v0, zBot)], bkDark);
