@@ -3255,6 +3255,33 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       diamond(ctx, sx, sy, hw, hh); ctx.stroke(); diamond(ctx, sx, sy, hw * 0.88, hh * 0.88); ctx.stroke();
       break;
     }
+    case 'mattress': {
+      // Old mattress lying flat — 2×1 footprint, ticking stripes, brown stains
+      const col = d.color, mH = 0.2;
+      const Pt = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      // Thin left face (v = +0.5)
+      poly(ctx, [Pt(-1, 0.5, 0), Pt(1, 0.5, 0), Pt(1, 0.5, mH), Pt(-1, 0.5, mH)], shade(col, 0.52));
+      // Thin right face (u = +1)
+      poly(ctx, [Pt(1, 0.5, 0), Pt(1, -0.5, 0), Pt(1, -0.5, mH), Pt(1, 0.5, mH)], shade(col, 0.68));
+      // Top face — main mattress surface
+      const FT: number[][] = [Pt(-1, -0.5, mH), Pt(1, -0.5, mH), Pt(1, 0.5, mH), Pt(-1, 0.5, mH)];
+      poly(ctx, FT, shade(col, 1.06));
+      // Ticking stripes (blue-gray bands along the length)
+      const sc = hexA('#6878a0', 0.45);
+      for (let i = 0; i < 3; i++) { const x0 = i / 3 + 0.03; fQuad(ctx, FT, x0, x0 + 0.14, 0, 1, sc); }
+      // Horizontal seam lines
+      fLine(ctx, FT, 0, 0.14, 1, 0.14, shade(col, 0.6), 0.6);
+      fLine(ctx, FT, 0, 0.86, 1, 0.86, shade(col, 0.6), 0.6);
+      // Stains — dirty brown blotches
+      fQuad(ctx, FT, 0.52, 0.70, 0.25, 0.55, 'rgba(88,60,18,0.36)');
+      fQuad(ctx, FT, 0.16, 0.27, 0.58, 0.76, 'rgba(70,48,12,0.28)');
+      // Sagging dip in the centre (subtle dark)
+      fQuad(ctx, FT, 0.28, 0.72, 0.28, 0.72, 'rgba(0,0,0,0.07)');
+      // Border piping around top edge
+      ctx.strokeStyle = shade(col, 0.65); ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(FT[0][0], FT[0][1]); for (let i = 1; i < FT.length; i++) ctx.lineTo(FT[i][0], FT[i][1]); ctx.closePath(); ctx.stroke();
+      break;
+    }
     case 'manhole': {
       const col = d.color, hw = TW * 0.68, hh = TH * 0.68;
       diamond(ctx, sx, sy, hw, hh); ctx.fillStyle = col; ctx.fill();
