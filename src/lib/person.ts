@@ -51,7 +51,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   const broad = p.g === 1;
   const hbW = (broad ? 9 : 7.6) * s;     // torso half-width
   const dress = p.top === 4;
-  const headY = -15 * s, headR = 7.2 * s, torsoTop = -7 * s, torsoBot = 9 * s, hipY = 9 * s, legBot = 21 * s;
+  const torsoTop = -7 * s, torsoBot = 9 * s, hipY = 9 * s, legBot = 21 * s;
 
   ctx.save(); ctx.lineJoin = 'round'; ctx.shadowBlur = 0;
 
@@ -91,16 +91,19 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   else if (p.top === 3) { ctx.fillStyle = topD; ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(-hbW * 0.45, torsoTop); ctx.lineTo(-1.5 * s, torsoTop + 6 * s); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(hbW * 0.45, torsoTop); ctx.lineTo(1.5 * s, torsoTop + 6 * s); ctx.closePath(); ctx.fill(); ctx.strokeStyle = topD; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, torsoTop + 5 * s); ctx.lineTo(0, torsoBot + 2 * s); ctx.stroke(); }   // jacket lapels + zip
   else if (p.top === 5) { ctx.fillStyle = topL; rr(ctx, -2.6 * s, torsoTop, 5.2 * s, torsoBot - torsoTop, 1 * s); ctx.fill(); ctx.fillStyle = topD; ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(-hbW * 0.5, torsoTop); ctx.lineTo(-1.6 * s, torsoTop + 7 * s); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(0, torsoTop); ctx.lineTo(hbW * 0.5, torsoTop); ctx.lineTo(1.6 * s, torsoTop + 7 * s); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#c02530'; ctx.beginPath(); ctx.moveTo(-1.2 * s, torsoTop + 1 * s); ctx.lineTo(1.2 * s, torsoTop + 1 * s); ctx.lineTo(0.7 * s, torsoBot - 1 * s); ctx.lineTo(-0.7 * s, torsoBot - 1 * s); ctx.closePath(); ctx.fill(); }   // suit: shirt + lapels + tie
 
-  // ── neck + head (+ ears, nose, jaw shading) ──
-  ctx.fillStyle = tone; rr(ctx, -2.2 * s, headY + headR - 1 * s, 4.4 * s, 5 * s, 1.6 * s); ctx.fill();
+  // ── neck (world-space) + 2× head ──
+  // headCenter = -22.2s so neck top (headCenter + 14.4s - 1s = -8.8s) matches the original position.
+  const headCenterY = -22.2 * s;
+  ctx.fillStyle = tone; rr(ctx, -2.2 * s, headCenterY + 14.4 * s - 1 * s, 4.4 * s, 5 * s, 1.6 * s); ctx.fill();   // neck
+  ctx.save(); ctx.translate(0, headCenterY); ctx.scale(2, 2);   // 2× head scale — all head features below scale proportionally
+  const headY = 0, headR = 7.2 * s;
   ctx.fillStyle = shadeC(tone, 0.9); ctx.beginPath(); ctx.arc(-headR + 0.4 * s, headY + 1 * s, 1.5 * s, 0, Math.PI * 2); ctx.arc(headR - 0.4 * s, headY + 1 * s, 1.5 * s, 0, Math.PI * 2); ctx.fill();   // ears
   ctx.fillStyle = tone; ctx.beginPath(); ctx.ellipse(0, headY + 0.4 * s, headR, headR * 1.04, 0, 0, Math.PI * 2); ctx.fill();   // head (slightly oval)
   ctx.strokeStyle = shadeC(tone, 0.78); ctx.lineWidth = 0.8 * s; ctx.beginPath(); ctx.ellipse(0, headY + 0.4 * s, headR, headR * 1.04, 0, 0, Math.PI * 2); ctx.stroke();   // soft outline
-  ctx.strokeStyle = shadeC(tone, 0.82); ctx.lineWidth = 1 * s; ctx.beginPath(); ctx.moveTo(0.3 * s, headY + 0.6 * s); ctx.lineTo(-0.4 * s, headY + 2 * s); ctx.stroke();   // nose
   if (p.acc === 4) { ctx.fillStyle = shadeC(p.hairC, 0.7); ctx.beginPath(); ctx.arc(0, headY + headR * 0.55, headR * 0.95, 0.15, Math.PI - 0.15); ctx.fill(); }   // beard
 
   // ── face ──
-  const eyeY = headY - 0.5 * s, eyeX = 2.6 * s;
+  const eyeY = headY + 0.4 * s, eyeX = 2.6 * s;
   if (p.acc !== 2) {
     const eyeE = p.eyes ?? 0;
     for (const sx of [-eyeX, eyeX]) {
@@ -247,9 +250,9 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
     }
   }
   ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; ctx.beginPath();
-  if (p.face === 1) ctx.arc(0, headY + 2.6 * s, 2.4 * s, 0.2, Math.PI - 0.2);   // smile
-  else if (p.face === 2) { ctx.moveTo(-2.4 * s, headY + 3.2 * s); ctx.lineTo(2.4 * s, headY + 3.2 * s); }   // straight (cool)
-  else { ctx.moveTo(-1.8 * s, headY + 3.2 * s); ctx.lineTo(1.8 * s, headY + 3.2 * s); }
+  if (p.face === 1) ctx.arc(0, headY + 3.5 * s, 2.4 * s, 0.2, Math.PI - 0.2);   // smile
+  else if (p.face === 2) { ctx.moveTo(-2.4 * s, headY + 4.1 * s); ctx.lineTo(2.4 * s, headY + 4.1 * s); }   // straight (cool)
+  else { ctx.moveTo(-1.8 * s, headY + 4.1 * s); ctx.lineTo(1.8 * s, headY + 4.1 * s); }
   ctx.stroke();
 
   // ── hair (drawn around/over the head per style) ──
@@ -282,5 +285,6 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   }
   if (p.acc === 3) { ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.arc(-headR + 0.5 * s, headY + 2 * s, 1.2 * s, 0, Math.PI * 2); ctx.arc(headR - 0.5 * s, headY + 2 * s, 1.2 * s, 0, Math.PI * 2); ctx.fill(); }
 
+  ctx.restore();   // end 2× head scale
   ctx.restore();
 }
