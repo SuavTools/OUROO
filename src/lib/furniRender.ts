@@ -2152,8 +2152,7 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
 const drawNeonSignArcade = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _b: string, t: number, dir: number) => {
   void _a; void _b;
   // 4-tile wide × 2-tile tall horizontal neon sign; back-wall mounted
-  // u centred on the 2-tile span midpoint (u=0.5 from anchor); visual width ≈ 4 tiles
-  const u0 = -1.46, u1 = 2.46, v0 = -0.48, v1 = -0.38, zBot = 0.15, zTop = 1.85;
+  const u0 = -0.46, u1 = 3.46, v0 = -0.48, v1 = -0.38, zBot = 0.15, zTop = 1.85;
   const P = proj(sx, sy, dir);
   const bkDark = '#04050e';
   // Solid box faces
