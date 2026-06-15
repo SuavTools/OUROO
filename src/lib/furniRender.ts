@@ -2115,28 +2115,15 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     poly(ctx, [P(u1 - bu, v1, zTop),  P(u1, v1, zTop),       P(u1, v1, zBot),        P(u1 - bu, v1, zBot)],  blk);
     // white inner accent line under top bar
     poly(ctx, [P(u0 + bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz - 0.022), P(u0 + bu, v1, zTop - bz - 0.022)], '#ffffff');
-    // yellow left band (~25 % of inner width, the "GAMES" side strip)
-    const yB = u0 + bu + 0.20;
-    poly(ctx, [P(u0 + bu, v1, zTop - bz), P(yB, v1, zTop - bz), P(yB, v1, zBot + bz), P(u0 + bu, v1, zBot + bz)], yel);
-    // "ARCADE" text vertically on red section
+    // "ARCADE" text vertically — centred on full inner panel, inset enough so A and E clear the border bars
     ctx.save();
     ctx.font = '900 9px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const arcUc = (yB + u1 - bu) / 2, arcZT = zTop - bz - 0.06, arcZB = zBot + bz + 0.08;
+    const arcUc = (u0 + bu + u1 - bu) / 2, arcZT = zTop - bz - 0.25, arcZB = zBot + bz + 0.25;
     const arcStep = (arcZT - arcZB) / 5;
     for (let i = 0; i < 6; i++) {
       const pt = P(arcUc, v1, arcZT - i * arcStep);
       ctx.fillStyle = blk; ctx.fillText('ARCADE'[i], pt[0] + 0.7, pt[1] + 0.6);
       ctx.fillStyle = cream; ctx.fillText('ARCADE'[i], pt[0], pt[1]);
-    }
-    ctx.restore();
-    // "GAMES" text vertically on yellow band
-    ctx.save();
-    ctx.font = '700 6px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const gUc = (u0 + bu + yB) / 2, gZT = zTop - bz - 0.14, gZB = zBot + bz + 0.14;
-    const gStep = (gZT - gZB) / 4;
-    for (let i = 0; i < 5; i++) {
-      const pt = P(gUc, v1, gZT - i * gStep);
-      ctx.fillStyle = blk; ctx.fillText('GAMES'[i], pt[0], pt[1]);
     }
     ctx.restore();
     // dot-bulb border (chaser animation)
@@ -2158,9 +2145,9 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
       ctx.fillStyle = (i + ph + 2) % 2 === 0 ? yel : '#7a6010';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
-    for (let i = 0; i < 10; i++) {  // left column (white dots on yellow band)
+    for (let i = 0; i < 10; i++) {  // left column
       const pt = P(u0 + bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 9);
-      ctx.fillStyle = (i + ph) % 2 === 0 ? '#fff' : '#888';
+      ctx.fillStyle = (i + ph) % 2 === 0 ? yel : '#7a6010';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
   });
