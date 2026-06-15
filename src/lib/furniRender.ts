@@ -3174,19 +3174,47 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       break;
     }
     case 'shoppingcart': {
-      const col = d.color;
-      const top = boxAt(ctx, sx, sy, 0.6, 0.5, 0.85, col, accent);
-      const Hh = sy - top;
-      // Wheels — dark ellipses at ground corners
-      ctx.fillStyle = '#1a1a1a';
-      for (const [dx, dy] of [[-TW * 0.62, -TH * 0.1], [TW * 0.62, -TH * 0.1], [-TW * 0.2, TH * 0.5], [TW * 0.2, TH * 0.5]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(sx + dx, sy + dy, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill(); }
-      // Wire grid on right face
-      ctx.strokeStyle = shade(col, 0.36); ctx.lineWidth = 0.8;
-      for (let i = 1; i <= 2; i++) { const f = i / 3; ctx.beginPath(); ctx.moveTo(sx, sy + TH * 0.5 - f * Hh); ctx.lineTo(sx + TW * 0.6, sy - f * Hh); ctx.stroke(); }
-      // Handle bar along back-top edge, raised above
-      ctx.strokeStyle = shade(col, 1.2); ctx.lineWidth = 3.5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(sx - TW * 0.6, top - 6); ctx.lineTo(sx, top - TH * 0.5 - 6); ctx.stroke();
+      // 2×1 tile shopping cart — wire-grid basket, rust brackets, handle at u=+1 end
+      const col = d.color, bkt = '#b84828', bH = 0.82;
+      const Pt = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      // Wire grid: rectangular holes punched into a parallelogram face using fQuad
+      const wireGrid = (F: number[][], cols: number, rows: number) => {
+        const w = 0.13;
+        for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+          fQuad(ctx, F, c / cols + w * 0.6, (c + 1) / cols - w * 0.6, r / rows + w * 1.1, (r + 1) / rows - w * 1.1, 'rgba(8,12,18,0.58)');
+        }
+      };
+      // Left face — long side (v = +0.5), 5×3 hole grid
+      const FL: number[][] = [Pt(-1, 0.5, 0), Pt(1, 0.5, 0), Pt(1, 0.5, bH), Pt(-1, 0.5, bH)];
+      poly(ctx, FL, shade(col, 0.5)); wireGrid(FL, 5, 3);
+      // Right face — short handle-end (u = +1), 2×3 hole grid
+      const FR: number[][] = [Pt(1, 0.5, 0), Pt(1, -0.5, 0), Pt(1, -0.5, bH), Pt(1, 0.5, bH)];
+      poly(ctx, FR, shade(col, 0.7)); wireGrid(FR, 2, 3);
+      // Top rim outline (open basket top)
+      const rim = [Pt(-1, -0.5, bH), Pt(1, -0.5, bH), Pt(1, 0.5, bH), Pt(-1, 0.5, bH)];
+      ctx.strokeStyle = shade(col, 1.22); ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(rim[0][0], rim[0][1]); for (let i = 1; i < rim.length; i++) ctx.lineTo(rim[i][0], rim[i][1]); ctx.closePath(); ctx.stroke();
+      // Corner posts + bracket squares
+      ctx.lineCap = 'round';
+      for (const [u, v] of [[-1, 0.5], [1, 0.5], [1, -0.5]] as [number, number][]) {
+        const b = Pt(u, v, 0), tp = Pt(u, v, bH);
+        ctx.strokeStyle = bkt; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(tp[0], tp[1]); ctx.stroke();
+        ctx.fillStyle = bkt; ctx.fillRect(tp[0] - 3, tp[1] - 3, 6, 6); ctx.fillRect(b[0] - 3, b[1] - 3, 6, 6);
+      }
+      // Handle — two posts rising from the u=+1 end, joined by a horizontal bar
+      const hs1 = Pt(1, -0.28, bH), hs2 = Pt(1, 0.28, bH);
+      const h1 = Pt(1, -0.28, bH + 0.42), h2 = Pt(1, 0.28, bH + 0.42);
+      ctx.strokeStyle = bkt; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(hs1[0], hs1[1]); ctx.lineTo(h1[0], h1[1]); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hs2[0], hs2[1]); ctx.lineTo(h2[0], h2[1]); ctx.stroke();
+      ctx.strokeStyle = shade(col, 1.22); ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(h1[0], h1[1]); ctx.lineTo(h2[0], h2[1]); ctx.stroke();
       ctx.lineCap = 'butt';
+      // Wheels — 4 dark ellipses at basket corners
+      ctx.fillStyle = '#1a1a1a';
+      for (const [u, v] of [[-1, 0.5], [1, 0.5], [-1, -0.5], [1, -0.5]] as [number, number][]) {
+        const wp = Pt(u, v, 0); ctx.beginPath(); ctx.ellipse(wp[0], wp[1] + 3, 4.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+      }
       break;
     }
     case 'graffiti': {

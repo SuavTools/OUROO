@@ -363,7 +363,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'fishbone',   name: 'Fishbone',         emoji: '🐟', cat: 'urban', color: '#c0b898', h: 0,  walk: true,  foot: 0.5, special: 'fishbone' },
   { kind: 'brokenbottle',name:'Broken Bottle',    emoji: '🍶', cat: 'urban', color: '#4a8a70', h: 0,  walk: true,  foot: 0.5, special: 'brokenbottle' },
   { kind: 'oil_stain',  name: 'Oil Stain',        emoji: '🫧', cat: 'urban', color: '#1a1a22', h: 0,  walk: true,  foot: 1,   special: 'oilstain' },
-  { kind: 'shopping_cart',name:'Shopping Cart',   emoji: '🛒', cat: 'urban', color: '#8a8a7a', h: 1,  walk: false, foot: 0.8, special: 'shoppingcart' },
+  { kind: 'shopping_cart',name:'Shopping Cart',   emoji: '🛒', cat: 'urban', color: '#8a8a7a', h: 1,  walk: false, foot: 0.8, special: 'shoppingcart', span: [2, 1] },
   { kind: 'graffiti',   name: 'Graffiti Tag',     emoji: '🎨', cat: 'urban', color: '#cc2244', h: 0,  walk: true,  foot: 1,   special: 'graffiti' },
   { kind: 'pigeon',     name: 'Pigeon',           emoji: '🐦', cat: 'urban', color: '#8a8898', h: 0,  walk: true,  foot: 0.5, special: 'pigeon' },
   { kind: 'drain',      name: 'Drain',            emoji: '⬛', cat: 'urban', color: '#3a3a3a', h: 0,  walk: true,  foot: 0.8, special: 'drain' },
