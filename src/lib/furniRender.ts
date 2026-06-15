@@ -2097,7 +2097,8 @@ const drawRetroArcadeCab = (ctx: CanvasRenderingContext2D, sx: number, sy: numbe
 const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _b: string, t: number, dir: number) => {
   void _a; void _b;
   const red = '#c41a0c', yel = '#f4c518', cream = '#fef0c0', blk = '#06040c';
-  const u0 = -0.34, u1 = 0.34, v0 = -0.055, v1 = 0.055, zBot = 0.52, zTop = 1.96;
+  // full tile width; pushed to back edge so front face (+v) points toward tile centre
+  const u0 = -0.48, u1 = 0.48, v0 = -0.48, v1 = -0.38, zBot = 0.52, zTop = 2.45;
   const parts: IsoPart[] = [{ u0, u1, v0, v1, z0: zBot, z1: zTop, t: '#141018', r: shade(yel, 0.86), l: shade(red, 0.62) }];
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
     // downward-arrow chevron
@@ -2107,20 +2108,20 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     // red panel background
     poly(ctx, [P(u0, v1, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u0, v1, zBot)], red);
     // black border frame
-    const bz = 0.10, bu = 0.038;
+    const bz = 0.10, bu = 0.045;
     poly(ctx, [P(u0, v1, zTop),       P(u1, v1, zTop),       P(u1, v1, zTop - bz),  P(u0, v1, zTop - bz)],  blk);
     poly(ctx, [P(u0, v1, zBot + bz),  P(u1, v1, zBot + bz),  P(u1, v1, zBot),        P(u0, v1, zBot)],       blk);
     poly(ctx, [P(u0, v1, zTop),       P(u0 + bu, v1, zTop),  P(u0 + bu, v1, zBot),   P(u0, v1, zBot)],       blk);
     poly(ctx, [P(u1 - bu, v1, zTop),  P(u1, v1, zTop),       P(u1, v1, zBot),        P(u1 - bu, v1, zBot)],  blk);
     // white inner accent line under top bar
     poly(ctx, [P(u0 + bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz - 0.022), P(u0 + bu, v1, zTop - bz - 0.022)], '#ffffff');
-    // yellow left band (the "GAMES" side strip)
-    const yB = u0 + bu + 0.115;
+    // yellow left band (~25 % of inner width, the "GAMES" side strip)
+    const yB = u0 + bu + 0.20;
     poly(ctx, [P(u0 + bu, v1, zTop - bz), P(yB, v1, zTop - bz), P(yB, v1, zBot + bz), P(u0 + bu, v1, zBot + bz)], yel);
     // "ARCADE" text vertically on red section
     ctx.save();
-    ctx.font = '900 8px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const arcUc = (yB + u1 - bu) / 2, arcZT = zTop - bz - 0.05, arcZB = zBot + bz + 0.06;
+    ctx.font = '900 9px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const arcUc = (yB + u1 - bu) / 2, arcZT = zTop - bz - 0.06, arcZB = zBot + bz + 0.08;
     const arcStep = (arcZT - arcZB) / 5;
     for (let i = 0; i < 6; i++) {
       const pt = P(arcUc, v1, arcZT - i * arcStep);
@@ -2130,8 +2131,8 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     ctx.restore();
     // "GAMES" text vertically on yellow band
     ctx.save();
-    ctx.font = '700 5.5px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const gUc = (u0 + bu + yB) / 2, gZT = zTop - bz - 0.12, gZB = zBot + bz + 0.12;
+    ctx.font = '700 6px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const gUc = (u0 + bu + yB) / 2, gZT = zTop - bz - 0.14, gZB = zBot + bz + 0.14;
     const gStep = (gZT - gZB) / 4;
     for (let i = 0; i < 5; i++) {
       const pt = P(gUc, v1, gZT - i * gStep);
@@ -2141,30 +2142,30 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     // dot-bulb border (chaser animation)
     const ph = Math.floor(t / 8) % 4, dr = 2.0;
     const uRange = u1 - bu - (u0 + bu + 0.02);
-    for (let i = 0; i < 5; i++) {  // top row
-      const pt = P(u0 + bu + 0.01 + i * uRange / 4, v1, zTop - bz * 0.52);
+    for (let i = 0; i < 7; i++) {  // top row
+      const pt = P(u0 + bu + 0.01 + i * uRange / 6, v1, zTop - bz * 0.52);
       ctx.fillStyle = (i + ph) % 2 === 0 ? yel : '#7a6010';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
-    for (let i = 0; i < 5; i++) {  // bottom row
-      const pt = P(u0 + bu + 0.01 + i * uRange / 4, v1, zBot + bz * 0.52);
+    for (let i = 0; i < 7; i++) {  // bottom row
+      const pt = P(u0 + bu + 0.01 + i * uRange / 6, v1, zBot + bz * 0.52);
       ctx.fillStyle = (i + ph + 1) % 2 === 0 ? yel : '#7a6010';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
     const zRange = zTop - bz - 0.02 - (zBot + bz + 0.02);
-    for (let i = 0; i < 7; i++) {  // right column
-      const pt = P(u1 - bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 6);
+    for (let i = 0; i < 10; i++) {  // right column
+      const pt = P(u1 - bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 9);
       ctx.fillStyle = (i + ph + 2) % 2 === 0 ? yel : '#7a6010';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
-    for (let i = 0; i < 7; i++) {  // left column (white dots on yellow band)
-      const pt = P(u0 + bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 6);
+    for (let i = 0; i < 10; i++) {  // left column (white dots on yellow band)
+      const pt = P(u0 + bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 9);
       ctx.fillStyle = (i + ph) % 2 === 0 ? '#fff' : '#888';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
     // "25¢" badge, bottom-right
     ctx.save();
-    const bg = P(u1 - bu - 0.07, v1, zBot + bz + 0.16);
+    const bg = P(u1 - bu - 0.08, v1, zBot + bz + 0.18);
     ctx.strokeStyle = cream; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(bg[0], bg[1], 7, 0, Math.PI * 2); ctx.stroke();
     ctx.font = '700 5px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = cream; ctx.fillText('25¢', bg[0], bg[1]);
@@ -3053,7 +3054,7 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     if (drawSvgFurni(ctx, kind, cx, cy)) return;   // fall through to procedural only until the image loads
   }
   if (ANIMATED.has(d.special ?? '')) {
-    if (d.cat !== 'constr') { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    if (d.cat !== 'constr' && kind !== 'arcsign') { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
     drawRaw(ctx, kind, sx, sy, accent, t, dir); return;
   }
   try { ctx.drawImage(getSprite(kind, accent, dir), 0, 0, SPR_W * SS, SPR_H * SS, sx - OX, sy - OY, SPR_W, SPR_H); }
