@@ -3281,6 +3281,8 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
 const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign', 'neonsign', 'puddle', 'brokenbottle', 'oilstain', 'pigeon']);
+// Urban floor props that sit flush with the ground — no contact shadow or outline
+const NO_SHADOW = new Set(['newspaper', 'puddle', 'fishbone', 'brokenbottle', 'oilstain', 'graffiti', 'pigeon', 'drain', 'manhole']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -3293,8 +3295,8 @@ function buildSprite(kind: string, accent: string, dir: number): HTMLCanvasEleme
   const sil = mkCanvas(W, H); const sc = sil.getContext('2d')!; sc.drawImage(art, 0, 0); sc.globalCompositeOperation = 'source-in'; sc.fillStyle = 'rgba(12,10,16,0.95)'; sc.fillRect(0, 0, W, H);
   // 3) compose: contact shadow → outline (silhouette stamped around) → art on top
   const out = mkCanvas(W, H); const cx = out.getContext('2d')!;
-  if (defOf(kind).cat !== 'constr' && kind !== 'neonarch') { cx.save(); cx.globalAlpha = 0.26; cx.fillStyle = '#000'; cx.beginPath(); cx.ellipse(OX * SS, OY * SS, TW * 0.82 * SS, TH * 0.72 * SS, 0, 0, Math.PI * 2); cx.fill(); cx.restore(); }
-  if (defOf(kind).cat !== 'constr' && kind !== 'neonarch') { const k = Math.round(1.6 * SS); for (let a = 0; a < 8; a++) cx.drawImage(sil, Math.round(Math.cos(a * Math.PI / 4) * k), Math.round(Math.sin(a * Math.PI / 4) * k)); }
+  if (defOf(kind).cat !== 'constr' && kind !== 'neonarch' && !NO_SHADOW.has(defOf(kind).special ?? '')) { cx.save(); cx.globalAlpha = 0.26; cx.fillStyle = '#000'; cx.beginPath(); cx.ellipse(OX * SS, OY * SS, TW * 0.82 * SS, TH * 0.72 * SS, 0, 0, Math.PI * 2); cx.fill(); cx.restore(); }
+  if (defOf(kind).cat !== 'constr' && kind !== 'neonarch' && !NO_SHADOW.has(defOf(kind).special ?? '')) { const k = Math.round(1.6 * SS); for (let a = 0; a < 8; a++) cx.drawImage(sil, Math.round(Math.cos(a * Math.PI / 4) * k), Math.round(Math.sin(a * Math.PI / 4) * k)); }
   cx.drawImage(art, 0, 0);
   return out;
 }
@@ -3323,7 +3325,7 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     if (drawSvgFurni(ctx, kind, cx, cy)) return;   // fall through to procedural only until the image loads
   }
   if (ANIMATED.has(d.special ?? '')) {
-    if (d.cat !== 'constr' && kind !== 'arcsign' && kind !== 'neonsign') { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    if (d.cat !== 'constr' && kind !== 'arcsign' && kind !== 'neonsign' && !NO_SHADOW.has(d.special ?? '')) { ctx.save(); ctx.globalAlpha = 0.22; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.72, TH * 0.62, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
     drawRaw(ctx, kind, sx, sy, accent, t, dir); return;
   }
   try { ctx.drawImage(getSprite(kind, accent, dir), 0, 0, SPR_W * SS, SPR_H * SS, sx - OX, sy - OY, SPR_W, SPR_H); }
