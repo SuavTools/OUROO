@@ -2163,13 +2163,6 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
       ctx.fillStyle = (i + ph) % 2 === 0 ? '#fff' : '#888';
       ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
     }
-    // "25¢" badge, bottom-right
-    ctx.save();
-    const bg = P(u1 - bu - 0.08, v1, zBot + bz + 0.18);
-    ctx.strokeStyle = cream; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(bg[0], bg[1], 7, 0, Math.PI * 2); ctx.stroke();
-    ctx.font = '700 5px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = cream; ctx.fillText('25¢', bg[0], bg[1]);
-    ctx.restore();
   });
 };
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
