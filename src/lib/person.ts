@@ -12,6 +12,7 @@ export type PersonSpec = {
   shoes: number; shoeC: string;
   face: number;     // expression
   acc: number;      // accessory
+  eyes: number;     // eye style
 };
 
 // ── option sets (labels drive the creator UI) ──
@@ -23,20 +24,21 @@ export const PANTS = ['Pants', 'Shorts', 'Skirt'];
 export const SHOES = ['Sneakers', 'Boots', 'Barefoot'];
 export const FACES = ['Neutral', 'Smile', 'Cool'];
 export const ACCS = ['None', 'Glasses', 'Shades', 'Earrings', 'Beard'];
+export const EYES = ['Dot', 'Wide', 'Sleepy', 'Happy', 'Surprised', 'Angry', 'Tired', 'Stars', 'Spiral', 'Heart', 'Cross', 'Teary'];
 export const HAIR_COLORS = ['#1a1410', '#3a2616', '#6b4423', '#a9712f', '#d9b25a', '#e8e2d0', '#9a9a9a', '#b03028', '#cc44aa', '#4488ff'];
 export const CLOTH_COLORS = ['#ff4e3e', '#ff8800', '#ffd23a', '#1ED760', '#00cfff', '#4466dd', '#cc44ff', '#ff66aa', '#ffffff', '#1a1a24', '#9aa0b5', '#7a4e2a'];
 
-export const defaultPerson = (): PersonSpec => ({ g: 0, tone: 1, hair: 1, hairC: '#3a2616', hat: 0, hatC: '#1a1a24', top: 0, topC: '#00cfff', pants: 0, pantsC: '#1a1a24', shoes: 0, shoeC: '#ffffff', face: 1, acc: 0 });
+export const defaultPerson = (): PersonSpec => ({ g: 0, tone: 1, hair: 1, hairC: '#3a2616', hat: 0, hatC: '#1a1a24', top: 0, topC: '#00cfff', pants: 0, pantsC: '#1a1a24', shoes: 0, shoeC: '#ffffff', face: 1, acc: 0, eyes: 0 });
 
 const hx = (c: string) => c.replace('#', '');
 export const isPersonId = (id: string) => id.startsWith('person:');
 export function encodePerson(p: PersonSpec): string {
-  return ['person:' + p.g, p.tone, p.hair, hx(p.hairC), p.hat, hx(p.hatC), p.top, hx(p.topC), p.pants, hx(p.pantsC), p.shoes, hx(p.shoeC), p.face, p.acc].join('~');
+  return ['person:' + p.g, p.tone, p.hair, hx(p.hairC), p.hat, hx(p.hatC), p.top, hx(p.topC), p.pants, hx(p.pantsC), p.shoes, hx(p.shoeC), p.face, p.acc, p.eyes].join('~');
 }
 export function parsePerson(id: string): PersonSpec {
   const f = id.replace(/^person:/, '').split('~'); const n = (i: number, d = 0) => { const v = parseInt(f[i]); return Number.isFinite(v) ? v : d; }; const col = (i: number, d: string) => f[i] ? '#' + f[i] : d;
   const d = defaultPerson();
-  return { g: n(0), tone: n(1, 1), hair: n(2, 1), hairC: col(3, d.hairC), hat: n(4), hatC: col(5, d.hatC), top: n(6), topC: col(7, d.topC), pants: n(8), pantsC: col(9, d.pantsC), shoes: n(10), shoeC: col(11, d.shoeC), face: n(12, 1), acc: n(13) };
+  return { g: n(0), tone: n(1, 1), hair: n(2, 1), hairC: col(3, d.hairC), hat: n(4), hatC: col(5, d.hatC), top: n(6), topC: col(7, d.topC), pants: n(8), pantsC: col(9, d.pantsC), shoes: n(10), shoeC: col(11, d.shoeC), face: n(12, 1), acc: n(13), eyes: n(14) };
 }
 export const personPrimaryColor = (p: PersonSpec): string => p.topC || '#00cfff';
 
@@ -98,9 +100,152 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   if (p.acc === 4) { ctx.fillStyle = shadeC(p.hairC, 0.7); ctx.beginPath(); ctx.arc(0, headY + headR * 0.55, headR * 0.95, 0.15, Math.PI - 0.15); ctx.fill(); }   // beard
 
   // ── face ──
-  ctx.fillStyle = '#1c1c22';
   const eyeY = headY - 0.5 * s, eyeX = 2.6 * s;
-  if (p.acc !== 2) { ctx.beginPath(); ctx.arc(-eyeX, eyeY, 1.1 * s, 0, Math.PI * 2); ctx.arc(eyeX, eyeY, 1.1 * s, 0, Math.PI * 2); ctx.fill(); }
+  if (p.acc !== 2) {
+    const eyeE = p.eyes ?? 0;
+    for (const sx of [-eyeX, eyeX]) {
+      ctx.fillStyle = '#1c1c22';
+      switch (eyeE) {
+        default:
+        case 0: // Dot
+          ctx.beginPath(); ctx.arc(sx, eyeY, 1.1 * s, 0, Math.PI * 2); ctx.fill();
+          break;
+        case 1: { // Wide — large oval sclera + pupil + glint
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.ellipse(sx, eyeY, 2.1 * s, 2.5 * s, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 0.5 * s; ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          ctx.beginPath(); ctx.arc(sx, eyeY + 0.3 * s, 1.3 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(sx + 0.5 * s, eyeY - 0.7 * s, 0.5 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 2: { // Sleepy — half-lidded
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.ellipse(sx, eyeY + 0.4 * s, 1.7 * s, 1.3 * s, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          ctx.beginPath(); ctx.arc(sx, eyeY + 0.5 * s, 0.85 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = tone;
+          ctx.fillRect(sx - 2.1 * s, eyeY - 1.1 * s, 4.2 * s, 1.6 * s);
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 0.65 * s;
+          ctx.beginPath(); ctx.moveTo(sx - 2.1 * s, eyeY + 0.35 * s); ctx.lineTo(sx + 2.1 * s, eyeY + 0.35 * s); ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 3: // Happy — upward arcs (∩ shape)
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 1.3 * s;
+          ctx.beginPath(); ctx.arc(sx, eyeY + 0.6 * s, 1.5 * s, Math.PI + 0.25, Math.PI * 2 - 0.25); ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        case 4: { // Surprised — large circles
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(sx, eyeY, 2.0 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 0.6 * s; ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          ctx.beginPath(); ctx.arc(sx, eyeY, 1.1 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(sx + 0.5 * s, eyeY - 0.5 * s, 0.4 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 5: { // Angry — angled top lid (V-shape brows)
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.ellipse(sx, eyeY, 1.7 * s, 1.2 * s, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          ctx.beginPath(); ctx.arc(sx, eyeY, 0.85 * s, 0, Math.PI * 2); ctx.fill();
+          // outer corner high, inner corner low (brow angled toward nose)
+          const outerLidY = eyeY - 1.2 * s;
+          const innerLidY = eyeY - 0.1 * s;
+          const leftLidY = sx < 0 ? outerLidY : innerLidY;
+          const rightLidY = sx < 0 ? innerLidY : outerLidY;
+          ctx.fillStyle = tone;
+          ctx.beginPath();
+          ctx.moveTo(sx - 2.2 * s, leftLidY); ctx.lineTo(sx + 2.2 * s, rightLidY);
+          ctx.lineTo(sx + 2.2 * s, eyeY - 2.5 * s); ctx.lineTo(sx - 2.2 * s, eyeY - 2.5 * s);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 0.75 * s;
+          ctx.beginPath(); ctx.moveTo(sx - 2.2 * s, leftLidY); ctx.lineTo(sx + 2.2 * s, rightLidY); ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 6: { // Tired — droopy with bags under eyes
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.ellipse(sx, eyeY, 1.6 * s, 1.3 * s, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          ctx.beginPath(); ctx.arc(sx, eyeY, 0.85 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = shadeC(tone, 0.72); ctx.lineWidth = 0.55 * s;
+          ctx.beginPath(); ctx.arc(sx, eyeY + 2.0 * s, 1.4 * s, 0.15, Math.PI - 0.15); ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 7: { // Stars — 6-pointed golden stars
+          ctx.fillStyle = '#ffd23a';
+          const sr = 2.2 * s;
+          ctx.beginPath();
+          for (let i = 0; i < 12; i++) {
+            const a = (i * Math.PI) / 6 - Math.PI / 2;
+            const rad = i % 2 === 0 ? sr : sr * 0.42;
+            i === 0 ? ctx.moveTo(sx + Math.cos(a) * rad, eyeY + Math.sin(a) * rad)
+                    : ctx.lineTo(sx + Math.cos(a) * rad, eyeY + Math.sin(a) * rad);
+          }
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#c89020'; ctx.lineWidth = 0.4 * s; ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 8: { // Spiral — hypnotic
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 0.55 * s;
+          ctx.beginPath();
+          for (let t = 0.05; t <= Math.PI * 3.5; t += 0.08) {
+            const r = (t / (Math.PI * 3.5)) * 2.1 * s;
+            const px = sx + Math.cos(t) * r, py = eyeY + Math.sin(t) * r;
+            t <= 0.1 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 9: { // Heart
+          ctx.fillStyle = '#ff4e3e';
+          const hs = 1.5 * s;
+          ctx.beginPath();
+          ctx.moveTo(sx, eyeY + hs * 0.8);
+          ctx.bezierCurveTo(sx - hs * 1.6, eyeY + hs * 0.1, sx - hs * 1.6, eyeY - hs * 1.1, sx, eyeY - hs * 0.3);
+          ctx.bezierCurveTo(sx + hs * 1.6, eyeY - hs * 1.1, sx + hs * 1.6, eyeY + hs * 0.1, sx, eyeY + hs * 0.8);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 10: { // Cross/X — dizzy
+          const prevLineCap = ctx.lineCap;
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = '#1c1c22'; ctx.lineWidth = 1.3 * s;
+          const cr = 1.4 * s;
+          ctx.beginPath();
+          ctx.moveTo(sx - cr, eyeY - cr); ctx.lineTo(sx + cr, eyeY + cr);
+          ctx.moveTo(sx + cr, eyeY - cr); ctx.lineTo(sx - cr, eyeY + cr);
+          ctx.stroke();
+          ctx.lineCap = prevLineCap;
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+        case 11: { // Teary — dot with teardrop
+          ctx.fillStyle = '#1c1c22';
+          ctx.beginPath(); ctx.arc(sx, eyeY, 1.1 * s, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#7ad4ff';
+          ctx.beginPath();
+          ctx.moveTo(sx - 0.7 * s, eyeY + 1.6 * s);
+          ctx.lineTo(sx, eyeY + 0.7 * s);
+          ctx.lineTo(sx + 0.7 * s, eyeY + 1.6 * s);
+          ctx.arc(sx, eyeY + 1.6 * s, 0.7 * s, 0, Math.PI);
+          ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#1c1c22';
+          break;
+        }
+      }
+    }
+  }
   ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; ctx.beginPath();
   if (p.face === 1) ctx.arc(0, headY + 2.6 * s, 2.4 * s, 0.2, Math.PI - 0.2);   // smile
   else if (p.face === 2) { ctx.moveTo(-2.4 * s, headY + 3.2 * s); ctx.lineTo(2.4 * s, headY + 3.2 * s); }   // straight (cool)

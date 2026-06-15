@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId,
-  TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, HAIR_COLORS, CLOTH_COLORS,
+  TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS,
 } from '@/lib/person';
 import { SKINS, skinById } from '@/lib/skins';
 import { PersonPreview } from '@/components/PersonPreview';
@@ -24,6 +24,7 @@ export const NpcEditor: React.FC<{
 }> = ({ open, initial, onPlace, onClose }) => {
   const initPerson = initial && isPersonId(initial.a) ? parsePerson(initial.a) : defaultPerson();
   const [appMode, setAppMode] = useState<'person' | 'skin'>(initial && !isPersonId(initial.a) ? 'skin' : 'person');
+  const [designTab, setDesignTab] = useState<'style' | 'eyes'>('style');
   const [person, setPerson] = useState<PersonSpec>(initPerson);
   const [skinSel, setSkinSel] = useState<string>(initial && !isPersonId(initial.a) ? initial.a : 'diamond-gold');
   const [name, setName] = useState(initial?.n ?? '');
@@ -82,16 +83,29 @@ export const NpcEditor: React.FC<{
                 <Row label="Face">{Chips(FACES, person.face, i => setP({ face: i }))}</Row>
               </div>
             </div>
-            <Row label="Hair">{Chips(HAIR, person.hair, i => setP({ hair: i }))}</Row>
-            {person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}
-            <Row label="Hat">{Chips(HATS, person.hat, i => setP({ hat: i }))}</Row>
-            {person.hat !== 0 && Swatches(CLOTH_COLORS, person.hatC, c => setP({ hatC: c }))}
-            <Row label="Top">{Chips(TOPS, person.top, i => setP({ top: i }))}</Row>
-            {Swatches(CLOTH_COLORS, person.topC, c => setP({ topC: c }))}
-            {person.top !== 4 && (<><Row label="Legs">{Chips(PANTS, person.pants, i => setP({ pants: i }))}</Row>{Swatches(CLOTH_COLORS, person.pantsC, c => setP({ pantsC: c }))}</>)}
-            <Row label="Shoes">{Chips(SHOES, person.shoes, i => setP({ shoes: i }))}</Row>
-            {person.shoes !== 2 && Swatches(CLOTH_COLORS, person.shoeC, c => setP({ shoeC: c }))}
-            <Row label="Accessory">{Chips(ACCS, person.acc, i => setP({ acc: i }))}</Row>
+            {/* Tab bar */}
+            <div className="flex gap-1">
+              {(['style', 'eyes'] as const).map(tab => (
+                <button key={tab} onClick={() => setDesignTab(tab)}
+                  className={`px-4 py-1.5 text-[10px] uppercase tracking-widest border transition-colors ${designTab === tab ? 'bg-white/12 border-white/35 text-white' : 'border-white/12 text-white/45 hover:text-white/70 hover:border-white/25'}`}>
+                  {tab === 'style' ? 'Style' : 'Eyes'}
+                </button>
+              ))}
+            </div>
+            {designTab === 'style' ? (<>
+              <Row label="Hair">{Chips(HAIR, person.hair, i => setP({ hair: i }))}</Row>
+              {person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}
+              <Row label="Hat">{Chips(HATS, person.hat, i => setP({ hat: i }))}</Row>
+              {person.hat !== 0 && Swatches(CLOTH_COLORS, person.hatC, c => setP({ hatC: c }))}
+              <Row label="Top">{Chips(TOPS, person.top, i => setP({ top: i }))}</Row>
+              {Swatches(CLOTH_COLORS, person.topC, c => setP({ topC: c }))}
+              {person.top !== 4 && (<><Row label="Legs">{Chips(PANTS, person.pants, i => setP({ pants: i }))}</Row>{Swatches(CLOTH_COLORS, person.pantsC, c => setP({ pantsC: c }))}</>)}
+              <Row label="Shoes">{Chips(SHOES, person.shoes, i => setP({ shoes: i }))}</Row>
+              {person.shoes !== 2 && Swatches(CLOTH_COLORS, person.shoeC, c => setP({ shoeC: c }))}
+              <Row label="Accessory">{Chips(ACCS, person.acc, i => setP({ acc: i }))}</Row>
+            </>) : (
+              <Row label="Eye style">{Chips(EYES, person.eyes ?? 0, i => setP({ eyes: i }))}</Row>
+            )}
           </div>
         ) : (
           <div className="flex items-center gap-4">
