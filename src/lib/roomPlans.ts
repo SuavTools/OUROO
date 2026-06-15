@@ -133,7 +133,7 @@ export const ROOM_PLANS: RoomPlan[] = [
   { id: 'pista', name: 'Dancefloor', rows: octa(16, 5), spawn: [8, 8] },
   { id: 'clube', name: 'Club', rows: clube(), spawn: [17, 31] },
   { id: 'jardim', name: 'Garden', rows: jardim(), spawn: [11, 19] },
-  { id: 'corredor', name: 'Corridor', rows: Array.from({ length: 18 }, () => '0000'), spawn: [2, 16] },
+  { id: 'corredor', name: 'Corridor', rows: Array.from({ length: 4 }, () => '0'.repeat(18)), spawn: [16, 2] },
 ];
 
 // Jardim Imperial — a Japanese garden: octagonal grass with a central koi pond and stone paths.
