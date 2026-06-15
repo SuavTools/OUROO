@@ -33,6 +33,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
   const [codeUnlocks, setCodeUnlocks] = useState<string[]>([]);
   const [isMod, setIsMod] = useState(false);
   const [furniCat, setFurniCat] = useState('tier1');
+  const [openPanel, setOpenPanel] = useState<'eyes' | 'mouth' | 'hair' | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const flash = (ok: boolean, text: string) => { setToast({ ok, text }); setTimeout(() => setToast(null), 2200); };
@@ -124,17 +125,27 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
           );
           return (
             <div className="space-y-3">
-              <div className="flex items-center gap-4 border border-white/12 bg-black/40 p-3">
+              <div className="flex items-start gap-4 border border-white/12 bg-black/40 p-3">
                 <div className="w-24 h-28 bg-black/50 border border-white/10 flex items-center justify-center shrink-0"><PersonPreview spec={person} size={104} animate /></div>
                 <div className="flex-1 space-y-2">
                   <Row label="Body">{Chips(['Slim', 'Broad'], person.g, i => setP({ g: i }))}</Row>
                   <Row label="Skin tone"><div className="flex gap-1">{TONES.map((c, i) => (<button key={c} onClick={() => setP({ tone: i })} className={`w-6 h-6 rounded-full border ${person.tone === i ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} />))}</div></Row>
-                  <Row label="Mouth">{Chips(MOUTHS, person.mouth, i => setP({ mouth: i }))}</Row>
+                  <div className="flex gap-1">
+                    {(['eyes', 'mouth', 'hair'] as const).map(key => {
+                      const isOpen = openPanel === key;
+                      return (
+                        <button key={key} onClick={() => setOpenPanel(isOpen ? null : key)}
+                          className={`flex-1 flex items-center justify-between gap-1 px-2 py-1.5 border text-[10px] uppercase tracking-wide transition-colors ${isOpen ? 'border-white text-white bg-white/10' : 'border-white/15 text-white/55 hover:text-white/80'}`}>
+                          {key}<span className="text-[8px] text-white/30">{isOpen ? '▴' : '▾'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {openPanel === 'eyes' && Chips(EYES, person.eyes ?? 0, i => setP({ eyes: i }))}
+                  {openPanel === 'mouth' && Chips(MOUTHS, person.mouth, i => setP({ mouth: i }))}
+                  {openPanel === 'hair' && <div className="space-y-1.5">{Chips(HAIR, person.hair, i => setP({ hair: i }))}{person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}</div>}
                 </div>
               </div>
-              <Row label="Eyes">{Chips(EYES, person.eyes ?? 0, i => setP({ eyes: i }))}</Row>
-              <Row label="Hair">{Chips(HAIR, person.hair, i => setP({ hair: i }))}</Row>
-              {person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}
               <Row label="Hat">{Chips(HATS, person.hat, i => setP({ hat: i }))}</Row>
               {person.hat !== 0 && Swatches(CLOTH_COLORS, person.hatC, c => setP({ hatC: c }))}
               <Row label="Top">{Chips(TOPS, person.top, i => setP({ top: i }))}</Row>
