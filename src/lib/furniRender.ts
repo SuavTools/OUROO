@@ -2155,8 +2155,6 @@ const drawNeonSignArcade = (ctx: CanvasRenderingContext2D, sx: number, sy: numbe
   const u0 = -0.50, u1 = 3.42, v0 = -0.48, v1 = -0.38, zBot = 0.15, zTop = 1.85;
   const P = proj(sx, sy, dir);
   const bkDark = '#04050e';
-  // Solid box faces
-  poly(ctx, [P(u0, v0, zTop), P(u1, v0, zTop), P(u1, v1, zTop), P(u0, v1, zTop)], bkDark);
   if (faceVisible(1, 0, dir)) poly(ctx, [P(u1, v0, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u1, v0, zBot)], bkDark);
   if (!faceVisible(0, 1, dir)) return;
   poly(ctx, [P(u0, v1, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u0, v1, zBot)], bkDark);
