@@ -2117,8 +2117,8 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     poly(ctx, [P(u0 + bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz - 0.022), P(u0 + bu, v1, zTop - bz - 0.022)], '#ffffff');
     // "ARCADE" text vertically — centred on full inner panel, inset enough so A and E clear the border bars
     ctx.save();
-    ctx.font = '900 9px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const arcUc = (u0 + bu + u1 - bu) / 2, arcZT = zTop - bz - 0.20, arcZB = zBot + bz + 0.20;
+    ctx.font = '900 8px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const arcUc = (u0 + bu + u1 - bu) / 2, arcZT = zTop - bz - 0.22, arcZB = zBot + bz + 0.22;
     const arcStep = (arcZT - arcZB) / 5;
     for (let i = 0; i < 6; i++) {
       const pt = P(arcUc, v1, arcZT - i * arcStep);
