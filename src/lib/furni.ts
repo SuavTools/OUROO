@@ -300,7 +300,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'clawmachine',name: 'Claw Machine',emoji: '🕹️', cat: 'games', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'clawmachine' },
   { kind: 'pacman',     name: 'Pac Arcade',  emoji: '🟡', cat: 'games', color: '#f4c430', h: 2, walk: false, foot: 0.7, special: 'pacman' },
   { kind: 'retrocab',   name: 'Retro Arcade',emoji: '🕹️', cat: 'games', color: '#cc1a0a', h: 2, walk: false, foot: 0.7, special: 'retrocab' },
-  { kind: 'arcsign',    name: 'Arcade Sign',  emoji: '🎰', cat: 'games', color: '#c41a0c', h: 2, walk: false, foot: 0.7, special: 'arcsign' },
+  { kind: 'arcsign',    name: 'Arcade Sign',  emoji: '🎰', cat: 'games', color: '#c41a0c', h: 3, walk: false, foot: 0.7, special: 'arcsign' },
   { kind: 'cashvault',  name: 'Prize Vault', emoji: '💰', cat: 'games', color: '#3a3e4a', h: 4, walk: false, foot: 0.7, special: 'cashvault' },
   { kind: 'pinball',    name: 'Pinball',     emoji: '🔴', cat: 'games', color: '#1b1b26', h: 1, walk: false, foot: 1,   special: 'pinball', span: [1, 2] },
   { kind: 'airhockey',  name: 'Air Hockey',  emoji: '🏒', cat: 'games', color: '#3a7bd0', h: 1, walk: false, foot: 1,   special: 'airhockey', span: [2, 1] },

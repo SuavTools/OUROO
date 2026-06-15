@@ -2098,7 +2098,7 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
   void _a; void _b;
   const red = '#c41a0c', yel = '#f4c518', cream = '#fef0c0', blk = '#06040c';
   // full tile width; pushed to back edge so front face (+v) points toward tile centre
-  const u0 = -0.48, u1 = 0.48, v0 = -0.48, v1 = -0.38, zBot = 0.52, zTop = 2.45;
+  const u0 = -0.48, u1 = 0.48, v0 = -0.48, v1 = -0.38, zBot = 0.52, zTop = 3.0;
   const parts: IsoPart[] = [{ u0, u1, v0, v1, z0: zBot, z1: zTop, t: '#141018', r: shade(yel, 0.86), l: shade(red, 0.62) }];
   drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
     // downward-arrow chevron
@@ -2118,7 +2118,7 @@ const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _
     // "ARCADE" text vertically — centred on full inner panel, inset enough so A and E clear the border bars
     ctx.save();
     ctx.font = '900 9px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const arcUc = (u0 + bu + u1 - bu) / 2, arcZT = zTop - bz - 0.25, arcZB = zBot + bz + 0.25;
+    const arcUc = (u0 + bu + u1 - bu) / 2, arcZT = zTop - bz - 0.20, arcZB = zBot + bz + 0.20;
     const arcStep = (arcZT - arcZB) / 5;
     for (let i = 0; i < 6; i++) {
       const pt = P(arcUc, v1, arcZT - i * arcStep);
