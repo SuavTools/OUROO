@@ -2781,10 +2781,12 @@ const drawVending = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
         poly(ctx, [P(cx-0.021, v1, bz+0.38), P(cx+0.021, v1, bz+0.38), P(cx+0.016, v1, bz+0.33), P(cx-0.016, v1, bz+0.33)], cap); // cap
         poly(ctx, [P(cx-0.040, v1, bz+0.17), P(cx-0.025, v1, bz+0.17), P(cx-0.020, v1, bz), P(cx-0.034, v1, bz)], 'rgba(255,255,255,0.20)'); // highlight
       }
-      // Dispensing area — red base, dark slot with red border
-      poly(ctx, [P(gU0, v1, 0.11), P(gU1, v1, 0.11), P(gU1, v1, 0), P(gU0, v1, 0)], shade(base, 0.58));
-      poly(ctx, [P(gU0 + 0.015, v1, 0.088), P(gU1 - 0.015, v1, 0.088), P(gU1 - 0.015, v1, 0.012), P(gU0 + 0.015, v1, 0.012)], shade(base, 0.80));
-      poly(ctx, [P(gU0 + 0.02, v1, 0.08), P(gU1 - 0.02, v1, 0.08), P(gU1 - 0.02, v1, 0.02), P(gU0 + 0.02, v1, 0.02)], '#0d1e2c');
+      // Bottom body strip below glass — clearly red
+      poly(ctx, [P(gU0, v1, gZB), P(gU1, v1, gZB), P(gU1, v1, 0), P(gU0, v1, 0)], shade(base, 0.72));
+      // Red border + dark interior around tray area under bottom shelf
+      const tZ0 = gZB, tZ1 = sZ[0] - 0.005;
+      poly(ctx, [P(gU0, v1, tZ1), P(gU1, v1, tZ1), P(gU1, v1, tZ0), P(gU0, v1, tZ0)], shade(base, 0.82));
+      poly(ctx, [P(gU0 + 0.016, v1, tZ1 - 0.016), P(gU1 - 0.016, v1, tZ1 - 0.016), P(gU1 - 0.016, v1, tZ0 + 0.014), P(gU0 + 0.016, v1, tZ0 + 0.014)], '#09131e');
     }
     // ── Right face (+u): control panel ──
     if (faceVisible(1, 0, dir)) {
