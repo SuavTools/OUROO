@@ -2094,6 +2094,83 @@ const drawRetroArcadeCab = (ctx: CanvasRenderingContext2D, sx: number, sy: numbe
     poly(ctx, [P(-0.37, F, 2.55), P(0.37, F, 2.55), P(0.37, F, 2.15), P(-0.37, F, 2.15)], red);
   });
 };
+const drawArcadeSign = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, _b: string, t: number, dir: number) => {
+  void _a; void _b;
+  const red = '#c41a0c', yel = '#f4c518', cream = '#fef0c0', blk = '#06040c';
+  const u0 = -0.34, u1 = 0.34, v0 = -0.055, v1 = 0.055, zBot = 0.52, zTop = 1.96;
+  const parts: IsoPart[] = [{ u0, u1, v0, v1, z0: zBot, z1: zTop, t: '#141018', r: shade(yel, 0.86), l: shade(red, 0.62) }];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts, (P) => {
+    // downward-arrow chevron
+    if (faceVisible(0, 1, dir)) poly(ctx, [P(u0, v1, zBot), P(u1, v1, zBot), P(0, v1, 0)], shade(red, 0.82));
+    if (faceVisible(1, 0, dir)) poly(ctx, [P(u1, v0, zBot), P(u1, v1, zBot), P(0, v1, 0), P(0, v0, 0)], shade(yel, 0.72));
+    if (!faceVisible(0, 1, dir)) return;
+    // red panel background
+    poly(ctx, [P(u0, v1, zTop), P(u1, v1, zTop), P(u1, v1, zBot), P(u0, v1, zBot)], red);
+    // black border frame
+    const bz = 0.10, bu = 0.038;
+    poly(ctx, [P(u0, v1, zTop),       P(u1, v1, zTop),       P(u1, v1, zTop - bz),  P(u0, v1, zTop - bz)],  blk);
+    poly(ctx, [P(u0, v1, zBot + bz),  P(u1, v1, zBot + bz),  P(u1, v1, zBot),        P(u0, v1, zBot)],       blk);
+    poly(ctx, [P(u0, v1, zTop),       P(u0 + bu, v1, zTop),  P(u0 + bu, v1, zBot),   P(u0, v1, zBot)],       blk);
+    poly(ctx, [P(u1 - bu, v1, zTop),  P(u1, v1, zTop),       P(u1, v1, zBot),        P(u1 - bu, v1, zBot)],  blk);
+    // white inner accent line under top bar
+    poly(ctx, [P(u0 + bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz), P(u1 - bu, v1, zTop - bz - 0.022), P(u0 + bu, v1, zTop - bz - 0.022)], '#ffffff');
+    // yellow left band (the "GAMES" side strip)
+    const yB = u0 + bu + 0.115;
+    poly(ctx, [P(u0 + bu, v1, zTop - bz), P(yB, v1, zTop - bz), P(yB, v1, zBot + bz), P(u0 + bu, v1, zBot + bz)], yel);
+    // "ARCADE" text vertically on red section
+    ctx.save();
+    ctx.font = '900 8px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const arcUc = (yB + u1 - bu) / 2, arcZT = zTop - bz - 0.05, arcZB = zBot + bz + 0.06;
+    const arcStep = (arcZT - arcZB) / 5;
+    for (let i = 0; i < 6; i++) {
+      const pt = P(arcUc, v1, arcZT - i * arcStep);
+      ctx.fillStyle = blk; ctx.fillText('ARCADE'[i], pt[0] + 0.7, pt[1] + 0.6);
+      ctx.fillStyle = cream; ctx.fillText('ARCADE'[i], pt[0], pt[1]);
+    }
+    ctx.restore();
+    // "GAMES" text vertically on yellow band
+    ctx.save();
+    ctx.font = '700 5.5px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const gUc = (u0 + bu + yB) / 2, gZT = zTop - bz - 0.12, gZB = zBot + bz + 0.12;
+    const gStep = (gZT - gZB) / 4;
+    for (let i = 0; i < 5; i++) {
+      const pt = P(gUc, v1, gZT - i * gStep);
+      ctx.fillStyle = blk; ctx.fillText('GAMES'[i], pt[0], pt[1]);
+    }
+    ctx.restore();
+    // dot-bulb border (chaser animation)
+    const ph = Math.floor(t / 8) % 4, dr = 2.0;
+    const uRange = u1 - bu - (u0 + bu + 0.02);
+    for (let i = 0; i < 5; i++) {  // top row
+      const pt = P(u0 + bu + 0.01 + i * uRange / 4, v1, zTop - bz * 0.52);
+      ctx.fillStyle = (i + ph) % 2 === 0 ? yel : '#7a6010';
+      ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
+    }
+    for (let i = 0; i < 5; i++) {  // bottom row
+      const pt = P(u0 + bu + 0.01 + i * uRange / 4, v1, zBot + bz * 0.52);
+      ctx.fillStyle = (i + ph + 1) % 2 === 0 ? yel : '#7a6010';
+      ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
+    }
+    const zRange = zTop - bz - 0.02 - (zBot + bz + 0.02);
+    for (let i = 0; i < 7; i++) {  // right column
+      const pt = P(u1 - bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 6);
+      ctx.fillStyle = (i + ph + 2) % 2 === 0 ? yel : '#7a6010';
+      ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
+    }
+    for (let i = 0; i < 7; i++) {  // left column (white dots on yellow band)
+      const pt = P(u0 + bu * 0.5, v1, zTop - bz - 0.01 - i * zRange / 6);
+      ctx.fillStyle = (i + ph) % 2 === 0 ? '#fff' : '#888';
+      ctx.beginPath(); ctx.arc(pt[0], pt[1], dr, 0, Math.PI * 2); ctx.fill();
+    }
+    // "25¢" badge, bottom-right
+    ctx.save();
+    const bg = P(u1 - bu - 0.07, v1, zBot + bz + 0.16);
+    ctx.strokeStyle = cream; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(bg[0], bg[1], 7, 0, Math.PI * 2); ctx.stroke();
+    ctx.font = '700 5px Arial,Helvetica,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = cream; ctx.fillText('25¢', bg[0], bg[1]);
+    ctx.restore();
+  });
+};
 const drawPinball = (ctx: CanvasRenderingContext2D, sx: number, sy: number, accent: string, base: string, dir: number) => {
   const m = base, cT = shade(m, 1.2), cR = shade(m, 0.9), cL = shade(m, 0.56);
   const parts: IsoPart[] = [...legs([[-0.3, -0.5], [0.3, -0.5], [-0.3, 0.5], [0.3, 0.5]], 0.55).map(p => ({ ...p, t: cT, r: cR, l: cL })), { u0: -0.36, u1: 0.36, v0: -0.6, v1: 0.6, z0: 0.55, z1: 0.72, t: cT, r: cR, l: cL }, { u0: -0.36, u1: 0.36, v0: -0.66, v1: -0.5, z0: 0.72, z1: 1.8, t: cT, r: cR, l: cL }];
@@ -2839,6 +2916,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'tv': drawTV(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'pacman': drawPacman(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'retrocab': drawRetroArcadeCab(ctx, sx, sy, accent, d.color, t, dir); break;
+    case 'arcsign': drawArcadeSign(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'cashvault': drawCashVault(ctx, sx, sy, accent, d.color, t, dir); break;
     case 'clorack': drawCloRack(ctx, sx, sy, accent, d.color); break;
     case 'clorail': drawCloRail(ctx, sx, sy, accent, d.color, dir); break;
@@ -2932,7 +3010,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
