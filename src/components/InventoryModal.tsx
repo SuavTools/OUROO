@@ -10,7 +10,7 @@ import { SkinPreview } from '@/components/SkinPreview';
 import { IconPreview } from '@/components/IconPreview';
 import { IconEditor } from '@/components/IconEditor';
 import { PersonPreview } from '@/components/PersonPreview';
-import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
+import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
 import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon } from '@/lib/wallet';
@@ -29,6 +29,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
   const [selected, setSelected] = useState(getSelectedSkinId());
   const [person, setPerson] = useState<PersonSpec>(() => { const s = getSelectedSkinId(); return isPersonId(s) ? parsePerson(s) : defaultPerson(); });
   const setP = (patch: Partial<PersonSpec>) => setPerson(p => ({ ...p, ...patch }));
+  const [designTab, setDesignTab] = useState<'style' | 'eyes'>('style');
   const [best, setBest] = useState(0);
   const [codeUnlocks, setCodeUnlocks] = useState<string[]>([]);
   const [isMod, setIsMod] = useState(false);
@@ -132,16 +133,29 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
                   <Row label="Face">{Chips(FACES, person.face, i => setP({ face: i }))}</Row>
                 </div>
               </div>
-              <Row label="Hair">{Chips(HAIR, person.hair, i => setP({ hair: i }))}</Row>
-              {person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}
-              <Row label="Hat">{Chips(HATS, person.hat, i => setP({ hat: i }))}</Row>
-              {person.hat !== 0 && Swatches(CLOTH_COLORS, person.hatC, c => setP({ hatC: c }))}
-              <Row label="Top">{Chips(TOPS, person.top, i => setP({ top: i }))}</Row>
-              {Swatches(CLOTH_COLORS, person.topC, c => setP({ topC: c }))}
-              {person.top !== 4 && (<><Row label="Legs">{Chips(PANTS, person.pants, i => setP({ pants: i }))}</Row>{Swatches(CLOTH_COLORS, person.pantsC, c => setP({ pantsC: c }))}</>)}
-              <Row label="Shoes">{Chips(SHOES, person.shoes, i => setP({ shoes: i }))}</Row>
-              {person.shoes !== 2 && Swatches(CLOTH_COLORS, person.shoeC, c => setP({ shoeC: c }))}
-              <Row label="Accessory">{Chips(ACCS, person.acc, i => setP({ acc: i }))}</Row>
+              {/* Style / Eyes tabs */}
+              <div className="flex gap-1">
+                {(['style', 'eyes'] as const).map(t => (
+                  <button key={t} onClick={() => setDesignTab(t)}
+                    className={`px-4 py-1.5 text-[10px] uppercase tracking-widest border transition-colors ${designTab === t ? 'bg-white/12 border-white/35 text-white' : 'border-white/12 text-white/45 hover:text-white/70 hover:border-white/25'}`}>
+                    {t === 'style' ? 'Style' : 'Eyes'}
+                  </button>
+                ))}
+              </div>
+              {designTab === 'style' ? (<>
+                <Row label="Hair">{Chips(HAIR, person.hair, i => setP({ hair: i }))}</Row>
+                {person.hair !== 0 && Swatches(HAIR_COLORS, person.hairC, c => setP({ hairC: c }))}
+                <Row label="Hat">{Chips(HATS, person.hat, i => setP({ hat: i }))}</Row>
+                {person.hat !== 0 && Swatches(CLOTH_COLORS, person.hatC, c => setP({ hatC: c }))}
+                <Row label="Top">{Chips(TOPS, person.top, i => setP({ top: i }))}</Row>
+                {Swatches(CLOTH_COLORS, person.topC, c => setP({ topC: c }))}
+                {person.top !== 4 && (<><Row label="Legs">{Chips(PANTS, person.pants, i => setP({ pants: i }))}</Row>{Swatches(CLOTH_COLORS, person.pantsC, c => setP({ pantsC: c }))}</>)}
+                <Row label="Shoes">{Chips(SHOES, person.shoes, i => setP({ shoes: i }))}</Row>
+                {person.shoes !== 2 && Swatches(CLOTH_COLORS, person.shoeC, c => setP({ shoeC: c }))}
+                <Row label="Accessory">{Chips(ACCS, person.acc, i => setP({ acc: i }))}</Row>
+              </>) : (
+                <Row label="Eye style">{Chips(EYES, person.eyes ?? 0, i => setP({ eyes: i }))}</Row>
+              )}
               <button onClick={() => equip(encodePerson(person))} disabled={isWorn}
                 className="w-full mt-1 bg-[#00cfff] text-black font-bold uppercase text-xs tracking-widest py-3 hover:bg-white transition-colors active:scale-95 disabled:opacity-50 disabled:bg-[#1ED760]">
                 {isWorn ? 'Wearing this ✓' : 'Wear this character ▸'}
