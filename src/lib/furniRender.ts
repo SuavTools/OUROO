@@ -3331,6 +3331,167 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       for (const [bx, by] of [[0, -hh * 0.78], [hw * 0.78, 0], [0, hh * 0.78], [-hw * 0.78, 0]] as [number, number][]) { ctx.beginPath(); ctx.arc(sx + bx, sy + by, 2, 0, Math.PI * 2); ctx.fill(); }  // bolts
       break;
     }
+    case 'trashblock': {
+      const col = d.color;
+      const hw = TW * d.foot, hh = TH * d.foot, Hh = d.h * STACK_H;
+      block(ctx, sx, sy, d.h, col, accent, d.foot);
+      // Horizontal compression layer lines
+      ctx.lineWidth = 0.8;
+      const nLines = d.h * 3 + 1;
+      for (let i = 1; i < nLines; i++) {
+        const dy = -(i / nLines) * Hh;
+        ctx.strokeStyle = i % 2 === 0 ? shade(col, 0.28) : shade(col, 0.44);
+        ctx.beginPath(); ctx.moveTo(sx - hw, sy + dy); ctx.lineTo(sx, sy + hh + dy); ctx.lineTo(sx + hw, sy + dy); ctx.stroke();
+      }
+      // Coloured junk bits visible on the top face
+      const topY = sy - Hh;
+      ctx.fillStyle = '#8a3a1a'; ctx.fillRect(sx - 5, topY - 2, 7, 2);
+      ctx.fillStyle = '#6a6a4a'; ctx.fillRect(sx + 3, topY + 1, 4, 2);
+      ctx.fillStyle = '#c89860'; ctx.fillRect(sx - 2, topY - 3, 5, 1.5);
+      ctx.fillStyle = '#3a5a3a'; ctx.fillRect(sx + 5, topY - 1, 3, 1.8);
+      break;
+    }
+    case 'forklift': {
+      const col = d.color;
+      const Pt = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      // Wheels
+      ctx.fillStyle = '#111';
+      for (const [wu, wv] of [[-1.7, 0.85], [-1.7, -0.85], [1.65, 0.85], [1.65, -0.85]] as [number, number][]) {
+        const wp = Pt(wu, wv, 0);
+        ctx.beginPath(); ctx.ellipse(wp[0], wp[1] + 3, 7, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#2a2a2a'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1] + 3, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+      }
+      // Forks (two flat beams extending forward)
+      const fW = 0.11, fH = 0.15;
+      for (const fv of [-0.3, 0.3] as number[]) {
+        poly(ctx, [Pt(-2, fv - fW, fH), Pt(-0.05, fv - fW, fH), Pt(-0.05, fv + fW, fH), Pt(-2, fv + fW, fH)], shade(col, 0.9));
+        poly(ctx, [Pt(-2, fv + fW, 0), Pt(-0.05, fv + fW, 0), Pt(-0.05, fv + fW, fH), Pt(-2, fv + fW, fH)], shade(col, 0.55));
+        poly(ctx, [Pt(-2, fv - fW, 0), Pt(-2, fv + fW, 0), Pt(-2, fv + fW, fH), Pt(-2, fv - fW, fH)], shade(col, 0.7));
+      }
+      // Fork carriage
+      const fcH = 0.6;
+      poly(ctx, [Pt(-0.05, 0.5, 0), Pt(0.1, 0.5, 0), Pt(0.1, 0.5, fcH), Pt(-0.05, 0.5, fcH)], shade(col, 0.55));
+      poly(ctx, [Pt(0.1, 0.5, 0), Pt(0.1, -0.5, 0), Pt(0.1, -0.5, fcH), Pt(0.1, 0.5, fcH)], shade(col, 0.72));
+      poly(ctx, [Pt(-0.05, -0.5, fcH), Pt(0.1, -0.5, fcH), Pt(0.1, 0.5, fcH), Pt(-0.05, 0.5, fcH)], shade(col, 0.9));
+      // Mast posts
+      const mastH = 2.35;
+      for (const mv of [-0.88, 0.88] as number[]) {
+        poly(ctx, [Pt(0, mv + 0.07, 0), Pt(0.12, mv + 0.07, 0), Pt(0.12, mv + 0.07, mastH), Pt(0, mv + 0.07, mastH)], shade(col, 0.56));
+        poly(ctx, [Pt(0.12, mv - 0.07, 0), Pt(0.12, mv + 0.07, 0), Pt(0.12, mv + 0.07, mastH), Pt(0.12, mv - 0.07, mastH)], shade(col, 0.72));
+        poly(ctx, [Pt(0, mv - 0.07, mastH), Pt(0.12, mv - 0.07, mastH), Pt(0.12, mv + 0.07, mastH), Pt(0, mv + 0.07, mastH)], shade(col, 0.9));
+      }
+      // Mast cross bars
+      for (const mz of [0.6, 1.2, 1.8, 2.25] as number[]) {
+        poly(ctx, [Pt(0, -0.88, mz), Pt(0, 0.88, mz), Pt(0, 0.88, mz + 0.06), Pt(0, -0.88, mz + 0.06)], shade(col, 0.5));
+      }
+      // Cab body
+      const cabH = 1.12;
+      poly(ctx, [Pt(0.12, 1, 0), Pt(2, 1, 0), Pt(2, 1, cabH), Pt(0.12, 1, cabH)], shade(col, 0.52));
+      poly(ctx, [Pt(2, 1, 0), Pt(2, -1, 0), Pt(2, -1, cabH), Pt(2, 1, cabH)], shade(col, 0.7));
+      poly(ctx, [Pt(0.12, -1, cabH), Pt(2, -1, cabH), Pt(2, 1, cabH), Pt(0.12, 1, cabH)], shade(col, 1.08));
+      // Cab front face + windshield glass
+      const WF: number[][] = [Pt(0.12, 1, 0), Pt(0.12, -1, 0), Pt(0.12, -1, cabH), Pt(0.12, 1, cabH)];
+      poly(ctx, WF, shade(col, 0.38));
+      fQuad(ctx, WF, 0.08, 0.92, 0.22, 0.84, hexA('#7ad8f0', 0.42));
+      // Overhead guard frame
+      const ogZ = cabH + 0.08;
+      ctx.strokeStyle = shade(col, 0.88); ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      const ogC: [number, number][] = [[0.12, 1], [2, 1], [2, -1], [0.12, -1]];
+      const fp0 = Pt(ogC[0][0], ogC[0][1], ogZ); ctx.beginPath(); ctx.moveTo(fp0[0], fp0[1]);
+      for (let i = 1; i < ogC.length; i++) { const fp = Pt(ogC[i][0], ogC[i][1], ogZ); ctx.lineTo(fp[0], fp[1]); }
+      ctx.closePath(); ctx.stroke();
+      for (const [cu, cv] of ogC) {
+        const bot = Pt(cu, cv, cabH - 0.02), top = Pt(cu, cv, ogZ);
+        ctx.beginPath(); ctx.moveTo(bot[0], bot[1]); ctx.lineTo(top[0], top[1]); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+      // Counterweight
+      const cw = '#3a3838';
+      poly(ctx, [Pt(1.65, 1, 0), Pt(2, 1, 0), Pt(2, 1, 0.5), Pt(1.65, 1, 0.5)], shade(cw, 0.8));
+      poly(ctx, [Pt(2, 1, 0), Pt(2, -1, 0), Pt(2, -1, 0.5), Pt(2, 1, 0.5)], shade(cw, 1.0));
+      poly(ctx, [Pt(1.65, -1, 0.5), Pt(2, -1, 0.5), Pt(2, 1, 0.5), Pt(1.65, 1, 0.5)], shade(cw, 1.15));
+      break;
+    }
+    case 'rustycar': {
+      const col = d.color;
+      const Pt = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      const S = (u: number, z: number) => Pt(u, 1.5, z);
+      const E = (v: number, z: number) => Pt(2, v, z);
+      // Rear face
+      poly(ctx, [E(-1.5, 0), E(1.5, 0), E(1.5, 0.62), E(-1.5, 0.62)], shade(col, 0.55));
+      poly(ctx, [E(-1.5, 0.62), E(1.5, 0.62), E(1.35, 0.98), E(-1.35, 0.98)], shade(col, 0.44));
+      poly(ctx, [E(-1.32, 0.22), E(-1.06, 0.22), E(-1.06, 0.52), E(-1.32, 0.52)], '#cc1800');
+      poly(ctx, [E(0.95, 0.22), E(1.2, 0.22), E(1.2, 0.52), E(0.95, 0.52)], '#cc1800');
+      poly(ctx, [E(-1.5, 0.06), E(1.5, 0.06), E(1.5, 0.18), E(-1.5, 0.18)], '#8a8a7a');
+      // Side body silhouette (left face, v=1.5)
+      poly(ctx, [
+        S(-2, 0), S(-2, 0.38), S(-1.85, 0.52), S(-0.72, 0.52),
+        S(-0.22, 0.98), S(1.22, 0.98), S(1.52, 0.62), S(2, 0.62),
+        S(2, 0.38), S(2, 0),
+      ], col);
+      // Windshield
+      poly(ctx, [S(-0.72, 0.52), S(-0.2, 0.97), S(0.82, 0.97), S(0.52, 0.52)], hexA('#5ab0c8', 0.45));
+      // Side door window
+      poly(ctx, [S(-0.65, 0.52), S(-0.65, 0.95), S(1.18, 0.95), S(1.18, 0.52)], hexA('#5ab0c8', 0.32));
+      // Rear window
+      poly(ctx, [S(1.22, 0.97), S(1.52, 0.62), S(1.7, 0.62), S(1.4, 0.97)], hexA('#5ab0c8', 0.28));
+      // Door crease line
+      ctx.strokeStyle = shade(col, 0.55); ctx.lineWidth = 0.8;
+      const dl = [S(-0.68, 0.08), S(2, 0.08)];
+      ctx.beginPath(); ctx.moveTo(dl[0][0], dl[0][1]); ctx.lineTo(dl[1][0], dl[1][1]); ctx.stroke();
+      // Wheel arch cutouts
+      ctx.fillStyle = '#111';
+      for (const wu of [-1.5, 1.55] as number[]) {
+        const ap = S(wu, 0); ctx.beginPath(); ctx.ellipse(ap[0], ap[1], 16, 11, 0, Math.PI, 0); ctx.fill();
+      }
+      // Rust patches
+      ctx.fillStyle = 'rgba(72,26,8,0.52)';
+      const rp1 = S(0.3, 0.38); ctx.beginPath(); ctx.ellipse(rp1[0], rp1[1], 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(55,20,6,0.48)';
+      const rp2 = S(-1.1, 0.28); ctx.beginPath(); ctx.ellipse(rp2[0], rp2[1], 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(75,28,8,0.45)';
+      const rp3 = S(1.75, 0.3); ctx.beginPath(); ctx.ellipse(rp3[0], rp3[1], 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+      // Top faces — hood, roof, trunk
+      poly(ctx, [Pt(-2, -1.5, 0.52), Pt(-0.72, -1.5, 0.52), Pt(-0.72, 1.5, 0.52), Pt(-2, 1.5, 0.52)], shade(col, 0.94));
+      poly(ctx, [Pt(-0.22, -1.5, 0.98), Pt(1.22, -1.5, 0.98), Pt(1.22, 1.5, 0.98), Pt(-0.22, 1.5, 0.98)], shade(col, 1.04));
+      poly(ctx, [Pt(1.52, -1.5, 0.62), Pt(2, -1.5, 0.62), Pt(2, 1.5, 0.62), Pt(1.52, 1.5, 0.62)], shade(col, 0.9));
+      // Wheels (near side, v=1.5)
+      for (const wu of [-1.5, 1.55] as number[]) {
+        const wp = Pt(wu, 1.5, 0);
+        ctx.fillStyle = '#0a0808'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1], 13, 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1], 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#6a6060'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1], 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case 'hazardsign': {
+      const col = d.color;
+      const postH = 1.72 * STACK_H;
+      const pW = 3;
+      // Post (three faces of a thin isometric column)
+      ctx.fillStyle = '#4a4a4a';
+      ctx.beginPath(); ctx.moveTo(sx - pW, sy); ctx.lineTo(sx, sy + pW * 0.5); ctx.lineTo(sx, sy - postH + pW * 0.5); ctx.lineTo(sx - pW, sy - postH); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#5a5a5a';
+      ctx.beginPath(); ctx.moveTo(sx, sy + pW * 0.5); ctx.lineTo(sx + pW, sy); ctx.lineTo(sx + pW, sy - postH); ctx.lineTo(sx, sy - postH + pW * 0.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#6a6a6a';
+      ctx.beginPath(); ctx.moveTo(sx - pW, sy - postH); ctx.lineTo(sx, sy - postH - pW * 0.5); ctx.lineTo(sx + pW, sy - postH); ctx.lineTo(sx, sy - postH + pW * 0.5); ctx.closePath(); ctx.fill();
+      // Yellow warning diamond sign
+      const sCX = sx, sCY = sy - postH - 22;
+      const half = 17;
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath(); ctx.moveTo(sCX + 1, sCY - half + 1); ctx.lineTo(sCX + half + 1, sCY + 1); ctx.lineTo(sCX + 1, sCY + half + 1); ctx.lineTo(sCX - half + 1, sCY + 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(sCX, sCY - half); ctx.lineTo(sCX + half, sCY); ctx.lineTo(sCX, sCY + half); ctx.lineTo(sCX - half, sCY); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#1a1200'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sCX, sCY - half); ctx.lineTo(sCX + half, sCY); ctx.lineTo(sCX, sCY + half); ctx.lineTo(sCX - half, sCY); ctx.closePath(); ctx.stroke();
+      const ih = half - 3;
+      ctx.strokeStyle = shade(col, 0.68); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(sCX, sCY - ih); ctx.lineTo(sCX + ih, sCY); ctx.lineTo(sCX, sCY + ih); ctx.lineTo(sCX - ih, sCY); ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = '#1a1200'; ctx.font = 'bold 19px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('!', sCX, sCY + 1);
+      break;
+    }
     default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr') : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr');
   }
 }

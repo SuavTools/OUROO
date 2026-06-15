@@ -40,6 +40,7 @@ export const CATS: FurniCat[] = [
   { id: 'electro',  name: 'Electronics' },
   { id: 'deco',     name: 'Decoration' },
   { id: 'urban',    name: 'Urban' },
+  { id: 'junkyard', name: 'Junkyard' },
 ];
 
 // Per-item Cristais price for premium collections (0 / absent = free basic furni).
@@ -370,6 +371,11 @@ export const FURNI: FurniDef[] = [
   { kind: 'manhole',    name: 'Manhole',          emoji: '⚫', cat: 'urban', color: '#4a4844', h: 0,  walk: true,  foot: 0.7, special: 'manhole' },
   { kind: 'mattress',  name: 'Old Mattress',     emoji: '🛌', cat: 'urban', color: '#b8b0a0', h: 1,  walk: false, foot: 1,   special: 'mattress', span: [2, 1] },
   { kind: 'dumpster',  name: 'Dumpster',         emoji: '🗑️', cat: 'urban', color: '#2a4a28', h: 2,  walk: false, foot: 1,   special: 'dumpster', span: [2, 1] },
+  { kind: 'trash_block',  name: 'Compacted Trash Block',        emoji: '📦', cat: 'junkyard', color: '#4a4a3a', h: 1, walk: false, foot: 1,   special: 'trashblock' },
+  { kind: 'trash_wall',   name: 'Compacted Trash Double Block', emoji: '📦', cat: 'junkyard', color: '#4a4a3a', h: 2, walk: false, foot: 1,   special: 'trashblock' },
+  { kind: 'forklift',     name: 'Forklift',                     emoji: '🏗️', cat: 'junkyard', color: '#e8b820', h: 2, walk: false, foot: 1,   special: 'forklift',   span: [4, 2] },
+  { kind: 'rusty_car',    name: 'Old Rusty Car',                emoji: '🚗', cat: 'junkyard', color: '#8a4a2e', h: 1, walk: false, foot: 1,   special: 'rustycar',   span: [4, 3] },
+  { kind: 'hazard_sign',  name: 'Hazard Sign',                  emoji: '⚠️', cat: 'junkyard', color: '#f0c800', h: 2, walk: false, foot: 0.4, special: 'hazardsign' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
