@@ -2786,7 +2786,7 @@ const drawVending = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
       // Red border + dark interior around tray area under bottom shelf
       const tZ0 = gZB, tZ1 = sZ[0] - 0.005;
       poly(ctx, [P(gU0, v1, tZ1), P(gU1, v1, tZ1), P(gU1, v1, tZ0), P(gU0, v1, tZ0)], shade(base, 0.82));
-      poly(ctx, [P(gU0 + 0.016, v1, tZ1 - 0.016), P(gU1 - 0.016, v1, tZ1 - 0.016), P(gU1 - 0.016, v1, tZ0 + 0.014), P(gU0 + 0.016, v1, tZ0 + 0.014)], '#09131e');
+      poly(ctx, [P(gU0 + 0.04, v1, tZ1 - 0.04), P(gU1 - 0.04, v1, tZ1 - 0.04), P(gU1 - 0.04, v1, tZ0 + 0.014), P(gU0 + 0.04, v1, tZ0 + 0.014)], '#09131e');
     }
     // ── Right face (+u): control panel ──
     if (faceVisible(1, 0, dir)) {
