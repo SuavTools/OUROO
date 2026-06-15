@@ -2780,8 +2780,9 @@ const drawVending = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: 
         // highlight
         poly(ctx, [P(pu, v1, bz + 0.30), P(pu + 0.025, v1, bz + 0.30), P(pu + 0.025, v1, bz), P(pu, v1, bz)], 'rgba(255,255,255,0.22)');
       }
-      // Dispensing slot
-      poly(ctx, [P(gU0, v1, 0.11), P(gU1, v1, 0.11), P(gU1, v1, 0), P(gU0, v1, 0)], '#050d16');
+      // Dispensing area — red base, dark slot with red border
+      poly(ctx, [P(gU0, v1, 0.11), P(gU1, v1, 0.11), P(gU1, v1, 0), P(gU0, v1, 0)], shade(base, 0.58));
+      poly(ctx, [P(gU0 + 0.015, v1, 0.088), P(gU1 - 0.015, v1, 0.088), P(gU1 - 0.015, v1, 0.012), P(gU0 + 0.015, v1, 0.012)], shade(base, 0.80));
       poly(ctx, [P(gU0 + 0.02, v1, 0.08), P(gU1 - 0.02, v1, 0.08), P(gU1 - 0.02, v1, 0.02), P(gU0 + 0.02, v1, 0.02)], '#0d1e2c');
     }
     // ── Right face (+u): control panel ──
