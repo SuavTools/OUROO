@@ -10,7 +10,7 @@ import { SkinPreview } from '@/components/SkinPreview';
 import { IconPreview } from '@/components/IconPreview';
 import { IconEditor } from '@/components/IconEditor';
 import { PersonPreview } from '@/components/PersonPreview';
-import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
+import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, MOUTHS, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
 import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon } from '@/lib/wallet';
@@ -129,7 +129,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
                 <div className="flex-1 space-y-2">
                   <Row label="Body">{Chips(['Slim', 'Broad'], person.g, i => setP({ g: i }))}</Row>
                   <Row label="Skin tone"><div className="flex gap-1">{TONES.map((c, i) => (<button key={c} onClick={() => setP({ tone: i })} className={`w-6 h-6 rounded-full border ${person.tone === i ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} />))}</div></Row>
-                  <Row label="Face">{Chips(FACES, person.face, i => setP({ face: i }))}</Row>
+                  <Row label="Mouth">{Chips(MOUTHS, person.mouth, i => setP({ mouth: i }))}</Row>
                 </div>
               </div>
               <Row label="Eyes">{Chips(EYES, person.eyes ?? 0, i => setP({ eyes: i }))}</Row>

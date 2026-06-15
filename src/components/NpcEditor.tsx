@@ -6,7 +6,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId,
-  TONES, HAIR, HATS, TOPS, PANTS, SHOES, FACES, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS,
+  TONES, HAIR, HATS, TOPS, PANTS, SHOES, MOUTHS, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS,
 } from '@/lib/person';
 import { SKINS, skinById } from '@/lib/skins';
 import { PersonPreview } from '@/components/PersonPreview';
@@ -80,7 +80,7 @@ export const NpcEditor: React.FC<{
               <div className="flex-1 space-y-2">
                 <Row label="Body">{Chips(['Slim', 'Broad'], person.g, i => setP({ g: i }))}</Row>
                 <Row label="Skin tone"><div className="flex gap-1">{TONES.map((c, i) => (<button key={c} onClick={() => setP({ tone: i })} className={`w-6 h-6 rounded-full border ${person.tone === i ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} />))}</div></Row>
-                <Row label="Face">{Chips(FACES, person.face, i => setP({ face: i }))}</Row>
+                <Row label="Mouth">{Chips(MOUTHS, person.mouth, i => setP({ mouth: i }))}</Row>
               </div>
             </div>
             {/* Tab bar */}

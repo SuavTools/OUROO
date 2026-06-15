@@ -10,7 +10,7 @@ export type PersonSpec = {
   top: number; topC: string;
   pants: number; pantsC: string;
   shoes: number; shoeC: string;
-  face: number;     // expression
+  mouth: number;    // mouth style
   acc: number;      // accessory
   eyes: number;     // eye style
 };
@@ -22,23 +22,23 @@ export const HATS = ['None', 'Cap', 'Beanie', 'Top hat', 'Crown', 'Cowboy'];
 export const TOPS = ['Tee', 'Hoodie', 'Tank', 'Jacket', 'Dress', 'Suit'];
 export const PANTS = ['Pants', 'Shorts', 'Skirt'];
 export const SHOES = ['Sneakers', 'Boots', 'Barefoot'];
-export const FACES = ['Neutral', 'Smile', 'Cool'];
+export const MOUTHS = ['Neutral', 'Smile', 'Cool', 'Grin', 'Open', 'Tongue', 'Tiny O', 'Smirk', 'Pucker', 'Grit', 'Wavy', 'Ooh', 'Wide', 'Lol'];
 export const ACCS = ['None', 'Glasses', 'Shades', 'Earrings', 'Beard'];
 export const EYES = ['Dot', 'Wide', 'Sleepy', 'Happy', 'Surprised', 'Angry', 'Tired', 'Stars', 'Spiral', 'Heart', 'Cross', 'Teary'];
 export const HAIR_COLORS = ['#1a1410', '#3a2616', '#6b4423', '#a9712f', '#d9b25a', '#e8e2d0', '#9a9a9a', '#b03028', '#cc44aa', '#4488ff'];
 export const CLOTH_COLORS = ['#ff4e3e', '#ff8800', '#ffd23a', '#1ED760', '#00cfff', '#4466dd', '#cc44ff', '#ff66aa', '#ffffff', '#1a1a24', '#9aa0b5', '#7a4e2a'];
 
-export const defaultPerson = (): PersonSpec => ({ g: 0, tone: 1, hair: 1, hairC: '#3a2616', hat: 0, hatC: '#1a1a24', top: 0, topC: '#00cfff', pants: 0, pantsC: '#1a1a24', shoes: 0, shoeC: '#ffffff', face: 1, acc: 0, eyes: 0 });
+export const defaultPerson = (): PersonSpec => ({ g: 0, tone: 1, hair: 1, hairC: '#3a2616', hat: 0, hatC: '#1a1a24', top: 0, topC: '#00cfff', pants: 0, pantsC: '#1a1a24', shoes: 0, shoeC: '#ffffff', mouth: 1, acc: 0, eyes: 0 });
 
 const hx = (c: string) => c.replace('#', '');
 export const isPersonId = (id: string) => id.startsWith('person:');
 export function encodePerson(p: PersonSpec): string {
-  return ['person:' + p.g, p.tone, p.hair, hx(p.hairC), p.hat, hx(p.hatC), p.top, hx(p.topC), p.pants, hx(p.pantsC), p.shoes, hx(p.shoeC), p.face, p.acc, p.eyes].join('~');
+  return ['person:' + p.g, p.tone, p.hair, hx(p.hairC), p.hat, hx(p.hatC), p.top, hx(p.topC), p.pants, hx(p.pantsC), p.shoes, hx(p.shoeC), p.mouth, p.acc, p.eyes].join('~');
 }
 export function parsePerson(id: string): PersonSpec {
   const f = id.replace(/^person:/, '').split('~'); const n = (i: number, d = 0) => { const v = parseInt(f[i]); return Number.isFinite(v) ? v : d; }; const col = (i: number, d: string) => f[i] ? '#' + f[i] : d;
   const d = defaultPerson();
-  return { g: n(0), tone: n(1, 1), hair: n(2, 1), hairC: col(3, d.hairC), hat: n(4), hatC: col(5, d.hatC), top: n(6), topC: col(7, d.topC), pants: n(8), pantsC: col(9, d.pantsC), shoes: n(10), shoeC: col(11, d.shoeC), face: n(12, 1), acc: n(13), eyes: n(14) };
+  return { g: n(0), tone: n(1, 1), hair: n(2, 1), hairC: col(3, d.hairC), hat: n(4), hatC: col(5, d.hatC), top: n(6), topC: col(7, d.topC), pants: n(8), pantsC: col(9, d.pantsC), shoes: n(10), shoeC: col(11, d.shoeC), mouth: n(12, 1), acc: n(13), eyes: n(14) };
 }
 export const personPrimaryColor = (p: PersonSpec): string => p.topC || '#00cfff';
 
@@ -249,11 +249,67 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
       }
     }
   }
-  ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; ctx.beginPath();
-  if (p.face === 1) ctx.arc(0, headY + 3.5 * s, 2.4 * s, 0.2, Math.PI - 0.2);   // smile
-  else if (p.face === 2) { ctx.moveTo(-2.4 * s, headY + 4.1 * s); ctx.lineTo(2.4 * s, headY + 4.1 * s); }   // straight (cool)
-  else { ctx.moveTo(-1.8 * s, headY + 4.1 * s); ctx.lineTo(1.8 * s, headY + 4.1 * s); }
-  ctx.stroke();
+  { // ── mouth ──
+    const mo = p.mouth ?? 0, my = headY + 4.2 * s;
+    ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s;
+    switch (mo) {
+      case 1: // Smile
+        ctx.beginPath(); ctx.arc(0, headY + 3.5 * s, 2.4 * s, 0.2, Math.PI - 0.2); ctx.stroke(); break;
+      case 2: // Cool
+        ctx.beginPath(); ctx.moveTo(-2.4 * s, my); ctx.lineTo(2.4 * s, my); ctx.stroke(); break;
+      case 3: { // Grin — wide smile showing upper teeth
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-3 * s, my - 0.6 * s); ctx.quadraticCurveTo(0, my + 1.4 * s, 3 * s, my - 0.6 * s); ctx.lineTo(3 * s, my + 1.4 * s); ctx.lineTo(-3 * s, my + 1.4 * s); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#d0c8c0'; ctx.lineWidth = 0.3 * s; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 1.2 * s, my - 0.3 * s); ctx.lineTo(i * 1.2 * s, my + 1.4 * s); ctx.stroke(); }
+        ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; ctx.beginPath(); ctx.moveTo(-3 * s, my - 0.6 * s); ctx.quadraticCurveTo(0, my + 1.4 * s, 3 * s, my - 0.6 * s); ctx.moveTo(-3 * s, my + 1.4 * s); ctx.lineTo(3 * s, my + 1.4 * s); ctx.stroke(); break;
+      }
+      case 4: { // Open — oval open mouth
+        ctx.fillStyle = '#3a1510'; ctx.beginPath(); ctx.ellipse(0, my, 2 * s, 1.6 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); break;
+      }
+      case 5: { // Tongue — wide open + tongue hanging down
+        ctx.fillStyle = '#3a1510'; ctx.beginPath(); ctx.arc(0, my - 1 * s, 2.6 * s, 0, Math.PI); ctx.fill();
+        ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; ctx.beginPath(); ctx.arc(0, my - 1 * s, 2.6 * s, 0, Math.PI); ctx.stroke();
+        ctx.fillStyle = '#e87878'; ctx.beginPath(); ctx.ellipse(0, my + 2.5 * s, 1.3 * s, 2 * s, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#c04040'; ctx.lineWidth = 0.7 * s; ctx.stroke(); break;
+      }
+      case 6: { // Tiny O — small surprised circle
+        ctx.fillStyle = '#3a1510'; ctx.beginPath(); ctx.arc(0, my, 0.9 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); break;
+      }
+      case 7: { // Smirk — one corner curled up
+        ctx.beginPath(); ctx.moveTo(-1.5 * s, my + 0.3 * s); ctx.quadraticCurveTo(0.5 * s, my + 0.5 * s, 2 * s, my - 1 * s); ctx.stroke(); break;
+      }
+      case 8: { // Pucker — small pursed oval lips
+        ctx.fillStyle = '#d46060'; ctx.beginPath(); ctx.ellipse(0, my, 1.5 * s, 1 * s, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#a03030'; ctx.lineWidth = 0.9 * s; ctx.stroke();
+        ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 0.5 * s; ctx.beginPath(); ctx.moveTo(-1.5 * s, my); ctx.lineTo(1.5 * s, my); ctx.stroke(); break;
+      }
+      case 9: { // Grit — flat bar of gritted teeth
+        ctx.fillStyle = '#fff'; rr(ctx, -2.4 * s, my - 0.9 * s, 4.8 * s, 1.8 * s, 0.4 * s); ctx.fill();
+        ctx.strokeStyle = '#d0c8c0'; ctx.lineWidth = 0.3 * s; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 1.2 * s, my - 0.9 * s); ctx.lineTo(i * 1.2 * s, my + 0.9 * s); ctx.stroke(); }
+        ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; rr(ctx, -2.4 * s, my - 0.9 * s, 4.8 * s, 1.8 * s, 0.4 * s); ctx.stroke(); break;
+      }
+      case 10: { // Wavy — squiggly line
+        ctx.beginPath(); ctx.moveTo(-2.4 * s, my); ctx.bezierCurveTo(-1.6 * s, my - 1.1 * s, -0.8 * s, my + 1.1 * s, 0, my); ctx.bezierCurveTo(0.8 * s, my - 1.1 * s, 1.6 * s, my + 1.1 * s, 2.4 * s, my); ctx.stroke(); break;
+      }
+      case 11: { // Ooh — big open circle
+        ctx.fillStyle = '#3a1510'; ctx.beginPath(); ctx.arc(0, my, 2.4 * s, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); break;
+      }
+      case 12: { // Wide — open with top + bottom teeth rows
+        const wW = 2.8 * s, th = 1.1 * s, wy = my - 1.5 * s;
+        ctx.fillStyle = '#fff'; rr(ctx, -wW, wy, wW * 2, th, 0.4 * s); ctx.fill(); rr(ctx, -wW, wy + th + 1 * s, wW * 2, th, 0.4 * s); ctx.fill();
+        ctx.fillStyle = '#3a1510'; ctx.fillRect(-wW, wy + th, wW * 2, 1 * s);
+        ctx.strokeStyle = '#d0c8c0'; ctx.lineWidth = 0.3 * s;
+        for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 1.4 * s, wy); ctx.lineTo(i * 1.4 * s, wy + th); ctx.stroke(); ctx.beginPath(); ctx.moveTo(i * 1.4 * s, wy + th + 1 * s); ctx.lineTo(i * 1.4 * s, wy + th + 1 * s + th); ctx.stroke(); }
+        ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; rr(ctx, -wW, wy, wW * 2, th * 2 + 1 * s, 0.4 * s); ctx.stroke(); break;
+      }
+      case 13: { // Lol — tongue lolling out to the side
+        ctx.fillStyle = '#e87878'; ctx.beginPath(); ctx.ellipse(2 * s, my + 0.5 * s, 1.8 * s, 1.2 * s, -0.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#c04040'; ctx.lineWidth = 0.7 * s; ctx.stroke();
+        ctx.strokeStyle = '#7a4a3a'; ctx.lineWidth = 1.2 * s; ctx.beginPath(); ctx.moveTo(-1.8 * s, my); ctx.lineTo(1.8 * s, my); ctx.stroke(); break;
+      }
+      default: // 0: Neutral
+        ctx.beginPath(); ctx.moveTo(-1.8 * s, my); ctx.lineTo(1.8 * s, my); ctx.stroke(); break;
+    }
+  }
 
   // ── hair (drawn around/over the head per style) ──
   ctx.fillStyle = p.hairC; const hc = p.hairC;
