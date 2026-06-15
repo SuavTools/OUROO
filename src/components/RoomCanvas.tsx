@@ -1550,6 +1550,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             for (let q = 0; q < 3; q++) { const sxv = b.sx + ((gx * 13 + gy * 7 + q * 29) % 40) - 20, syv = b.sy + ((gy * 11 + q * 17 + (t >> 4)) % 24) - 12; ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(t * 0.05 + gx + q)); ctx.fillStyle = q ? '#8a9cff' : '#fff'; ctx.fillRect(sxv, syv, 1.5, 1.5); }
             ctx.restore();
           }
+          else if (mat === 13) { ctx.fillStyle = odd ? '#8a8a96' : '#797986'; ctx.fill(); ctx.strokeStyle = 'rgba(20,20,30,0.18)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(b.sx - TW * 0.5, b.sy); ctx.lineTo(b.sx + TW * 0.5, b.sy); ctx.moveTo(b.sx, b.sy - TH * 0.5); ctx.lineTo(b.sx, b.sy + TH * 0.5); ctx.stroke(); }   // concrete — flat gray with joint lines
+          else if (mat === 14) { ctx.fillStyle = odd ? '#9a9690' : '#87837c'; ctx.fill(); ctx.fillStyle = 'rgba(36,30,22,0.28)'; for (let q = 0; q < 7; q++) ctx.fillRect(b.sx + ((gx * 11 + gy * 7 + q * 17) % 30) - 15, b.sy + ((gy * 9 + gx * 5 + q * 13) % 18) - 9, 2, 2); }   // gravel — speckled pebbles
+          else if (mat === 15) { ctx.fillStyle = odd ? '#7a5a3a' : '#6a4e2e'; ctx.fill(); ctx.fillStyle = 'rgba(28,14,6,0.22)'; for (let q = 0; q < 5; q++) ctx.fillRect(b.sx + ((gx * 13 + gy * 9 + q * 19) % 32) - 16, b.sy + ((gy * 11 + gx * 7 + q * 11) % 20) - 10, 2.5, 1.5); }   // dirt — earthy brown with dark flecks
           else { ctx.fillStyle = theme.floor; ctx.fill(); ctx.fillStyle = odd ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.22)'; ctx.fill(); }
           if (mat === 3) { ctx.strokeStyle = hexA('#e8c66a', 0.5); ctx.lineWidth = 1; diamond(b.sx, b.sy, TW * 0.84, TH * 0.84); ctx.stroke(); }   // carpet gold trim
           else if (mat === 2) { ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = '#2c6e34'; for (let q = 0; q < 5; q++) { const gxp = b.sx + (q - 2) * 6, gyp = b.sy + ((q % 2) - 0.5) * 6; ctx.beginPath(); ctx.moveTo(gxp, gyp + 3); ctx.lineTo(gxp, gyp - 4); ctx.stroke(); } ctx.restore(); }   // grass blades
@@ -2049,7 +2052,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <div className="p-3">
                 <p className="text-[11px] text-[#1ED760]/90 mb-2">Pick a floor and tap tiles to paint it. Furniture and triggers are untouched.</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {([[-1, 'Default', '#2a2a36'], [2, 'Grass', '#358540'], [1, 'Marble', '#bdb6a6'], [3, 'Carpet', '#9c1f29'], [4, 'Dark', '#1d1d27'], [5, 'Disco', '#cc44ff'], [6, 'Water', '#0c5e78'], [7, 'Lava', '#e0531e'], [8, 'Sand', '#dcc88c'], [9, 'Snow', '#dde8f5'], [10, 'Wood', '#8a5a32'], [11, 'Neon', '#0a0a16'], [12, 'Void', '#04040a']] as [number, string, string][]).map(([m, label, col]) => (
+                  {([[-1, 'Default', '#2a2a36'], [2, 'Grass', '#358540'], [1, 'Marble', '#bdb6a6'], [3, 'Carpet', '#9c1f29'], [4, 'Dark', '#1d1d27'], [5, 'Disco', '#cc44ff'], [6, 'Water', '#0c5e78'], [7, 'Lava', '#e0531e'], [8, 'Sand', '#dcc88c'], [9, 'Snow', '#dde8f5'], [10, 'Wood', '#8a5a32'], [11, 'Neon', '#0a0a16'], [12, 'Void', '#04040a'], [13, 'Concrete', '#8a8a96'], [14, 'Gravel', '#87837c'], [15, 'Dirt', '#7a5a3a']] as [number, string, string][]).map(([m, label, col]) => (
                     <button key={m} onClick={() => setPaintMat(m)}
                       className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-[11px] transition-colors ${paintMat === m ? 'border-[#1ED760] bg-[#1ED760]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
                       <span className="w-3.5 h-3.5 rounded-sm border border-white/20" style={{ background: col }} />{label}
