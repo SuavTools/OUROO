@@ -3084,6 +3084,163 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       ctx.stroke();
       break;
     }
+    case 'rubbish': {
+      // Three lumpy bin bags — back pair, then front bag on top
+      const bag = (bx: number, by: number, rx: number, ry: number, sf: number) => {
+        ctx.fillStyle = shade(d.color, sf);
+        ctx.beginPath(); ctx.ellipse(sx + bx, sy + by, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = shade(d.color, sf * 0.45); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(sx + bx, sy + by - ry * 0.72, rx * 0.28, ry * 0.13, 0, 0, Math.PI * 2); ctx.stroke();  // tie
+      };
+      bag(-9, -13, 8, 11, 0.85); bag(9, -11, 8, 11, 1.0); bag(0, -9, 10, 13, 0.95);
+      break;
+    }
+    case 'trashcan': {
+      const top = boxAt(ctx, sx, sy, 0.38, 0.38, 0.9, d.color, accent);
+      // lid — slightly wider and cocked to one side
+      ctx.fillStyle = shade(d.color, 1.3); diamond(ctx, sx + 1, top - 2, TW * 0.44, TH * 0.44); ctx.fill();
+      // horizontal ridges on the body
+      ctx.strokeStyle = shade(d.color, 0.4); ctx.lineWidth = 0.8;
+      [0.33, 0.66].forEach(f => { const yy = sy + (top - sy) * f; ctx.beginPath(); ctx.moveTo(sx - TW * 0.38, yy); ctx.lineTo(sx, yy + TH * 0.38); ctx.lineTo(sx + TW * 0.38, yy); ctx.stroke(); });
+      // rubbish sticking out the top
+      ctx.strokeStyle = '#5a3a1e'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx - 3, top); ctx.lineTo(sx - 5, top - 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + 4, top + 1); ctx.lineTo(sx + 7, top - 6); ctx.stroke();
+      break;
+    }
+    case 'newspaper': {
+      // Three crumpled sheets scattered on the floor
+      const sheet = (ox: number, oy: number, hw: number, hh: number) => {
+        diamond(ctx, sx + ox, sy + oy, hw, hh); ctx.fillStyle = d.color; ctx.fill();
+        ctx.strokeStyle = shade(d.color, 0.5); ctx.lineWidth = 0.7;
+        for (let r = -1; r <= 1; r++) { ctx.beginPath(); ctx.moveTo(sx + ox - hw * 0.65, sy + oy + r * hh * 0.33); ctx.lineTo(sx + ox + hw * 0.65, sy + oy + r * hh * 0.33); ctx.stroke(); }
+        ctx.strokeStyle = shade(d.color, 0.72); ctx.lineWidth = 0.5; diamond(ctx, sx + ox, sy + oy, hw, hh); ctx.stroke();
+      };
+      sheet(-10, -2, 14, 9); sheet(7, -3, 11, 7); sheet(-2, 5, 13, 8);
+      break;
+    }
+    case 'puddle': {
+      // Shallow dirty puddle with animated ripples (in ANIMATED set)
+      const ph = Math.sin(t * 0.07) * 0.5 + 0.5;
+      const hw = TW * 0.86, hh = TH * 0.7;
+      diamond(ctx, sx, sy, hw, hh); ctx.fillStyle = d.color; ctx.fill();
+      ctx.save();
+      ctx.fillStyle = hexA('#b0ccd8', 0.08 + ph * 0.1); diamond(ctx, sx, sy, hw, hh); ctx.fill();
+      ctx.strokeStyle = hexA('#c8dde8', 0.18 + ph * 0.22); ctx.lineWidth = 0.8;
+      diamond(ctx, sx, sy, hw * 0.55, hh * 0.55); ctx.stroke();
+      diamond(ctx, sx + 5, sy + 2, hw * 0.28, hh * 0.25); ctx.stroke();
+      ctx.restore();
+      break;
+    }
+    case 'fishbone': {
+      // A picked-clean fishbone on the ground
+      const col = d.color, by = sy - 3;
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(sx - 14, by); ctx.lineTo(sx + 12, by); ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(sx - 14, by); ctx.lineTo(sx - 21, by - 6); ctx.lineTo(sx - 21, by + 6); ctx.closePath(); ctx.fill();  // tail
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) { const rx = sx - 7 + i * 5, ang = i % 2 === 0 ? 6 : -6; ctx.beginPath(); ctx.moveTo(rx, by); ctx.lineTo(rx - 2, by + ang); ctx.stroke(); ctx.beginPath(); ctx.moveTo(rx, by); ctx.lineTo(rx - 2, by - ang); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(sx + 12, by, 3, 0, Math.PI * 2); ctx.fillStyle = shade(col, 1.1); ctx.fill();  // head
+      break;
+    }
+    case 'brokenbottle': {
+      // Scattered glass shards with a periodic glint (in ANIMATED set)
+      const col = d.color;
+      const shard = (ox: number, oy: number, pts: [number, number][]) => {
+        ctx.beginPath(); ctx.moveTo(sx + ox + pts[0][0], sy + oy + pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(sx + ox + pts[i][0], sy + oy + pts[i][1]);
+        ctx.closePath(); ctx.fillStyle = hexA(col, 0.65); ctx.fill();
+        ctx.strokeStyle = hexA(col, 0.35); ctx.lineWidth = 0.5; ctx.stroke();
+      };
+      shard(-6, -4, [[-4, 0], [0, -5], [5, 2], [2, 6]]);
+      shard(5, -2, [[0, -4], [4, 0], [1, 5], [-4, 2]]);
+      shard(-2, 5, [[-5, 0], [0, -4], [4, 1], [0, 5]]);
+      shard(1, -2, [[-2, -7], [2, -5], [3, 1], [-1, 3], [-3, -1]]);
+      const glint = Math.abs(Math.sin(t * 0.09 + 1.3));
+      if (glint > 0.8) { ctx.save(); ctx.globalAlpha = (glint - 0.8) / 0.2; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(sx + 3, sy - 8); ctx.lineTo(sx + 4, sy - 4); ctx.lineTo(sx + 3, sy); ctx.lineTo(sx + 2, sy - 4); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      break;
+    }
+    case 'oilstain': {
+      // Iridescent rainbow oil slick (in ANIMATED set)
+      const hw = TW * 0.9, hh = TH * 0.72;
+      diamond(ctx, sx, sy, hw, hh); ctx.fillStyle = d.color; ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      const hue = (t * 1.5) % 360;
+      ctx.fillStyle = `hsla(${hue},90%,55%,0.12)`; diamond(ctx, sx, sy, hw, hh); ctx.fill();
+      ctx.fillStyle = `hsla(${(hue + 120) % 360},90%,55%,0.09)`; diamond(ctx, sx - 4, sy + 2, hw * 0.7, hh * 0.58); ctx.fill();
+      ctx.fillStyle = `hsla(${(hue + 240) % 360},90%,55%,0.1)`; diamond(ctx, sx + 5, sy - 3, hw * 0.5, hh * 0.42); ctx.fill();
+      ctx.restore();
+      break;
+    }
+    case 'shoppingcart': {
+      const col = d.color;
+      const top = boxAt(ctx, sx, sy, 0.6, 0.5, 0.85, col, accent);
+      const Hh = sy - top;
+      // Wheels — dark ellipses at ground corners
+      ctx.fillStyle = '#1a1a1a';
+      for (const [dx, dy] of [[-TW * 0.62, -TH * 0.1], [TW * 0.62, -TH * 0.1], [-TW * 0.2, TH * 0.5], [TW * 0.2, TH * 0.5]] as [number, number][]) { ctx.beginPath(); ctx.ellipse(sx + dx, sy + dy, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill(); }
+      // Wire grid on right face
+      ctx.strokeStyle = shade(col, 0.36); ctx.lineWidth = 0.8;
+      for (let i = 1; i <= 2; i++) { const f = i / 3; ctx.beginPath(); ctx.moveTo(sx, sy + TH * 0.5 - f * Hh); ctx.lineTo(sx + TW * 0.6, sy - f * Hh); ctx.stroke(); }
+      // Handle bar along back-top edge, raised above
+      ctx.strokeStyle = shade(col, 1.2); ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(sx - TW * 0.6, top - 6); ctx.lineTo(sx, top - TH * 0.5 - 6); ctx.stroke();
+      ctx.lineCap = 'butt';
+      break;
+    }
+    case 'graffiti': {
+      // Spray-paint tag on the floor
+      ctx.save(); ctx.strokeStyle = d.color; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      const strokes: [number, number][][] = [
+        [[sx - 18, sy - 4], [sx - 10, sy - 9], [sx + 2, sy - 2], [sx + 10, sy - 9], [sx + 18, sy - 3]],
+        [[sx - 14, sy + 3], [sx - 6, sy - 5], [sx + 6, sy + 4], [sx + 14, sy - 3]],
+        [[sx - 8, sy + 6], [sx + 1, sy], [sx + 8, sy + 5]],
+      ];
+      for (const s of strokes) { ctx.beginPath(); ctx.moveTo(s[0][0], s[0][1]); for (let i = 1; i < s.length; i++) ctx.lineTo(s[i][0], s[i][1]); ctx.stroke(); }
+      ctx.globalAlpha = 0.28; ctx.fillStyle = d.color;
+      for (let i = 0; i < 10; i++) { const ox = ((i * 73 + 13) % 44) - 22, oy = ((i * 47 + 7) % 24) - 12; ctx.beginPath(); ctx.arc(sx + ox, sy + oy, 1 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+      break;
+    }
+    case 'pigeon': {
+      // Head-bobbing pigeon (in ANIMATED set)
+      const col = d.color, py = sy - 7, bob = Math.sin(t * 0.18) * 2.5;
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(sx, py, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = shade(col, 1.18); ctx.beginPath(); ctx.ellipse(sx - 2, py - 1, 6, 3.5, 0, 0, Math.PI * 2); ctx.fill();  // wing sheen
+      ctx.fillStyle = shade(col, 0.78); ctx.beginPath(); ctx.moveTo(sx - 7, py); ctx.lineTo(sx - 14, py + 3); ctx.lineTo(sx - 12, py - 3); ctx.closePath(); ctx.fill();  // tail
+      const [hx, hy] = [sx + 8, py - 5 + bob];
+      ctx.fillStyle = shade(col, 1.12); ctx.beginPath(); ctx.arc(hx, hy, 4, 0, Math.PI * 2); ctx.fill();  // head
+      ctx.fillStyle = '#c8a040'; ctx.beginPath(); ctx.moveTo(hx + 3, hy); ctx.lineTo(hx + 8, hy + 1); ctx.lineTo(hx + 4, hy + 2); ctx.closePath(); ctx.fill();  // beak
+      ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(hx + 2, hy - 1, 1.2, 0, Math.PI * 2); ctx.fill();  // eye
+      ctx.strokeStyle = '#c8a040'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(sx + 2, py + 5); ctx.lineTo(sx, py + 10); ctx.lineTo(sx - 4, py + 11); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx - 3, py + 5); ctx.lineTo(sx - 5, py + 10); ctx.lineTo(sx - 9, py + 11); ctx.stroke();
+      break;
+    }
+    case 'drain': {
+      const col = d.color, hw = TW * 0.76, hh = TH * 0.76;
+      diamond(ctx, sx, sy, hw, hh); ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = shade(col, 0.28); ctx.lineWidth = 1.5;
+      for (let i = -2; i <= 2; i++) { const oy = i * hh * 0.32; ctx.beginPath(); ctx.moveTo(sx - hw * 0.82, sy + oy); ctx.lineTo(sx + hw * 0.82, sy + oy); ctx.stroke(); }  // grate slots
+      ctx.strokeStyle = shade(col, 1.22); ctx.lineWidth = 1;
+      diamond(ctx, sx, sy, hw, hh); ctx.stroke(); diamond(ctx, sx, sy, hw * 0.88, hh * 0.88); ctx.stroke();
+      break;
+    }
+    case 'manhole': {
+      const col = d.color, hw = TW * 0.68, hh = TH * 0.68;
+      diamond(ctx, sx, sy, hw, hh); ctx.fillStyle = col; ctx.fill();
+      ctx.strokeStyle = shade(col, 1.28); ctx.lineWidth = 1;
+      for (const f of [0.84, 0.64, 0.38]) { diamond(ctx, sx, sy, hw * f, hh * f); ctx.stroke(); }  // concentric rings
+      ctx.strokeStyle = shade(col, 0.44); ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(sx - hw * 0.68, sy); ctx.lineTo(sx + hw * 0.68, sy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx, sy - hh * 0.68); ctx.lineTo(sx, sy + hh * 0.68); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx - hw * 0.5, sy - hh * 0.5); ctx.lineTo(sx + hw * 0.5, sy + hh * 0.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx - hw * 0.5, sy + hh * 0.5); ctx.lineTo(sx + hw * 0.5, sy - hh * 0.5); ctx.stroke();  // ribs
+      ctx.fillStyle = shade(col, 0.32);
+      for (const [bx, by] of [[0, -hh * 0.78], [hw * 0.78, 0], [0, hh * 0.78], [-hw * 0.78, 0]] as [number, number][]) { ctx.beginPath(); ctx.arc(sx + bx, sy + by, 2, 0, Math.PI * 2); ctx.fill(); }  // bolts
+      break;
+    }
     default: kind.startsWith('blk_') ? drawBuilt(ctx, sx, sy, d.h, d.color, accent, d.foot, kind, null, 0, d.cat === 'constr') : block(ctx, sx, sy, d.h, d.color, accent, d.foot, undefined, d.cat === 'constr');
   }
 }
@@ -3095,7 +3252,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign', 'neonsign']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign', 'neonsign', 'puddle', 'brokenbottle', 'oilstain', 'pigeon']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
 const spriteOrder: string[] = []; const SPRITE_CAP = 140;
 const mkCanvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };

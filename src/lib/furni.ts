@@ -39,6 +39,7 @@ export const CATS: FurniCat[] = [
   { id: 'luzes',    name: 'Lights' },
   { id: 'electro',  name: 'Electronics' },
   { id: 'deco',     name: 'Decoration' },
+  { id: 'urban',    name: 'Urban' },
 ];
 
 // Per-item Cristais price for premium collections (0 / absent = free basic furni).
@@ -354,6 +355,19 @@ export const FURNI: FurniDef[] = [
   { kind: 'pumpkin',    name: 'Jack-o-Lantern',emoji: '🎃', cat: 'festive', color: '#e07b1f', h: 1, walk: false, foot: 0.5, special: 'pumpkin' },
   { kind: 'menorah',    name: 'Menorah',     emoji: '🕎', cat: 'festive', color: '#caa24a', h: 1, walk: false, foot: 0.5, special: 'menorah' },
   { kind: 'stringlights',name: 'String Lights',emoji: '✨', cat: 'festive', color: '#ffe65c', h: 2, walk: true,  foot: 1, special: 'stringlights', span: [2, 1] },
+  // Urban — gritty street props
+  { kind: 'rubbish',    name: 'Rubbish Bags',    emoji: '🗑️', cat: 'urban', color: '#3a3a28', h: 1,  walk: false, foot: 0.8, special: 'rubbish' },
+  { kind: 'trashcan',   name: 'Trash Can',        emoji: '🗑️', cat: 'urban', color: '#585858', h: 1,  walk: false, foot: 0.4, special: 'trashcan' },
+  { kind: 'newspaper',  name: 'Old Newspapers',   emoji: '📰', cat: 'urban', color: '#c8bf96', h: 0,  walk: true,  foot: 1,   special: 'newspaper' },
+  { kind: 'puddle',     name: 'Puddle',           emoji: '💧', cat: 'urban', color: '#3a5a70', h: 0,  walk: true,  foot: 1,   special: 'puddle' },
+  { kind: 'fishbone',   name: 'Fishbone',         emoji: '🐟', cat: 'urban', color: '#c0b898', h: 0,  walk: true,  foot: 0.5, special: 'fishbone' },
+  { kind: 'brokenbottle',name:'Broken Bottle',    emoji: '🍶', cat: 'urban', color: '#4a8a70', h: 0,  walk: true,  foot: 0.5, special: 'brokenbottle' },
+  { kind: 'oil_stain',  name: 'Oil Stain',        emoji: '🫧', cat: 'urban', color: '#1a1a22', h: 0,  walk: true,  foot: 1,   special: 'oilstain' },
+  { kind: 'shopping_cart',name:'Shopping Cart',   emoji: '🛒', cat: 'urban', color: '#8a8a7a', h: 1,  walk: false, foot: 0.8, special: 'shoppingcart' },
+  { kind: 'graffiti',   name: 'Graffiti Tag',     emoji: '🎨', cat: 'urban', color: '#cc2244', h: 0,  walk: true,  foot: 1,   special: 'graffiti' },
+  { kind: 'pigeon',     name: 'Pigeon',           emoji: '🐦', cat: 'urban', color: '#8a8898', h: 0,  walk: true,  foot: 0.5, special: 'pigeon' },
+  { kind: 'drain',      name: 'Drain',            emoji: '⬛', cat: 'urban', color: '#3a3a3a', h: 0,  walk: true,  foot: 0.8, special: 'drain' },
+  { kind: 'manhole',    name: 'Manhole',          emoji: '⚫', cat: 'urban', color: '#4a4844', h: 0,  walk: true,  foot: 0.7, special: 'manhole' },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
