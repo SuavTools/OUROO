@@ -3255,6 +3255,41 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
       diamond(ctx, sx, sy, hw, hh); ctx.stroke(); diamond(ctx, sx, sy, hw * 0.88, hh * 0.88); ctx.stroke();
       break;
     }
+    case 'dumpster': {
+      // Large 2×1 wheeled dumpster — corrugated sides, split lid with front panel ajar
+      const col = d.color, dH = 1.65;
+      const Pt = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
+      // Left face (v = +0.5) — long side
+      const FL: number[][] = [Pt(-1, 0.5, 0), Pt(1, 0.5, 0), Pt(1, 0.5, dH), Pt(-1, 0.5, dH)];
+      poly(ctx, FL, shade(col, 0.54));
+      for (const r of [0.28, 0.56]) { fQuad(ctx, FL, 0, 1, r - 0.036, r + 0.036, shade(col, 0.38)); fQuad(ctx, FL, 0, 1, r, r + 0.02, shade(col, 0.68)); }
+      // Right face (u = +1) — short end
+      const FR: number[][] = [Pt(1, 0.5, 0), Pt(1, -0.5, 0), Pt(1, -0.5, dH), Pt(1, 0.5, dH)];
+      poly(ctx, FR, shade(col, 0.7));
+      for (const r of [0.28, 0.56]) { fQuad(ctx, FR, 0, 1, r - 0.036, r + 0.036, shade(col, 0.54)); fQuad(ctx, FR, 0, 1, r, r + 0.02, shade(col, 0.86)); }
+      // Lid — back half flat, front half propped ajar
+      const ajar = 0.3;
+      poly(ctx, [Pt(-1, -0.5, dH), Pt(1, -0.5, dH), Pt(1, 0, dH), Pt(-1, 0, dH)], shade(col, 0.92));  // back lid
+      poly(ctx, [Pt(-1, 0, dH), Pt(1, 0, dH), Pt(1, 0.5, dH + ajar), Pt(-1, 0.5, dH + ajar)], shade(col, 1.08));  // front lid ajar
+      // Dark interior glimpse under the open front lid
+      poly(ctx, [Pt(-1, 0, dH - 0.06), Pt(1, 0, dH - 0.06), Pt(1, 0.34, dH - 0.12), Pt(-1, 0.34, dH - 0.12)], '#060a06');
+      // Hinge seam between the two lids
+      const [h0, h1] = [Pt(-1, 0, dH), Pt(1, 0, dH)];
+      ctx.strokeStyle = shade(col, 0.3); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(h0[0], h0[1]); ctx.lineTo(h1[0], h1[1]); ctx.stroke();
+      // Vertical frame posts at visible corners
+      ctx.strokeStyle = shade(col, 1.12); ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (const [u, v] of [[-1, 0.5], [1, 0.5], [1, -0.5]] as [number, number][]) {
+        const b = Pt(u, v, 0), tp = Pt(u, v, dH); ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(tp[0], tp[1]); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+      // Wheels/casters
+      ctx.fillStyle = '#111';
+      for (const [u, v] of [[-0.78, 0.5], [0.78, 0.5], [-0.78, -0.5], [0.78, -0.5]] as [number, number][]) {
+        const wp = Pt(u, v, 0); ctx.beginPath(); ctx.ellipse(wp[0], wp[1] + 5, 5.5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.ellipse(wp[0], wp[1] + 5, 5.5, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      break;
+    }
     case 'mattress': {
       // Old mattress lying flat — 2×1 footprint, ticking stripes, brown stains
       const col = d.color, mH = 0.2;

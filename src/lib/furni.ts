@@ -369,6 +369,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'drain',      name: 'Drain',            emoji: '⬛', cat: 'urban', color: '#3a3a3a', h: 0,  walk: true,  foot: 0.8, special: 'drain' },
   { kind: 'manhole',    name: 'Manhole',          emoji: '⚫', cat: 'urban', color: '#4a4844', h: 0,  walk: true,  foot: 0.7, special: 'manhole' },
   { kind: 'mattress',  name: 'Old Mattress',     emoji: '🛌', cat: 'urban', color: '#b8b0a0', h: 1,  walk: false, foot: 1,   special: 'mattress', span: [2, 1] },
+  { kind: 'dumpster',  name: 'Dumpster',         emoji: '🗑️', cat: 'urban', color: '#2a4a28', h: 2,  walk: false, foot: 1,   special: 'dumpster', span: [2, 1] },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));
