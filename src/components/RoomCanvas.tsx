@@ -1509,12 +1509,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const drawAvatarBody = (a: Avatar, isSelf: boolean) => {
       const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;   // sink + ripple when standing in a pool
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
+      // Floor indicators (shadow + glow) snap to the actual surface level so they don't lerp through
+      // platform side-face geometry while the body sprite smoothly transitions between elevations.
+      const sy_floor = iso(a.fx, a.fy, a.lvl).sy + wade;
       const pi = a.skinId && a.skinId.startsWith('person:') ? parsePerson(a.skinId) : null;
       const col = pi ? personPrimaryColor(pi) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
-      if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       ctx.save(); ctx.translate(sx, sy - 30 + bob); ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;
       if (pi) drawPerson(ctx, pi, 42, 56, a.af);
