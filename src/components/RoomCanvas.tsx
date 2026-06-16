@@ -284,7 +284,7 @@ const encodeReward = (mode: LoreMode, crystals: number, skinId: string) => `rewa
 // ROOM ATMOSPHERE — an admin-chosen backdrop layer, persisted as a `bg:<id>` row. 'auto' = the room's
 // built-in day/night. The rest override it for storytelling (sunny, rainy, Matrix-style code rain, a
 // glitched-out signal). The atmosphere paints the sky/void BEHIND the isometric room.
-type Atmo = 'auto' | 'day' | 'night' | 'rain' | 'coderain' | 'glitch' | 'lava' | 'purplehaze' | 'swamp' | 'cosmic' | 'sunset';
+type Atmo = 'auto' | 'day' | 'night' | 'rain' | 'coderain' | 'glitch' | 'lava' | 'purplehaze' | 'swamp' | 'cosmic' | 'sunset' | 'disco';
 const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'auto', label: 'Room default', sw: '#7a8090' },
   { id: 'day', label: 'Sunny day', sw: '#aedcff' },
@@ -297,6 +297,7 @@ const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'swamp', label: 'Green swamp', sw: '#3f6e3a' },
   { id: 'cosmic', label: 'Cosmic', sw: '#5b3a8a' },
   { id: 'sunset', label: 'Sunset', sw: '#ff7e5f' },
+  { id: 'disco', label: 'Disco', sw: '#ff44cc' },
 ];
 type RoomItemRow = { id: string; kind: string; x: number; y: number; created_by?: string | null };
 // Load EVERY row for a room — PostgREST caps a single select at ~1000 rows, so page through with range()
@@ -1466,6 +1467,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       else if (atmo === 'swamp') { bg.addColorStop(0, '#0a1408'); bg.addColorStop(0.55, '#13230f'); bg.addColorStop(1, '#1d3318'); }
       else if (atmo === 'cosmic') { bg.addColorStop(0, '#03020a'); bg.addColorStop(0.6, '#0a0820'); bg.addColorStop(1, '#140a2e'); }
       else if (atmo === 'sunset') { bg.addColorStop(0, '#2a2a6e'); bg.addColorStop(0.45, '#c8527a'); bg.addColorStop(0.7, '#ff9a5a'); bg.addColorStop(1, '#ffd27a'); }
+      else if (atmo === 'disco') { bg.addColorStop(0, '#08040f'); bg.addColorStop(0.5, '#0e0618'); bg.addColorStop(1, '#050310'); }
       else { bg.addColorStop(0, '#08080e'); bg.addColorStop(0.55, '#0b0912'); bg.addColorStop(1, '#0a0610'); }
       ctx.fillStyle = bg; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
       if (atmo === 'day') {   // soft sun glow + drifting clouds
@@ -1493,6 +1495,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       } else if (atmo === 'cosmic') {   // starfield + a soft nebula
         ctx.save(); const neb = ctx.createRadialGradient(STAGE_W * 0.7, 160, 20, STAGE_W * 0.7, 160, 320); neb.addColorStop(0, 'rgba(120,70,200,0.22)'); neb.addColorStop(1, 'rgba(120,70,200,0)'); ctx.fillStyle = neb; ctx.fillRect(0, 0, STAGE_W, STAGE_H);
         for (let i = 0; i < 90; i++) { const x = (i * 137.5) % STAGE_W, y = (i * 79.3) % STAGE_H; ctx.globalAlpha = 0.3 + 0.6 * Math.abs(Math.sin(t * 0.04 + i)); ctx.fillStyle = i % 7 ? '#fff' : '#bfd0ff'; const s = i % 11 === 0 ? 2 : 1; ctx.fillRect(x, y, s, s); } ctx.restore();
+      } else if (atmo === 'disco') {   // disco ball reflections — coloured light patches sweeping the void + sparkle dots
+        ctx.save();
+        for (let i = 0; i < 18; i++) { const ph = t * 0.025 + i * (Math.PI * 2 / 18); const x = STAGE_W * 0.5 + Math.cos(ph * 0.71 + i * 0.38) * STAGE_W * 0.46; const y = STAGE_H * 0.38 + Math.sin(ph * 0.53 + i * 0.85) * STAGE_H * 0.36; const hue = (t * 2.5 + i * 20) % 360; const a = 0.13 + 0.09 * Math.abs(Math.sin(t * 0.06 + i * 1.1)); const rg = ctx.createRadialGradient(x, y, 2, x, y, 70); rg.addColorStop(0, `hsla(${hue},100%,68%,${a})`); rg.addColorStop(1, `hsla(${hue},100%,68%,0)`); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(x, y, 70, 38, 0, 0, Math.PI * 2); ctx.fill(); }
+        for (let i = 0; i < 35; i++) { const x = ((i * 149.7 + t * (i % 2 ? 1.1 : -0.9)) % (STAGE_W + 20)); const y = (i * 83.1 + Math.sin(t * 0.05 + i * 0.6) * 18) % (STAGE_H * 0.75); const hue = (t * 5 + i * 10) % 360; ctx.globalAlpha = Math.max(0, Math.sin(t * 0.12 + i * 0.74)) * 0.85; ctx.fillStyle = `hsl(${hue},100%,82%)`; const s = i % 7 === 0 ? 3 : 2; ctx.fillRect(x, y, s, s); }
+        ctx.restore();
       } else if (atmo === 'sunset') {   // low sun + warm haze bands
         ctx.save(); const sun = ctx.createRadialGradient(STAGE_W * 0.5, STAGE_H * 0.72, 8, STAGE_W * 0.5, STAGE_H * 0.72, 200); sun.addColorStop(0, 'rgba(255,240,200,0.95)'); sun.addColorStop(0.5, 'rgba(255,180,120,0.5)'); sun.addColorStop(1, 'rgba(255,180,120,0)'); ctx.fillStyle = sun; ctx.beginPath(); ctx.arc(STAGE_W * 0.5, STAGE_H * 0.72, 200, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(120,60,90,0.18)'; for (let i = 0; i < 4; i++) { const cy = 70 + i * 50 + Math.sin(t * 0.02 + i) * 6; ctx.beginPath(); ctx.ellipse(((i * 360 + t * 0.3) % (STAGE_W + 280)) - 140, cy, 90, 14, 0, 0, Math.PI * 2); ctx.fill(); } ctx.restore();
