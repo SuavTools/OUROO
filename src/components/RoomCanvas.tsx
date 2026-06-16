@@ -51,7 +51,7 @@ const wrapBubble = (text: string): string[] => {
 // import can't insert unbounded rows. Place as much as you like.
 const MAX_ITEMS = 100000;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
 // ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
@@ -68,9 +68,9 @@ const TUT_ROOMS: Record<string, RoomDef> = {
   terminal: { slug: 't_terminal', name: 'The Terminal', accent: '#8a9cff', floor: '#0d0f1c', plan: 'quadrado' },
   yourroom: { slug: 't_yourroom', name: 'Your Room',    accent: '#1ED760', floor: '#161628', plan: 'quadrado' },
 };
-const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'mega' };
+const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'mega',   outdoor: true };
 const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'enorme' };
-const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'grove', day: true };
+const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'grove',  day: true, outdoor: true };
 // The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
 // Town is the social hub, the Woods are the wild edge.
 const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
@@ -299,9 +299,10 @@ const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'sunset', label: 'Sunset', sw: '#ff7e5f' },
   { id: 'disco', label: 'Disco', sw: '#ff44cc' },
 ];
-// Rooms that follow a real-world GMT+10 day/night schedule instead of a static atmosphere.
-const SCHEDULED_SLUGS = new Set([
-  'town', 'woods',
+// User-created outdoor rooms — follow the GMT+10 day/night schedule.
+// Hardcoded rooms (Town, Woods) carry outdoor:true directly in their RoomDef.
+// Add a new outdoor room's slug here; roomDefOf picks it up automatically.
+const OUTDOOR_SLUGS = new Set([
   'u_00633691813b', // The Park
   'u_df131d039537', // Alleyway
   'u_7f1dc449d1f4', // More Alleyway
@@ -692,7 +693,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const finishCharacter = () => { setCharDone(true); try { localStorage.setItem('ouroo_tut_char', '1'); } catch { /* ignore */ } };
   // "Enter the simulation?" → fade to white → Your Room.
   const enterSimulation = () => { setSimConfirm(false); setSimFade(true); setTimeout(() => { setSimFade(false); onSetStepRef.current?.('yourroom'); }, 1200); };
-  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan });
+  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan, outdoor: OUTDOOR_SLUGS.has(r.slug) });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
     const res = await createRoom(newRoomName, !newRoomPrivate, newRoomPlan);
@@ -1473,7 +1474,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     const draw = () => {
       const theme = themeRef.current; const t = framesRef.current;
-      const atmo: Atmo = bgRef.current !== 'auto' ? bgRef.current : SCHEDULED_SLUGS.has(roomMetaRef.current.slug) ? scheduleAtmo() : (theme.day ? 'day' : 'night');
+      const atmo: Atmo = bgRef.current !== 'auto' ? bgRef.current : theme.outdoor ? scheduleAtmo() : (theme.day ? 'day' : 'night');
       const day = atmo === 'day' || atmo === 'rain' || atmo === 'sunset';   // "bright" → sky + lighter vignette/veranda
       const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H);
       if (atmo === 'day') { bg.addColorStop(0, '#aedcff'); bg.addColorStop(0.5, '#cfeaff'); bg.addColorStop(1, '#eaf6ef'); }
