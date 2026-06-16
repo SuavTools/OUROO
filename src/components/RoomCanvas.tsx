@@ -989,6 +989,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (!d.obscures && d.cat !== 'constr') continue;
       if (!d.obscures && d.pass && d.special !== 'roof') continue;  // skip doors/gates but not roofs
       if (!d.obscures && d.walk && (it.elev || 0) < 2) continue;   // walkable constr blocks only obscure when elevated
+      if (!d.obscures && it.kind === 'plataforma') continue;         // platforms are flat surfaces, not overhead covers
       if (d.obscures && (it.elev || 0) < 2) continue;              // explicit-obscures items (e.g. trash blocks) require elev >= 2
       const [sw, sh] = effSpan(it.kind, it.dir || 0);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) s.add(key(it.gx + du, it.gy + dv));
