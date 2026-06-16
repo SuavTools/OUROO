@@ -224,7 +224,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'pagoda',   name: 'Pagoda',   emoji: '🏯', cat: 'deco', color: '#d8402a', h: 4, walk: false, foot: 0.8, special: 'pagoda' },
   { kind: 'toro',     name: 'Stone Lantern', emoji: '🏮', cat: 'deco', color: '#b8b8b0', h: 2, walk: false, foot: 0.5, special: 'toro' },
   { kind: 'fonte',    name: 'Fountain', emoji: '⛲', cat: 'deco', color: '#c8ccd4', h: 1, walk: false, foot: 0.9, special: 'fountain' },
-  { kind: 'poste',    name: 'VIP Rope', emoji: '🪢', cat: 'deco', color: '#caa24a', h: 0, walk: true,  foot: 0.3, special: 'rope', span: [3, 1] },
+  { kind: 'poste',    name: 'VIP Rope', emoji: '🪢', cat: 'deco', color: '#caa24a', h: 0, walk: false, foot: 0.3, special: 'rope', span: [3, 1] },
   { kind: 'boia',     name: 'Float',    emoji: '🛟', cat: 'deco', color: '#ff5a5a', h: 0, walk: true,  foot: 0.6, special: 'float' },
   { kind: 'parasol',  name: 'Parasol',  emoji: '⛱️', cat: 'deco', color: '#e23b46', h: 2, walk: false, foot: 0.8, special: 'parasol' },
   { kind: 'banner',   name: 'Banner',   emoji: '🎌', cat: 'deco', color: '#7a1020', h: 0, walk: true, foot: 0.4, special: 'banner' },
