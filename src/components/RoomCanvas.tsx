@@ -1647,7 +1647,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           }
           return;
         }
-        if (lift > 0 && dd.walk && dd.cat !== 'constr' && dd.special !== 'neonarch' && dd.special !== 'arch' && dd.special !== 'disco') drawSupports(ii, z, sw, sh);
+        if (lift > 0 && dd.walk && dd.cat !== 'constr' && dd.special !== 'neonarch' && dd.special !== 'arch' && dd.special !== 'disco' && dd.special !== 'ball_hc') drawSupports(ii, z, sw, sh);
         drawFurniSprite(ctx, ii.kind, sx, sy, theme.accent, framesRef.current, ii.dir || 0);
       } }); }
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
