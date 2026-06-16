@@ -924,8 +924,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const surf = surfRef.current, S = solidRef.current; const tk = key(tx, ty);
     if (S[tk] || !surf[tk].length || (sx === tx && sy === ty)) return [];
     const obscured = buildObscuredSet();
-    // Refuse to auto-path to an obscured tile unless already standing within 1 tile of it.
-    if (obscured.has(tk) && Math.max(Math.abs(sx - tx), Math.abs(sy - ty)) > 1) return [];
+    const playerObscured = obscured.has(key(sx, sy));
+    // Block routing to an obscured tile from outside — unless already standing within 1 tile of it.
+    // If the player is already inside an obscured area, lift all restrictions so they can navigate freely.
+    if (!playerObscured && obscured.has(tk) && Math.max(Math.abs(sx - tx), Math.abs(sy - ty)) > 1) return [];
     // Avoid portal tiles unless the destination is within 1 tile of a portal (intentional approach).
     const allPortals = [...(PORTALS[roomMetaRef.current.slug] ?? []), ...itemsRef.current.filter(it => it.portalTo)] as { gx: number; gy: number }[];
     const destNearPortal = allPortals.some(pt => Math.max(Math.abs(pt.gx - tx), Math.abs(pt.gy - ty)) <= 1);
@@ -941,7 +943,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const [dx, dy] of N) {
         const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
         const k2 = key(nx, ny); if (S[k2]) continue;
-        if (k2 !== tk && obscured.has(k2)) continue;                               // don't route through obscured tiles (only the destination is allowed)
+        if (!playerObscured && k2 !== tk && obscured.has(k2)) continue;             // outside: don't route through obscured tiles; inside: navigate freely
         if (portalKeys?.has(k2)) continue;                                         // skip portal tiles unless intentionally approaching one
         if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
         for (let si = surf[k2].length - 1; si >= 0; si--) {   // prefer highest reachable surface (step ON, not under)
