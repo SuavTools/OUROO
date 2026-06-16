@@ -771,7 +771,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
         const k = key(gx, gy); const base = planRef.current[k]; if (base < 0) continue;   // can't sit on a void tile
         if (base + elev + (d.h || 0) > peak) peak = base + elev + (d.h || 0);   // track the topmost point for the camera
-        if (d.pass) { /* walk-through (doorways/roof): never blocks, never raises the floor */ }
+        if (d.pass || (!d.walk && (d.cat === 'constr' || d.obscures) && elev >= 2)) { /* walk-through or elevated overhead cover: never blocks, never raises the floor */ }
         else if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
         else if (sit != null) { surf[k].push(base + elev + sit); if (elev <= 0.01) grounded[k] = 1; }
         else S[k] = 1;
@@ -895,7 +895,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const d = defOf(it.kind);
       if (!d.obscures && d.cat !== 'constr') continue;
       if (!d.obscures && d.pass && d.special !== 'roof') continue;  // skip doors/gates but not roofs
-      if (!d.obscures && d.walk && (it.elev || 0) < 2) continue;   // walkable blocks only obscure when elevated
+      if (!d.obscures && d.walk && (it.elev || 0) < 2) continue;   // walkable constr blocks only obscure when elevated
+      if (d.obscures && (it.elev || 0) < 2) continue;              // explicit-obscures items (e.g. trash blocks) require elev >= 2
       const [sw, sh] = effSpan(it.kind, it.dir || 0);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) s.add(key(it.gx + du, it.gy + dv));
     }
