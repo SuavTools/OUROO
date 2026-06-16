@@ -299,6 +299,24 @@ const ATMOS: { id: Atmo; label: string; sw: string }[] = [
   { id: 'sunset', label: 'Sunset', sw: '#ff7e5f' },
   { id: 'disco', label: 'Disco', sw: '#ff44cc' },
 ];
+// Rooms that follow a real-world GMT+10 day/night schedule instead of a static atmosphere.
+const SCHEDULED_SLUGS = new Set([
+  'town', 'woods',
+  'u_00633691813b', // The Park
+  'u_df131d039537', // Alleyway
+  'u_7f1dc449d1f4', // More Alleyway
+  'u_7ebfdc6ffa2b', // Even More Alleyway?
+  'u_a4b6e410943b', // Junkyard
+  // TODO: add Dirt Road slug here
+]);
+const scheduleAtmo = (): Atmo => {
+  const now = new Date();
+  const gmt10Min = (now.getUTCHours() * 60 + now.getUTCMinutes() + 10 * 60) % (24 * 60);
+  if (gmt10Min >= 330 && gmt10Min < 420) return 'sunset';  // 5:30–7:00  sunrise glow
+  if (gmt10Min >= 420 && gmt10Min < 1080) return 'day';    // 7:00–18:00 daytime
+  if (gmt10Min >= 1080 && gmt10Min < 1200) return 'sunset'; // 18:00–20:00 sunset
+  return 'night';                                            // 20:00–5:30  night
+};
 type RoomItemRow = { id: string; kind: string; x: number; y: number; created_by?: string | null };
 // Load EVERY row for a room — PostgREST caps a single select at ~1000 rows, so page through with range()
 // until a short page comes back. Without this a room silently stops loading past ~1000 pieces.
@@ -1455,7 +1473,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
     const draw = () => {
       const theme = themeRef.current; const t = framesRef.current;
-      const atmo: Atmo = bgRef.current === 'auto' ? (theme.day ? 'day' : 'night') : bgRef.current;
+      const atmo: Atmo = bgRef.current !== 'auto' ? bgRef.current : SCHEDULED_SLUGS.has(roomMetaRef.current.slug) ? scheduleAtmo() : (theme.day ? 'day' : 'night');
       const day = atmo === 'day' || atmo === 'rain' || atmo === 'sunset';   // "bright" → sky + lighter vignette/veranda
       const bg = ctx.createLinearGradient(0, 0, 0, STAGE_H);
       if (atmo === 'day') { bg.addColorStop(0, '#aedcff'); bg.addColorStop(0.5, '#cfeaff'); bg.addColorStop(1, '#eaf6ef'); }
