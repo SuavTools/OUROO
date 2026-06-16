@@ -452,6 +452,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const wasMovingRef = useRef(false);
   const strideRef = useRef(0);   // distance walked since the last footstep sound
   const lastPortalKeyRef = useRef<string | null>(null);   // rising-edge guard so a portal fires once per arrival
+  const portalFromRef = useRef<string | null>(null);       // source-room slug when arriving via a portal — consumed by ingest
   const portalTileRef = useRef(-1);                       // last tile we ran the portal check on (skip the per-frame scan otherwise)
   const voidTimerRef = useRef(0);   // frames the player has lingered on a void tile (time-based hazard)
   const modRef = useRef(false);
@@ -744,6 +745,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const def = await resolveDest(p.to);
     if (!def) { flashHint('That door leads nowhere now.'); return; }
     musicRef.current?.portal();   // threshold-crossing shimmer
+    portalFromRef.current = roomMetaRef.current.slug;   // remember origin so ingest can spawn near the return portal
     switchRoom(def);
     if (p.user) return;
     try {
@@ -909,6 +911,44 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (fx < GRID && fy < GRID && solidRef.current[key(fx, fy)]) {
         const near = nearestUnobscuredTile(ox, oy);
         if (near) { me.fx = near.gx; me.fy = near.gy; me.tx = near.gx; me.ty = near.gy; me.path = []; }
+      }
+    }
+    // Portal-arrival guard: spawn adjacent to the return portal in the destination room.
+    // If every adjacent tile is obscured, fall back to the nearest unobscured tile from that portal.
+    { const from = portalFromRef.current;
+      if (from) {
+        portalFromRef.current = null;
+        const slug = roomMetaRef.current.slug;
+        const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
+        const returnPortals: { gx: number; gy: number }[] = [
+          ...(PORTALS[slug] ?? []).filter(rp => rp.to === from),
+          ...allItems.filter(it => it.portalTo === from).map(it => ({ gx: it.gx, gy: it.gy })),
+        ];
+        const S = solidRef.current, surf = surfRef.current, obscured = buildObscuredSet();
+        let placed = false;
+        for (const portal of returnPortals) {
+          if (placed) break;
+          for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            const nx = portal.gx + dx, ny = portal.gy + dy;
+            if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+            const k = key(nx, ny);
+            if (S[k] || !surf[k].length || obscured.has(k)) continue;
+            const me = selfRef.current;
+            me.fx = nx; me.fy = ny; me.tx = nx; me.ty = ny; me.path = [];
+            lastPortalKeyRef.current = `${portal.gx},${portal.gy}`;   // suppress immediate re-fire on the return portal
+            placed = true; break;
+          }
+          if (!placed) {
+            // All adjacent tiles are obscured — nearest unobscured tile to the portal instead
+            const near = nearestUnobscuredTile(portal.gx, portal.gy);
+            if (near) {
+              const me = selfRef.current;
+              me.fx = near.gx; me.fy = near.gy; me.tx = near.gx; me.ty = near.gy; me.path = [];
+              lastPortalKeyRef.current = `${portal.gx},${portal.gy}`;
+              placed = true;
+            }
+          }
+        }
       }
     }
     rebuildNpcs();
