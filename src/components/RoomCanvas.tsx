@@ -893,9 +893,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const s = new Set<number>();
     for (const it of allItems) {
       const d = defOf(it.kind);
-      if (d.cat !== 'constr') continue;
-      if ((d.h ?? 0) < 2 && d.special !== 'roof') continue;  // roofs (h=1) count; short blocks don't
-      if (d.pass && d.special !== 'roof') continue;           // skip doors/gates (walk-through entries)
+      if (!d.obscures && d.cat !== 'constr') continue;
+      if (!d.obscures && (d.h ?? 0) < 2 && d.special !== 'roof') continue;  // roofs (h=1) count; short blocks don't
+      if (!d.obscures && d.pass && d.special !== 'roof') continue;           // skip doors/gates (walk-through entries)
       const [sw, sh] = effSpan(it.kind, it.dir || 0);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) s.add(key(it.gx + du, it.gy + dv));
     }

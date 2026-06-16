@@ -9,7 +9,8 @@
 export type FurniDef = {
   kind: string; name: string; emoji: string; cat: string; color: string;
   h: number; walk: boolean; foot: number; special?: string; span?: [number, number];
-  pass?: boolean;   // walk-THROUGH (doorways): renders tall but never blocks the tile or raises the floor
+  pass?: boolean;     // walk-THROUGH (doorways): renders tall but never blocks the tile or raises the floor
+  obscures?: boolean; // tile is treated as obscured for pathfinding (blocks auto-routing from > 1 tile away)
 };
 
 export type FurniCat = { id: string; name: string; premium?: boolean };
@@ -371,8 +372,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'manhole',    name: 'Manhole',          emoji: '⚫', cat: 'urban', color: '#4a4844', h: 0,  walk: true,  foot: 0.7, special: 'manhole' },
   { kind: 'mattress',  name: 'Old Mattress',     emoji: '🛌', cat: 'urban', color: '#b8b0a0', h: 1,  walk: false, foot: 1,   special: 'mattress', span: [2, 1] },
   { kind: 'dumpster',  name: 'Dumpster',         emoji: '🗑️', cat: 'urban', color: '#2a4a28', h: 2,  walk: false, foot: 1,   special: 'dumpster', span: [2, 1] },
-  { kind: 'trash_block',  name: 'Compacted Trash Block',        emoji: '📦', cat: 'junkyard', color: '#4a4a3a', h: 1, walk: false, foot: 1,   special: 'trashblock' },
-  { kind: 'trash_wall',   name: 'Compacted Trash Double Block', emoji: '📦', cat: 'junkyard', color: '#4a4a3a', h: 2, walk: false, foot: 1,   special: 'trashblock' },
+  { kind: 'trash_block',  name: 'Compacted Trash Block',        emoji: '📦', cat: 'constr',   color: '#4a4a3a', h: 1, walk: false, foot: 1,   special: 'trashblock', obscures: true },
+  { kind: 'trash_wall',   name: 'Compacted Trash Double Block', emoji: '📦', cat: 'constr',   color: '#4a4a3a', h: 2, walk: false, foot: 1,   special: 'trashblock', obscures: true },
   { kind: 'forklift',     name: 'Forklift',                     emoji: '🏗️', cat: 'junkyard', color: '#e8b820', h: 2, walk: false, foot: 1,   special: 'forklift',   span: [4, 2] },
   { kind: 'rusty_car',    name: 'Old Rusty Car',                emoji: '🚗', cat: 'junkyard', color: '#8a4a2e', h: 2, walk: false, foot: 1,   special: 'rustycar',   span: [2, 4] },
   { kind: 'hazard_sign',  name: 'Hazard Sign',                  emoji: '⚠️', cat: 'junkyard', color: '#f0c800', h: 2, walk: false, foot: 0.4, special: 'hazardsign' },
