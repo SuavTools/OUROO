@@ -307,7 +307,7 @@ const SCHEDULED_SLUGS = new Set([
   'u_7f1dc449d1f4', // More Alleyway
   'u_7ebfdc6ffa2b', // Even More Alleyway?
   'u_a4b6e410943b', // Junkyard
-  // TODO: add Dirt Road slug here
+  'u_8c0a2afe1aaf', // Dirt Road
 ]);
 const scheduleAtmo = (): Atmo => {
   const now = new Date();
