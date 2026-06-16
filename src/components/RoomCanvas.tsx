@@ -890,6 +890,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const findPath = (sx: number, sy: number, slvl: number, tx: number, ty: number) => {
     const surf = surfRef.current, S = solidRef.current; const tk = key(tx, ty);
     if (S[tk] || !surf[tk].length || (sx === tx && sy === ty)) return [];
+    // Avoid portal tiles unless the destination is within 1 tile of a portal (intentional approach).
+    const allPortals = [...(PORTALS[roomMetaRef.current.slug] ?? []), ...itemsRef.current.filter(it => it.portalTo)] as { gx: number; gy: number }[];
+    const destNearPortal = allPortals.some(pt => Math.max(Math.abs(pt.gx - tx), Math.abs(pt.gy - ty)) <= 1);
+    const portalKeys = destNearPortal ? null : new Set(allPortals.map(pt => key(pt.gx, pt.gy)));
     const id = (k: number, l: number) => `${k}:${l}`;
     const start = { k: key(sx, sy), l: slvl }; const startId = id(start.k, start.l);
     const prev = new Map<string, string>(); const info = new Map<string, { gx: number; gy: number; z: number }>();
@@ -901,6 +905,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const [dx, dy] of N) {
         const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
         const k2 = key(nx, ny); if (S[k2]) continue;
+        if (portalKeys?.has(k2)) continue;                                         // skip portal tiles unless intentionally approaching one
         if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
         for (let si = surf[k2].length - 1; si >= 0; si--) {   // prefer highest reachable surface (step ON, not under)
           const sz = surf[k2][si];
