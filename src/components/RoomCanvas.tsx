@@ -884,17 +884,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     rebuildHeight();
   }, [roomMeta.slug, roomMeta.plan]);
-  // A tile is "obscured" — tucked inside a built structure or directly covered by construction
-  // furniture — when either: (a) most orthogonal sides are sealed by solid furniture (walled-off
-  // nook), or (b) any construction-category item sits directly on the tile (acts as a roof/ceiling).
-  // Used to stop players auto-pathing straight to hidden easter eggs from across the room.
+  // A tile is "obscured" if any construction item with height >= 2 (wall, roof, pillar, door…)
+  // has a footprint that covers it — meaning the tile is inside or beneath a built structure.
   const isTileObscured = (gx: number, gy: number): boolean => {
-    const S = solidRef.current, plan = planRef.current; let blocked = 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = gx + dx, ny = gy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
-      const k2 = key(nx, ny); if (S[k2] && plan[k2] >= 0) blocked++;   // sealed by a placed item, not the room's void edge
-    }
-    if (blocked >= 3) return true;
     const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
     for (const it of allItems) {
       const d = defOf(it.kind); if (d.cat !== 'constr' || (d.h ?? 0) < 2) continue;
