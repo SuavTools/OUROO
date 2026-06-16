@@ -895,6 +895,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     return blocked >= 3;
   };
+  // Closest open (walkable, non-hidden) tile to (gx,gy) — used when a click lands on solid
+  // furniture/construction so it redirects to a real destination instead of doing nothing.
+  const nearestUnobscuredTile = (gx: number, gy: number): { gx: number; gy: number } | null => {
+    const S = solidRef.current, surf = surfRef.current;
+    for (let r = 1; r < GRID; r++) {
+      for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;   // ring border only
+        const nx = gx + dx, ny = gy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+        const k = key(nx, ny); if (S[k] || !surf[k].length) continue;
+        if (isTileObscured(nx, ny)) continue;
+        return { gx: nx, gy: ny };
+      }
+    }
+    return null;
+  };
   // Level-aware BFS over (tile, surface) nodes: step to a neighbour surface within ±1 of the current
   // level. From the ground you can't reach a high deck (gap>1) so you pass UNDER it; ramps/stairs add
   // the intermediate surfaces to climb ON. Returns waypoints {gx,gy,z}.
@@ -1708,7 +1723,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const tx = gx + dx, ty = gy + dy;
       if (planLvl(tx, ty) >= 0) { const fp = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, tx, ty); if (fp && fp.length) { me.path = fp; return; } }
     }
-    const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, gx, gy); if (p && p.length) me.path = p;
+    // Clicking ON furniture/construction redirects to the nearest open tile instead of no-op'ing.
+    let dest = { gx, gy };
+    if (solidRef.current[key(gx, gy)]) { const near = nearestUnobscuredTile(gx, gy); if (near) dest = near; }
+    const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, dest.gx, dest.gy); if (p && p.length) me.path = p;
   };
   // ── Click-drag floor/carpet painting ──
   const isFloorPaint = (kind: string): boolean => { const d = defOf(kind); const [sw, sh] = d.span ?? [1, 1]; return !!d.walk && (d.h ?? 0) <= 1 && sw === 1 && sh === 1 && d.special !== 'stair'; };
