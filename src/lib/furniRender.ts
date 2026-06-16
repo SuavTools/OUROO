@@ -3416,77 +3416,77 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'rustycar': {
       const col = d.color;
       const Pt = (u: number, v: number, z: number): number[] => [sx + (u - v) * TW, sy + (u + v) * TH - z * STACK_H];
-      const S = (u: number, z: number) => Pt(u, 1, z);   // near side face (v=1, 2-tile-wide span)
-      const E = (v: number, z: number) => Pt(2, v, z);   // front face (u=2)
-      // Front face — lower body panel with headlights + grille
-      poly(ctx, [E(-1, 0), E(1, 0), E(1, 0.68), E(-1, 0.68)], shade(col, 0.52));
-      const headlight = (vv: number) => {
-        const p = E(vv, 0.42);
+      const S = (v: number, z: number) => Pt(1, v, z);   // side face at u=1 (car drives along v)
+      const F = (u: number, z: number) => Pt(u, 2, z);   // front face at v=2 (faces bottom-left)
+      // Front face — headlights + grille (lowest point, bottom-left)
+      poly(ctx, [F(-1, 0), F(1, 0), F(1, 0.68), F(-1, 0.68)], shade(col, 0.52));
+      const headlight = (uu: number) => {
+        const p = F(uu, 0.42);
         ctx.fillStyle = '#1c1818'; ctx.beginPath(); ctx.ellipse(p[0], p[1], 8, 5, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(220,200,100,0.32)'; ctx.beginPath(); ctx.ellipse(p[0] - 1, p[1] - 1, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
       };
       headlight(-0.65); headlight(0.65);
       for (let gi = 0; gi < 3; gi++) {
         const gz = 0.08 + gi * 0.1;
-        poly(ctx, [E(-0.45, gz), E(0.45, gz), E(0.45, gz + 0.055), E(-0.45, gz + 0.055)], '#28261e');
+        poly(ctx, [F(-0.45, gz), F(0.45, gz), F(0.45, gz + 0.055), F(-0.45, gz + 0.055)], '#28261e');
       }
-      poly(ctx, [E(-1, 0.04), E(1, 0.04), E(1, 0.16), E(-1, 0.16)], '#787868');
-      // Side body — boxy sedan silhouette: hood, windshield slope, roof, rear slope, trunk
+      poly(ctx, [F(-1, 0.04), F(1, 0.04), F(1, 0.16), F(-1, 0.16)], '#787868');
+      // Side body — boxy sedan silhouette (front at v=2, rear at v=-2)
       poly(ctx, [
-        S(-2, 0), S(-2, 0.68),
-        S(-0.65, 0.68), S(-0.02, 1.45),
-        S(1.0, 1.45), S(1.6, 0.68),
-        S(2, 0.68), S(2, 0),
+        S(2, 0), S(2, 0.68),
+        S(0.6, 0.68), S(0.0, 1.45),
+        S(-1.0, 1.45), S(-1.6, 0.68),
+        S(-2, 0.68), S(-2, 0),
       ], col);
       // Windshield glass (slanted A-pillar to roof)
-      poly(ctx, [S(-0.65, 0.68), S(-0.02, 1.45), S(0.72, 1.45), S(0.1, 0.68)], hexA('#5ab0c8', 0.5));
-      // Windshield cracks — main zigzag from lower corner + branch
+      poly(ctx, [S(0.6, 0.68), S(0.0, 1.45), S(-0.65, 1.45), S(-0.05, 0.68)], hexA('#5ab0c8', 0.5));
+      // Windshield cracks — main zigzag + branch
       ctx.strokeStyle = 'rgba(12,10,8,0.82)'; ctx.lineWidth = 1.2;
       ctx.beginPath();
-      const wc = [S(-0.55, 0.72), S(-0.2, 1.0), S(0.1, 0.88), S(0.42, 1.28)];
+      const wc = [S(0.45, 0.72), S(0.1, 1.0), S(0.22, 0.9), S(-0.25, 1.28)];
       ctx.moveTo(wc[0][0], wc[0][1]);
       for (let i = 1; i < wc.length; i++) ctx.lineTo(wc[i][0], wc[i][1]);
-      const wb = [S(-0.2, 1.0), S(0.18, 1.38)];
+      const wb = [S(0.1, 1.0), S(-0.15, 1.38)];
       ctx.moveTo(wb[0][0], wb[0][1]); ctx.lineTo(wb[1][0], wb[1][1]);
       ctx.stroke();
       // Side door window (B-pillar to C-pillar)
-      poly(ctx, [S(0.1, 0.68), S(0.1, 1.45), S(1.0, 1.45), S(1.0, 0.68)], hexA('#5ab0c8', 0.32));
+      poly(ctx, [S(-0.05, 0.68), S(-0.05, 1.45), S(-1.0, 1.45), S(-1.0, 0.68)], hexA('#5ab0c8', 0.32));
       // Side window crack
       ctx.strokeStyle = 'rgba(12,10,8,0.55)'; ctx.lineWidth = 0.9;
       ctx.beginPath();
-      const wsc = [S(0.55, 1.3), S(0.72, 1.05), S(0.88, 1.18)];
+      const wsc = [S(-0.35, 1.3), S(-0.55, 1.05), S(-0.7, 1.18)];
       ctx.moveTo(wsc[0][0], wsc[0][1]);
       for (let i = 1; i < wsc.length; i++) ctx.lineTo(wsc[i][0], wsc[i][1]);
       ctx.stroke();
       // Rear quarter window (slanted C-pillar)
-      poly(ctx, [S(1.0, 1.45), S(1.6, 0.68), S(1.78, 0.68), S(1.18, 1.45)], hexA('#5ab0c8', 0.28));
+      poly(ctx, [S(-1.0, 1.45), S(-1.6, 0.68), S(-1.78, 0.68), S(-1.18, 1.45)], hexA('#5ab0c8', 0.28));
       // Door crease line
       ctx.strokeStyle = shade(col, 0.55); ctx.lineWidth = 0.8;
-      const dl = [S(-0.62, 0.18), S(2, 0.18)];
+      const dl = [S(0.55, 0.18), S(-1.55, 0.18)];
       ctx.beginPath(); ctx.moveTo(dl[0][0], dl[0][1]); ctx.lineTo(dl[1][0], dl[1][1]); ctx.stroke();
       // Door handle
-      const dh = [S(0.7, 0.42), S(0.92, 0.42)];
+      const dh = [S(-0.3, 0.42), S(-0.55, 0.42)];
       ctx.strokeStyle = shade(col, 0.58); ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(dh[0][0], dh[0][1]); ctx.lineTo(dh[1][0], dh[1][1]); ctx.stroke();
       // Wheel arch cutouts
       ctx.fillStyle = '#0d0d0d';
-      for (const wu of [-1.3, 1.3] as number[]) {
-        const ap = S(wu, 0); ctx.beginPath(); ctx.ellipse(ap[0], ap[1], 17, 12, 0, Math.PI, 0); ctx.fill();
+      for (const vv of [1.3, -1.3] as number[]) {
+        const ap = S(vv, 0); ctx.beginPath(); ctx.ellipse(ap[0], ap[1], 17, 12, 0, Math.PI, 0); ctx.fill();
       }
       // Rust patches
       ctx.fillStyle = 'rgba(72,26,8,0.52)';
-      const rp1 = S(0.55, 0.44); ctx.beginPath(); ctx.ellipse(rp1[0], rp1[1], 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+      const rp1 = S(-0.5, 0.44); ctx.beginPath(); ctx.ellipse(rp1[0], rp1[1], 12, 7, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = 'rgba(55,20,6,0.48)';
-      const rp2 = S(-1.1, 0.32); ctx.beginPath(); ctx.ellipse(rp2[0], rp2[1], 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+      const rp2 = S(1.1, 0.32); ctx.beginPath(); ctx.ellipse(rp2[0], rp2[1], 8, 5, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = 'rgba(75,28,8,0.45)';
-      const rp3 = S(1.8, 0.35); ctx.beginPath(); ctx.ellipse(rp3[0], rp3[1], 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+      const rp3 = S(-1.8, 0.35); ctx.beginPath(); ctx.ellipse(rp3[0], rp3[1], 9, 5, 0, 0, Math.PI * 2); ctx.fill();
       // Top faces — hood, roof, trunk
-      poly(ctx, [Pt(-2, -1, 0.68), Pt(-0.65, -1, 0.68), Pt(-0.65, 1, 0.68), Pt(-2, 1, 0.68)], shade(col, 0.9));
-      poly(ctx, [Pt(-0.02, -1, 1.45), Pt(1.0, -1, 1.45), Pt(1.0, 1, 1.45), Pt(-0.02, 1, 1.45)], shade(col, 1.05));
-      poly(ctx, [Pt(1.6, -1, 0.68), Pt(2, -1, 0.68), Pt(2, 1, 0.68), Pt(1.6, 1, 0.68)], shade(col, 0.88));
-      // Wheels (near side, v=1)
-      for (const wu of [-1.3, 1.3] as number[]) {
-        const wp = Pt(wu, 1, 0);
+      poly(ctx, [Pt(-1, 2, 0.68), Pt(1, 2, 0.68), Pt(1, 0.6, 0.68), Pt(-1, 0.6, 0.68)], shade(col, 0.9));
+      poly(ctx, [Pt(-1, 0.0, 1.45), Pt(1, 0.0, 1.45), Pt(1, -1.0, 1.45), Pt(-1, -1.0, 1.45)], shade(col, 1.05));
+      poly(ctx, [Pt(-1, -1.6, 0.68), Pt(1, -1.6, 0.68), Pt(1, -2, 0.68), Pt(-1, -2, 0.68)], shade(col, 0.88));
+      // Wheels (near side, u=1)
+      for (const vv of [1.3, -1.3] as number[]) {
+        const wp = Pt(1, vv, 0);
         ctx.fillStyle = '#0a0808'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1], 14, 9, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1], 9, 5.5, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#6a6060'; ctx.beginPath(); ctx.ellipse(wp[0], wp[1], 4.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
