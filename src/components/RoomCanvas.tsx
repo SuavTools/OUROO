@@ -897,7 +897,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (blocked >= 3) return true;
     const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
     for (const it of allItems) {
-      if (defOf(it.kind).cat !== 'constr') continue;
+      const d = defOf(it.kind); if (d.cat !== 'constr' || (d.h ?? 0) < 2) continue;
       const [sw, sh] = effSpan(it.kind, it.dir || 0);
       if (gx >= it.gx && gx < it.gx + sw && gy >= it.gy && gy < it.gy + sh) return true;
     }
