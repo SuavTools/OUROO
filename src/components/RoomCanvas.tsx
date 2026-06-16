@@ -1515,10 +1515,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const drawAvatarBody = (a: Avatar, isSelf: boolean) => {
       const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;   // sink + ripple when standing in a pool
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
-      // Floor indicators (shadow + glow): snap the screen-y to the nearest tile centre so the ellipses
-      // don't drift below the platform surface as the avatar moves fractionally past the tile midpoint.
-      // sx still tracks the fractional position so the indicator follows the avatar horizontally.
-      const sy_floor = (clampTile(a.fx) + clampTile(a.fy)) * TH - a.lvl * STACK_H + wade;
+      // Floor indicators (shadow + glow) snap to the actual surface level so they don't lerp through
+      // platform side-face geometry while the body sprite smoothly transitions between elevations.
+      const sy_floor = iso(a.fx, a.fy, a.lvl).sy + wade;
       const pi = a.skinId && a.skinId.startsWith('person:') ? parsePerson(a.skinId) : null;
       const col = pi ? personPrimaryColor(pi) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
