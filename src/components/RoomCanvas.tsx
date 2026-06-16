@@ -902,6 +902,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (near) { me.fx = near.gx; me.fy = near.gy; me.tx = near.gx; me.ty = near.gy; me.path = []; }
       }
     }
+    // Diagonal-behind guard: don't spawn 1 tile behind solid furniture on the vertical axis.
+    // In iso (sort by gx+gy), solid at (ox+1,oy+1) renders in front and visually covers the player.
+    { const me = selfRef.current; const ox = clampTile(me.fx), oy = clampTile(me.fy);
+      const fx = ox + 1, fy = oy + 1;
+      if (fx < GRID && fy < GRID && solidRef.current[key(fx, fy)]) {
+        const near = nearestUnobscuredTile(ox, oy);
+        if (near) { me.fx = near.gx; me.fy = near.gy; me.tx = near.gx; me.ty = near.gy; me.path = []; }
+      }
+    }
     rebuildNpcs();
     // On-enter markers: fire once per player (per marker id) — Oracle card / glitch sequence / reward.
     for (const mk of loreRef.current.filter(l => l.mode === 'enter')) {
