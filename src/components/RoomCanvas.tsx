@@ -895,6 +895,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (nk>=0) { me.fx=nk%GRID; me.fy=(nk/GRID)|0; me.tx=me.fx; me.ty=me.fy; me.path=[]; }
       }
     }
+    // Obscure guard: if spawn lands under an obscuring structure, step out to the nearest open tile.
+    { const me = selfRef.current; const ox = clampTile(me.fx), oy = clampTile(me.fy);
+      if (buildObscuredSet().has(key(ox, oy))) {
+        const near = nearestUnobscuredTile(ox, oy);
+        if (near) { me.fx = near.gx; me.fy = near.gy; me.tx = near.gx; me.ty = near.gy; me.path = []; }
+      }
+    }
     rebuildNpcs();
     // On-enter markers: fire once per player (per marker id) — Oracle card / glitch sequence / reward.
     for (const mk of loreRef.current.filter(l => l.mode === 'enter')) {
