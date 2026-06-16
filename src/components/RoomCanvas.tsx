@@ -951,6 +951,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
       }
     }
+    // Elevation correction: after all positional guards, snap z/lvl to the highest walkable surface
+    // at the chosen tile so the avatar stands on top of any platform rather than inside it.
+    { const me = selfRef.current; const k = key(clampTile(me.fx), clampTile(me.fy));
+      const surfs = surfRef.current[k];
+      if (surfs && surfs.length > 0) { const top = Math.max(...surfs); me.z = top; me.lvl = top; }
+    }
     rebuildNpcs();
     // On-enter markers: fire once per player (per marker id) — Oracle card / glitch sequence / reward.
     for (const mk of loreRef.current.filter(l => l.mode === 'enter')) {
