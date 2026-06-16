@@ -884,18 +884,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     rebuildHeight();
   }, [roomMeta.slug, roomMeta.plan]);
-  // Builds a set of tile keys covered by obscuring construction: 'constr' items placed at
-  // elev >= 2 (high enough to walk under) except doors/gates (pass=true), plus any non-constr
-  // item with obscures:true. Ground-level constr (elev 0-1) stays a solid barrier, not an
-  // overhead cover — characters can't fit under it.
+  // Builds a set of tile keys covered by obscuring construction: all 'constr' structural items
+  // (walls, pillars, roofs, windows) plus walkable blocks placed at elev >= 2 (overhead cover).
+  // Doors/gates (pass=true, non-roof) are excluded — intentional walk-through entries.
+  // Walkable blocks at elev 0-1 are ground-level platforms, not overhead covers.
   const buildObscuredSet = (): Set<number> => {
     const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
     const s = new Set<number>();
     for (const it of allItems) {
       const d = defOf(it.kind);
       if (!d.obscures && d.cat !== 'constr') continue;
-      if (!d.obscures && d.pass) continue;                    // skip doors/gates (walk-through entries)
-      if (!d.obscures && (it.elev || 0) < 2) continue;       // ground-level constr can't be walked under
+      if (!d.obscures && d.pass && d.special !== 'roof') continue;  // skip doors/gates but not roofs
+      if (!d.obscures && d.walk && (it.elev || 0) < 2) continue;   // walkable blocks only obscure when elevated
       const [sw, sh] = effSpan(it.kind, it.dir || 0);
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) s.add(key(it.gx + du, it.gy + dv));
     }
