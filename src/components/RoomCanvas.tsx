@@ -1690,10 +1690,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const { gx, gy } = evtTile(e);
     if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
     // Hidden easter egg — the wall at the top-centre of the Terminal room pays out, once.
+    // Requires the player to be adjacent (Chebyshev ≤ 1); clicking from afar falls through
+    // to the solid-tile redirect so they walk up first.
     if (room === 't_terminal' && gx === 5 && gy === 1 && !eggClaimed) {
-      setEggClaimed(true); addBalance(EASTER_EGG_REWARD); musicRef.current?.chime();
-      flashHint(`The wall gives. ${CURRENCY_SYMBOL}+${EASTER_EGG_REWARD} ✦`);
-      return;
+      const { fx, fy } = selfRef.current;
+      if (Math.max(Math.abs(clampTile(fx) - 5), Math.abs(clampTile(fy) - 1)) <= 1) {
+        setEggClaimed(true); addBalance(EASTER_EGG_REWARD); musicRef.current?.chime();
+        flashHint(`The wall gives. ${CURRENCY_SYMBOL}+${EASTER_EGG_REWARD} ✦`);
+        return;
+      }
+      // Too far away — fall through so the solid-redirect routes them toward the wall.
     }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
     if (placeNpc) { placeNpcAt(gx, gy); return; }
