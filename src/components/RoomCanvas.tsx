@@ -884,8 +884,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     rebuildHeight();
   }, [roomMeta.slug, roomMeta.plan]);
-  // A tile is "obscured" — tucked inside a built structure (a hut of blocks, a walled-off nook) —
-  // when most of its orthogonal sides are sealed by solid furniture (not the room's own boundary wall).
+  // A tile is "obscured" — tucked inside a built structure or directly covered by construction
+  // furniture — when either: (a) most orthogonal sides are sealed by solid furniture (walled-off
+  // nook), or (b) any construction-category item sits directly on the tile (acts as a roof/ceiling).
   // Used to stop players auto-pathing straight to hidden easter eggs from across the room.
   const isTileObscured = (gx: number, gy: number): boolean => {
     const S = solidRef.current, plan = planRef.current; let blocked = 0;
@@ -893,7 +894,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const nx = gx + dx, ny = gy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
       const k2 = key(nx, ny); if (S[k2] && plan[k2] >= 0) blocked++;   // sealed by a placed item, not the room's void edge
     }
-    return blocked >= 3;
+    if (blocked >= 3) return true;
+    const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
+    for (const it of allItems) {
+      if (defOf(it.kind).cat !== 'constr') continue;
+      const [sw, sh] = effSpan(it.kind, it.dir || 0);
+      if (gx >= it.gx && gx < it.gx + sw && gy >= it.gy && gy < it.gy + sh) return true;
+    }
+    return false;
   };
   // Closest open (walkable, non-hidden) tile to (gx,gy) — used when a click lands on solid
   // furniture/construction so it redirects to a real destination instead of doing nothing.
