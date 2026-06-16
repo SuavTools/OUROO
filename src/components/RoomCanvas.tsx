@@ -884,27 +884,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     rebuildHeight();
   }, [roomMeta.slug, roomMeta.plan]);
-  // A tile is "obscured" if any construction item with height >= 2 (wall, roof, pillar, door…)
-  // has a footprint that covers it — meaning the tile is inside or beneath a built structure.
-  const isTileObscured = (gx: number, gy: number): boolean => {
+  // Builds a set of tile keys covered by obscuring construction: roof items (special='roof', h=1)
+  // and tall non-pass items (h>=2: walls, pillars, windows). Doors/gates (pass=true, non-roof)
+  // are excluded — they are intentional walk-through entries, not covers.
+  // NOTE: all roof variants have h=1 in furni.ts, so the threshold must admit h>=1 for roofs.
+  const buildObscuredSet = (): Set<number> => {
     const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
+    const s = new Set<number>();
     for (const it of allItems) {
-      const d = defOf(it.kind); if (d.cat !== 'constr' || (d.h ?? 0) < 2) continue;
+      const d = defOf(it.kind);
+      if (d.cat !== 'constr') continue;
+      if ((d.h ?? 0) < 2 && d.special !== 'roof') continue;  // roofs (h=1) count; short blocks don't
+      if (d.pass && d.special !== 'roof') continue;           // skip doors/gates (walk-through entries)
       const [sw, sh] = effSpan(it.kind, it.dir || 0);
-      if (gx >= it.gx && gx < it.gx + sw && gy >= it.gy && gy < it.gy + sh) return true;
+      for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) s.add(key(it.gx + du, it.gy + dv));
     }
-    return false;
+    return s;
   };
-  // Closest open (walkable, non-hidden) tile to (gx,gy) — used when a click lands on solid
+  // Closest open (walkable, non-obscured) tile to (gx,gy) — used when a click lands on solid
   // furniture/construction so it redirects to a real destination instead of doing nothing.
   const nearestUnobscuredTile = (gx: number, gy: number): { gx: number; gy: number } | null => {
     const S = solidRef.current, surf = surfRef.current;
+    const obscured = buildObscuredSet();
     for (let r = 1; r < GRID; r++) {
       for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;   // ring border only
         const nx = gx + dx, ny = gy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
         const k = key(nx, ny); if (S[k] || !surf[k].length) continue;
-        if (isTileObscured(nx, ny)) continue;
+        if (obscured.has(k)) continue;
         return { gx: nx, gy: ny };
       }
     }
@@ -916,8 +923,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const findPath = (sx: number, sy: number, slvl: number, tx: number, ty: number) => {
     const surf = surfRef.current, S = solidRef.current; const tk = key(tx, ty);
     if (S[tk] || !surf[tk].length || (sx === tx && sy === ty)) return [];
-    // Refuse to auto-path to a hidden/obscured tile (easter egg) unless already standing within 1 tile of it.
-    if (isTileObscured(tx, ty) && Math.max(Math.abs(sx - tx), Math.abs(sy - ty)) > 1) return [];
+    const obscured = buildObscuredSet();
+    // Refuse to auto-path to an obscured tile unless already standing within 1 tile of it.
+    if (obscured.has(tk) && Math.max(Math.abs(sx - tx), Math.abs(sy - ty)) > 1) return [];
     // Avoid portal tiles unless the destination is within 1 tile of a portal (intentional approach).
     const allPortals = [...(PORTALS[roomMetaRef.current.slug] ?? []), ...itemsRef.current.filter(it => it.portalTo)] as { gx: number; gy: number }[];
     const destNearPortal = allPortals.some(pt => Math.max(Math.abs(pt.gx - tx), Math.abs(pt.gy - ty)) <= 1);
@@ -933,6 +941,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const [dx, dy] of N) {
         const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
         const k2 = key(nx, ny); if (S[k2]) continue;
+        if (k2 !== tk && obscured.has(k2)) continue;                               // don't route through obscured tiles (only the destination is allowed)
         if (portalKeys?.has(k2)) continue;                                         // skip portal tiles unless intentionally approaching one
         if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
         for (let si = surf[k2].length - 1; si >= 0; si--) {   // prefer highest reachable surface (step ON, not under)
