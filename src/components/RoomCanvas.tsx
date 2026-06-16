@@ -884,12 +884,25 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     rebuildHeight();
   }, [roomMeta.slug, roomMeta.plan]);
+  // A tile is "obscured" — tucked inside a built structure (a hut of blocks, a walled-off nook) —
+  // when most of its orthogonal sides are sealed by solid furniture (not the room's own boundary wall).
+  // Used to stop players auto-pathing straight to hidden easter eggs from across the room.
+  const isTileObscured = (gx: number, gy: number): boolean => {
+    const S = solidRef.current, plan = planRef.current; let blocked = 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = gx + dx, ny = gy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+      const k2 = key(nx, ny); if (S[k2] && plan[k2] >= 0) blocked++;   // sealed by a placed item, not the room's void edge
+    }
+    return blocked >= 3;
+  };
   // Level-aware BFS over (tile, surface) nodes: step to a neighbour surface within ±1 of the current
   // level. From the ground you can't reach a high deck (gap>1) so you pass UNDER it; ramps/stairs add
   // the intermediate surfaces to climb ON. Returns waypoints {gx,gy,z}.
   const findPath = (sx: number, sy: number, slvl: number, tx: number, ty: number) => {
     const surf = surfRef.current, S = solidRef.current; const tk = key(tx, ty);
     if (S[tk] || !surf[tk].length || (sx === tx && sy === ty)) return [];
+    // Refuse to auto-path to a hidden/obscured tile (easter egg) unless already standing within 1 tile of it.
+    if (isTileObscured(tx, ty) && Math.max(Math.abs(sx - tx), Math.abs(sy - ty)) > 1) return [];
     // Avoid portal tiles unless the destination is within 1 tile of a portal (intentional approach).
     const allPortals = [...(PORTALS[roomMetaRef.current.slug] ?? []), ...itemsRef.current.filter(it => it.portalTo)] as { gx: number; gy: number }[];
     const destNearPortal = allPortals.some(pt => Math.max(Math.abs(pt.gx - tx), Math.abs(pt.gy - ty)) <= 1);
