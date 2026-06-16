@@ -374,7 +374,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'trash_block',  name: 'Compacted Trash Block',        emoji: '📦', cat: 'junkyard', color: '#4a4a3a', h: 1, walk: false, foot: 1,   special: 'trashblock' },
   { kind: 'trash_wall',   name: 'Compacted Trash Double Block', emoji: '📦', cat: 'junkyard', color: '#4a4a3a', h: 2, walk: false, foot: 1,   special: 'trashblock' },
   { kind: 'forklift',     name: 'Forklift',                     emoji: '🏗️', cat: 'junkyard', color: '#e8b820', h: 2, walk: false, foot: 1,   special: 'forklift',   span: [4, 2] },
-  { kind: 'rusty_car',    name: 'Old Rusty Car',                emoji: '🚗', cat: 'junkyard', color: '#8a4a2e', h: 1, walk: false, foot: 1,   special: 'rustycar',   span: [4, 3] },
+  { kind: 'rusty_car',    name: 'Old Rusty Car',                emoji: '🚗', cat: 'junkyard', color: '#8a4a2e', h: 2, walk: false, foot: 1,   special: 'rustycar',   span: [4, 2] },
   { kind: 'hazard_sign',  name: 'Hazard Sign',                  emoji: '⚠️', cat: 'junkyard', color: '#f0c800', h: 2, walk: false, foot: 0.4, special: 'hazardsign' },
 ];
 
