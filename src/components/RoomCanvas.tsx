@@ -1480,7 +1480,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const alpha = Math.min(1, a.bubbleLife / 30); ctx.save(); ctx.globalAlpha = alpha; ctx.font = '600 15px Helvetica, Arial';
         const lines = wrapBubble(a.bubble); const lh = 19, padY = 7;
         const tw = Math.max(...lines.map(l => ctx.measureText(l).width)), bw = tw + 22, bh = lines.length * lh + padY * 2;
-        const bx = sx - bw / 2, by = sy - 56 - bh;   // sit the whole box above the head regardless of line count
+        const bx = sx - bw / 2, by = sy - 101 - bh;   // sit above 2× head + tallest hat (top hat ≈ sy-87)
         ctx.fillStyle = 'rgba(10,10,18,0.94)'; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(sx - 6, by + bh); ctx.lineTo(sx + 6, by + bh); ctx.lineTo(sx, by + bh + 8); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
