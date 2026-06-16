@@ -310,13 +310,30 @@ const OUTDOOR_SLUGS = new Set([
   'u_a4b6e410943b', // Junkyard
   'u_8c0a2afe1aaf', // Dirt Road
 ]);
+// 5% per-hour rain probability → ~94% chance of at least one rain spell per 5-day period.
+const RAIN_PROB = 0.05;
+// Deterministic float in [0,1) from an integer seed — stable across frames for the same window.
+const seededFrac = (n: number) => { const x = Math.sin(n + 1) * 43758.5453; return x - Math.floor(x); };
 const scheduleAtmo = (): Atmo => {
   const now = new Date();
   const gmt10Min = (now.getUTCHours() * 60 + now.getUTCMinutes() + 10 * 60) % (24 * 60);
-  if (gmt10Min >= 330 && gmt10Min < 420) return 'sunset';  // 5:30–7:00  sunrise glow
-  if (gmt10Min >= 420 && gmt10Min < 1080) return 'day';    // 7:00–18:00 daytime
+  if (gmt10Min >= 330 && gmt10Min < 420) return 'sunset';   // 5:30–7:00  sunrise glow
+  if (gmt10Min >= 420 && gmt10Min < 1080) {                 // 7:00–18:00 daytime
+    // Seed on (GMT+10 calendar day, hour) so the decision is stable per hour and shared across clients.
+    const day = Math.floor((now.getTime() + 10 * 3600000) / 86400000);
+    const curHour = Math.floor(gmt10Min / 60);
+    for (let h = curHour; h >= Math.max(7, curHour - 1); h--) {
+      const seed = day * 24 + h;
+      if (seededFrac(seed) < RAIN_PROB) {
+        const start = h * 60 + Math.floor(seededFrac(seed * 2) * 60); // random minute within hour
+        const dur   = 5 + Math.floor(seededFrac(seed * 3) * 56);       // 5–60 min
+        if (gmt10Min >= start && gmt10Min < Math.min(start + dur, 1080)) return 'rain';
+      }
+    }
+    return 'day';
+  }
   if (gmt10Min >= 1080 && gmt10Min < 1200) return 'sunset'; // 18:00–20:00 sunset
-  return 'night';                                            // 20:00–5:30  night
+  return 'night';                                             // 20:00–5:30  night
 };
 type RoomItemRow = { id: string; kind: string; x: number; y: number; created_by?: string | null };
 // Load EVERY row for a room — PostgREST caps a single select at ~1000 rows, so page through with range()
