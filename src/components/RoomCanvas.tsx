@@ -684,7 +684,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
   };
 
-  const pushFeed = (handle: string, text: string) => { const id = ++feedId.current; setFeed(f => [...f.slice(-5), { id, handle, text }]); setTimeout(() => setFeed(f => f.filter(m => m.id !== id)), 9000); };
+  const pushFeed = (handle: string, text: string) => { const id = ++feedId.current; setFeed(f => [...f.slice(-4), { id, handle, text }]); };
   const say = (raw: string) => {
     const v = validateMessage(raw); if (!v.ok) { flashHint(v.error); return; }
     const text = v.value.slice(0, 120); const me = selfRef.current; me.bubble = text; me.bubbleLife = BUBBLE_FRAMES;
