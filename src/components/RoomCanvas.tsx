@@ -365,7 +365,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -665,6 +665,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Same check from inside canvas closures (reads refs, not render state).
   const canBuildHere = () => canBuildIn(roomMetaRef.current, ownerIdRef.current, myHandleRef.current, modRef.current);
   const [invOpen, setInvOpen] = useState(false);
+  const [emoteOpen, setEmoteOpen] = useState(false);
+  const [currentEmote, setCurrentEmote] = useState<string | null>(null);
   const wallet = useWallet();
   // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in.
   const { user } = useUser();
@@ -676,6 +678,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const signedInRef = useRef(false);
   useEffect(() => { signedInRef.current = signedIn; }, [signedIn]);
   const requireAccount = (): boolean => { if (signedInRef.current) return true; flashHint('Create an account to build 🛸'); signInWithDiscord(); return false; };
+
+  const activateEmote = (name: string | null) => {
+    const me = selfRef.current;
+    me.emote = name;
+    setCurrentEmote(name);
+    setEmoteOpen(false);
+    if (channelRef.current && joinedRef.current) {
+      channelRef.current.send({ type: 'broadcast', event: 'emote', payload: { id: me.id, em: name } });
+    }
+  };
 
   // Equip a skin or custom icon on the live avatar and broadcast it to the room.
   const equipAppearance = (id: string) => {
@@ -1328,6 +1340,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
         .on('broadcast', { event: 'delcurated' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { delCuratedRef.current.add(id); decorRef.current = decorRef.current.filter(d => d.id !== id); rebuildHeight(); } })   // admin removed a baked-in piece
+        .on('broadcast', { event: 'emote' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return; const r = remotesRef.current.get(id); if (r) r.emote = pl.em ? String(pl.em) : null; })
         .on('broadcast', { event: 'leave' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id && remotesRef.current.delete(id)) setPopulation(remotesRef.current.size + 1); })   // someone left/refreshed → drop them now (don't wait for presence timeout)
         .subscribe(async status => {
           if (!alive) return;
@@ -1374,7 +1387,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         else { const s = Math.min(WALK, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; strideRef.current += s; }
       }
       if (moving) { if (!wasMovingRef.current || strideRef.current >= 1.05) { strideRef.current = 0; musicRef.current?.footstep(); } }
-      else { me.af += 0.3; strideRef.current = 1.05; }   // primed so the next walk's first step sounds at once
+      else { me.af += me.emote ? 1 : 0.3; strideRef.current = 1.05; }   // primed so the next walk's first step sounds at once
       const targetZ = me.path.length ? me.path[0].z : me.lvl;   // climb toward the next surface as we walk
       me.z += (targetZ - me.z) * 0.25;
       if (me.bubbleLife > 0) me.bubbleLife--;
@@ -1396,6 +1409,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           lastPortalKeyRef.current = pk;
           const nowObs = buildObscuredSet().has(ct);
           if (nowObs !== inObscuredRef.current) { inObscuredRef.current = nowObs; setInObscured(nowObs); }
+          if (me.emote) { me.emote = null; setCurrentEmote(null); if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'emote', payload: { id: me.id, em: null } }); }
         }
       }
       // ARCADE MACHINES — pop the game picker when the player steps onto a tile adjacent to the cabinet.
@@ -1531,8 +1545,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      const bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
-      ctx.save(); ctx.translate(sx, sy - 30 + bob); ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;
+      const em = a.emote ?? null;
+      let bob: number, sway = 0, spin = 0;
+      if (em === 'dance') {
+        bob = Math.sin(a.af * 0.22) * 10;
+        sway = Math.sin(a.af * 0.11) * 6;
+      } else if (em === 'jump') {
+        bob = -Math.max(0, Math.sin(a.af * 0.1)) * 22;
+      } else if (em === 'levitate') {
+        bob = -12 - Math.sin(a.af * 0.05) * 6;
+        spin = Math.sin(a.af * 0.03) * 0.08;
+      } else {
+        bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
+      }
+      if (em === 'levitate') {
+        ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(a.af * 0.08) * 0.2;
+        ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(sx, sy_floor, 20 + Math.sin(a.af * 0.08) * 4, 9, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save(); ctx.translate(sx + sway, sy - 30 + bob); if (spin) ctx.rotate(spin);
+      ctx.shadowColor = col; ctx.shadowBlur = em === 'levitate' ? 38 : (isSelf ? 22 : 12);
       if (pi) drawPerson(ctx, pi, 42, 56, a.af);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
@@ -1829,6 +1862,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     return { gx, gy, raw };
   };
   const onPointerDown = (e: React.PointerEvent) => {
+    setEmoteOpen(false);
     const { gx, gy } = evtTile(e);
     if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
     // Hidden easter egg — the wall at the top-centre of the Terminal room pays out, once.
@@ -2002,6 +2036,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         )}
         {!tutorial && <button onClick={() => setShowRooms(s => !s)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">⤧ Rooms</button>}
         {!tutorial && <button onClick={() => setInvOpen(true)} className="text-[11px] font-mono uppercase tracking-widest text-white border border-white/25 bg-black/50 px-3 py-1.5 hover:bg-white hover:text-black transition-all">☻ <span className="text-brandYellow">{CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</span></button>}
+        {!tutorial && (
+          <div className="relative">
+            <button onClick={() => setEmoteOpen(o => !o)} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${currentEmote ? 'text-[#c084fc] border-[#c084fc]/60 bg-black/50 hover:bg-[#c084fc] hover:text-black' : emoteOpen ? 'bg-white text-black border-white' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>
+              ◈{currentEmote ? ` ${currentEmote}` : ' Emote'}
+            </button>
+            {emoteOpen && (
+              <div className="absolute top-full mt-1 left-0 z-50 flex flex-col bg-black/95 border border-white/20 p-1 min-w-max">
+                {(['dance', 'jump', 'levitate'] as const).map(e => (
+                  <button key={e} onClick={() => activateEmote(currentEmote === e ? null : e)}
+                    className={`text-[11px] font-mono uppercase tracking-widest px-3 py-1.5 text-left transition-all ${currentEmote === e ? 'bg-[#c084fc] text-black' : 'text-white hover:bg-white hover:text-black'}`}>
+                    {e === 'dance' ? '⬡ Dance' : e === 'jump' ? '△ Jump' : '✦ Levitate'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
         {!tutorial && isSuper && <button onClick={() => setAdminOpen(true)} title="Admin panel" className="text-[11px] font-mono uppercase tracking-widest text-brandYellow border border-brandYellow/40 bg-black/50 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">📊</button>}
         {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
