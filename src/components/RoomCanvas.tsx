@@ -348,18 +348,19 @@ async function fetchAllRoomItems(sb: NonNullable<typeof supabase>, room: string)
   }
   return all;
 }
+const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
     const [, to = '', code = '', hidden = ''] = rawKind.split(':');
-    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: decodeURIComponent(to), portalCode: decodeURIComponent(code), portalHidden: hidden === '1' };
+    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: safeDecode(to), portalCode: safeDecode(code), portalHidden: hidden === '1' };
   }
   if (rawKind.startsWith('setgame:')) {
     const [, gid = '', rules = ''] = rawKind.split(':');
-    return { id, kind: 'setgame', gx, gy, dir: 0, elev: 0, createdBy, gameId: decodeURIComponent(gid), gameRules: decodeRules(rules), gameSet: true };
+    return { id, kind: 'setgame', gx, gy, dir: 0, elev: 0, createdBy, gameId: safeDecode(gid), gameRules: decodeRules(rules), gameSet: true };
   }
   if (rawKind.startsWith('game:')) {
     const [, gid = '', rules = '', hidden = ''] = rawKind.split(':');
-    return { id, kind: 'arcade', gx, gy, dir: 0, elev: 0, createdBy, gameId: decodeURIComponent(gid), gameRules: decodeRules(rules), gameHidden: hidden === '1' };
+    return { id, kind: 'arcade', gx, gy, dir: 0, elev: 0, createdBy, gameId: safeDecode(gid), gameRules: decodeRules(rules), gameHidden: hidden === '1' };
   }
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
@@ -849,8 +850,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (raw.startsWith('npc:')) { const nd = decodeNpc(raw); if (nd) placedNpcsRef.current.push({ id: String(d.id), gx: Number(d.x), gy: Number(d.y), data: nd }); continue; }   // admin-placed NPC
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
       if (raw.startsWith('bg:')) { const a = raw.slice(3) as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; bgIdRef.current = String(d.id); } continue; }
-      if (raw.startsWith('reward:')) { const p = raw.split(':'); const mode = (p[1] === 'enter' ? 'enter' : 'tile') as LoreMode; loreRef.current.push({ id: String(d.id), mode, style: 'reward', gx: Number(d.x), gy: Number(d.y), text: '', crystals: Number(p[2]) || 0, skinId: decodeURIComponent(p[3] || '') }); continue; }
-      if (raw.startsWith('lore:') || raw.startsWith('seq:')) { const style: LoreStyle = raw.startsWith('seq:') ? 'glitch' : 'oracle'; const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = decodeURIComponent(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', style, gx: Number(d.x), gy: Number(d.y), text }); continue; }
+      if (raw.startsWith('reward:')) { const p = raw.split(':'); const mode = (p[1] === 'enter' ? 'enter' : 'tile') as LoreMode; loreRef.current.push({ id: String(d.id), mode, style: 'reward', gx: Number(d.x), gy: Number(d.y), text: '', crystals: Number(p[2]) || 0, skinId: safeDecode(p[3] || '') }); continue; }
+      if (raw.startsWith('lore:') || raw.startsWith('seq:')) { const style: LoreStyle = raw.startsWith('seq:') ? 'glitch' : 'oracle'; const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = safeDecode(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', style, gx: Number(d.x), gy: Number(d.y), text }); continue; }
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
     }
     setBgAtmo(bgRef.current);
@@ -1332,7 +1333,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (status === 'SUBSCRIBED') {
             setConnected(true);
             const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
-            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl });   // small payload only — no nested objects
+            if (!alive) return;
+            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl }).catch(() => {});
+            if (!alive) return;
             ingestItemRows(await fetchAllRoomItems(sb, room));
           } else {
             setConnected(false);
