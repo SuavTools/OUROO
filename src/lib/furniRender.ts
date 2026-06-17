@@ -2618,6 +2618,41 @@ const drawMannequin = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a
   ];
   drawParts(ctx, sx, sy, dir, 0, 0, parts);
 };
+// Novelty satire — two suited figures standing side by side, inner hands clasped (a 2-tile span piece).
+const drawLeaders = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
+  void _a; void base;
+  type Pal = { suit: string; skin: string; hair: string; tie: string; swoop?: boolean };
+  const trump: Pal = { suit: '#22314f', skin: '#e3a263', hair: '#e8cf63', tie: '#c0282d', swoop: true };
+  const putin: Pal = { suit: '#3a3d45', skin: '#dcc2a6', hair: '#c2c2c8', tie: '#8a9bb5' };
+  const person = (uc: number, p: Pal): IsoPart[] => {
+    const sT = shade(p.suit, 1.25), sR = shade(p.suit, 0.95), sL = shade(p.suit, 0.6);
+    const kT = shade(p.skin, 1.15), kR = shade(p.skin, 0.92), kL = shade(p.skin, 0.62);
+    const tr = shade(p.suit, 0.62), tT = shade(tr, 1.2), tR = shade(tr, 0.9), tL = shade(tr, 0.56);
+    const hT = shade(p.hair, 1.2), hR = shade(p.hair, 0.92), hL = shade(p.hair, 0.62);
+    const out: IsoPart[] = [
+      { u0: uc - 0.17, u1: uc - 0.01, v0: -0.16, v1: 0.06, z0: 0, z1: 0.08, t: '#16161b', r: '#101015', l: '#0a0a0d' },   // shoes
+      { u0: uc + 0.01, u1: uc + 0.17, v0: -0.16, v1: 0.06, z0: 0, z1: 0.08, t: '#16161b', r: '#101015', l: '#0a0a0d' },
+      { u0: uc - 0.16, u1: uc - 0.02, v0: -0.1, v1: 0.1, z0: 0.06, z1: 0.74, t: tT, r: tR, l: tL },                       // trouser legs
+      { u0: uc + 0.02, u1: uc + 0.16, v0: -0.1, v1: 0.1, z0: 0.06, z1: 0.74, t: tT, r: tR, l: tL },
+      { u0: uc - 0.21, u1: uc + 0.21, v0: -0.14, v1: 0.14, z0: 0.7, z1: 1.5, t: sT, r: sR, l: sL },                       // jacket / torso
+      { u0: uc - 0.05, u1: uc + 0.05, v0: -0.17, v1: -0.14, z0: 0.78, z1: 1.46, t: p.tie, r: shade(p.tie, 0.85), l: shade(p.tie, 0.6) }, // tie strip (proud, front)
+      { u0: uc - 0.06, u1: uc + 0.06, v0: -0.07, v1: 0.07, z0: 1.5, z1: 1.58, t: kT, r: kR, l: kL },                      // neck
+      { u0: uc - 0.12, u1: uc + 0.12, v0: -0.11, v1: 0.11, z0: 1.58, z1: 1.92, t: kT, r: kR, l: kL },                     // head
+      { u0: uc - 0.14, u1: uc + 0.14, v0: -0.13, v1: 0.13, z0: 1.9, z1: 2.04, t: hT, r: hR, l: hL },                      // hair
+    ];
+    if (p.swoop) out.push({ u0: uc - 0.15, u1: uc + 0.15, v0: -0.16, v1: -0.12, z0: 1.84, z1: 2.06, t: hT, r: hR, l: hL }); // signature forward swoop
+    return out;
+  };
+  const ucL = -0.5, ucR = 0.5, sk = '#e0b07a';
+  const parts: IsoPart[] = [
+    ...person(ucL, trump),
+    ...person(ucR, putin),
+    { u0: ucL + 0.12, u1: -0.1, v0: -0.02, v1: 0.1, z0: 0.96, z1: 1.12, t: shade(trump.suit, 1.2), r: shade(trump.suit, 0.95), l: shade(trump.suit, 0.6) }, // left arm
+    { u0: 0.1, u1: ucR - 0.12, v0: -0.02, v1: 0.1, z0: 0.96, z1: 1.12, t: shade(putin.suit, 1.2), r: shade(putin.suit, 0.95), l: shade(putin.suit, 0.6) },   // right arm
+    { u0: -0.11, u1: 0.11, v0: -0.04, v1: 0.12, z0: 0.94, z1: 1.16, t: shade(sk, 1.12), r: shade(sk, 0.92), l: shade(sk, 0.62) },                            // clasped hands
+  ];
+  drawParts(ctx, sx, sy, dir, 0, 0, parts);
+};
 // Display table — a low table topped with folded clothes stacks.
 const drawCloTable = (ctx: CanvasRenderingContext2D, sx: number, sy: number, _a: string, base: string, dir: number) => {
   void _a; const w = base, cT = shade(w, 1.2), cR = shade(w, 0.9), cL = shade(w, 0.56);
@@ -3013,6 +3048,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
     case 'clorack': drawCloRack(ctx, sx, sy, accent, d.color); break;
     case 'clorail': drawCloRail(ctx, sx, sy, accent, d.color, dir); break;
     case 'mannequin': drawMannequin(ctx, sx, sy, accent, d.color, dir); break;
+    case 'leaders': drawLeaders(ctx, sx, sy, accent, d.color, dir); break;
     case 'clotable': drawCloTable(ctx, sx, sy, accent, d.color, dir); break;
     case 'shoewall': drawShoeWall(ctx, sx, sy, accent, d.color, dir); break;
     case 'fitroom': drawFitRoom(ctx, sx, sy, accent, d.color, dir); break;

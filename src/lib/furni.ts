@@ -229,6 +229,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'boia',     name: 'Float',    emoji: '🛟', cat: 'deco', color: '#ff5a5a', h: 0, walk: true,  foot: 0.6, special: 'float' },
   { kind: 'parasol',  name: 'Parasol',  emoji: '⛱️', cat: 'deco', color: '#e23b46', h: 2, walk: false, foot: 0.8, special: 'parasol' },
   { kind: 'banner',   name: 'Banner',   emoji: '🎌', cat: 'deco', color: '#7a1020', h: 0, walk: true, foot: 0.4, special: 'banner' },
+  { kind: 'leaders',  name: 'Trump & Putin', emoji: '🤝', cat: 'deco', color: '#22314f', h: 2, walk: false, foot: 1, special: 'leaders', span: [2, 1] },
   // ★ Italian Brainrot — café gear + the iconic AI-meme characters
   { kind: 'espresso',   name: 'Espresso Bar',           emoji: '☕', cat: 'brainrot', color: '#c8ccd4', h: 2, walk: false, foot: 0.6, special: 'espresso' },
   { kind: 'cappuccino', name: 'Cappuccino',             emoji: '☕', cat: 'brainrot', color: '#f4efe6', h: 1, walk: false, foot: 0.5, special: 'cappuccino' },
@@ -425,6 +426,8 @@ const ROTATABLE = new Set(['chair', 'sofa', 'armchair', 'throne', 'couch', 'couc
   'tikibar', 'surfrack', 'lifeguard', 'hammock', 'cooler', 'workbench', 'toolcab', 'gaspump', 'stringlights',
   // more benches + glass table
   'woodbench', 'stonebench', 'modernbench', 'glasstable',
+  // novelty figures
+  'leaders',
   // building kit — doors + windows + gates rotate to face either iso wall direction
   'door', 'window', 'gate',
   // outdoor fences — all 4-way directional
