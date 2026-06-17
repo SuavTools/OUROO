@@ -15,7 +15,7 @@ const MOODS: Record<string, Mood> = {
   archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 520, bass: false, gain: 0.42 }, // sparse, melancholy
   foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 620, bass: true,  gain: 0.42 }, // warm, industrial drone
   disco:   { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // funky 120 BPM — G3 root, mixolydian, tight stabs, hi-hats
-  u_2a698cb336b8: { scale: [0, 3, 7, 10], root: 110, beatMs: 460, wave: 'sawtooth', cutoff: 1100, bass: true, gain: 0.38 },  // notwesyoung's room → sweat
+  u_2a698cb336b8: { scale: [0, 3, 7, 10], root: 110, beatMs: 460, wave: 'sawtooth', cutoff: 1100, bass: true, gain: 0.38, kick: true, snare: true, hihatOffbeat: true },  // notwesyoung's room → sweat
   u_4c7959e1b001: { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // Rusty's Basement → disco
   default: { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 950,  wave: 'triangle', cutoff: 700, bass: false, gain: 0.44 },
 };
