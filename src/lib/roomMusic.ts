@@ -3,7 +3,7 @@
 // signal — the carrier wave that holds the Loop together. A slow lo-fi pad + sparse arpeggio + optional
 // bass pulse, with a per-room mood. Starts on a user gesture (browser autoplay), mutable, low volume.
 
-type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number; kick?: boolean; hihat?: boolean; hihatOffbeat?: boolean; snare?: boolean; stab?: boolean };
+type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number; kick?: boolean; hihat?: boolean; hihatOffbeat?: boolean; hihatOpen?: boolean; snare?: boolean; stab?: boolean };
 
 // scale = semitone offsets; root = base frequency (Hz). Tuned per sector's vibe.
 // cutoff is deliberately low — a muffled, behind-the-glass lo-fi bed that sits UNDER the room.
@@ -11,11 +11,11 @@ const MOODS: Record<string, Mood> = {
   praca:   { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 900,  wave: 'triangle', cutoff: 760, bass: false, gain: 0.5 },  // calm, hopeful
   jardim:  { scale: [0, 2, 4, 7, 9],  root: 196, beatMs: 1100, wave: 'sine',     cutoff: 640, bass: false, gain: 0.46 }, // serene, koto-ish
   clube:   { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 980,  bass: true,  gain: 0.4 },  // loudest signal — a pulse
-  sweat:   { scale: [0, 3, 7, 10],   root: 110, beatMs: 460,  wave: 'sawtooth', cutoff: 1100, bass: true,  gain: 0.38, kick: true, snare: true, hihatOffbeat: true }, // dark techno — A2 root, minor-7th, 130 BPM, bright and heavy
+  sweat:   { scale: [0, 3, 7, 10],   root: 110, beatMs: 460,  wave: 'sawtooth', cutoff: 1100, bass: true,  gain: 0.38, kick: true, snare: true, hihatOffbeat: true, hihatOpen: true }, // dark techno — A2 root, minor-7th, 130 BPM, bright and heavy
   archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 520, bass: false, gain: 0.42 }, // sparse, melancholy
   foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 620, bass: true,  gain: 0.42 }, // warm, industrial drone
   disco:   { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // funky 120 BPM — G3 root, mixolydian, tight stabs, hi-hats
-  u_2a698cb336b8: { scale: [0, 3, 7, 10], root: 110, beatMs: 460, wave: 'sawtooth', cutoff: 1100, bass: true, gain: 0.38, kick: true, snare: true, hihatOffbeat: true },  // notwesyoung's room → sweat
+  u_2a698cb336b8: { scale: [0, 3, 7, 10], root: 110, beatMs: 460, wave: 'sawtooth', cutoff: 1100, bass: true, gain: 0.38, kick: true, snare: true, hihatOffbeat: true, hihatOpen: true },  // notwesyoung's room → sweat
   u_4c7959e1b001: { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // Rusty's Basement → disco
   default: { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 950,  wave: 'triangle', cutoff: 700, bass: false, gain: 0.44 },
 };
@@ -146,6 +146,20 @@ export class RoomMusic {
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.25);
   }
 
+  private openHiHat() {
+    if (!this.ctx || !this.sfx) return;
+    const t = this.ctx.currentTime; const dur = 0.22;
+    const len = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;   // flat white noise — envelope via GainNode
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6000;
+    const peak = this.ctx.createBiquadFilter(); peak.type = 'peaking'; peak.frequency.value = 10000; peak.gain.value = 5; peak.Q.value = 1.0;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.07, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(hp); hp.connect(peak); peak.connect(g); g.connect(this.sfx); src.start(t); src.stop(t + dur + 0.01);
+  }
+
   private hiHat() {
     if (!this.ctx || !this.sfx) return;
     const t = this.ctx.currentTime;
@@ -199,7 +213,7 @@ export class RoomMusic {
     }
     if (m.kick) this.kickDrum();                                                                                    // four-on-the-floor
     if (m.hihat) { this.hiHat(); setTimeout(() => { if (this.running) this.hiHat(); }, m.beatMs / 2); }            // 8th-note hi-hats (disco)
-    if (m.hihatOffbeat) { setTimeout(() => { if (this.running) this.hiHat(); }, m.beatMs / 2); }                   // offbeat-only hi-hats (techno)
+    if (m.hihatOffbeat) { setTimeout(() => { if (this.running) m.hihatOpen ? this.openHiHat() : this.hiHat(); }, m.beatMs / 2); }   // offbeat-only hi-hats (techno)
     if (m.snare && this.step % 2 === 1) this.snareDrum();                                                          // backbeat 2 and 4
     this.step++;
   }
