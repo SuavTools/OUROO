@@ -49,15 +49,15 @@ const URL_RE = /https?:\/\/[^\s]+/gi;
 
 export type MsgCheck = { ok: true; value: string } | { ok: false; error: string };
 
-// Chat message filter: length + slur/hate blocklist + no-links rule.
+// Chat message filter: length + no-links rule. Banned words are replaced inline with *Error Code*
+// rather than blocking the whole message — the rest of the text sends as-is.
 export function validateMessage(raw: string): MsgCheck {
-  const value = (raw ?? '').replace(/\s+/g, ' ').trim();
-  if (value.length < 1) return { ok: false, error: 'Message is empty.' };
+  const value = (raw ?? ‘’).replace(/\s+/g, ‘ ‘).trim();
+  if (value.length < 1) return { ok: false, error: ‘Message is empty.’ };
   if (value.length > MSG_MAX) return { ok: false, error: `Max ${MSG_MAX} characters.` };
-  const norm = normalize(value);
-  if (BLOCK.some(bad => bad && norm.includes(bad))) return { ok: false, error: 'Message blocked 🙃' };
-  if ((value.match(URL_RE) || []).length > 0) return { ok: false, error: 'Links aren’t allowed in chat.' };
-  return { ok: true, value };
+  if ((value.match(URL_RE) || []).length > 0) return { ok: false, error: ‘Links aren’t allowed in chat.’ };
+  const sanitized = value.replace(/\S+/g, word => BLOCK.some(bad => bad && normalize(word).includes(bad)) ? ‘*Error Code*’ : word);
+  return { ok: true, value: sanitized };
 }
 
 export function validateHandle(raw: string): HandleCheck {
