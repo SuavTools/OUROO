@@ -3,7 +3,7 @@
 // signal — the carrier wave that holds the Loop together. A slow lo-fi pad + sparse arpeggio + optional
 // bass pulse, with a per-room mood. Starts on a user gesture (browser autoplay), mutable, low volume.
 
-type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number; kick?: boolean; hihat?: boolean; snare?: boolean; stab?: boolean };
+type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number; kick?: boolean; hihat?: boolean; hihatOffbeat?: boolean; snare?: boolean; stab?: boolean };
 
 // scale = semitone offsets; root = base frequency (Hz). Tuned per sector's vibe.
 // cutoff is deliberately low — a muffled, behind-the-glass lo-fi bed that sits UNDER the room.
@@ -11,7 +11,7 @@ const MOODS: Record<string, Mood> = {
   praca:   { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 900,  wave: 'triangle', cutoff: 760, bass: false, gain: 0.5 },  // calm, hopeful
   jardim:  { scale: [0, 2, 4, 7, 9],  root: 196, beatMs: 1100, wave: 'sine',     cutoff: 640, bass: false, gain: 0.46 }, // serene, koto-ish
   clube:   { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 980,  bass: true,  gain: 0.4 },  // loudest signal — a pulse
-  sweat:   { scale: [0, 3, 7, 10],   root: 110, beatMs: 460,  wave: 'sawtooth', cutoff: 1100, bass: true,  gain: 0.38, kick: true }, // dark techno — A2 root, minor-7th, 130 BPM, bright and heavy
+  sweat:   { scale: [0, 3, 7, 10],   root: 110, beatMs: 460,  wave: 'sawtooth', cutoff: 1100, bass: true,  gain: 0.38, kick: true, snare: true, hihatOffbeat: true }, // dark techno — A2 root, minor-7th, 130 BPM, bright and heavy
   archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 520, bass: false, gain: 0.42 }, // sparse, melancholy
   foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 620, bass: true,  gain: 0.42 }, // warm, industrial drone
   disco:   { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // funky 120 BPM — G3 root, mixolydian, tight stabs, hi-hats
@@ -197,9 +197,10 @@ export class RoomMusic {
         if (this.step % 4 === 0) this.note(sc[0] - 12, dur * 1.6, 0.14);
       }
     }
-    if (m.kick) this.kickDrum();                                                                           // four-on-the-floor
-    if (m.hihat) { this.hiHat(); setTimeout(() => { if (this.running) this.hiHat(); }, m.beatMs / 2); }   // 8th-note hi-hats
-    if (m.snare && this.step % 2 === 1) this.snareDrum();                                                 // backbeat 2 and 4
+    if (m.kick) this.kickDrum();                                                                                    // four-on-the-floor
+    if (m.hihat) { this.hiHat(); setTimeout(() => { if (this.running) this.hiHat(); }, m.beatMs / 2); }            // 8th-note hi-hats (disco)
+    if (m.hihatOffbeat) { setTimeout(() => { if (this.running) this.hiHat(); }, m.beatMs / 2); }                   // offbeat-only hi-hats (techno)
+    if (m.snare && this.step % 2 === 1) this.snareDrum();                                                          // backbeat 2 and 4
     this.step++;
   }
 }
