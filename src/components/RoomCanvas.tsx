@@ -1868,8 +1868,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (planLvl(tx, ty) >= 0) { const fp = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, tx, ty); if (fp && fp.length) { me.path = fp; return; } }
     }
     // Clicking ON furniture/construction redirects to the nearest open tile instead of no-op'ing.
+    // Exception: if the player is already inside an obscured area, don't eject them — just stay put.
     let dest = { gx, gy };
-    if (solidRef.current[key(gx, gy)]) { const near = nearestUnobscuredTile(gx, gy); if (near) dest = near; }
+    if (solidRef.current[key(gx, gy)]) {
+      const playerObscured = buildObscuredSet().has(key(clampTile(me.fx), clampTile(me.fy)));
+      if (!playerObscured) { const near = nearestUnobscuredTile(gx, gy); if (near) dest = near; }
+      else return;
+    }
     const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, dest.gx, dest.gy); if (p && p.length) me.path = p;
   };
   // ── Click-drag floor/carpet painting ──
