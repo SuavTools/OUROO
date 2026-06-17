@@ -1741,7 +1741,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // depth-sorted furni + avatars (sorted by tile + surface level so layers occlude correctly)
       const ents: Array<{ s: number; draw: () => void }> = [];
       const allItems = decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current;
-      for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); ents.push({ s: (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => {
+      for (const it of allItems) { const dd = defOf(it.kind); const [sw, sh] = effSpan(it.kind, it.dir || 0); const ii = it, lift = it.elev || 0, zb = Math.max(0, planLvl(it.gx, it.gy)), z = zb + lift; const surfZ = z + (dd.h || 0); const flatWalk = dd.walk && !dd.h; ents.push({ s: flatWalk ? it.gx + it.gy + surfZ * 0.02 : (it.gx + sw - 1) + (it.gy + sh - 1) + surfZ * 0.02, draw: () => {
         const { sx, sy } = iso(ii.gx, ii.gy, z);
         // disguised triggers — invisible to players, but ADMINS always see a soft glow (stronger while
         // decorating) so they can find/manage them. Portals glow purple; game events glow arcade-yellow.
@@ -1762,9 +1762,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // an avatar sitting on a (possibly multi-tile) seat must sort ABOVE it — multi-tile sprites
       // sort by their front corner, so add a boost when standing on a seat's footprint.
       const seatBoost = (fx: number, fy: number) => { const cx = clampTile(fx), cy = clampTile(fy); for (const it of allItems) { if (sitHeight(it.kind) == null) continue; const [sw, sh] = effSpan(it.kind, it.dir || 0); if (cx >= it.gx && cx < it.gx + sw && cy >= it.gy && cy < it.gy + sh) return 1.2; } return 0; };
-      for (const n of npcsRef.current) { const nn = n; ents.push({ s: nn.fx + nn.fy + nn.z * 0.02 + 0.005 + seatBoost(nn.fx, nn.fy), draw: () => drawAvatarBody(nn, false) }); }
-      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.z * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatarBody(selfRef.current, true) });
-      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.z * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatarBody(rr, false) }); }
+      for (const n of npcsRef.current) { const nn = n; ents.push({ s: nn.fx + nn.fy + nn.lvl * 0.02 + 0.005 + seatBoost(nn.fx, nn.fy), draw: () => drawAvatarBody(nn, false) }); }
+      ents.push({ s: selfRef.current.fx + selfRef.current.fy + selfRef.current.lvl * 0.02 + 0.01 + seatBoost(selfRef.current.fx, selfRef.current.fy), draw: () => drawAvatarBody(selfRef.current, true) });
+      for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: rr.fx + rr.fy + rr.lvl * 0.02 + 0.01 + seatBoost(rr.fx, rr.fy), draw: () => drawAvatarBody(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
       // Selected-object highlight — drawn AFTER the pieces (so it isn't hidden behind a tall one): a pulsing
       // ring around the footprint + a bobbing chevron above, marking the piece the edit popup is acting on.
