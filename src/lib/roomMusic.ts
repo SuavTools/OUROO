@@ -3,7 +3,7 @@
 // signal — the carrier wave that holds the Loop together. A slow lo-fi pad + sparse arpeggio + optional
 // bass pulse, with a per-room mood. Starts on a user gesture (browser autoplay), mutable, low volume.
 
-type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number; kick?: boolean };
+type Mood = { scale: number[]; root: number; beatMs: number; wave: OscillatorType; cutoff: number; bass: boolean; gain: number; kick?: boolean; hihat?: boolean; snare?: boolean; stab?: boolean };
 
 // scale = semitone offsets; root = base frequency (Hz). Tuned per sector's vibe.
 // cutoff is deliberately low — a muffled, behind-the-glass lo-fi bed that sits UNDER the room.
@@ -14,8 +14,9 @@ const MOODS: Record<string, Mood> = {
   sweat:   { scale: [0, 3, 7, 10],   root: 110, beatMs: 460,  wave: 'sawtooth', cutoff: 1100, bass: true,  gain: 0.38, kick: true }, // dark techno — A2 root, minor-7th, 130 BPM, bright and heavy
   archive: { scale: [0, 2, 3, 7, 8],  root: 174, beatMs: 1300, wave: 'sine',     cutoff: 520, bass: false, gain: 0.42 }, // sparse, melancholy
   foundry: { scale: [0, 2, 3, 5, 7],  root: 147, beatMs: 760,  wave: 'triangle', cutoff: 620, bass: true,  gain: 0.42 }, // warm, industrial drone
+  disco:   { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // funky 120 BPM — G3 root, mixolydian, tight stabs, hi-hats
   u_2a698cb336b8: { scale: [0, 3, 7, 10], root: 110, beatMs: 460, wave: 'sawtooth', cutoff: 1100, bass: true, gain: 0.38 },  // notwesyoung's room → sweat
-  u_4c7959e1b001: { scale: [0, 3, 5, 7, 10], root: 165, beatMs: 440,  wave: 'sawtooth', cutoff: 980,  bass: true,  gain: 0.4 },   // Rusty's Basement → clube
+  u_4c7959e1b001: { scale: [0, 2, 4, 7, 9, 10], root: 196, beatMs: 500, wave: 'sawtooth', cutoff: 1800, bass: true, gain: 0.44, kick: true, hihat: true, snare: true, stab: true }, // Rusty's Basement → disco
   default: { scale: [0, 2, 4, 7, 9],  root: 220, beatMs: 950,  wave: 'triangle', cutoff: 700, bass: false, gain: 0.44 },
 };
 
@@ -145,12 +146,60 @@ export class RoomMusic {
     o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.25);
   }
 
+  private hiHat() {
+    if (!this.ctx || !this.sfx) return;
+    const t = this.ctx.currentTime;
+    const len = Math.floor(this.ctx.sampleRate * 0.025);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const hp = this.ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000;
+    const g = this.ctx.createGain(); g.gain.value = 0.06;
+    src.connect(hp); hp.connect(g); g.connect(this.sfx); src.start(t);
+  }
+
+  private snareDrum() {
+    if (!this.ctx || !this.sfx) return;
+    const t = this.ctx.currentTime;
+    // noise body
+    const len = Math.floor(this.ctx.sampleRate * 0.12);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.8;
+    const g = this.ctx.createGain(); g.gain.value = 0.08;
+    src.connect(bp); bp.connect(g); g.connect(this.sfx); src.start(t);
+    // tonal crack
+    const o = this.ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = 185;
+    const og = this.ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.05, t + 0.003); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+    o.connect(og); og.connect(this.sfx); o.start(t); o.stop(t + 0.08);
+  }
+
   private tick() {
     const m = this.mood, sc = m.scale, dur = m.beatMs / 1000;
-    if (this.step % 4 === 0) { const base = sc[(this.step / 4) % sc.length]; [0, 7, 12].forEach((iv, i) => this.note(base + iv, dur * 3.6, 0.1, i * 5)); }   // pad chord (root · 5th · octave)
-    if (this.step % 2 === 1) { const a = sc[(this.step + (this.step % 5)) % sc.length]; this.note(a + 12, dur * 0.8, 0.07); }                                  // sparse arpeggio, octave up
-    if (m.bass && this.step % 4 === 0) this.note(sc[0] - 12, dur * 1.6, 0.14);                                                                                  // bass pulse
-    if (m.kick) this.kickDrum();                                                                                                                                  // four-on-the-floor
+    // Chord pad — staccato stabs on beat 1 + upbeat answer on beat 3; long pads otherwise
+    if (this.step % 4 === 0) {
+      const base = sc[(this.step / 4) % sc.length];
+      [0, 7, 12].forEach((iv, i) => this.note(base + iv, dur * (m.stab ? 0.9 : 3.6), 0.1, i * 5));
+    }
+    if (m.stab && this.step % 4 === 2) {
+      const base = sc[(this.step / 2) % sc.length];
+      [0, 4, 7, 10].forEach((iv, i) => this.note(base + iv, dur * 0.3, 0.09, i * 4));   // dominant-7th stab
+    }
+    if (this.step % 2 === 1) { const a = sc[(this.step + (this.step % 5)) % sc.length]; this.note(a + 12, dur * 0.8, 0.07); }   // sparse arpeggio, octave up
+    // Bass — walking root→fifth in stab/disco mode, single pulse otherwise
+    if (m.bass) {
+      if (m.stab) {
+        if (this.step % 4 === 0) this.note(sc[0] - 12, dur * 0.8, 0.16);
+        if (this.step % 4 === 2) this.note(sc[0] - 5,  dur * 0.65, 0.12);   // fifth above bass root
+      } else {
+        if (this.step % 4 === 0) this.note(sc[0] - 12, dur * 1.6, 0.14);
+      }
+    }
+    if (m.kick) this.kickDrum();                                                                           // four-on-the-floor
+    if (m.hihat) { this.hiHat(); setTimeout(() => { if (this.running) this.hiHat(); }, m.beatMs / 2); }   // 8th-note hi-hats
+    if (m.snare && this.step % 2 === 1) this.snareDrum();                                                 // backbeat 2 and 4
     this.step++;
   }
 }
