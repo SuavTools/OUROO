@@ -46,7 +46,8 @@ const rr = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 const shadeC = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, Math.round(((n >> 16) & 255) * f)), g = Math.min(255, Math.round(((n >> 8) & 255) * f)), b = Math.min(255, Math.round((n & 255) * f)); return `rgb(${r},${g},${b})`; };
 
 // Draw a person centred at the current origin, fitting roughly w×h, `af` = anim frame (subtle sway).
-export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: number, h: number, af: number) {
+// `armLift` 0→1 rotates arms out to the sides and overhead (jumping-jack style).
+export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: number, h: number, af: number, armLift = 0) {
   const s = h / 50, tone = TONES[p.tone] ?? TONES[1], sway = Math.sin(af * 0.12) * 0.6 * s;
   const broad = p.g === 1;
   const hbW = (broad ? 9 : 7.6) * s;     // torso half-width
@@ -73,9 +74,21 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   // ── arms (behind torso) ──
   const longSleeve = p.top === 1 || p.top === 3;   // hoodie / jacket
   for (const side of [-1, 1]) {
-    const ax = side * (hbW + 1.4 * s), aSwing = side * sway;
-    ctx.fillStyle = longSleeve ? p.topC : tone; rr(ctx, ax - 1.8 * s, torsoTop + 1 * s + aSwing, 3.6 * s, 11 * s, 1.8 * s); ctx.fill();
-    ctx.fillStyle = tone; ctx.beginPath(); ctx.arc(ax, torsoTop + 13 * s + aSwing, 2 * s, 0, Math.PI * 2); ctx.fill();   // hand
+    const ax = side * (hbW + 1.4 * s);
+    if (armLift > 0) {
+      // Rotate the arm around the shoulder joint: negative side-factor because rotating away from body
+      // means CCW for right arm, CW for left arm (canvas +rotation = clockwise on screen).
+      ctx.save();
+      ctx.translate(ax, torsoTop + 1 * s);
+      ctx.rotate(-side * armLift * Math.PI * 0.85);
+      ctx.fillStyle = longSleeve ? p.topC : tone; rr(ctx, -1.8 * s, 0, 3.6 * s, 11 * s, 1.8 * s); ctx.fill();
+      ctx.fillStyle = tone; ctx.beginPath(); ctx.arc(0, 12 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else {
+      const aSwing = side * sway;
+      ctx.fillStyle = longSleeve ? p.topC : tone; rr(ctx, ax - 1.8 * s, torsoTop + 1 * s + aSwing, 3.6 * s, 11 * s, 1.8 * s); ctx.fill();
+      ctx.fillStyle = tone; ctx.beginPath(); ctx.arc(ax, torsoTop + 13 * s + aSwing, 2 * s, 0, Math.PI * 2); ctx.fill();   // hand
+    }
   }
 
   // ── torso / top ──

@@ -1552,12 +1552,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         sway = Math.sin(a.af * 0.11) * 6;
       } else if (em === 'jump') {
         bob = -Math.max(0, Math.sin(a.af * 0.1)) * 22;
+      } else if (em === 'jjack') {
+        bob = -Math.max(0, Math.sin(a.af * 0.1)) * 22;
       } else if (em === 'levitate') {
         bob = -12 - Math.sin(a.af * 0.05) * 6;
         spin = Math.sin(a.af * 0.03) * 0.08;
       } else {
         bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       }
+      const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       if (em === 'levitate') {
         ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(a.af * 0.08) * 0.2;
         ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.lineWidth = 1.5;
@@ -1566,7 +1569,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       ctx.save(); ctx.translate(sx + sway, sy - 30 + bob); if (spin) ctx.rotate(spin);
       ctx.shadowColor = col; ctx.shadowBlur = em === 'levitate' ? 38 : (isSelf ? 22 : 12);
-      if (pi) drawPerson(ctx, pi, 42, 56, a.af);
+      if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
@@ -2039,14 +2042,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         {!tutorial && (
           <div className="relative">
             <button onClick={() => setEmoteOpen(o => !o)} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${currentEmote ? 'text-[#c084fc] border-[#c084fc]/60 bg-black/50 hover:bg-[#c084fc] hover:text-black' : emoteOpen ? 'bg-white text-black border-white' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>
-              ◈{currentEmote ? ` ${currentEmote}` : ' Emote'}
+              ◈{currentEmote ? ` ${{ dance: 'Dance', jump: 'Jump', jjack: 'Jumping Jack', levitate: 'Levitate' }[currentEmote] ?? currentEmote}` : ' Emote'}
             </button>
             {emoteOpen && (
               <div className="absolute top-full mt-1 left-0 z-50 flex flex-col bg-black/95 border border-white/20 p-1 min-w-max">
-                {(['dance', 'jump', 'levitate'] as const).map(e => (
+                {(['dance', 'jump', 'jjack', 'levitate'] as const).map(e => (
                   <button key={e} onClick={() => activateEmote(currentEmote === e ? null : e)}
                     className={`text-[11px] font-mono uppercase tracking-widest px-3 py-1.5 text-left transition-all ${currentEmote === e ? 'bg-[#c084fc] text-black' : 'text-white hover:bg-white hover:text-black'}`}>
-                    {e === 'dance' ? '⬡ Dance' : e === 'jump' ? '△ Jump' : '✦ Levitate'}
+                    {e === 'dance' ? '⬡ Dance' : e === 'jump' ? '△ Jump' : e === 'jjack' ? '✦ Jumping Jack' : '✦ Levitate'}
                   </button>
                 ))}
               </div>
