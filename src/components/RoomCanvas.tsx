@@ -532,6 +532,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [glitchSeq, setGlitchSeq] = useState<string | null>(null); // the full-screen glitch/terminal takeover
   const [rewardReveal, setRewardReveal] = useState<{ crystals: number; skinId: string } | null>(null);   // screen-takeover reward celebration
   const [bgAtmo, setBgAtmo] = useState<Atmo>('auto');   // current room atmosphere (mirrors bgRef, for the editor)
+  const [inObscured, setInObscured] = useState(false);  // true while the player is inside an obscured (hidden) area
+  const inObscuredRef = useRef(false);                   // shadow ref so the animation loop can gate setState
   const [atmoMode, setAtmoMode] = useState(false);      // showing the atmosphere palette in Decorate
   const [gamesMode, setGamesMode] = useState(false);    // admin: the Games tab (place game triggers / set-game events)
   const [gTab, setGTab] = useState<'play' | 'set'>('play');   // Games tab: which event type to place
@@ -1392,6 +1394,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const pt = portalAtTile(cgx, cgy); const pk = pt ? `${pt.gx},${pt.gy}` : null;
           if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelToRef.current(pt); } }
           lastPortalKeyRef.current = pk;
+          const nowObs = buildObscuredSet().has(ct);
+          if (nowObs !== inObscuredRef.current) { inObscuredRef.current = nowObs; setInObscured(nowObs); }
         }
       }
       // ARCADE MACHINES — pop the game picker when the player steps onto a tile adjacent to the cabinet.
@@ -1876,6 +1880,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       else return;
     }
     const p = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, dest.gx, dest.gy); if (p && p.length) me.path = p;
+  };
+  // Move the player exactly one tile in the given grid delta — used by the obscured-area move pad.
+  const moveStep = (dgx: number, dgy: number) => {
+    const me = selfRef.current;
+    const fx = clampTile(me.fx), fy = clampTile(me.fy);
+    const tx = fx + dgx, ty = fy + dgy;
+    if (tx < 0 || ty < 0 || tx >= GRID || ty >= GRID) return;
+    const k = key(tx, ty);
+    if (solidRef.current[k] || !surfRef.current[k].length) return;
+    const reachable = surfRef.current[k].filter(z => Math.abs(z - me.lvl) <= 1.001);
+    if (!reachable.length) return;
+    me.path = [{ gx: tx, gy: ty, z: Math.max(...reachable) }];
   };
   // ── Click-drag floor/carpet painting ──
   const isFloorPaint = (kind: string): boolean => { const d = defOf(kind); const [sw, sh] = d.span ?? [1, 1]; return !!d.walk && (d.h ?? 0) <= 1 && sw === 1 && sh === 1 && d.special !== 'stair'; };
@@ -2428,6 +2444,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 rounded active:scale-95 hover:bg-white transition-colors">Say</button>
         </div>
       </form>
+
+      {inObscured && (
+        <div className="absolute right-3 z-40" style={{ bottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <div className="bg-black/60 border border-white/15 rounded-xl p-1.5 grid grid-cols-3 gap-1">
+            {([
+              ['↖', -1,  0], ['↑', -1, -1], ['↗',  0, -1],
+              ['←', -1,  1], [null, 0,  0], ['→',  1, -1],
+              ['↙',  0,  1], ['↓',  1,  1], ['↘',  1,  0],
+            ] as ([string, number, number] | [null, number, number])[]).map(([arrow, dgx, dgy], i) =>
+              arrow ? (
+                <button key={i} onPointerDown={() => moveStep(dgx, dgy)}
+                  className="w-8 h-8 flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 active:bg-white/20 active:scale-90 rounded transition-all text-base select-none">
+                  {arrow}
+                </button>
+              ) : (
+                <div key={i} className="w-8 h-8" />
+              )
+            )}
+          </div>
+        </div>
+      )}
 
       {portalPrompt && (
         <div className="absolute inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => { setPortalPrompt(null); setPortalCode(''); }}>
