@@ -1548,7 +1548,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const em = a.emote ?? null;
       let bob: number, sway = 0, spin = 0;
       if (em === 'dance') {
-        const CYCLE = 160, SEG = 20, t = a.af % CYCLE, pt = (t % SEG) / SEG;
+        const CYCLE = 186, SEG = CYCLE / 8, t = a.af % CYCLE, pt = (t % SEG) / SEG;
         const smooth = (x: number) => x * x * (3 - 2 * x);
         const X = 8, JUMP = 14, SB = 3;
         switch (Math.floor(t / SEG)) {
