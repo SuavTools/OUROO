@@ -1573,6 +1573,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
+      const legFold = em === 'levitate' ? 1 : 0;
       if (em === 'levitate') {
         ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(a.af * 0.08) * 0.2;
         ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.lineWidth = 1.5;
@@ -1581,7 +1582,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       ctx.save(); ctx.translate(sx + sway, sy - 30 + bob); if (spin) ctx.rotate(spin);
       ctx.shadowColor = col; ctx.shadowBlur = em === 'levitate' ? 38 : (isSelf ? 22 : 12);
-      if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug);
+      if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
