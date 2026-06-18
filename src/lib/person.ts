@@ -78,7 +78,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
         ctx.rotate(-side * legFold * Math.PI * 0.40);
         ctx.fillStyle = p.pantsC; rr(ctx, -1.9 * s, 0, 3.8 * s, halfLen, 1.8 * s); ctx.fill();
         // shin pivots at knee, rotates inward: right CW (+), left CCW (-)
-        ctx.translate(0, halfLen); ctx.rotate(side * legFold * Math.PI * 0.55);
+        ctx.translate(0, halfLen); ctx.rotate(side * legFold * Math.PI * 0.68);
         ctx.fillStyle = short ? tone : p.pantsC; rr(ctx, -1.9 * s, 0, 3.8 * s, halfLen, 1.8 * s); ctx.fill();
         if (p.shoes !== 2) { const sh = (p.shoes === 1 ? 5 : 3.2) * s; ctx.fillStyle = p.shoeC; rr(ctx, -2.1 * s, halfLen - 1 * s, 4.2 * s, sh, 1.6 * s); ctx.fill(); ctx.fillStyle = shadeC(p.shoeC, 0.6); rr(ctx, -2.2 * s, halfLen - 1 * s + sh - 1.4 * s, 4.4 * s, 1.6 * s, 0.8 * s); ctx.fill(); }
         else { ctx.fillStyle = tone; rr(ctx, -1.8 * s, halfLen - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); }
