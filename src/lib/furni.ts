@@ -304,6 +304,7 @@ export const FURNI: FurniDef[] = [
   { kind: 'clawmachine',name: 'Claw Machine',emoji: '🕹️', cat: 'games', color: '#b3242e', h: 2, walk: false, foot: 0.7, special: 'clawmachine' },
   { kind: 'pacman',     name: 'Pac Arcade',  emoji: '🟡', cat: 'games', color: '#f4c430', h: 2, walk: false, foot: 0.7, special: 'pacman' },
   { kind: 'retrocab',   name: 'Retro Arcade',emoji: '🕹️', cat: 'games', color: '#cc1a0a', h: 2, walk: false, foot: 0.7, special: 'retrocab' },
+  { kind: 'duelcab',    name: 'Duel Cabinet',emoji: '⚔️', cat: 'games', color: '#7a1aaa', h: 2, walk: false, foot: 0.7, special: 'retrocab' },   // walk up → 1v1 Climb Race lobby (friendly or wager)
   { kind: 'arcsign',    name: 'Arcade Sign',  emoji: '🎰', cat: 'games', color: '#c41a0c', h: 3, walk: false, foot: 0.7, special: 'arcsign' },
   { kind: 'neonsign',   name: 'Neon Sign',    emoji: '💡', cat: 'games', color: '#2244dd', h: 2, walk: false, foot: 0.4, special: 'neonsign' },
   { kind: 'cashvault',  name: 'Prize Vault', emoji: '💰', cat: 'games', color: '#3a3e4a', h: 4, walk: false, foot: 0.7, special: 'cashvault' },

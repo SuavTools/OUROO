@@ -39,6 +39,8 @@ export function mulberry32(seed: number): () => number {
 }
 // A fresh 32-bit seed for a new duel.
 export const makeSeed = (): number => Math.floor(Math.random() * 0xffffffff) >>> 0;
+// A match id for a FRIENDLY duel (no durable row) — just names the live `duel:<id>` channel both join.
+export const makeMatchId = (): string => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `m_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
 
 // ---- stake (symmetric: each side antes this) ----
 export type DuelStake = { crystals: number; items: Record<string, number> };
@@ -165,10 +167,13 @@ export function payoutMult(role: DuelRole, winner: DuelWinner): number {
 
 // ---- the launch ticket (survives the world unmount, mirroring ouroo_game_origin) ----
 // RoomCanvas stashes this right before launching the duel view; DuelClimbCanvas reads + clears it on mount.
+// `friendly` duels carry no stake and no durable row — `id` is just the live channel name (makeMatchId).
 export type DuelTicket = {
   id: string; seed: number; role: DuelRole; room: string;
-  meHandle: string; meToken: string; oppHandle: string; oppToken: string;
-  stake: DuelStake;
+  meHandle: string; oppHandle: string;
+  friendly: boolean;
+  meToken?: string; oppToken?: string;
+  stake?: DuelStake;
 };
 const TICKET_KEY = 'ouroo_duel_ticket';
 export function stashTicket(t: DuelTicket): void {

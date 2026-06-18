@@ -77,6 +77,7 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
   });
 
   const [practice, setPractice] = useState(false);
+  const [friendly, setFriendly] = useState(false);
   const [oppHandle, setOppHandle] = useState('Opponent');
   const [stakeText, setStakeText] = useState('');
   const [showIntro, setShowIntro] = useState(true);
@@ -92,7 +93,7 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
   useEffect(() => {
     const t = readTicket();
     ticketRef.current = t;
-    if (t) { setOppHandle(t.oppHandle); setStakeText(stakeLabel(t.stake)); setPractice(false); }
+    if (t) { setOppHandle(t.oppHandle); setFriendly(t.friendly); setStakeText(t.stake ? stakeLabel(t.stake) : ''); setPractice(false); }
     else setPractice(true);
     refreshSkin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,10 +254,36 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
 
   const toggleMute = () => { setIsMuted(m => { const nv = !m; synthRef.current?.setMuted(nv); return nv; }); };
 
-  // ---- settlement: report my score, wait for the opponent, credit the pot exactly once ----
+  // ---- friendly resolution: no stakes — just exchange final scores over the channel and show the winner ----
+  const resolveFriendly = async (myScore: number) => {
+    const t = ticketRef.current;
+    if (!t) return;
+    setSettling(true);
+    try { channelRef.current?.send({ type: 'broadcast', event: 'done', payload: { role: t.role, score: myScore } }); } catch { /* ignore */ }
+    const show = (oppScore: number, note = '') => {
+      if (settledRef.current) return;
+      settledRef.current = true;
+      const iWon = myScore > oppScore, draw = myScore === oppScore;
+      setOutcome({ result: iWon ? t.role : draw ? 'draw' : (t.role === 'host' ? 'guest' : 'host'), iWon, draw, myScore, oppScore, label: '' });
+      if (note) setSettleNote(note);
+      setSettling(false);
+      synthRef.current?.stopLoop();
+      if (iWon) synthRef.current?.playCombo(6); else if (!draw) synthRef.current?.playHurt();
+    };
+    if (oppDoneRef.current != null) { show(oppDoneRef.current); return; }
+    for (let i = 0; i < 24 && !settledRef.current; i++) {     // ~24s grace for the opponent to finish
+      await new Promise(r => setTimeout(r, 1000));
+      if (oppDoneRef.current != null) { show(oppDoneRef.current); return; }
+      if (i === 2) setSettleNote(`Waiting for ${t.oppHandle} to finish…`);
+    }
+    if (!settledRef.current) show(oppScoreRef.current, `${t.oppHandle} didn't finish.`);
+  };
+
+  // ---- wager settlement: report my score, wait for the opponent, credit the pot exactly once ----
   const settleDuel = async (myScore: number) => {
     const t = ticketRef.current;
-    if (!t) return;   // practice: nothing to settle
+    const stake = t?.stake;
+    if (!t || !stake) return;   // practice / friendly: handled elsewhere
     setSettling(true);
     // Tell the opponent I'm done (so their client can settle without waiting on a poll).
     try { channelRef.current?.send({ type: 'broadcast', event: 'done', payload: { role: t.role, score: myScore } }); } catch { /* ignore */ }
@@ -265,10 +292,10 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
       if (settledRef.current) return;
       settledRef.current = true;
       const mult = payoutMult(t.role, winner);
-      creditStake(t.stake, mult);
+      creditStake(stake, mult);
       const iWon = winner !== 'draw' && winner === t.role;
       const draw = winner === 'draw';
-      setOutcome({ result: winner, iWon, draw, myScore, oppScore, label: stakeLabel(t.stake) });
+      setOutcome({ result: winner, iWon, draw, myScore, oppScore, label: stakeLabel(stake) });
       setSettling(false);
       synthRef.current?.stopLoop();
       if (iWon) synthRef.current?.playCombo(6); else if (!draw) synthRef.current?.playHurt();
@@ -283,7 +310,7 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
       await new Promise(r => setTimeout(r, 1500));
       row = await fetchDuel(t.id).catch(() => null);
       if (row?.state === 'settled' && row.winner) { credit(row.winner, t.role === 'host' ? (row.guest_result ?? 0) : (row.host_result ?? 0)); return; }
-      if (row?.state === 'void') { if (!settledRef.current) { settledRef.current = true; creditStake(t.stake, 1); setOutcome({ result: 'draw', iWon: false, draw: true, myScore, oppScore: oppScoreRef.current, label: stakeLabel(t.stake) }); setSettleNote('Duel voided — your ante was refunded.'); setSettling(false); synthRef.current?.stopLoop(); } return; }
+      if (row?.state === 'void') { if (!settledRef.current) { settledRef.current = true; creditStake(stake, 1); setOutcome({ result: 'draw', iWon: false, draw: true, myScore, oppScore: oppScoreRef.current, label: stakeLabel(stake) }); setSettleNote('Duel voided — your ante was refunded.'); setSettling(false); synthRef.current?.stopLoop(); } return; }
       if (i === 2) setSettleNote(`Waiting for ${t.oppHandle} to finish…`);
     }
 
@@ -291,8 +318,8 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
     if (!settledRef.current) {
       settledRef.current = true;
       await voidDuel(t.id).catch(() => {});
-      creditStake(t.stake, 1);
-      setOutcome({ result: 'draw', iWon: false, draw: true, myScore, oppScore: oppScoreRef.current, label: stakeLabel(t.stake) });
+      creditStake(stake, 1);
+      setOutcome({ result: 'draw', iWon: false, draw: true, myScore, oppScore: oppScoreRef.current, label: stakeLabel(stake) });
       setSettleNote(`${t.oppHandle} didn't finish — your ante was refunded.`);
       setSettling(false);
       synthRef.current?.stopLoop();
@@ -321,6 +348,7 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
       setIsPlaying(false);
       setFinished(true);
       if (practice) synthRef.current?.stopLoop();
+      else if (ticketRef.current?.friendly) void resolveFriendly(score);
       else void settleDuel(score);
     };
 
@@ -581,7 +609,9 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
               <p className="mt-4 max-w-sm text-white/70 text-sm leading-relaxed">
                 You vs <b className="text-white">{oppHandle}</b> — the same seeded tower, {MATCH_SECONDS} seconds each. Climb higher to win.
               </p>
-              <p className="mt-3 text-sm text-brandYellow font-bold">Pot on the line: {stakeText}</p>
+              {friendly
+                ? <p className="mt-3 text-sm text-white/55 font-bold">Friendly match · no stake</p>
+                : <p className="mt-3 text-sm text-brandYellow font-bold">Pot on the line: {stakeText}</p>}
             </>
           )}
           <p className="mt-3 text-[12px] text-white/45 font-mono">SPACE / TAP to jump · grab crystals mid-air to jump again</p>
@@ -605,13 +635,13 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
           ) : settling ? (
             <>
               <p className="text-[11px] uppercase tracking-[0.4em] text-brandYellow mb-2">You scored {finalScore}</p>
-              <div className="animate-pulse text-white/70 text-lg font-bold">Settling the pot…</div>
+              <div className="animate-pulse text-white/70 text-lg font-bold">{friendly ? 'Checking the result…' : 'Settling the pot…'}</div>
               <p className="text-[12px] text-white/45 mt-2">{settleNote || `Waiting for ${oppHandle}…`}</p>
             </>
           ) : outcome ? (
             <>
               <p className={`text-[11px] uppercase tracking-[0.4em] mb-1 ${outcome.iWon ? 'text-[#1ED760]' : outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
-                {outcome.iWon ? 'You won the pot' : outcome.draw ? 'Draw' : 'You lost the pot'}
+                {outcome.iWon ? (friendly ? 'You win' : 'You won the pot') : outcome.draw ? 'Draw' : (friendly ? 'You lose' : 'You lost the pot')}
               </p>
               <h2 className="font-helvetica font-black text-5xl tracking-tighter text-white leading-none">
                 {outcome.iWon ? '🏆' : outcome.draw ? '🤝' : '💀'}
@@ -619,9 +649,11 @@ export const DuelClimbCanvas: React.FC<{ stageScale?: number; isMobileStage?: bo
               <p className="text-sm text-white/70 mt-3">
                 You {outcome.myScore} · {oppHandle} {outcome.oppScore}
               </p>
-              <p className={`mt-2 text-sm font-bold ${outcome.iWon ? 'text-[#1ED760]' : outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
-                {outcome.iWon ? `+ ${outcome.label}` : outcome.draw ? `${outcome.label} returned` : `− ${outcome.label}`}
-              </p>
+              {!friendly && (
+                <p className={`mt-2 text-sm font-bold ${outcome.iWon ? 'text-[#1ED760]' : outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
+                  {outcome.iWon ? `+ ${outcome.label}` : outcome.draw ? `${outcome.label} returned` : `− ${outcome.label}`}
+                </p>
+              )}
               {settleNote && <p className="text-[12px] text-white/45 mt-2">{settleNote}</p>}
             </>
           ) : (

@@ -20,7 +20,7 @@ import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
 import {
-  canAfford, escrowAnte, creditStake, makeSeed, createDuel, markLocked, voidDuel,
+  canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
   stashTicket, stakeLabel, isWagerable, stakeIsEmpty, type DuelStake, type DuelIdentity,
 } from '@/lib/duel';
 import { InventoryModal } from '@/components/InventoryModal';
@@ -633,21 +633,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
   const onLaunchGameRef = useRef(onLaunchGame);
   useEffect(() => { onLaunchGameRef.current = onLaunchGame; }, [onLaunchGame]);
+  const { user } = useUser();   // signed-in Discord user (null = guest); used by the duel-lobby wager gate
 
-  // ── DUEL (1v1 wager) ── challenge a nearby/online player to a seeded Climb Race for crystals + items.
-  // The handshake rides the room channel (duel_invite → accept/decline → go); stakes escrow locally and
-  // the duels row is the durable referee. cid (challenge id) ties the messages of one challenge together.
-  type IncomingDuel = { cid: string; fromId: string; fromHandle: string; fromToken: string; stake: DuelStake };
-  type OutgoingDuel = { cid: string; toId: string; oppHandle: string; stake: DuelStake; me: DuelIdentity };
-  type AcceptedDuel = { cid: string; fromId: string; fromHandle: string; fromToken: string; stake: DuelStake; me: DuelIdentity };
-  const [duelPanel, setDuelPanel] = useState(false);                       // pick-opponent + stake builder
-  const [duelTarget, setDuelTarget] = useState<{ id: string; handle: string } | null>(null);
+  // ── DUEL LOBBY (placeable cabinet) ── walk up to a Duel Cabinet → a waiting room keyed by that cabinet.
+  // When a 2nd player walks up, the host (lower id, both agree) picks Friendly or a Wager, then starts.
+  // Coordination runs over a per-cabinet presence channel (duel:lobby:<cabId>); the seeded Climb Race
+  // (and, for wagers, the duels escrow row) take over once both launch. Discord is required only to wager.
+  type LobbyPlayer = { id: string; handle: string; token: string | null };
+  const [duelLobby, setDuelLobby] = useState<string | null>(null);        // cabinet id whose lobby is open (null = closed)
+  const [lobbyRoster, setLobbyRoster] = useState<LobbyPlayer[]>([]);
+  const [lobbyMode, setLobbyMode] = useState<'friendly' | 'wager'>('friendly');
   const [duelStake, setDuelStake] = useState<DuelStake>({ crystals: 0, items: {} });
-  const [duelOutStatus, setDuelOutStatus] = useState<'idle' | 'waiting' | 'declined' | 'error'>('idle');
-  const [duelMsg, setDuelMsg] = useState('');
-  const [duelIncoming, setDuelIncoming] = useState<IncomingDuel | null>(null);
-  const duelOutRef = useRef<OutgoingDuel | null>(null);
-  const duelAcceptedRef = useRef<AcceptedDuel | null>(null);
+  const [lobbyMsg, setLobbyMsg] = useState('');
+  const lobbyChannelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
+  const duelCabRef = useRef<string | null>(null);   // rising-edge guard for cabinet proximity
+  const launchingDuelRef = useRef(false);            // guard: launch the match exactly once
+  const hostStakeRef = useRef<DuelStake | null>(null);   // host's escrowed stake (for refund on guest nack)
   // Validate a stake received over the wire (never trust the payload shape).
   const normStake = (v: unknown): DuelStake => {
     const o = (v && typeof v === 'object') ? v as Record<string, unknown> : {};
@@ -655,68 +656,103 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (o.items && typeof o.items === 'object') for (const [k, n] of Object.entries(o.items as Record<string, unknown>)) { const c = Math.floor(Number(n) || 0); if (c > 0) items[k] = c; }
     return { crystals: Math.max(0, Math.floor(Number(o.crystals) || 0)), items };
   };
+  // My wagering identity, from the SAME signed-in user the rest of the UI trusts (useUser reads the
+  // persisted session; getAuthIdentity's network getUser() was returning null spuriously).
+  const meDuelIdentity = (): DuelIdentity | null => user ? { token: `discord:${user.id}`, handle: user.name.slice(0, 24) } : null;
   // Stash the ticket + launch the duel view (mirrors the arcade-machine launch path so EXIT returns here).
   const launchDuel = (ticket: Parameters<typeof stashTicket>[0]) => {
     stashTicket(ticket); nearMachineRef.current = 'launched'; writeOrigin();
     (onLaunchGameRef.current ?? onLaunchGame)?.('duel');
   };
-  // Host: guest accepted → escrow our ante, create the durable row, tell the guest to lock + launch.
-  const hostStartDuel = async (out: OutgoingDuel, guestToken: string, guestHandle: string) => {
-    duelOutRef.current = null;
-    if (!guestToken) { setDuelOutStatus('error'); setDuelMsg('Opponent is not signed in with Discord.'); return; }
-    if (!canAfford(out.stake).ok) { setDuelOutStatus('error'); setDuelMsg('You can no longer cover that stake.'); return; }
-    if (!escrowAnte(out.stake)) { setDuelOutStatus('error'); setDuelMsg('Could not escrow your ante.'); return; }
-    const seed = makeSeed();
-    const slug = roomMetaRef.current.slug;
-    const row = await createDuel({ room: slug, seed, host: out.me, guest: { token: guestToken, handle: guestHandle }, stake: out.stake });
-    if (!row) { creditStake(out.stake, 1); setDuelOutStatus('error'); setDuelMsg('Could not start the duel (offline?). Ante refunded.'); return; }
-    channelRef.current?.send({ type: 'broadcast', event: 'duel_go', payload: { cid: out.cid, toId: out.toId, duelId: row.id, seed, hostHandle: out.me.handle, hostToken: out.me.token } });
-    setDuelOutStatus('idle'); setDuelPanel(false);
-    launchDuel({ id: row.id, seed, role: 'host', room: slug, meHandle: out.me.handle, meToken: out.me.token, oppHandle: guestHandle, oppToken: guestToken, stake: out.stake });
-  };
-  // Guest: host created the row → escrow our matching ante, mark locked, launch.
-  const guestStartDuel = async (acc: AcceptedDuel, duelId: string, seed: number, hostHandle: string, hostToken: string) => {
-    duelAcceptedRef.current = null;
-    if (!escrowAnte(acc.stake)) {
-      channelRef.current?.send({ type: 'broadcast', event: 'duel_abort', payload: { cid: acc.cid, toId: acc.fromId, duelId } });
-      setDuelMsg('You could not cover the stake.'); return;
-    }
-    await markLocked(duelId, 'guest').catch(() => {});
-    const slug = roomMetaRef.current.slug;
-    launchDuel({ id: duelId, seed, role: 'guest', room: slug, meHandle: acc.me.handle, meToken: acc.me.token, oppHandle: hostHandle, oppToken: hostToken, stake: acc.stake });
-  };
-  // My wagering identity, derived from the SAME signed-in user the rest of the UI trusts (useUser reads
-  // the persisted session; getAuthIdentity's network getUser() was returning null spuriously here).
-  const meDuelIdentity = (): DuelIdentity | null => user ? { token: `discord:${user.id}`, handle: user.name.slice(0, 24) } : null;
-  // Host UI: fire the challenge.
-  const requestDuel = async () => {
-    if (!duelTarget) { setDuelMsg('Pick who to challenge.'); return; }
-    const meId = meDuelIdentity();
-    if (!meId) { setDuelMsg('Sign in with Discord to wager.'); return; }
-    if (stakeIsEmpty(duelStake)) { setDuelMsg('Set a stake first.'); return; }
-    const aff = canAfford(duelStake); if (!aff.ok) { setDuelMsg(aff.reason ?? 'Insufficient stake.'); return; }
-    const cid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `c_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-    duelOutRef.current = { cid, toId: duelTarget.id, oppHandle: duelTarget.handle, stake: duelStake, me: meId };
-    setDuelOutStatus('waiting'); setDuelMsg('');
-    channelRef.current?.send({ type: 'broadcast', event: 'duel_invite', payload: { cid, fromId: selfRef.current.id, fromHandle: selfRef.current.handle, fromToken: meId.token, toId: duelTarget.id, stake: duelStake } });
-  };
-  // Guest UI: accept / decline.
-  const acceptDuel = async () => {
-    const inc = duelIncoming; if (!inc) return;
-    const meId = meDuelIdentity();
-    if (!meId) { setDuelMsg('Sign in with Discord to accept.'); return; }
-    if (!canAfford(inc.stake).ok) { channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: inc.cid, toId: inc.fromId } }); setDuelIncoming(null); setDuelMsg('You cannot cover that stake.'); return; }
-    duelAcceptedRef.current = { cid: inc.cid, fromId: inc.fromId, fromHandle: inc.fromHandle, fromToken: inc.fromToken, stake: inc.stake, me: meId };
-    channelRef.current?.send({ type: 'broadcast', event: 'duel_accept', payload: { cid: inc.cid, toId: inc.fromId, guestToken: meId.token, guestHandle: meId.handle } });
-    setDuelIncoming(null); setDuelMsg(`Waiting for ${inc.fromHandle} to start…`);
-  };
-  const declineDuel = () => { const inc = duelIncoming; if (!inc) return; channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: inc.cid, toId: inc.fromId } }); setDuelIncoming(null); };
-  // Build the wagerable-item list from the wallet (non-free, finitely-owned furni you hold).
+  // Wagerable items: non-free, finitely-owned furni you hold.
   const wagerableItems = (): { kind: string; name: string; have: number }[] => {
     const w = wallet.furni;
     return Object.keys(w).filter(k => w[k] > 0 && isWagerable(k)).map(k => ({ kind: k, name: defOf(k)?.name ?? k, have: w[k] }));
   };
   const setStakeItem = (kind: string, n: number) => setDuelStake(s => { const items = { ...s.items }; if (n <= 0) delete items[kind]; else items[kind] = n; return { ...s, items }; });
+  const leaveLobby = () => { setDuelLobby(null); setLobbyMsg(''); setLobbyMode('friendly'); setDuelStake({ crystals: 0, items: {} }); };
+  // Host (lower id) starts the match: friendly → just share a seed; wager → escrow + create the duels row.
+  const startLobbyDuel = async () => {
+    const meId = selfRef.current.id;
+    const host = lobbyRoster[0], guest = lobbyRoster[1];
+    if (!host || !guest) { setLobbyMsg('Waiting for an opponent.'); return; }
+    if (host.id !== meId) { setLobbyMsg('Only the host starts the match.'); return; }
+    const slug = roomMetaRef.current.slug;
+    const seed = makeSeed();
+    if (lobbyMode === 'friendly') {
+      const matchId = makeMatchId();
+      launchingDuelRef.current = true;
+      lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, seed, friendly: true, hostId: meId, hostHandle: selfRef.current.handle, guestId: guest.id } });
+      launchDuel({ id: matchId, seed, role: 'host', room: slug, meHandle: selfRef.current.handle, oppHandle: guest.handle, friendly: true });
+      return;
+    }
+    // wager
+    const me = meDuelIdentity();
+    if (!me) { setLobbyMsg('Sign in with Discord to wager.'); return; }
+    if (!guest.token) { setLobbyMsg(`${guest.handle} isn't signed in — friendly only.`); return; }
+    if (stakeIsEmpty(duelStake)) { setLobbyMsg('Set a stake first.'); return; }
+    const aff = canAfford(duelStake); if (!aff.ok) { setLobbyMsg(aff.reason ?? 'Insufficient stake.'); return; }
+    if (!escrowAnte(duelStake)) { setLobbyMsg('Could not escrow your ante.'); return; }
+    const row = await createDuel({ room: slug, seed, host: me, guest: { token: guest.token, handle: guest.handle }, stake: duelStake });
+    if (!row) { creditStake(duelStake, 1); setLobbyMsg('Could not start (offline?). Ante refunded.'); return; }
+    hostStakeRef.current = duelStake;
+    launchingDuelRef.current = true;
+    lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: row.id, duelId: row.id, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
+    launchDuel({ id: row.id, seed, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
+  };
+  // Guest receives the host's start. Only the chosen guest launches; for a wager, escrow + lock first.
+  const onLobbyGo = async (p: Record<string, unknown>) => {
+    const meId = selfRef.current.id;
+    if (String(p.guestId ?? '') !== meId || launchingDuelRef.current) return;
+    const seed = Number(p.seed) >>> 0;
+    const hostHandle = String(p.hostHandle ?? 'Host');
+    const slug = roomMetaRef.current.slug;
+    if (p.friendly) {
+      launchingDuelRef.current = true;
+      launchDuel({ id: String(p.matchId), seed, role: 'guest', room: slug, meHandle: selfRef.current.handle, oppHandle: hostHandle, friendly: true });
+      return;
+    }
+    const me = meDuelIdentity();
+    const duelId = String(p.duelId ?? p.matchId);
+    const stake = normStake(p.stake);
+    if (!me) { lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_nack', payload: { duelId, toId: String(p.hostId) } }); setLobbyMsg('Sign in with Discord to accept a wager.'); return; }
+    if (!canAfford(stake).ok || !escrowAnte(stake)) { lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_nack', payload: { duelId, toId: String(p.hostId) } }); setLobbyMsg('You could not cover the stake.'); return; }
+    launchingDuelRef.current = true;
+    await markLocked(duelId, 'guest').catch(() => {});
+    launchDuel({ id: duelId, seed, role: 'guest', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: hostHandle, oppToken: String(p.hostToken ?? ''), stake, friendly: false });
+  };
+  const onLobbyNack = (p: Record<string, unknown>) => {
+    if (String(p.toId ?? '') !== selfRef.current.id) return;
+    if (p.duelId) void voidDuel(String(p.duelId));
+    if (hostStakeRef.current) { creditStake(hostStakeRef.current, 1); hostStakeRef.current = null; }
+    launchingDuelRef.current = false;
+    setLobbyMsg('Opponent could not match the stake — your ante was refunded.');
+  };
+  // Keep the latest lobby handlers reachable from the (once-created) lobby channel subscription.
+  const onLobbyGoRef = useRef(onLobbyGo); onLobbyGoRef.current = onLobbyGo;
+  const onLobbyNackRef = useRef(onLobbyNack); onLobbyNackRef.current = onLobbyNack;
+  // Join/leave the per-cabinet lobby channel while its overlay is open. Presence builds the roster; both
+  // players agree on host = lowest id. Re-tracks when sign-in changes so the wager option unlocks live.
+  useEffect(() => {
+    const cabId = duelLobby;
+    if (!cabId || !supabase) { setLobbyRoster([]); return; }
+    launchingDuelRef.current = false;
+    const meId = selfRef.current.id;
+    const myTok = user ? `discord:${user.id}` : null;
+    const ch = supabase.channel(`duel:lobby:${cabId}`, { config: { presence: { key: meId }, broadcast: { self: false } } });
+    lobbyChannelRef.current = ch;
+    const rebuild = () => {
+      const st = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
+      const seen = new Map<string, LobbyPlayer>();
+      for (const k in st) { const m = st[k]?.[0]; if (!m) continue; const id = String(m.id ?? k); seen.set(id, { id, handle: String(m.handle ?? '???'), token: m.token ? String(m.token) : null }); }
+      setLobbyRoster([...seen.values()].sort((a, b) => a.id.localeCompare(b.id)));
+    };
+    ch.on('presence', { event: 'sync' }, rebuild)
+      .on('broadcast', { event: 'lobby_go' }, ({ payload }) => { void onLobbyGoRef.current(payload as Record<string, unknown>); })
+      .on('broadcast', { event: 'lobby_nack' }, ({ payload }) => { onLobbyNackRef.current(payload as Record<string, unknown>); })
+      .subscribe(async status => { if (status === 'SUBSCRIBED') { await ch.track({ id: meId, handle: selfRef.current.handle, token: myTok }).catch(() => {}); } });
+    return () => { try { if (supabase) supabase.removeChannel(ch); } catch { /* ignore */ } if (lobbyChannelRef.current === ch) lobbyChannelRef.current = null; };
+  }, [duelLobby, user]);
   // Record where we're launching from so EXIT comes back here. Called at every launch site. Tutorial
   // rooms are skipped — their room is forced by the onboarding step, and a stale tutorial slug must
   // never leak into a "done" player's respawn.
@@ -917,8 +953,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [emoteOpen, setEmoteOpen] = useState(false);
   const [currentEmote, setCurrentEmote] = useState<string | null>(null);
   const wallet = useWallet();
-  // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in.
-  const { user } = useUser();
+  // Guests can walk + chat; building/creating needs a Discord account → kick off sign-in. (`user` is
+  // declared earlier, above the duel-lobby block, so its effect deps can reference it.)
   const signedIn = !!user;
   // Character-creator step: once they've chosen Discord (signed in) or guest, throw open the wardrobe.
   useEffect(() => { if (onboarding === 'character' && (signedIn || guestChosen) && !charDone) setInvOpen(true); }, [onboarding, signedIn, guestChosen, charDone]);
@@ -1692,33 +1728,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             executeTrade(myTradeItemRef.current, theirTradeOfferRef.current);
           }
         })
-        // ── DUEL handshake (addressed by toId; ignore messages not meant for us) ──
-        .on('broadcast', { event: 'duel_invite' }, ({ payload }) => {
-          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
-          if (duelOutRef.current || duelAcceptedRef.current) { channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: String(p.cid), toId: String(p.fromId) } }); return; }   // already busy
-          setDuelIncoming({ cid: String(p.cid), fromId: String(p.fromId), fromHandle: String(p.fromHandle ?? '???'), fromToken: String(p.fromToken ?? ''), stake: normStake(p.stake) });
-        })
-        .on('broadcast', { event: 'duel_decline' }, ({ payload }) => {
-          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
-          const out = duelOutRef.current; if (!out || out.cid !== String(p.cid)) return;
-          duelOutRef.current = null; setDuelOutStatus('declined'); setDuelMsg(`${out.oppHandle} declined.`);
-        })
-        .on('broadcast', { event: 'duel_accept' }, ({ payload }) => {
-          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
-          const out = duelOutRef.current; if (!out || out.cid !== String(p.cid)) return;
-          void hostStartDuel(out, String(p.guestToken ?? ''), String(p.guestHandle ?? out.oppHandle));
-        })
-        .on('broadcast', { event: 'duel_go' }, ({ payload }) => {
-          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
-          const acc = duelAcceptedRef.current; if (!acc || acc.cid !== String(p.cid)) return;
-          void guestStartDuel(acc, String(p.duelId), Number(p.seed) >>> 0, String(p.hostHandle ?? acc.fromHandle), String(p.hostToken ?? acc.fromToken));
-        })
-        .on('broadcast', { event: 'duel_abort' }, ({ payload }) => {
-          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
-          const out = duelOutRef.current; if (!out || out.cid !== String(p.cid)) return;
-          if (p.duelId) void voidDuel(String(p.duelId));
-          creditStake(out.stake, 1); duelOutRef.current = null; setDuelOutStatus('error'); setDuelMsg('Opponent could not match the stake — your ante was refunded.');
-        })
         .subscribe(async status => {
           if (!alive) return;
           joinedRef.current = status === 'SUBSCRIBED';
@@ -1818,6 +1827,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const nearKey = nearShop ? `${nearShop.gx},${nearShop.gy}` : null;
         if (nearShop && nearKey !== nearShopRef.current) { musicRef.current?.chime(); setShopPrompt({ items: nearShop.shopItems!, name: nearShop.shopName ?? '' }); }
         nearShopRef.current = nearKey;
+      }
+      // DUEL CABINET — open the lobby (waiting room) when you step adjacent to a placed Duel Cabinet.
+      {
+        const px = clampTile(me.fx), py = clampTile(me.fy);
+        let nearCab: Item | null = null;
+        for (const it of itemsRef.current) { if (it.kind === 'duelcab' && Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) === 1) { nearCab = it; break; } }
+        const nearKey = nearCab ? nearCab.id : null;
+        if (nearCab && nearKey !== duelCabRef.current) { musicRef.current?.chime(); setDuelLobby(nearCab.id); }
+        duelCabRef.current = nearKey;
       }
       // ── TUTORIAL flow ── the onward door (TUT_PORTAL_TILE) + the terminal, gated by the current step.
       {
@@ -2531,7 +2549,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </div>
         )}
         <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
-        {!tutorial && <button onClick={() => { setDuelTarget(null); setDuelStake({ crystals: 0, items: {} }); setDuelOutStatus('idle'); setDuelMsg(''); setDuelPanel(true); }} title="Challenge a player to a wagered Climb Race" className="text-[11px] font-mono uppercase tracking-widest text-brandRed border border-brandRed/40 bg-black/50 px-3 py-1.5 hover:bg-brandRed hover:text-black transition-all">⚔ Duel</button>}
         {!tutorial && isSuper && <button onClick={() => setAdminOpen(true)} title="Admin panel" className="text-[11px] font-mono uppercase tracking-widest text-brandYellow border border-brandYellow/40 bg-black/50 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">📊</button>}
         {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
@@ -3250,108 +3267,101 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </div>
       )}
 
-      {/* ── DUEL · challenge a player to a wagered Climb Race ── */}
-      {duelPanel && (
-        <div className="absolute inset-0 z-[68] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => { if (duelOutStatus !== 'waiting') setDuelPanel(false); }}>
-          <div className="w-full max-w-sm border border-brandRed/40 bg-black p-6 space-y-4 max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ duel · climb race</p>
-              <button onClick={() => { if (duelOutStatus !== 'waiting') setDuelPanel(false); }} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
-            </div>
-
-            {duelOutStatus === 'waiting' ? (
-              <div className="py-4 text-center space-y-3">
-                <p className="text-sm text-white/70">Challenge sent to <b className="text-white">{duelOutRef.current?.oppHandle}</b>.</p>
-                <p className="text-[12px] text-white/45">Waiting for them to accept…</p>
-                <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
-                <button onClick={() => { duelOutRef.current = null; setDuelOutStatus('idle'); }} className="mt-2 text-[11px] font-mono uppercase tracking-widest text-white/60 border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors">Cancel</button>
+      {/* ── DUEL CABINET LOBBY · walk up → wait for an opponent → friendly or wager → race ── */}
+      {duelLobby && (() => {
+        const meId = selfRef.current.id;
+        const isHost = lobbyRoster[0]?.id === meId;
+        const opp = isHost ? lobbyRoster[1] : lobbyRoster[0];
+        const matched = lobbyRoster.length >= 2 && !!opp;
+        return (
+          <div className="absolute inset-0 z-[68] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={leaveLobby}>
+            <div className="w-full max-w-sm border border-brandRed/40 bg-black p-6 space-y-4 max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ duel cabinet</p>
+                <button onClick={leaveLobby} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
               </div>
-            ) : (
-              <>
-                <p className="text-sm text-white/60 leading-relaxed">Both of you race the <b className="text-white/85">same seeded tower</b> for 75s. Higher score takes the pot. Discord sign-in required to wager.</p>
 
-                {/* Opponent picker */}
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Challenge who</p>
-                  {(() => {
-                    const players = [...remotesRef.current.entries()].map(([id, a]) => ({ id, handle: a.handle }));
-                    if (!players.length) return <p className="text-[12px] text-white/40 italic">Nobody else is here right now.</p>;
-                    return (
-                      <div className="flex flex-wrap gap-1.5">
-                        {players.map(pl => (
-                          <button key={pl.id} onClick={() => setDuelTarget(pl)}
-                            className={`text-[12px] font-mono px-3 py-1.5 border transition-colors ${duelTarget?.id === pl.id ? 'bg-brandRed text-black border-brandRed' : 'text-white/75 border-white/20 hover:border-brandRed/60'}`}>{pl.handle}</button>
-                        ))}
+              {/* roster */}
+              <div className="flex items-center justify-center gap-3 py-1">
+                <span className="text-sm text-white font-bold">{selfRef.current.handle}{isHost && matched ? ' 👑' : ''}</span>
+                <span className="text-white/30 font-mono text-xs">VS</span>
+                <span className="text-sm font-bold text-white/80">{opp ? `${opp.handle}${!isHost ? ' 👑' : ''}` : <span className="text-white/35 italic font-normal">waiting…</span>}</span>
+              </div>
+
+              {!matched ? (
+                <div className="py-4 text-center space-y-2">
+                  <p className="text-sm text-white/70">Waiting for an opponent to step up to the cabinet…</p>
+                  <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
+                  <p className="text-[12px] text-white/40">Same seeded tower, {/* keep in sync with the game */}75s each — higher score wins.</p>
+                </div>
+              ) : !isHost ? (
+                <div className="py-4 text-center space-y-2">
+                  <p className="text-sm text-white/70"><b className="text-white">{opp!.handle}</b> is the host — they pick friendly or a wager.</p>
+                  <p className="text-[12px] text-white/45">Waiting for them to start…</p>
+                  <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
+                  {lobbyMsg && <p className="text-[12px] text-brandYellow">{lobbyMsg}</p>}
+                </div>
+              ) : (
+                <>
+                  {/* mode toggle */}
+                  <div className="flex gap-2">
+                    <button onClick={() => setLobbyMode('friendly')} className={`flex-1 text-[12px] font-bold uppercase tracking-widest py-2 border transition-colors ${lobbyMode === 'friendly' ? 'bg-white text-black border-white' : 'text-white/70 border-white/20 hover:border-white/50'}`}>Friendly</button>
+                    <button onClick={() => setLobbyMode('wager')} className={`flex-1 text-[12px] font-bold uppercase tracking-widest py-2 border transition-colors ${lobbyMode === 'wager' ? 'bg-brandRed text-black border-brandRed' : 'text-brandRed/80 border-brandRed/30 hover:border-brandRed/60'}`}>Wager ✦</button>
+                  </div>
+
+                  {lobbyMode === 'friendly' ? (
+                    <p className="text-[12px] text-white/55 leading-relaxed">No stake — just bragging rights. Anyone can play (no sign-in needed).</p>
+                  ) : !meDuelIdentity() ? (
+                    <p className="text-[12px] text-brandYellow leading-relaxed">Sign in with Discord to put crystals or items on the line.</p>
+                  ) : !opp!.token ? (
+                    <p className="text-[12px] text-brandYellow leading-relaxed"><b className="text-white">{opp!.handle}</b> isn&apos;t signed in with Discord — friendly only.</p>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Ante · Cristais (you have {CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')})</p>
+                        <input type="number" min={0} max={wallet.balance} value={duelStake.crystals || ''} placeholder="0"
+                          onChange={e => { const n = Math.max(0, Math.min(wallet.balance, Math.floor(Number(e.target.value) || 0))); setDuelStake(s => ({ ...s, crystals: n })); }}
+                          className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-brandRed" />
                       </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Stake: crystals */}
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Ante · Cristais (you have {CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')})</p>
-                  <input type="number" min={0} max={wallet.balance} value={duelStake.crystals || ''} placeholder="0"
-                    onChange={e => { const n = Math.max(0, Math.min(wallet.balance, Math.floor(Number(e.target.value) || 0))); setDuelStake(s => ({ ...s, crystals: n })); }}
-                    className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-brandRed" />
-                </div>
-
-                {/* Stake: items */}
-                {(() => {
-                  const items = wagerableItems();
-                  if (!items.length) return null;
-                  return (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Ante · items</p>
-                      <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
-                        {items.map(it => {
-                          const n = duelStake.items[it.kind] ?? 0;
-                          return (
-                            <div key={it.kind} className="flex items-center justify-between gap-2 border border-white/10 px-2.5 py-1.5">
-                              <span className="text-[12px] text-white/75 truncate">{it.name} <span className="text-white/35">×{it.have}</span></span>
-                              <span className="flex items-center gap-2 shrink-0">
-                                <button onClick={() => setStakeItem(it.kind, Math.max(0, n - 1))} className="w-6 h-6 border border-white/20 text-white/70 hover:bg-white hover:text-black leading-none">−</button>
-                                <span className="w-5 text-center text-sm text-white tabular-nums">{n}</span>
-                                <button onClick={() => setStakeItem(it.kind, Math.min(it.have, n + 1))} className="w-6 h-6 border border-white/20 text-white/70 hover:bg-white hover:text-black leading-none">+</button>
-                              </span>
+                      {(() => {
+                        const items = wagerableItems();
+                        if (!items.length) return null;
+                        return (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Ante · items</p>
+                            <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto">
+                              {items.map(it => {
+                                const n = duelStake.items[it.kind] ?? 0;
+                                return (
+                                  <div key={it.kind} className="flex items-center justify-between gap-2 border border-white/10 px-2.5 py-1.5">
+                                    <span className="text-[12px] text-white/75 truncate">{it.name} <span className="text-white/35">×{it.have}</span></span>
+                                    <span className="flex items-center gap-2 shrink-0">
+                                      <button onClick={() => setStakeItem(it.kind, Math.max(0, n - 1))} className="w-6 h-6 border border-white/20 text-white/70 hover:bg-white hover:text-black leading-none">−</button>
+                                      <span className="w-5 text-center text-sm text-white tabular-nums">{n}</span>
+                                      <button onClick={() => setStakeItem(it.kind, Math.min(it.have, n + 1))} className="w-6 h-6 border border-white/20 text-white/70 hover:bg-white hover:text-black leading-none">+</button>
+                                    </span>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
+                          </div>
+                        );
+                      })()}
+                      <div className="text-[12px] text-white/55">Pot per side: <b className="text-brandRed">{stakeLabel(duelStake)}</b></div>
+                    </>
+                  )}
 
-                <div className="text-[12px] text-white/55">Pot per side: <b className="text-brandRed">{stakeLabel(duelStake)}</b></div>
-                {duelMsg && <p className="text-[12px] text-brandYellow">{duelMsg}</p>}
-
-                <button onClick={() => void requestDuel()} disabled={!duelTarget || stakeIsEmpty(duelStake)}
-                  className="w-full bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed">
-                  ⚔ Challenge{duelTarget ? ` ${duelTarget.handle}` : ''}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── DUEL · an incoming challenge ── */}
-      {duelIncoming && (
-        <div className="absolute inset-0 z-[69] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="w-full max-w-sm border border-brandRed/50 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ you've been challenged</p>
-            <p className="text-sm text-white/75 leading-relaxed"><b className="text-white">{duelIncoming.fromHandle}</b> wants to duel you in a <b className="text-white/85">Climb Race</b> — same seeded tower, 75s, higher score wins.</p>
-            <div className="border border-white/10 px-3 py-2 text-center">
-              <p className="text-[10px] uppercase tracking-widest text-white/40">Pot per side</p>
-              <p className="text-brandRed font-bold mt-0.5">{stakeLabel(duelIncoming.stake)}</p>
-            </div>
-            {duelMsg && <p className="text-[12px] text-brandYellow text-center">{duelMsg}</p>}
-            <div className="flex gap-3">
-              <button onClick={() => void acceptDuel()} className="flex-1 bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98]">Accept</button>
-              <button onClick={declineDuel} className="flex-1 border border-white/20 text-white/70 font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white hover:text-black transition-colors">Decline</button>
+                  {lobbyMsg && <p className="text-[12px] text-brandYellow">{lobbyMsg}</p>}
+                  <button onClick={() => void startLobbyDuel()} disabled={lobbyMode === 'wager' && (!meDuelIdentity() || !opp!.token || stakeIsEmpty(duelStake))}
+                    className="w-full bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed">
+                    ▶ Start vs {opp!.handle}
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <NpcEditor open={npcEditor} initial={editingNpcId ? pendingNpcRef.current : null}
         onClose={() => { setNpcEditor(false); setEditingNpcId(null); }}

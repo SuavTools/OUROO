@@ -3579,7 +3579,7 @@ function drawRaw(ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: nu
 // detail with no per-frame cost. Animated pieces (screens, flames, water, spin) still draw live.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 const SS = 2, SPR_W = 240, SPR_H = 300, OX = 120, OY = 224;   // sprite canvas + local tile-origin
-const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'pacman', 'arcsign', 'neonsign', 'puddle', 'brokenbottle', 'oilstain', 'pigeon']);
+const ANIMATED = new Set(['ball_hc', 'tv', 'laptop', 'pa', 'booth', 'lamp', 'lantern', 'speaker', 'disco', 'fountain', 'float', 'chandelier', 'water', 'jukebox', 'lavalamp', 'aquarium', 'fireplace', 'espresso', 'hottub', 'washer', 'holopod', 'teleporter', 'plasmalamp', 'welder', 'xmastree', 'candle', 'firepit', 'lavablock', 'voidblock', 'retrocab', 'duelcab', 'pacman', 'arcsign', 'neonsign', 'puddle', 'brokenbottle', 'oilstain', 'pigeon']);
 // Urban floor props that sit flush with the ground — no contact shadow or outline
 const NO_SHADOW = new Set(['newspaper', 'puddle', 'fishbone', 'brokenbottle', 'oilstain', 'graffiti', 'pigeon', 'drain', 'manhole', 'disco', 'ball_hc']);
 const spriteCache = new Map<string, HTMLCanvasElement>();
