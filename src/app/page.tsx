@@ -167,7 +167,9 @@ export default function Home() {
   if (view === 'duel') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        {duelGameId === 'leap'
+        {duelGameId === 'ouroo'
+          ? <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} duel onExit={() => setView('lobby')} />
+          : duelGameId === 'leap'
           ? <LeapCanvas stageScale={stage.scale} isMobileStage={stage.mobile} duel onExit={() => setView('lobby')} />
           : <DuelClimbCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />}
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>

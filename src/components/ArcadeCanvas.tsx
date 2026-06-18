@@ -8,6 +8,7 @@ import { supabaseReady } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import { drawSkinShape, skinById, getSelectedSkinId, type SkinShape } from '@/lib/skins';
 import { reconcileNow, CURRENCY_SYMBOL } from '@/lib/wallet';
+import { useDuelMatch } from '@/lib/useDuelMatch';
 import { ArcadeSynth } from '@/lib/engine/synth';
 import { BrandText } from './BrandText';
 
@@ -104,7 +105,7 @@ const perkLabel = (k: string) => PERK_LABEL[k] ?? k;
 // ---- COMPONENT ----
 // gameMods: special-rule flags this run launched with (e.g. { doubleCrystals: true }). Accepted but
 // not yet acted on — the launch path (placed game triggers) forwards them for a future pass.
-export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; gameMods?: Record<string, boolean> | null; onFirstGameOver?: () => void }> = ({ stageScale = 1, isMobileStage = false, gameMods: _gameMods = null, onFirstGameOver }) => {
+export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; gameMods?: Record<string, boolean> | null; duel?: boolean; onExit?: () => void; onFirstGameOver?: () => void }> = ({ stageScale = 1, isMobileStage = false, gameMods: _gameMods = null, duel = false, onExit, onFirstGameOver }) => {
   const firstOverFiredRef = useRef(false);   // onboarding: fire onFirstGameOver exactly once, on the first death
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
   const synthRef    = useRef<ArcadeSynth | null>(null);
@@ -168,6 +169,10 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   const submittedRef = useRef(false);  // guard against double-submit per run
   const [cristaisEarned, setCristaisEarned] = useState(0);
   const { user: discordUser } = useUser();   // logged-in Discord identity (null when anon)
+  // 1v1 duel layer (inert unless launched into the duel view): "first to lose loses" — higher score wins.
+  const duelMatch = useDuelMatch(duel);
+  const duelRef = useRef(duelMatch);
+  duelRef.current = duelMatch;
 
   const doSubmit = async (handle?: string) => {
     setLbState('submitting'); setLbError('');
@@ -185,6 +190,8 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
   // Reset the guard whenever a fresh run starts.
   useEffect(() => {
     if (isPlaying) { submittedRef.current = false; setCristaisEarned(0); setLbState('idle'); setLbRank(null); setLbError(''); return; }
+    // Duel: the score goes to the opponent (first to lose loses), not the solo board.
+    if (duel) { if (!showIntro && !submittedRef.current) { submittedRef.current = true; duelRef.current.finish(score); } return; }
     // First death of an onboarding run → hand control back so the world can ask them to make an account.
     if (!showIntro && !firstOverFiredRef.current && onFirstGameOver) { firstOverFiredRef.current = true; onFirstGameOver(); }
     if (!showIntro && score > 0 && supabaseReady && !submittedRef.current) {
@@ -195,6 +202,9 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, showIntro]);
+
+  // Stream my live score to the opponent's meter while a duel run is in progress.
+  useEffect(() => { if (duel && isPlaying) duelRef.current.progress(score); }, [score, duel, isPlaying]);
 
   const PW = 38, PH = 52;
 
@@ -2708,7 +2718,31 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
                 </div>
               </div>
 
-              {/* Ranking */}
+              {/* Duel result (first to lose loses) — replaces the global ranking in a duel */}
+              {duel ? (
+                <div className="border border-brandRed/30 p-5 text-center flex flex-col justify-center">
+                  {duelMatch.settling || !duelMatch.outcome ? (
+                    <>
+                      <div className="animate-pulse text-white/70 text-lg font-bold">{duelMatch.friendly ? 'Checking the result…' : 'Settling the pot…'}</div>
+                      <p className="text-[12px] text-white/45 mt-2">Waiting for {duelMatch.oppHandle}…</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className={`text-[11px] uppercase tracking-[0.4em] mb-1 ${duelMatch.outcome.iWon ? 'text-[#1ED760]' : duelMatch.outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
+                        {duelMatch.outcome.iWon ? (duelMatch.friendly ? 'You win' : 'You won the pot') : duelMatch.outcome.draw ? 'Draw' : (duelMatch.friendly ? 'You lose' : 'You lost the pot')}
+                      </p>
+                      <div className="text-5xl leading-none my-1">{duelMatch.outcome.iWon ? '🏆' : duelMatch.outcome.draw ? '🤝' : '💀'}</div>
+                      <p className="text-sm text-white/70 mt-2">You {duelMatch.outcome.myScore.toLocaleString('pt-PT')} · {duelMatch.oppHandle} {duelMatch.outcome.oppScore.toLocaleString('pt-PT')}</p>
+                      {!duelMatch.friendly && duelMatch.outcome.stakeText && (
+                        <p className={`mt-2 text-sm font-bold ${duelMatch.outcome.iWon ? 'text-[#1ED760]' : duelMatch.outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
+                          {duelMatch.outcome.iWon ? `+ ${duelMatch.outcome.stakeText}` : duelMatch.outcome.draw ? `${duelMatch.outcome.stakeText} returned` : `− ${duelMatch.outcome.stakeText}`}
+                        </p>
+                      )}
+                      {duelMatch.outcome.note && <p className="text-[12px] text-white/45 mt-2">{duelMatch.outcome.note}</p>}
+                    </>
+                  )}
+                </div>
+              ) : (
               <div className="border border-white/10 p-5">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[11px] uppercase tracking-[0.25em] text-white/40">Global Ranking</p>
@@ -2735,10 +2769,13 @@ export const ArcadeCanvas: React.FC<{ stageScale?: number; isMobileStage?: boole
 
                 <Leaderboard compact limit={5} highlightId={lbPlayerId} refreshKey={lbRefresh} showToggle />
               </div>
+              )}
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3 items-center">
-              <button onClick={reboot} className="bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm px-8 py-4 hover:bg-white transition-colors cursor-pointer pointer-events-auto active:scale-95">▶ Play again</button>
+              {duel
+                ? <button onClick={() => onExit?.()} className="bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm px-8 py-4 hover:bg-white transition-colors cursor-pointer pointer-events-auto active:scale-95">◂ Back to Plaza</button>
+                : <button onClick={reboot} className="bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm px-8 py-4 hover:bg-white transition-colors cursor-pointer pointer-events-auto active:scale-95">▶ Play again</button>}
             </div>
           </div>
         </div>
