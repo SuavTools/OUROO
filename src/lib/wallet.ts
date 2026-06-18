@@ -131,6 +131,12 @@ export function returnFurni(kind: string): void {
   if (isFurniFree(kind)) return;
   const w = getWallet(); w.furni[kind] = (w.furni[kind] || 0) + 1; save(w);
 }
+// Grant N of a kind into the inventory in a single write (duel payouts credit wagered items here).
+// Free basics are unlimited and untracked, so granting them is a no-op.
+export function grantFurni(kind: string, n: number): void {
+  if (isFurniFree(kind) || n <= 0) return;
+  const w = getWallet(); w.furni[kind] = (w.furni[kind] || 0) + Math.floor(n); save(w);
+}
 
 // ---- custom icons ----
 export const getIcons = (): CustomIcon[] => getWallet().icons;

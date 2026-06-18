@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 import { LeapCanvas } from '@/components/LeapCanvas';
+import { DuelClimbCanvas } from '@/components/DuelClimbCanvas';
 import { RoomCanvas } from '@/components/RoomCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
@@ -14,7 +15,7 @@ import { ChatModal } from '@/components/ChatModal';
 import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
 
-type View = 'landing' | 'arcade' | 'leap' | 'lobby';
+type View = 'landing' | 'arcade' | 'leap' | 'duel' | 'lobby';
 // Onboarding spine — a portal-chained, Oracle-guided tutorial (canon: tutorial-sequence-spec):
 //   oracle → arcade → terminal → character → yourroom → town → done.
 // page.tsx owns the persisted step + whether the tutorial game was played (that fact has to survive
@@ -112,7 +113,7 @@ export default function Home() {
 
   // Launch a game from inside the world (walking up to an arcade machine or a placed game trigger).
   // RoomCanvas records where you launched from (ouroo_game_origin) so exit returns you there.
-  const launchGame = (id: string, mods?: Record<string, boolean>) => { setGameMods(mods ?? null); setView(id === 'leap' ? 'leap' : 'arcade'); };
+  const launchGame = (id: string, mods?: Record<string, boolean>) => { setGameMods(mods ?? null); setView(id === 'leap' ? 'leap' : id === 'duel' ? 'duel' : 'arcade'); };
 
   // ==========================================================================
   // THE ARCADE
@@ -149,6 +150,18 @@ export default function Home() {
         >
           [ EXIT ]
         </button>
+      </main>
+    );
+  }
+
+  // ==========================================================================
+  // OUROO DUEL — 1v1 wagered Climb Race (launched from the Plaza)
+  // ==========================================================================
+  if (view === 'duel') {
+    return (
+      <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
+        <DuelClimbCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />
+        <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
       </main>
     );
   }

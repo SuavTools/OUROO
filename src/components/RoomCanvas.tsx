@@ -19,6 +19,10 @@ import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
+import {
+  getDuelIdentity, canAfford, escrowAnte, creditStake, makeSeed, createDuel, markLocked, voidDuel,
+  stashTicket, stakeLabel, isWagerable, stakeIsEmpty, type DuelStake, type DuelIdentity,
+} from '@/lib/duel';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
 import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
@@ -629,6 +633,87 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
   const onLaunchGameRef = useRef(onLaunchGame);
   useEffect(() => { onLaunchGameRef.current = onLaunchGame; }, [onLaunchGame]);
+
+  // ── DUEL (1v1 wager) ── challenge a nearby/online player to a seeded Climb Race for crystals + items.
+  // The handshake rides the room channel (duel_invite → accept/decline → go); stakes escrow locally and
+  // the duels row is the durable referee. cid (challenge id) ties the messages of one challenge together.
+  type IncomingDuel = { cid: string; fromId: string; fromHandle: string; fromToken: string; stake: DuelStake };
+  type OutgoingDuel = { cid: string; toId: string; oppHandle: string; stake: DuelStake; me: DuelIdentity };
+  type AcceptedDuel = { cid: string; fromId: string; fromHandle: string; fromToken: string; stake: DuelStake; me: DuelIdentity };
+  const [duelPanel, setDuelPanel] = useState(false);                       // pick-opponent + stake builder
+  const [duelTarget, setDuelTarget] = useState<{ id: string; handle: string } | null>(null);
+  const [duelStake, setDuelStake] = useState<DuelStake>({ crystals: 0, items: {} });
+  const [duelOutStatus, setDuelOutStatus] = useState<'idle' | 'waiting' | 'declined' | 'error'>('idle');
+  const [duelMsg, setDuelMsg] = useState('');
+  const [duelIncoming, setDuelIncoming] = useState<IncomingDuel | null>(null);
+  const duelOutRef = useRef<OutgoingDuel | null>(null);
+  const duelAcceptedRef = useRef<AcceptedDuel | null>(null);
+  // Validate a stake received over the wire (never trust the payload shape).
+  const normStake = (v: unknown): DuelStake => {
+    const o = (v && typeof v === 'object') ? v as Record<string, unknown> : {};
+    const items: Record<string, number> = {};
+    if (o.items && typeof o.items === 'object') for (const [k, n] of Object.entries(o.items as Record<string, unknown>)) { const c = Math.floor(Number(n) || 0); if (c > 0) items[k] = c; }
+    return { crystals: Math.max(0, Math.floor(Number(o.crystals) || 0)), items };
+  };
+  // Stash the ticket + launch the duel view (mirrors the arcade-machine launch path so EXIT returns here).
+  const launchDuel = (ticket: Parameters<typeof stashTicket>[0]) => {
+    stashTicket(ticket); nearMachineRef.current = 'launched'; writeOrigin();
+    (onLaunchGameRef.current ?? onLaunchGame)?.('duel');
+  };
+  // Host: guest accepted → escrow our ante, create the durable row, tell the guest to lock + launch.
+  const hostStartDuel = async (out: OutgoingDuel, guestToken: string, guestHandle: string) => {
+    duelOutRef.current = null;
+    if (!guestToken) { setDuelOutStatus('error'); setDuelMsg('Opponent is not signed in with Discord.'); return; }
+    if (!canAfford(out.stake).ok) { setDuelOutStatus('error'); setDuelMsg('You can no longer cover that stake.'); return; }
+    if (!escrowAnte(out.stake)) { setDuelOutStatus('error'); setDuelMsg('Could not escrow your ante.'); return; }
+    const seed = makeSeed();
+    const slug = roomMetaRef.current.slug;
+    const row = await createDuel({ room: slug, seed, host: out.me, guest: { token: guestToken, handle: guestHandle }, stake: out.stake });
+    if (!row) { creditStake(out.stake, 1); setDuelOutStatus('error'); setDuelMsg('Could not start the duel (offline?). Ante refunded.'); return; }
+    channelRef.current?.send({ type: 'broadcast', event: 'duel_go', payload: { cid: out.cid, toId: out.toId, duelId: row.id, seed, hostHandle: out.me.handle, hostToken: out.me.token } });
+    setDuelOutStatus('idle'); setDuelPanel(false);
+    launchDuel({ id: row.id, seed, role: 'host', room: slug, meHandle: out.me.handle, meToken: out.me.token, oppHandle: guestHandle, oppToken: guestToken, stake: out.stake });
+  };
+  // Guest: host created the row → escrow our matching ante, mark locked, launch.
+  const guestStartDuel = async (acc: AcceptedDuel, duelId: string, seed: number, hostHandle: string, hostToken: string) => {
+    duelAcceptedRef.current = null;
+    if (!escrowAnte(acc.stake)) {
+      channelRef.current?.send({ type: 'broadcast', event: 'duel_abort', payload: { cid: acc.cid, toId: acc.fromId, duelId } });
+      setDuelMsg('You could not cover the stake.'); return;
+    }
+    await markLocked(duelId, 'guest').catch(() => {});
+    const slug = roomMetaRef.current.slug;
+    launchDuel({ id: duelId, seed, role: 'guest', room: slug, meHandle: acc.me.handle, meToken: acc.me.token, oppHandle: hostHandle, oppToken: hostToken, stake: acc.stake });
+  };
+  // Host UI: fire the challenge.
+  const requestDuel = async () => {
+    if (!duelTarget) { setDuelMsg('Pick who to challenge.'); return; }
+    const meId = await getDuelIdentity();
+    if (!meId) { setDuelMsg('Sign in with Discord to wager.'); return; }
+    if (stakeIsEmpty(duelStake)) { setDuelMsg('Set a stake first.'); return; }
+    const aff = canAfford(duelStake); if (!aff.ok) { setDuelMsg(aff.reason ?? 'Insufficient stake.'); return; }
+    const cid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `c_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    duelOutRef.current = { cid, toId: duelTarget.id, oppHandle: duelTarget.handle, stake: duelStake, me: meId };
+    setDuelOutStatus('waiting'); setDuelMsg('');
+    channelRef.current?.send({ type: 'broadcast', event: 'duel_invite', payload: { cid, fromId: selfRef.current.id, fromHandle: selfRef.current.handle, fromToken: meId.token, toId: duelTarget.id, stake: duelStake } });
+  };
+  // Guest UI: accept / decline.
+  const acceptDuel = async () => {
+    const inc = duelIncoming; if (!inc) return;
+    const meId = await getDuelIdentity();
+    if (!meId) { setDuelMsg('Sign in with Discord to accept.'); return; }
+    if (!canAfford(inc.stake).ok) { channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: inc.cid, toId: inc.fromId } }); setDuelIncoming(null); setDuelMsg('You cannot cover that stake.'); return; }
+    duelAcceptedRef.current = { cid: inc.cid, fromId: inc.fromId, fromHandle: inc.fromHandle, fromToken: inc.fromToken, stake: inc.stake, me: meId };
+    channelRef.current?.send({ type: 'broadcast', event: 'duel_accept', payload: { cid: inc.cid, toId: inc.fromId, guestToken: meId.token, guestHandle: meId.handle } });
+    setDuelIncoming(null); setDuelMsg(`Waiting for ${inc.fromHandle} to start…`);
+  };
+  const declineDuel = () => { const inc = duelIncoming; if (!inc) return; channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: inc.cid, toId: inc.fromId } }); setDuelIncoming(null); };
+  // Build the wagerable-item list from the wallet (non-free, finitely-owned furni you hold).
+  const wagerableItems = (): { kind: string; name: string; have: number }[] => {
+    const w = wallet.furni;
+    return Object.keys(w).filter(k => w[k] > 0 && isWagerable(k)).map(k => ({ kind: k, name: defOf(k)?.name ?? k, have: w[k] }));
+  };
+  const setStakeItem = (kind: string, n: number) => setDuelStake(s => { const items = { ...s.items }; if (n <= 0) delete items[kind]; else items[kind] = n; return { ...s, items }; });
   // Record where we're launching from so EXIT comes back here. Called at every launch site. Tutorial
   // rooms are skipped — their room is forced by the onboarding step, and a stale tutorial slug must
   // never leak into a "done" player's respawn.
@@ -1604,6 +1689,33 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             executeTrade(myTradeItemRef.current, theirTradeOfferRef.current);
           }
         })
+        // ── DUEL handshake (addressed by toId; ignore messages not meant for us) ──
+        .on('broadcast', { event: 'duel_invite' }, ({ payload }) => {
+          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
+          if (duelOutRef.current || duelAcceptedRef.current) { channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: String(p.cid), toId: String(p.fromId) } }); return; }   // already busy
+          setDuelIncoming({ cid: String(p.cid), fromId: String(p.fromId), fromHandle: String(p.fromHandle ?? '???'), fromToken: String(p.fromToken ?? ''), stake: normStake(p.stake) });
+        })
+        .on('broadcast', { event: 'duel_decline' }, ({ payload }) => {
+          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
+          const out = duelOutRef.current; if (!out || out.cid !== String(p.cid)) return;
+          duelOutRef.current = null; setDuelOutStatus('declined'); setDuelMsg(`${out.oppHandle} declined.`);
+        })
+        .on('broadcast', { event: 'duel_accept' }, ({ payload }) => {
+          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
+          const out = duelOutRef.current; if (!out || out.cid !== String(p.cid)) return;
+          void hostStartDuel(out, String(p.guestToken ?? ''), String(p.guestHandle ?? out.oppHandle));
+        })
+        .on('broadcast', { event: 'duel_go' }, ({ payload }) => {
+          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
+          const acc = duelAcceptedRef.current; if (!acc || acc.cid !== String(p.cid)) return;
+          void guestStartDuel(acc, String(p.duelId), Number(p.seed) >>> 0, String(p.hostHandle ?? acc.fromHandle), String(p.hostToken ?? acc.fromToken));
+        })
+        .on('broadcast', { event: 'duel_abort' }, ({ payload }) => {
+          const p = payload as Record<string, unknown>; if (String(p?.toId ?? '') !== me.id) return;
+          const out = duelOutRef.current; if (!out || out.cid !== String(p.cid)) return;
+          if (p.duelId) void voidDuel(String(p.duelId));
+          creditStake(out.stake, 1); duelOutRef.current = null; setDuelOutStatus('error'); setDuelMsg('Opponent could not match the stake — your ante was refunded.');
+        })
         .subscribe(async status => {
           if (!alive) return;
           joinedRef.current = status === 'SUBSCRIBED';
@@ -2416,6 +2528,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </div>
         )}
         <button onClick={() => setOracleOpen(true)} title="The Oracle — lore & questions" className="text-[11px] font-mono uppercase tracking-widest text-[#00cfff] border border-[#00cfff]/40 bg-black/50 px-3 py-1.5 hover:bg-[#00cfff] hover:text-black transition-all">❖ Oracle</button>
+        {!tutorial && <button onClick={() => { setDuelTarget(null); setDuelStake({ crystals: 0, items: {} }); setDuelOutStatus('idle'); setDuelMsg(''); setDuelPanel(true); }} title="Challenge a player to a wagered Climb Race" className="text-[11px] font-mono uppercase tracking-widest text-brandRed border border-brandRed/40 bg-black/50 px-3 py-1.5 hover:bg-brandRed hover:text-black transition-all">⚔ Duel</button>}
         {!tutorial && isSuper && <button onClick={() => setAdminOpen(true)} title="Admin panel" className="text-[11px] font-mono uppercase tracking-widest text-brandYellow border border-brandYellow/40 bg-black/50 px-3 py-1.5 hover:bg-brandYellow hover:text-black transition-all">📊</button>}
         {!tutorial && !locked && <button onClick={() => { if (!decorOpen && !requireAccount()) return; setDecorOpen(o => !o); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); }} className={`text-[11px] font-mono uppercase tracking-widest border px-3 py-1.5 transition-all ${decorOpen ? 'bg-brandYellow text-black border-brandYellow' : 'text-white border-white/25 bg-black/50 hover:bg-white hover:text-black'}`}>✦ Decorate</button>}
       </div>
@@ -3129,6 +3242,109 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DUEL · challenge a player to a wagered Climb Race ── */}
+      {duelPanel && (
+        <div className="absolute inset-0 z-[68] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => { if (duelOutStatus !== 'waiting') setDuelPanel(false); }}>
+          <div className="w-full max-w-sm border border-brandRed/40 bg-black p-6 space-y-4 max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ duel · climb race</p>
+              <button onClick={() => { if (duelOutStatus !== 'waiting') setDuelPanel(false); }} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
+            </div>
+
+            {duelOutStatus === 'waiting' ? (
+              <div className="py-4 text-center space-y-3">
+                <p className="text-sm text-white/70">Challenge sent to <b className="text-white">{duelOutRef.current?.oppHandle}</b>.</p>
+                <p className="text-[12px] text-white/45">Waiting for them to accept…</p>
+                <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
+                <button onClick={() => { duelOutRef.current = null; setDuelOutStatus('idle'); }} className="mt-2 text-[11px] font-mono uppercase tracking-widest text-white/60 border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors">Cancel</button>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-white/60 leading-relaxed">Both of you race the <b className="text-white/85">same seeded tower</b> for 75s. Higher score takes the pot. Discord sign-in required to wager.</p>
+
+                {/* Opponent picker */}
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Challenge who</p>
+                  {(() => {
+                    const players = [...remotesRef.current.entries()].map(([id, a]) => ({ id, handle: a.handle }));
+                    if (!players.length) return <p className="text-[12px] text-white/40 italic">Nobody else is here right now.</p>;
+                    return (
+                      <div className="flex flex-wrap gap-1.5">
+                        {players.map(pl => (
+                          <button key={pl.id} onClick={() => setDuelTarget(pl)}
+                            className={`text-[12px] font-mono px-3 py-1.5 border transition-colors ${duelTarget?.id === pl.id ? 'bg-brandRed text-black border-brandRed' : 'text-white/75 border-white/20 hover:border-brandRed/60'}`}>{pl.handle}</button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Stake: crystals */}
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Ante · Cristais (you have {CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')})</p>
+                  <input type="number" min={0} max={wallet.balance} value={duelStake.crystals || ''} placeholder="0"
+                    onChange={e => { const n = Math.max(0, Math.min(wallet.balance, Math.floor(Number(e.target.value) || 0))); setDuelStake(s => ({ ...s, crystals: n })); }}
+                    className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-brandRed" />
+                </div>
+
+                {/* Stake: items */}
+                {(() => {
+                  const items = wagerableItems();
+                  if (!items.length) return null;
+                  return (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Ante · items</p>
+                      <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+                        {items.map(it => {
+                          const n = duelStake.items[it.kind] ?? 0;
+                          return (
+                            <div key={it.kind} className="flex items-center justify-between gap-2 border border-white/10 px-2.5 py-1.5">
+                              <span className="text-[12px] text-white/75 truncate">{it.name} <span className="text-white/35">×{it.have}</span></span>
+                              <span className="flex items-center gap-2 shrink-0">
+                                <button onClick={() => setStakeItem(it.kind, Math.max(0, n - 1))} className="w-6 h-6 border border-white/20 text-white/70 hover:bg-white hover:text-black leading-none">−</button>
+                                <span className="w-5 text-center text-sm text-white tabular-nums">{n}</span>
+                                <button onClick={() => setStakeItem(it.kind, Math.min(it.have, n + 1))} className="w-6 h-6 border border-white/20 text-white/70 hover:bg-white hover:text-black leading-none">+</button>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="text-[12px] text-white/55">Pot per side: <b className="text-brandRed">{stakeLabel(duelStake)}</b></div>
+                {duelMsg && <p className="text-[12px] text-brandYellow">{duelMsg}</p>}
+
+                <button onClick={() => void requestDuel()} disabled={!duelTarget || stakeIsEmpty(duelStake)}
+                  className="w-full bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed">
+                  ⚔ Challenge{duelTarget ? ` ${duelTarget.handle}` : ''}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── DUEL · an incoming challenge ── */}
+      {duelIncoming && (
+        <div className="absolute inset-0 z-[69] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="w-full max-w-sm border border-brandRed/50 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ you've been challenged</p>
+            <p className="text-sm text-white/75 leading-relaxed"><b className="text-white">{duelIncoming.fromHandle}</b> wants to duel you in a <b className="text-white/85">Climb Race</b> — same seeded tower, 75s, higher score wins.</p>
+            <div className="border border-white/10 px-3 py-2 text-center">
+              <p className="text-[10px] uppercase tracking-widest text-white/40">Pot per side</p>
+              <p className="text-brandRed font-bold mt-0.5">{stakeLabel(duelIncoming.stake)}</p>
+            </div>
+            {duelMsg && <p className="text-[12px] text-brandYellow text-center">{duelMsg}</p>}
+            <div className="flex gap-3">
+              <button onClick={() => void acceptDuel()} className="flex-1 bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98]">Accept</button>
+              <button onClick={declineDuel} className="flex-1 border border-white/20 text-white/70 font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white hover:text-black transition-colors">Decline</button>
             </div>
           </div>
         </div>
