@@ -53,6 +53,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   const hbW = (broad ? 9 : 7.6) * s;     // torso half-width
   const dress = p.top === 4;
   const torsoTop = -7 * s, torsoBot = 9 * s, hipY = 9 * s, legBot = 21 * s;
+  const lsp = armLift * 5 * s;   // horizontal leg spread per side (jumping jack)
 
   ctx.save(); ctx.lineJoin = 'round'; ctx.shadowBlur = 0;
 
@@ -61,15 +62,15 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
     const skC = dress ? p.topC : p.pantsC; ctx.fillStyle = skC;
     ctx.beginPath(); ctx.moveTo(-hbW * 0.7, hipY - 2 * s); ctx.lineTo(hbW * 0.7, hipY - 2 * s); ctx.lineTo(hbW * 1.15, legBot - 2 * s); ctx.lineTo(-hbW * 1.15, legBot - 2 * s); ctx.closePath(); ctx.fill();
     // lower legs (tone) below the hem
-    ctx.fillStyle = tone; rr(ctx, -4.2 * s, legBot - 4 * s, 3.4 * s, 6 * s, 1.6 * s); ctx.fill(); rr(ctx, 0.8 * s, legBot - 4 * s, 3.4 * s, 6 * s, 1.6 * s); ctx.fill();
+    ctx.fillStyle = tone; rr(ctx, -4.2 * s - lsp, legBot - 4 * s, 3.4 * s, 6 * s, 1.6 * s); ctx.fill(); rr(ctx, 0.8 * s + lsp, legBot - 4 * s, 3.4 * s, 6 * s, 1.6 * s); ctx.fill();
   } else {
     const short = p.pants === 1; const legLen = short ? 7 * s : (legBot - hipY); ctx.fillStyle = p.pantsC;
-    rr(ctx, -4.6 * s, hipY, 3.8 * s, legLen, 1.8 * s); ctx.fill(); rr(ctx, 0.8 * s, hipY, 3.8 * s, legLen, 1.8 * s); ctx.fill();
-    if (short) { ctx.fillStyle = tone; rr(ctx, -4.2 * s, hipY + legLen, 3.2 * s, (legBot - hipY) - legLen, 1.4 * s); ctx.fill(); rr(ctx, 1 * s, hipY + legLen, 3.2 * s, (legBot - hipY) - legLen, 1.4 * s); ctx.fill(); }
+    rr(ctx, -4.6 * s - lsp, hipY, 3.8 * s, legLen, 1.8 * s); ctx.fill(); rr(ctx, 0.8 * s + lsp, hipY, 3.8 * s, legLen, 1.8 * s); ctx.fill();
+    if (short) { ctx.fillStyle = tone; rr(ctx, -4.2 * s - lsp, hipY + legLen, 3.2 * s, (legBot - hipY) - legLen, 1.4 * s); ctx.fill(); rr(ctx, 1 * s + lsp, hipY + legLen, 3.2 * s, (legBot - hipY) - legLen, 1.4 * s); ctx.fill(); }
   }
   // ── shoes ──
-  if (p.shoes !== 2) { const sh = (p.shoes === 1 ? 5 : 3.2) * s; for (const lx of [-5 * s, 0.8 * s]) { ctx.fillStyle = p.shoeC; rr(ctx, lx, legBot - 1 * s, 4.2 * s, sh, 1.6 * s); ctx.fill(); ctx.fillStyle = shadeC(p.shoeC, 0.6); rr(ctx, lx, legBot - 1 * s + sh - 1.4 * s, 4.4 * s, 1.6 * s, 0.8 * s); ctx.fill(); } }   // shoes + darker sole
-  else { ctx.fillStyle = tone; rr(ctx, -4.6 * s, legBot - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); rr(ctx, 1 * s, legBot - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); }
+  if (p.shoes !== 2) { const sh = (p.shoes === 1 ? 5 : 3.2) * s; for (const lx of [-5 * s - lsp, 0.8 * s + lsp]) { ctx.fillStyle = p.shoeC; rr(ctx, lx, legBot - 1 * s, 4.2 * s, sh, 1.6 * s); ctx.fill(); ctx.fillStyle = shadeC(p.shoeC, 0.6); rr(ctx, lx, legBot - 1 * s + sh - 1.4 * s, 4.4 * s, 1.6 * s, 0.8 * s); ctx.fill(); } }   // shoes + darker sole
+  else { ctx.fillStyle = tone; rr(ctx, -4.6 * s - lsp, legBot - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); rr(ctx, 1 * s + lsp, legBot - 1 * s, 3.6 * s, 3 * s, 1.4 * s); ctx.fill(); }
 
   // ── arms (behind torso) ──
   const longSleeve = p.top === 1 || p.top === 3;   // hoodie / jacket
