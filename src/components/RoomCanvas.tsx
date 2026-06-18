@@ -650,6 +650,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [lobbyMode, setLobbyMode] = useState<'friendly' | 'wager'>('friendly');
   const [duelStake, setDuelStake] = useState<DuelStake>({ crystals: 0, items: {} });
   const [lobbyMsg, setLobbyMsg] = useState('');
+  // A wager needs BOTH players to agree: the host offers (nothing escrowed yet), the guest sees the stake
+  // and accepts/declines, then both ante up and launch. Friendly needs no consent (nothing at risk).
+  type WagerOffer = { matchId: string; gameId: string; seed: number; stake: DuelStake; hostId: string; hostHandle: string; hostToken: string };
+  const [wagerOffer, setWagerOffer] = useState<WagerOffer | null>(null);   // guest: an incoming wager offer to accept/decline
+  const [wagerWaiting, setWagerWaiting] = useState(false);                  // host: waiting for the guest to accept
+  const pendingWagerRef = useRef<{ matchId: string; seed: number; gameId: string; stake: DuelStake; guest: LobbyPlayer } | null>(null);
+  const acceptedMatchRef = useRef<string | null>(null);    // guest: matchId of the wager I accepted (gate for lobby_go)
   const lobbyChannelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const duelCabRef = useRef<string | null>(null);   // rising-edge guard for cabinet proximity
   const launchingDuelRef = useRef(false);            // guard: launch the match exactly once
@@ -675,8 +682,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     return Object.keys(w).filter(k => w[k] > 0 && isWagerable(k)).map(k => ({ kind: k, name: defOf(k)?.name ?? k, have: w[k] }));
   };
   const setStakeItem = (kind: string, n: number) => setDuelStake(s => { const items = { ...s.items }; if (n <= 0) delete items[kind]; else items[kind] = n; return { ...s, items }; });
-  const leaveLobby = () => { setDuelLobby(null); setLobbyMsg(''); setLobbyMode('friendly'); setDuelStake({ crystals: 0, items: {} }); };
-  // Host (lower id) starts the match: friendly → just share a seed; wager → escrow + create the duels row.
+  const leaveLobby = () => { setDuelLobby(null); setLobbyMsg(''); setLobbyMode('friendly'); setDuelStake({ crystals: 0, items: {} }); setWagerOffer(null); setWagerWaiting(false); pendingWagerRef.current = null; acceptedMatchRef.current = null; };
+  // Host (lower id) starts the match. Friendly → share a seed and both launch immediately. Wager → send an
+  // OFFER and wait for the guest to agree (no crystals move until both consent).
   const startLobbyDuel = async () => {
     const meId = selfRef.current.id;
     const host = lobbyRoster[0], guest = lobbyRoster[1];
@@ -693,22 +701,57 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       launchDuel({ id: matchId, seed, gameId, role: 'host', room: slug, meHandle: selfRef.current.handle, oppHandle: guest.handle, friendly: true });
       return;
     }
-    // wager
+    // wager → offer (no escrow yet; wait for the guest to accept)
     const me = meDuelIdentity();
     if (!me) { setLobbyMsg('Sign in with Discord to wager.'); return; }
     if (!guest.token) { setLobbyMsg(`${guest.handle} isn't signed in — friendly only.`); return; }
     if (stakeIsEmpty(duelStake)) { setLobbyMsg('Set a stake first.'); return; }
     const aff = canAfford(duelStake); if (!aff.ok) { setLobbyMsg(aff.reason ?? 'Insufficient stake.'); return; }
-    if (!escrowAnte(duelStake)) { setLobbyMsg('Could not escrow your ante.'); return; }
     const matchId = makeMatchId();
-    void createDuel({ id: matchId, room: slug, seed, host: me, guest: { token: guest.token, handle: guest.handle }, stake: duelStake });   // best-effort audit row (settlement is over the channel)
-    hostStakeRef.current = duelStake;
-    launchingDuelRef.current = true;
-    // Await the broadcast so it flushes before launchDuel unmounts the room (and tears down this channel).
-    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, duelId: matchId, gameId, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
-    launchDuel({ id: matchId, seed, gameId, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
+    pendingWagerRef.current = { matchId, seed, gameId, stake: duelStake, guest };
+    setWagerWaiting(true); setLobbyMsg('');
+    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'wager_offer', payload: { matchId, gameId, seed, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
   };
-  // Guest receives the host's start. Only the chosen guest launches; for a wager, escrow + lock first.
+  const cancelWagerOffer = () => { pendingWagerRef.current = null; setWagerWaiting(false); setLobbyMsg(''); };
+  // Guest: a wager offer arrived → show it for accept/decline (nothing escrowed yet).
+  const onWagerOffer = (p: Record<string, unknown>) => {
+    if (String(p.guestId ?? '') !== selfRef.current.id) return;
+    setWagerOffer({ matchId: String(p.matchId), gameId: String(p.gameId ?? CLIMB_GAME_ID), seed: Number(p.seed) >>> 0, stake: normStake(p.stake), hostId: String(p.hostId), hostHandle: String(p.hostHandle ?? 'Host'), hostToken: String(p.hostToken ?? '') });
+  };
+  const acceptWager = async () => {
+    const o = wagerOffer; if (!o) return;
+    const me = meDuelIdentity();
+    if (!me) { setLobbyMsg('Sign in with Discord to accept.'); return; }
+    if (!canAfford(o.stake).ok) { setWagerOffer(null); setLobbyMsg('You cannot cover that stake.'); await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'wager_decline', payload: { matchId: o.matchId, toId: o.hostId } }); return; }
+    acceptedMatchRef.current = o.matchId;
+    setWagerOffer(null); setLobbyMsg('Wager accepted — waiting for host to start…');
+    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'wager_accept', payload: { matchId: o.matchId, guestId: selfRef.current.id, toId: o.hostId } });
+  };
+  const declineWager = async () => {
+    const o = wagerOffer; if (!o) return;
+    setWagerOffer(null);
+    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'wager_decline', payload: { matchId: o.matchId, toId: o.hostId } });
+  };
+  // Host: guest accepted the wager → NOW escrow our ante, record the audit row, send the real start.
+  const onWagerAccept = async (p: Record<string, unknown>) => {
+    if (String(p.toId ?? '') !== selfRef.current.id) return;
+    const pend = pendingWagerRef.current; if (!pend || pend.matchId !== String(p.matchId)) return;
+    const me = meDuelIdentity(); if (!me) return;
+    if (!canAfford(pend.stake).ok || !escrowAnte(pend.stake)) { setWagerWaiting(false); pendingWagerRef.current = null; setLobbyMsg('Could not escrow your ante.'); return; }
+    const slug = roomMetaRef.current.slug;
+    void createDuel({ id: pend.matchId, room: slug, seed: pend.seed, host: me, guest: { token: pend.guest.token!, handle: pend.guest.handle }, stake: pend.stake });   // best-effort audit
+    hostStakeRef.current = pend.stake;
+    launchingDuelRef.current = true;
+    pendingWagerRef.current = null;
+    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: pend.matchId, duelId: pend.matchId, gameId: pend.gameId, seed: pend.seed, friendly: false, stake: pend.stake, hostId: selfRef.current.id, hostHandle: me.handle, hostToken: me.token, guestId: pend.guest.id } });
+    launchDuel({ id: pend.matchId, seed: pend.seed, gameId: pend.gameId, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: pend.guest.handle, oppToken: pend.guest.token ?? undefined, stake: pend.stake, friendly: false });
+  };
+  const onWagerDecline = (p: Record<string, unknown>) => {
+    if (String(p.toId ?? '') !== selfRef.current.id) return;
+    const pend = pendingWagerRef.current; if (!pend || pend.matchId !== String(p.matchId)) return;
+    pendingWagerRef.current = null; setWagerWaiting(false); setLobbyMsg(`${pend.guest.handle} declined the wager.`);
+  };
+  // Both sides launch on the host's start. Friendly: anyone. Wager: only the guest who accepted this match.
   const onLobbyGo = async (p: Record<string, unknown>) => {
     const meId = selfRef.current.id;
     if (String(p.guestId ?? '') !== meId || launchingDuelRef.current) return;
@@ -721,8 +764,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       launchDuel({ id: String(p.matchId), seed, gameId, role: 'guest', room: slug, meHandle: selfRef.current.handle, oppHandle: hostHandle, friendly: true });
       return;
     }
-    const me = meDuelIdentity();
     const duelId = String(p.duelId ?? p.matchId);
+    if (acceptedMatchRef.current !== duelId) return;   // only launch a wager I explicitly accepted
+    const me = meDuelIdentity();
     const stake = normStake(p.stake);
     if (!me) { lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_nack', payload: { duelId, toId: String(p.hostId) } }); setLobbyMsg('Sign in with Discord to accept a wager.'); return; }
     if (!canAfford(stake).ok || !escrowAnte(stake)) { lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_nack', payload: { duelId, toId: String(p.hostId) } }); setLobbyMsg('You could not cover the stake.'); return; }
@@ -740,6 +784,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Keep the latest lobby handlers reachable from the (once-created) lobby channel subscription.
   const onLobbyGoRef = useRef(onLobbyGo); onLobbyGoRef.current = onLobbyGo;
   const onLobbyNackRef = useRef(onLobbyNack); onLobbyNackRef.current = onLobbyNack;
+  const onWagerOfferRef = useRef(onWagerOffer); onWagerOfferRef.current = onWagerOffer;
+  const onWagerAcceptRef = useRef(onWagerAccept); onWagerAcceptRef.current = onWagerAccept;
+  const onWagerDeclineRef = useRef(onWagerDecline); onWagerDeclineRef.current = onWagerDecline;
   // Join/leave the per-cabinet lobby channel while its overlay is open. Presence builds the roster; both
   // players agree on host = lowest id. Re-tracks when sign-in changes so the wager option unlocks live.
   useEffect(() => {
@@ -757,6 +804,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       setLobbyRoster([...seen.values()].sort((a, b) => a.id.localeCompare(b.id)));
     };
     ch.on('presence', { event: 'sync' }, rebuild)
+      .on('broadcast', { event: 'wager_offer' }, ({ payload }) => { onWagerOfferRef.current(payload as Record<string, unknown>); })
+      .on('broadcast', { event: 'wager_accept' }, ({ payload }) => { void onWagerAcceptRef.current(payload as Record<string, unknown>); })
+      .on('broadcast', { event: 'wager_decline' }, ({ payload }) => { onWagerDeclineRef.current(payload as Record<string, unknown>); })
       .on('broadcast', { event: 'lobby_go' }, ({ payload }) => { void onLobbyGoRef.current(payload as Record<string, unknown>); })
       .on('broadcast', { event: 'lobby_nack' }, ({ payload }) => { onLobbyNackRef.current(payload as Record<string, unknown>); })
       .subscribe(async status => { if (status === 'SUBSCRIBED') { await ch.track({ id: meId, handle: selfRef.current.handle, token: myTok }).catch(() => {}); } });
@@ -3310,11 +3360,35 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   <p className="text-[12px] text-white/40">Both play the same game — first to lose loses (higher score wins).</p>
                 </div>
               ) : !isHost ? (
-                <div className="py-4 text-center space-y-2">
-                  <p className="text-sm text-white/70"><b className="text-white">{opp!.handle}</b> is the host — they pick friendly or a wager.</p>
-                  <p className="text-[12px] text-white/45">Waiting for them to start…</p>
+                wagerOffer ? (
+                  /* Guest: the host offered a WAGER — see the stake and agree before any crystals move */
+                  <div className="py-2 text-center space-y-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ wager offer</p>
+                    <p className="text-sm text-white/75"><b className="text-white">{wagerOffer.hostHandle}</b> wants to wager:</p>
+                    <div className="border border-brandRed/30 px-3 py-2"><p className="text-brandRed font-bold">{stakeLabel(wagerOffer.stake)}</p><p className="text-[10px] uppercase tracking-widest text-white/40 mt-0.5">each side · winner takes all</p></div>
+                    {!meDuelIdentity() && <p className="text-[12px] text-brandYellow">Sign in with Discord to accept.</p>}
+                    {lobbyMsg && <p className="text-[12px] text-brandYellow">{lobbyMsg}</p>}
+                    <div className="flex gap-3">
+                      <button onClick={() => void acceptWager()} disabled={!meDuelIdentity()} className="flex-1 bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed">Accept</button>
+                      <button onClick={() => void declineWager()} className="flex-1 border border-white/20 text-white/70 font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white hover:text-black transition-colors">Decline</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-4 text-center space-y-2">
+                    <p className="text-sm text-white/70"><b className="text-white">{opp!.handle}</b> is the host — they pick friendly or a wager.</p>
+                    <p className="text-[12px] text-white/45">Waiting for them to start…</p>
+                    <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
+                    {lobbyMsg && <p className="text-[12px] text-brandYellow">{lobbyMsg}</p>}
+                  </div>
+                )
+              ) : wagerWaiting ? (
+                /* Host: offered a wager, waiting for the guest to agree */
+                <div className="py-4 text-center space-y-3">
+                  <p className="text-sm text-white/70">Wager offer sent to <b className="text-white">{opp!.handle}</b>:</p>
+                  <p className="text-brandRed font-bold">{stakeLabel(duelStake)}</p>
+                  <p className="text-[12px] text-white/45">Waiting for them to accept…</p>
                   <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
-                  {lobbyMsg && <p className="text-[12px] text-brandYellow">{lobbyMsg}</p>}
+                  <button onClick={cancelWagerOffer} className="mt-1 text-[11px] font-mono uppercase tracking-widest text-white/60 border border-white/20 px-4 py-2 hover:bg-white hover:text-black transition-colors">Cancel</button>
                 </div>
               ) : (
                 <>
@@ -3369,7 +3443,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   {lobbyMsg && <p className="text-[12px] text-brandYellow">{lobbyMsg}</p>}
                   <button onClick={() => void startLobbyDuel()} disabled={lobbyMode === 'wager' && (!meDuelIdentity() || !opp!.token || stakeIsEmpty(duelStake))}
                     className="w-full bg-brandRed text-black font-bold uppercase tracking-[0.2em] text-sm py-3 hover:bg-white transition-colors active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed">
-                    ▶ Start vs {opp!.handle}
+                    {lobbyMode === 'wager' ? `⚔ Offer wager to ${opp!.handle}` : `▶ Start vs ${opp!.handle}`}
                   </button>
                 </>
               )}
