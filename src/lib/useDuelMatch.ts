@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 import {
-  readTicket, clearTicket, reportResult, fetchDuel, voidDuel, creditStake, payoutMult, stakeLabel,
+  readTicket, clearTicket, reportResult, creditStake, payoutMult, stakeLabel,
   type DuelTicket, type DuelWinner,
 } from './duel';
 
@@ -37,6 +37,7 @@ export function useDuelMatch(enabled: boolean): {
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const oppDoneRef = useRef<number | null>(null);
   const oppScoreRef = useRef(0);   // latest opponent live score (for early resolution while waiting)
+  const sawOppRef = useRef(false); // did we ever hear from the opponent? (refund a wager if they never showed)
   const settledRef = useRef(false);
   const tickAccRef = useRef(0);
 
@@ -54,12 +55,14 @@ export function useDuelMatch(enabled: boolean): {
     ch.on('broadcast', { event: 'tick' }, ({ payload }) => {
       const p = payload as { role?: string; score?: number };
       if (!p || p.role === t.role) return;
+      sawOppRef.current = true;
       const s = Number(p.score) || 0;
       oppScoreRef.current = Math.max(oppScoreRef.current, s);
       setOppScore(oppScoreRef.current);
     }).on('broadcast', { event: 'done' }, ({ payload }) => {
       const p = payload as { role?: string; score?: number };
       if (!p || p.role === t.role) return;
+      sawOppRef.current = true;
       const s = Number(p.score) || 0;
       oppDoneRef.current = s;
       oppScoreRef.current = Math.max(oppScoreRef.current, s);
@@ -79,6 +82,10 @@ export function useDuelMatch(enabled: boolean): {
     ch.send({ type: 'broadcast', event: 'tick', payload: { role: t.role, score } });
   }, []);
 
+  // Settle entirely over the live channel (no DB dependency): higher score wins ("first to lose loses").
+  // Resolves the instant the result is certain — opponent finished, OR their live score already passed
+  // mine. A wager pays out 2× to the winner / refunds a draw; if the opponent never showed at all, the
+  // wager ante is refunded. The audit row (reportResult) is written best-effort and never blocks.
   const finish = useCallback((myScore: number) => {
     const t = ticketRef.current;
     if (!t) return;
@@ -87,52 +94,39 @@ export function useDuelMatch(enabled: boolean): {
     const stake = t.stake;
     const stakeText = stake ? stakeLabel(stake) : '';
 
-    const show = (winner: DuelWinner, oppScore: number, note = '') => {
+    const resolve = (oppScoreFinal: number, note = '') => {
       if (settledRef.current) return;
       settledRef.current = true;
-      const iWon = winner !== 'draw' && winner === t.role;
-      const draw = winner === 'draw';
+      const iWon = myScore > oppScoreFinal, draw = myScore === oppScoreFinal;
+      const winner: DuelWinner = iWon ? t.role : draw ? 'draw' : (t.role === 'host' ? 'guest' : 'host');
       if (!t.friendly && stake) creditStake(stake, payoutMult(t.role, winner));   // wager payout
-      setOutcome({ iWon, draw, myScore, oppScore, stakeText, note });
+      if (!t.friendly) void reportResult(t.id, t.role, myScore).catch(() => {});   // best-effort audit
+      setOutcome({ iWon, draw, myScore, oppScore: oppScoreFinal, stakeText, note });
+      setSettling(false);
+    };
+    const refund = (note: string) => {   // opponent never showed → give a wager ante back
+      if (settledRef.current) return;
+      settledRef.current = true;
+      if (!t.friendly && stake) creditStake(stake, 1);
+      setOutcome({ iWon: false, draw: true, myScore, oppScore: oppScoreRef.current, stakeText, note });
       setSettling(false);
     };
 
-    // FRIENDLY: higher score wins. Resolve the instant the result is certain — opponent finished, OR their
-    // live score already passed mine (they're ahead and still going → I've lost). Generous backstop otherwise.
-    if (t.friendly) {
-      const decide = (opp: number, note = '') => show(myScore > opp ? t.role : myScore === opp ? 'draw' : (t.role === 'host' ? 'guest' : 'host'), opp, note);
-      if (oppDoneRef.current != null) { decide(oppDoneRef.current); return; }
-      if (oppScoreRef.current > myScore) { decide(oppScoreRef.current); return; }   // already beaten
-      let n = 0;
-      const poll = setInterval(() => {
-        if (settledRef.current) { clearInterval(poll); return; }
-        if (oppDoneRef.current != null) { clearInterval(poll); decide(oppDoneRef.current); return; }
-        if (oppScoreRef.current > myScore) { clearInterval(poll); decide(oppScoreRef.current); return; }
-        if (++n >= 90) { clearInterval(poll); decide(oppScoreRef.current, `${t.oppHandle} didn't finish.`); }   // ~90s backstop
-      }, 1000);
-      return;
-    }
-
-    // WAGER: write my result to the durable row; settle when both are in (symmetric on both clients).
-    void (async () => {
-      let row = await reportResult(t.id, t.role, myScore).catch(() => null);
-      const oppOf = (r: NonNullable<typeof row>) => t.role === 'host' ? (r.guest_result ?? 0) : (r.host_result ?? 0);
-      if (row?.state === 'settled' && row.winner) { show(row.winner, oppOf(row)); return; }
-      for (let i = 0; i < 18 && !settledRef.current; i++) {     // ~27s
-        await new Promise(r => setTimeout(r, 1500));
-        row = await fetchDuel(t.id).catch(() => null);
-        if (row?.state === 'settled' && row.winner) { show(row.winner, oppOf(row)); return; }
-        if (row?.state === 'void') { if (stake && !settledRef.current) { settledRef.current = true; creditStake(stake, 1); setOutcome({ iWon: false, draw: true, myScore, oppScore, stakeText, note: 'Duel voided — your ante was refunded.' }); setSettling(false); } return; }
+    if (oppDoneRef.current != null) { resolve(oppDoneRef.current); return; }
+    if (oppScoreRef.current > myScore) { resolve(oppScoreRef.current); return; }   // already beaten
+    let n = 0;
+    const poll = setInterval(() => {
+      if (settledRef.current) { clearInterval(poll); return; }
+      if (oppDoneRef.current != null) { clearInterval(poll); resolve(oppDoneRef.current); return; }
+      if (oppScoreRef.current > myScore) { clearInterval(poll); resolve(oppScoreRef.current); return; }
+      if (++n >= 90) {   // ~90s backstop
+        clearInterval(poll);
+        if (sawOppRef.current) resolve(oppScoreRef.current, `${t.oppHandle} didn't finish.`);
+        else if (!t.friendly) refund(`${t.oppHandle} never showed — your ante was refunded.`);
+        else resolve(0, `${t.oppHandle} never showed.`);
       }
-      if (!settledRef.current) {   // opponent never finished → void + refund
-        settledRef.current = true;
-        await voidDuel(t.id).catch(() => {});
-        if (stake) creditStake(stake, 1);
-        setOutcome({ iWon: false, draw: true, myScore, oppScore, stakeText, note: `${t.oppHandle} didn't finish — your ante was refunded.` });
-        setSettling(false);
-      }
-    })();
-  }, [oppScore]);
+    }, 1000);
+  }, []);
 
   return {
     isDuel: !!ticket,

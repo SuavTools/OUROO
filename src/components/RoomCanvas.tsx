@@ -700,13 +700,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (stakeIsEmpty(duelStake)) { setLobbyMsg('Set a stake first.'); return; }
     const aff = canAfford(duelStake); if (!aff.ok) { setLobbyMsg(aff.reason ?? 'Insufficient stake.'); return; }
     if (!escrowAnte(duelStake)) { setLobbyMsg('Could not escrow your ante.'); return; }
-    const row = await createDuel({ room: slug, seed, host: me, guest: { token: guest.token, handle: guest.handle }, stake: duelStake });
-    if (!row) { creditStake(duelStake, 1); setLobbyMsg('Could not start (offline?). Ante refunded.'); return; }
+    const matchId = makeMatchId();
+    void createDuel({ id: matchId, room: slug, seed, host: me, guest: { token: guest.token, handle: guest.handle }, stake: duelStake });   // best-effort audit row (settlement is over the channel)
     hostStakeRef.current = duelStake;
     launchingDuelRef.current = true;
     // Await the broadcast so it flushes before launchDuel unmounts the room (and tears down this channel).
-    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: row.id, duelId: row.id, gameId, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
-    launchDuel({ id: row.id, seed, gameId, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
+    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, duelId: matchId, gameId, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
+    launchDuel({ id: matchId, seed, gameId, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
   };
   // Guest receives the host's start. Only the chosen guest launches; for a wager, escrow + lock first.
   const onLobbyGo = async (p: Record<string, unknown>) => {
@@ -3307,7 +3307,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <div className="py-4 text-center space-y-2">
                   <p className="text-sm text-white/70">Waiting for an opponent to step up to the cabinet…</p>
                   <div className="animate-pulse text-brandRed font-bold tracking-widest">● ● ●</div>
-                  <p className="text-[12px] text-white/40">Same seeded tower, {/* keep in sync with the game */}75s each — higher score wins.</p>
+                  <p className="text-[12px] text-white/40">Both play the same game — first to lose loses (higher score wins).</p>
                 </div>
               ) : !isHost ? (
                 <div className="py-4 text-center space-y-2">

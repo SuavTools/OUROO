@@ -109,13 +109,15 @@ export type DuelRow = {
   host_result: number | null; guest_result: number | null; winner: DuelWinner | null;
 };
 
-// Host creates the durable row at challenge-accept (after escrowing their own ante).
+// Best-effort durable AUDIT row for a wager, keyed by the shared match id. Settlement no longer depends
+// on this (it's resolved over the live channel like a friendly), so it silently no-ops when the `duels`
+// table isn't deployed — wagers work either way; the row just adds history when the migration is run.
 export async function createDuel(args: {
-  room: string; seed: number; host: DuelIdentity; guest: DuelIdentity; stake: DuelStake;
+  id: string; room: string; seed: number; host: DuelIdentity; guest: DuelIdentity; stake: DuelStake;
 }): Promise<DuelRow | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.from('duels').insert({
-    room: args.room, seed: args.seed,
+    id: args.id, room: args.room, seed: args.seed,
     host_token: args.host.token, host_handle: args.host.handle,
     guest_token: args.guest.token, guest_handle: args.guest.handle,
     stake_crystals: args.stake.crystals, stake_items: args.stake.items,
