@@ -18,7 +18,7 @@ import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, itemCount } from '@/lib/wallet';
-import { ITEMS, itemById, getSpeedMultiplier } from '@/lib/items';
+import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
 import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
@@ -610,7 +610,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const nearShopRef = useRef<string | null>(null);      // key of the shop tile currently in range
   const replacingShopIdRef = useRef<string | null>(null); // when re-placing: ID of the old shop to drop first
   const speedMultRef = useRef(1);                        // current speed multiplier from active item effects
-  const speedCheckRef = useRef(0);                       // frame counter for periodic multiplier refresh
+  const swayIntensityRef = useRef(0);                    // current drunk sway intensity from active item effects
+  const speedCheckRef = useRef(0);                       // frame counter for periodic effect refresh
   const machineOverrideRef = useRef<{ gameId: string; rules: GameRules } | null>(null);   // a placed set-game event retargets this room's machines
   const nearTermRef = useRef(false);      // rising-edge guard for the terminal
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
@@ -1426,7 +1427,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       framesRef.current++;
       const me = selfRef.current;
       let moving = false;
-      if (++speedCheckRef.current >= 60) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); }
+      if (++speedCheckRef.current >= 60) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity(); }
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
         if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
@@ -1630,6 +1631,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       } else {
         bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       }
+      if (isSelf && swayIntensityRef.current > 0) sway += Math.sin(framesRef.current * 0.035) * swayIntensityRef.current;
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
       if (em === 'levitate') {

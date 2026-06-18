@@ -2,6 +2,7 @@ export type UseType = 'single' | 'multi' | 'permanent';
 
 export type ItemEffect =
   | { type: 'speed'; multiplier: number; durationMs: number }
+  | { type: 'sway'; intensity: number; durationMs: number }
   | { type: 'jump'; multiplier: number; durationMs: number }
   | { type: 'emote_unlock'; emoteId: string };
 
@@ -25,6 +26,42 @@ export const ITEMS: Item[] = [
     effect: { type: 'speed', multiplier: 1.25, durationMs: 10 * 60 * 1000 },
     price: 200,
     emoji: '☕',
+  },
+  {
+    id: 'beer',
+    name: 'Beer',
+    description: 'Cold and honest. Takes the edge off.',
+    useType: 'single',
+    effect: { type: 'sway', intensity: 3, durationMs: 8 * 60 * 1000 },
+    price: 100,
+    emoji: '🍺',
+  },
+  {
+    id: 'wine',
+    name: 'Wine',
+    description: 'Aged slowly. Best enjoyed in company.',
+    useType: 'single',
+    effect: { type: 'sway', intensity: 5, durationMs: 12 * 60 * 1000 },
+    price: 150,
+    emoji: '🍷',
+  },
+  {
+    id: 'spirit',
+    name: 'Spirit',
+    description: 'Burns going down. The room shifts a little.',
+    useType: 'single',
+    effect: { type: 'sway', intensity: 10, durationMs: 3 * 60 * 1000 },
+    price: 250,
+    emoji: '🥃',
+  },
+  {
+    id: 'cocktail',
+    name: 'Cocktail',
+    description: 'Mixed with care. You feel it settle in.',
+    useType: 'single',
+    effect: { type: 'sway', intensity: 7, durationMs: 20 * 60 * 1000 },
+    price: 300,
+    emoji: '🍹',
   },
 ];
 
@@ -63,4 +100,13 @@ export function getSpeedMultiplier(): number {
     if (e.effect.type === 'speed' && e.expiresAt > now) mult *= e.effect.multiplier;
   }
   return mult;
+}
+
+// Returns the strongest active sway intensity (0 = none).
+export function getSwayIntensity(): number {
+  const now = Date.now(); let intensity = 0;
+  for (const e of loadEffects()) {
+    if (e.effect.type === 'sway' && e.expiresAt > now) intensity = Math.max(intensity, e.effect.intensity);
+  }
+  return intensity;
 }
