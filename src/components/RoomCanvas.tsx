@@ -712,6 +712,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [myTradeConfirmed, setMyTradeConfirmed] = useState(false);
   const [theirTradeConfirmed, setTheirTradeConfirmed] = useState(false);
 
+  // ── NPC interaction (gift only; no accept/decline needed) ──
+  const [npcInteract, setNpcInteract] = useState<{ handle: string; mode: 'prompt' | 'gift' } | null>(null);
+  const [npcGiftItem, setNpcGiftItem] = useState<string | null>(null);
+  const sendNpcGift = () => {
+    if (!npcInteract || !npcGiftItem) return;
+    if (!takeItem(npcGiftItem)) { flashHint('Not enough items'); return; }
+    const item = itemById(npcGiftItem);
+    flashHint(`Gifted ${item?.emoji ?? ''} ${item?.name ?? npcGiftItem} to ${npcInteract.handle}`);
+    setNpcGiftItem(null); setNpcInteract(null);
+  };
+
   const closeInteract = (notify = true) => {
     if (notify && interactSessionRef.current) {
       channelRef.current?.send({ type: 'broadcast', event: 'interact_close', payload: { from: selfRef.current.id, to: interactSessionRef.current.peer.id } });
@@ -2187,10 +2198,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (editSelRef.current) { setEditSel(null); return; }
     }
     // Clicking a tile occupied by another player offers interaction (not in tutorial or decor mode).
-    if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt) {
+    if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
       for (const [rid, remote] of remotesRef.current) {
         if (Math.round(remote.fx) === gx && Math.round(remote.fy) === gy) {
           setInteractPrompt({ id: rid, handle: remote.handle });
+          return;
+        }
+      }
+    }
+    // Clicking a tile occupied by an NPC opens gift interaction.
+    if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
+      for (const npc of npcsRef.current) {
+        if (Math.round(npc.fx) === gx && Math.round(npc.fy) === gy) {
+          setNpcInteract({ handle: npc.handle, mode: 'prompt' });
           return;
         }
       }
@@ -3382,6 +3402,59 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── NPC interaction: prompt ── */}
+      {npcInteract?.mode === 'prompt' && (
+        <div className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto w-64 bg-black/90 border border-white/20 shadow-2xl p-5 text-center">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-white/50 mb-1">Interact with</p>
+            <p className="font-mono font-bold text-white text-base mb-4">{npcInteract.handle}</p>
+            <div className="flex gap-2">
+              <button onClick={() => { setNpcGiftItem(null); setNpcInteract(s => s ? { ...s, mode: 'gift' } : null); }} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors active:scale-95">Yes</button>
+              <button onClick={() => setNpcInteract(null)} className="flex-1 border border-white/20 text-white/50 hover:text-white text-[11px] uppercase tracking-widest py-2.5 active:scale-95">No</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NPC interaction: gift panel ── */}
+      {npcInteract?.mode === 'gift' && (() => {
+        const myOwnedItems = ITEMS.filter(it => itemCount(it.id) > 0);
+        return (
+          <div className="absolute inset-0 z-[80] flex items-end sm:items-center justify-center pointer-events-none" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}>
+            <div className="absolute inset-0 bg-black/50 pointer-events-auto" onClick={() => setNpcInteract(null)} />
+            <div className="pointer-events-auto relative w-full max-w-sm mx-4 bg-black/95 border border-white/20 shadow-2xl">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                <span className="flex-1 font-mono text-[11px] uppercase tracking-widest text-white/60 truncate">Gift to {npcInteract.handle}</span>
+                <button onClick={() => setNpcInteract(null)} className="text-white/40 hover:text-white text-sm leading-none">✕</button>
+              </div>
+              <div className="p-4">
+                {myOwnedItems.length === 0 ? (
+                  <p className="text-white/40 text-xs font-mono text-center py-8">You have no items to gift</p>
+                ) : (
+                  <>
+                    <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-3">Select an item</p>
+                    <div className="space-y-1.5 max-h-44 overflow-y-auto mb-3">
+                      {myOwnedItems.map(it => (
+                        <button key={it.id} onClick={() => setNpcGiftItem(t => t === it.id ? null : it.id)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 border text-left transition-colors ${npcGiftItem === it.id ? 'border-[#00cfff] bg-[#00cfff]/10' : 'border-white/10 hover:border-white/30'}`}>
+                          <span className="text-xl leading-none">{it.emoji}</span>
+                          <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
+                          <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={sendNpcGift} disabled={!npcGiftItem}
+                      className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
+                      Gift ▸
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         );
