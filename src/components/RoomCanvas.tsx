@@ -1548,8 +1548,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const em = a.emote ?? null;
       let bob: number, sway = 0, spin = 0;
       if (em === 'dance') {
-        bob = Math.sin(a.af * 0.22) * 10;
-        sway = Math.sin(a.af * 0.11) * 6;
+        const CYCLE = 160, SEG = 20, t = a.af % CYCLE, pt = (t % SEG) / SEG;
+        const smooth = (x: number) => x * x * (3 - 2 * x);
+        const X = 8, JUMP = 14, SB = 3;
+        switch (Math.floor(t / SEG)) {
+          case 0: sway = -X + smooth(pt) * X * 2; bob = -Math.sin(pt * Math.PI) * JUMP; break;             // jump right
+          case 1: sway =  X; bob = 0; break;                                                                // pause right
+          case 2: sway =  X - smooth(pt) * X * 2; bob = -Math.abs(Math.sin(pt * Math.PI * 2)) * SB; break; // slide left
+          case 3: sway = -X + smooth(pt) * X * 2; bob = -Math.abs(Math.sin(pt * Math.PI * 2)) * SB; break; // slide right
+          case 4: sway =  X - smooth(pt) * X * 2; bob = -Math.sin(pt * Math.PI) * JUMP; break;             // jump left
+          case 5: sway = -X; bob = 0; break;                                                                // pause left
+          case 6: sway = -X + smooth(pt) * X * 2; bob = -Math.abs(Math.sin(pt * Math.PI * 2)) * SB; break; // slide right
+          default: sway =  X - smooth(pt) * X * 2; bob = -Math.abs(Math.sin(pt * Math.PI * 2)) * SB; break; // slide left
+        }
       } else if (em === 'jump') {
         bob = -Math.max(0, Math.sin(a.af * 0.1)) * 22;
       } else if (em === 'jjack') {
