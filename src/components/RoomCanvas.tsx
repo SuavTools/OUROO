@@ -384,7 +384,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 type InteractPeer = { id: string; handle: string };
 
@@ -713,12 +713,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [theirTradeConfirmed, setTheirTradeConfirmed] = useState(false);
 
   // ── NPC interaction (gift only; no accept/decline needed) ──
-  const [npcInteract, setNpcInteract] = useState<{ handle: string; mode: 'prompt' | 'gift' } | null>(null);
+  const [npcInteract, setNpcInteract] = useState<{ handle: string; nid: string; mode: 'prompt' | 'gift' } | null>(null);
   const [npcGiftItem, setNpcGiftItem] = useState<string | null>(null);
   const sendNpcGift = () => {
     if (!npcInteract || !npcGiftItem) return;
     if (!takeItem(npcGiftItem)) { flashHint('Not enough items'); return; }
     const item = itemById(npcGiftItem);
+    if (item) {
+      const npc = npcsRef.current.find(n => (n.nid ?? n.handle) === npcInteract.nid);
+      if (npc) {
+        const ef = item.effect; const now = Date.now();
+        if (ef.type === 'sway') {
+          npc.swayIntensity = ef.intensity; npc.swayExpiry = now + ef.durationMs;
+          npc.bubble = ['*hic*', 'woah~', '...heh', 'woozy'][Math.floor(Math.random() * 4)];
+          npc.bubbleLife = BUBBLE_FRAMES;
+        } else if (ef.type === 'speed') {
+          npc.speedMult = ef.multiplier; npc.speedExpiry = now + ef.durationMs;
+          npc.bubble = ["on it!", "woo!", "zoom~", "let's go!"][Math.floor(Math.random() * 4)];
+          npc.bubbleLife = BUBBLE_FRAMES;
+        }
+      }
+    }
     flashHint(`Gifted ${item?.emoji ?? ''} ${item?.name ?? npcGiftItem} to ${npcInteract.handle}`);
     setNpcGiftItem(null); setNpcInteract(null);
   };
@@ -1744,7 +1759,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (n.path.length) {   // advance along current path (collision-aware waypoints)
             const wp = n.path[0]; const dx = wp.gx - n.fx, dy = wp.gy - n.fy, d = Math.hypot(dx, dy);
             if (d < 0.12) { n.fx = wp.gx; n.fy = wp.gy; n.z = wp.z; n.lvl = wp.z; n.tx = wp.gx; n.ty = wp.gy; n.path.shift(); }
-            else { const s = Math.min(WALK * 0.55, d); n.fx += dx / d * s; n.fy += dy / d * s; }
+            else { const nspd = (n.speedExpiry ?? 0) > Date.now() ? (n.speedMult ?? 1) : 1; const s = Math.min(WALK * 0.55 * nspd, d); n.fx += dx / d * s; n.fy += dy / d * s; }
             n.af += 1;
           } else {
             n.af += 0.4;   // idle breathe while waiting
@@ -1827,8 +1842,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       // Drunk tilt: rotate body around the feet pivot so feet stay grounded.
       // Angle and bob both scale linearly with the active item's intensity.
-      const drunkTilt = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.035) * swayIntensityRef.current * 0.0175 : 0;
-      const drunkBob  = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.07)  * 1.5 : 0;
+      const activeSway = isSelf ? swayIntensityRef.current : ((a.swayExpiry ?? 0) > Date.now() ? (a.swayIntensity ?? 0) : 0);
+      const drunkTilt = activeSway > 0 ? Math.sin(framesRef.current * 0.035) * activeSway * 0.0175 : 0;
+      const drunkBob  = activeSway > 0 ? Math.sin(framesRef.current * 0.07)  * 1.5 : 0;
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
       if (em === 'levitate') {
@@ -2210,7 +2226,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
       for (const npc of npcsRef.current) {
         if (Math.round(npc.fx) === gx && Math.round(npc.fy) === gy) {
-          setNpcInteract({ handle: npc.handle, mode: 'prompt' });
+          setNpcInteract({ handle: npc.handle, nid: npc.nid ?? npc.handle, mode: 'prompt' });
           return;
         }
       }
