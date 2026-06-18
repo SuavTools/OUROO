@@ -1084,6 +1084,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const allPortals = [...(PORTALS[roomMetaRef.current.slug] ?? []), ...itemsRef.current.filter(it => it.portalTo)] as { gx: number; gy: number }[];
     const destNearPortal = allPortals.some(pt => Math.max(Math.abs(pt.gx - tx), Math.abs(pt.gy - ty)) <= 1);
     const portalKeys = destNearPortal ? null : new Set(allPortals.map(pt => key(pt.gx, pt.gy)));
+    // Avoid shop trigger tiles unless the destination IS a trigger tile (intentional entry).
+    const allShopTriggers = itemsRef.current.filter(it => it.kind === 'shop' && it.shopTriggers?.length).flatMap(it => it.shopTriggers!);
+    const destOnTrigger = allShopTriggers.some(t => t.gx === tx && t.gy === ty);
+    const shopTriggerKeys = destOnTrigger ? null : new Set(allShopTriggers.map(t => key(t.gx, t.gy)));
     const id = (k: number, l: number) => `${k}:${l}`;
     const start = { k: key(sx, sy), l: slvl }; const startId = id(start.k, start.l);
     const prev = new Map<string, string>(); const info = new Map<string, { gx: number; gy: number; z: number }>();
@@ -1097,6 +1101,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const k2 = key(nx, ny); if (S[k2]) continue;
         if (!playerObscured && k2 !== tk && obscured.has(k2)) continue;             // outside: don't route through obscured tiles; inside: navigate freely
         if (portalKeys?.has(k2)) continue;                                         // skip portal tiles unless intentionally approaching one
+        if (shopTriggerKeys?.has(k2)) continue;                                    // skip shop trigger tiles unless intentionally stepping on one
         if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
         for (let si = surf[k2].length - 1; si >= 0; si--) {   // prefer highest reachable surface (step ON, not under)
           const sz = surf[k2][si];
