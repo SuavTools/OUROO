@@ -255,7 +255,7 @@ const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent 
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 // portalTo/portalCode ride along on PLAYER-PLACED portals (a teleporter that links to another room).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[]; shopName?: string };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[]; shopName?: string; shopTriggers?: Array<{gx: number; gy: number}> };
 // Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
 const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
 const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
@@ -273,10 +273,13 @@ const encodeGameTrigger = (gameId: string, rules: GameRules, hidden = false) => 
 const encodeSetGame = (gameId: string, rules: GameRules) => `setgame:${encodeURIComponent(gameId)}:${encodeRules(rules)}`;
 // SHOP TRIGGERS — admin-placed shop events, invisible to players; walk close → shop modal.
 //   `shop:<item1>,<item2>,...`   each item ID is URL-encoded so commas stay clean as delimiters.
-// Format: `shop:<encodedName>:<item1>,<item2>,...`  (name may be empty → `shop::<items>`)
+// Format: `shop:<encodedName>:<item1>,<item2>,...[:<tx_ty;tx_ty;...>]`
+// 4th segment (trigger tiles) is optional — omitted means fall back to Chebyshev-1 proximity.
 // Backwards-compat: old rows have no name segment → `shop:<items>` (no second colon).
-const encodeShopTrigger = (name: string, itemIds: string[]): string =>
-  `shop:${encodeURIComponent(name)}:${itemIds.map(encodeURIComponent).join(',')}`;
+const encodeShopTrigger = (name: string, itemIds: string[], triggers?: Array<{gx: number; gy: number}>): string => {
+  const base = `shop:${encodeURIComponent(name)}:${itemIds.map(encodeURIComponent).join(',')}`;
+  return triggers && triggers.length > 0 ? `${base}:${triggers.map(t => `${t.gx}_${t.gy}`).join(';')}` : base;
+};
 const decodeShopItems = (s: string): string[] => s ? s.split(',').map(safeDecode).filter(Boolean) : [];
 // LORE MARKERS — admin-authored Oracle lore, persisted in room_items as `lore:<mode>:<encoded text>`.
 //   mode 'enter' → spoken once per player when they arrive in the room (tile ignored).
@@ -371,11 +374,12 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
     return { id, kind: 'arcade', gx, gy, dir: 0, elev: 0, createdBy, gameId: safeDecode(gid), gameRules: decodeRules(rules), gameHidden: hidden === '1' };
   }
   if (rawKind.startsWith('shop:')) {
-    const rest = rawKind.slice(5);
-    const colon = rest.indexOf(':');
-    const shopName = colon === -1 ? '' : safeDecode(rest.slice(0, colon));
-    const itemsPart = colon === -1 ? rest : rest.slice(colon + 1);
-    return { id, kind: 'shop', gx, gy, dir: 0, elev: 0, createdBy, shopName, shopItems: decodeShopItems(itemsPart) };
+    const parts = rawKind.slice(5).split(':');
+    const shopName = parts.length >= 2 ? safeDecode(parts[0]) : '';
+    const itemsPart = parts.length >= 2 ? parts[1] : parts[0];
+    const triggersPart = parts[2] ?? '';
+    const shopTriggers = triggersPart ? triggersPart.split(';').map(t => { const [x, y] = t.split('_').map(Number); return { gx: x, gy: y }; }).filter(t => !isNaN(t.gx) && !isNaN(t.gy)) : undefined;
+    return { id, kind: 'shop', gx, gy, dir: 0, elev: 0, createdBy, shopName, shopItems: decodeShopItems(itemsPart), shopTriggers };
   }
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
@@ -560,6 +564,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [sShopName, setSShopName] = useState('');               // name of the shop being configured
   const [sEditShopId, setSEditShopId] = useState<string | null>(null);   // item ID of the shop being edited (null = new)
   const [sShowEditList, setSShowEditList] = useState(false);    // showing the "edit shops" list
+  const [sTriggerMode, setSTriggerMode] = useState(false);      // admin is selecting activation tiles for a shop
+  const [sTriggerShopId, setSTriggerShopId] = useState<string | null>(null);
+  const [sTriggerTiles, setSTriggerTiles] = useState<string[]>([]); // selected tiles as "x_y" keys
   const [shopPrompt, setShopPrompt] = useState<{ items: string[]; name: string } | null>(null);   // shop modal when player walks close
   const [mkMode, setMkMode] = useState<LoreMode>('enter');     // editor: trigger of the marker being authored
   const [mkStyle, setMkStyle] = useState<LoreStyle>('oracle'); // editor: presentation of the marker
@@ -609,6 +616,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const nearMachineRef = useRef<string | null>(null);   // key of the machine currently in range (null = none); changes trigger the picker
   const nearShopRef = useRef<string | null>(null);      // key of the shop tile currently in range
   const replacingShopIdRef = useRef<string | null>(null); // when re-placing: ID of the old shop to drop first
+  const lastPlacedShopIdRef = useRef<string | null>(null); // set by placeItem when a shop is placed; read to enter trigger mode
+  const sTriggerTilesRef = useRef<Set<string>>(new Set()); // mirrors sTriggerTiles state for use in the draw loop
   const speedMultRef = useRef(1);                        // current speed multiplier from active item effects
   const swayIntensityRef = useRef(0);                    // current drunk sway intensity from active item effects
   const speedCheckRef = useRef(0);                       // frame counter for periodic effect refresh
@@ -673,8 +682,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { try { setMenuSeen(localStorage.getItem('ouroo_menu_seen') === '1'); } catch { /* ignore */ } }, []);
   const openMenu = () => { setMenuOpen(true); setMenuSeen(true); try { localStorage.setItem('ouroo_menu_seen', '1'); } catch { /* ignore */ } };
   const [cat, setCat] = useState('tier1');
-  const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false, tileMode: false, placingPrefab: false });
-  useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode, tileMode, placingPrefab: !!placingPrefab }; }, [decorOpen, placingKind, removeMode, rotateMode, tileMode, placingPrefab]);
+  const uiRef = useRef({ decorOpen: false, placingKind: null as string | null, removeMode: false, rotateMode: false, tileMode: false, placingPrefab: false, triggerMode: false });
+  useEffect(() => { uiRef.current = { decorOpen, placingKind, removeMode, rotateMode, tileMode, placingPrefab: !!placingPrefab, triggerMode: sTriggerMode }; }, [decorOpen, placingKind, removeMode, rotateMode, tileMode, placingPrefab, sTriggerMode]);
+  useEffect(() => { sTriggerTilesRef.current = new Set(sTriggerTiles); }, [sTriggerTiles]);
   const [isMod, setIsMod] = useState(false);
   const [isSuper, setIsSuper] = useState(false);   // super-admin → can open the Admin panel + grant admins
   const [adminOpen, setAdminOpen] = useState(false);
@@ -881,7 +891,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null;
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null; setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]);
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
@@ -1122,6 +1132,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!isFree && !modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
     if (isShop && replacingShopIdRef.current) { const old = itemsRef.current.find(i => i.id === replacingShopIdRef.current); if (old) dropItem(old); replacingShopIdRef.current = null; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
+    if (isShop) lastPlacedShopIdRef.current = id;
     const dbKind = isFree ? kind : encodeKind(engineKind, dir, elev);   // the room_items `kind` text (carries dir/elev or the event link)
     const item = hydrateItem(dbKind, id, gx, gy, deviceRef.current);
     itemsRef.current.push(item); setMyCount(c => c + 1); rebuildHeight();
@@ -1195,11 +1206,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const idx = itemsRef.current.findIndex(i => i.id === sEditShopId);
     if (idx === -1) { flashHint('Shop not found'); return; }
     const old = itemsRef.current[idx];
-    const newKind = encodeShopTrigger(sShopName, sShopItems);
+    const newKind = encodeShopTrigger(sShopName, sShopItems, old.shopTriggers);
     itemsRef.current[idx] = { ...old, shopName: sShopName, shopItems: sShopItems };
     supabase?.from('room_items').update({ kind: newKind }).eq('id', old.id).then(undefined, () => {});
     setSEditShopId(null); setSShopName(''); setSShopItems([]); setSShowEditList(false);
     flashHint('Shop updated ✦');
+  };
+  const confirmTriggers = () => {
+    const idx = itemsRef.current.findIndex(i => i.id === sTriggerShopId);
+    if (idx !== -1) {
+      const shop = itemsRef.current[idx];
+      const triggers = sTriggerTiles.map(k => { const [x, y] = k.split('_').map(Number); return { gx: x, gy: y }; });
+      const newKind = encodeShopTrigger(shop.shopName ?? '', shop.shopItems ?? [], triggers);
+      itemsRef.current[idx] = { ...shop, shopTriggers: triggers };
+      supabase?.from('room_items').update({ kind: newKind }).eq('id', shop.id).then(undefined, () => {});
+      flashHint(`Shop active on ${triggers.length} tile${triggers.length !== 1 ? 's' : ''} ✦`);
+    }
+    setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]);
   };
   // The top editable player item on a tile (own items, or anything if you can build here).
   const topItemAt = (gx: number, gy: number): Item | undefined =>
@@ -1479,7 +1502,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const px = clampTile(me.fx), py = clampTile(me.fy);
         let nearShop: Item | null = null;
         for (const it of itemsRef.current) {
-          if (it.kind === 'shop' && it.shopItems?.length && Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) <= 1) { nearShop = it; break; }
+          if (it.kind === 'shop' && it.shopItems?.length) {
+            const hit = it.shopTriggers?.length ? it.shopTriggers.some(t => px === t.gx && py === t.gy) : Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) <= 1;
+            if (hit) { nearShop = it; break; }
+          }
         }
         const nearKey = nearShop ? `${nearShop.gx},${nearShop.gy}` : null;
         if (nearShop && nearKey !== nearShopRef.current) { musicRef.current?.chime(); setShopPrompt({ items: nearShop.shopItems!, name: nearShop.shopName ?? '' }); }
@@ -1846,6 +1872,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(col, 0.28); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; diamond(sx, sy, TW, TH); ctx.stroke();
         }
       } else if (ui.decorOpen && (ui.placingKind || ui.removeMode || ui.rotateMode || ui.tileMode) && hv && lvl(hv.gx, hv.gy) >= 0) { const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy)); diamond(sx, sy, TW, TH); ctx.fillStyle = hexA(ui.removeMode ? '#ff4e3e' : theme.accent, 0.3); ctx.fill(); ctx.strokeStyle = ui.removeMode ? '#ff4e3e' : theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+      // Trigger tile selection — green overlays for selected tiles + dashed cursor on hover
+      if (ui.triggerMode) {
+        for (const k of sTriggerTilesRef.current) {
+          const [tgx, tgy] = k.split('_').map(Number); const L = Math.max(0, planLvl(tgx, tgy));
+          const { sx, sy } = iso(tgx, tgy, L);
+          diamond(sx, sy, TW, TH); ctx.fillStyle = hexA('#1ED760', 0.35); ctx.fill();
+          ctx.strokeStyle = '#1ED760'; ctx.lineWidth = 2; diamond(sx, sy, TW, TH); ctx.stroke();
+        }
+        if (hv && lvl(hv.gx, hv.gy) >= 0) {
+          const { sx, sy } = iso(hv.gx, hv.gy, lvl(hv.gx, hv.gy));
+          const sel = sTriggerTilesRef.current.has(`${hv.gx}_${hv.gy}`);
+          diamond(sx, sy, TW, TH); ctx.fillStyle = hexA('#1ED760', sel ? 0.55 : 0.18); ctx.fill();
+          ctx.strokeStyle = '#1ED760'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); diamond(sx, sy, TW, TH); ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
       // Lore tile markers — invisible to players; a small glyph only while an admin is decorating.
       if (ui.decorOpen) for (const lm of loreRef.current) { if (lm.mode !== 'tile') continue; const L = Math.max(0, planLvl(lm.gx, lm.gy)); const { sx, sy } = iso(lm.gx, lm.gy, L); const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save(); ctx.globalAlpha = pulse; ctx.strokeStyle = '#00cfff'; ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; diamond(sx, sy, TW * 0.6, TH * 0.6); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 0.9; ctx.fillStyle = '#00cfff'; ctx.font = '700 12px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✎', sx, sy - 1); ctx.restore(); }
 
@@ -1953,11 +1994,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       // Too far away — fall through so the solid-redirect routes them toward the wall.
     }
+    if (sTriggerMode) { const k = `${gx}_${gy}`; setSTriggerTiles(cur => cur.includes(k) ? cur.filter(t => t !== k) : [...cur, k]); return; }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
     if (placeNpc) { placeNpcAt(gx, gy); return; }
     if (tileMode) { paintTile(gx, gy); startPaintDrag(e, null); return; }                                 // admin floor-paint (drag to sweep)
     if (placingPrefab) { placePrefab(placingPrefab, gx, gy); return; }
-    if (placingKind) { placeItem(placingKind, gx, gy); if (isFloorPaint(placingKind)) startPaintDrag(e, placingKind); return; }   // carpet/floor → drag to lay a swathe
+    if (placingKind) {
+      placeItem(placingKind, gx, gy);
+      if (isFloorPaint(placingKind)) startPaintDrag(e, placingKind);
+      else if (lastPlacedShopIdRef.current) {
+        setSTriggerMode(true); setSTriggerShopId(lastPlacedShopIdRef.current); setSTriggerTiles([]);
+        setPlacingKind(null); lastPlacedShopIdRef.current = null;
+      }
+      return;
+    }
     if (removeMode) { removeAt(gx, gy); return; }
     if (rotateMode) { rotateAt(gx, gy); return; }
     // Decorating with no tool armed: press an object to SELECT it + arm a move-drag (drag to reposition,
@@ -2391,6 +2441,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                         </button>
                         <button
                           onClick={() => {
+                            const shop = itemsRef.current.find(i => i.id === sEditShopId);
+                            setSTriggerTiles((shop?.shopTriggers ?? []).map(t => `${t.gx}_${t.gy}`));
+                            setSTriggerShopId(sEditShopId);
+                            setSTriggerMode(true);
+                            setSEditShopId(null); setSShopName(''); setSShopItems([]);
+                          }}
+                          className="w-full px-3 py-1.5 border border-[#1ED760]/30 text-[11px] text-[#1ED760]/70 hover:border-[#1ED760] hover:text-[#1ED760] transition-colors"
+                        >
+                          Edit triggers ▸
+                        </button>
+                        <button
+                          onClick={() => {
                             const old = itemsRef.current.find(i => i.id === sEditShopId);
                             if (old) dropItem(old);
                             setSEditShopId(null); setSShopName(''); setSShopItems([]);
@@ -2738,6 +2800,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {sTriggerMode && (
+        <div className="absolute bottom-[4.5rem] left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-black/95 border border-[#1ED760]/40 px-4 py-2.5 pointer-events-auto">
+          <span className="text-[11px] text-[#1ED760]/80 whitespace-nowrap">
+            Tap tiles to set activation zone · <span className="font-bold text-[#1ED760]">{sTriggerTiles.length}</span> selected
+          </span>
+          <button onClick={() => { setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]); }}
+            className="text-[10px] text-white/45 hover:text-white transition-colors uppercase tracking-wide shrink-0">
+            Skip
+          </button>
+          <button onClick={confirmTriggers}
+            className="text-[10px] bg-[#1ED760] text-black font-bold uppercase tracking-widest px-3 py-1.5 hover:bg-white transition-colors active:scale-95 shrink-0">
+            Confirm ✦
+          </button>
         </div>
       )}
 
