@@ -20,7 +20,7 @@ import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
 import {
-  getDuelIdentity, canAfford, escrowAnte, creditStake, makeSeed, createDuel, markLocked, voidDuel,
+  canAfford, escrowAnte, creditStake, makeSeed, createDuel, markLocked, voidDuel,
   stashTicket, stakeLabel, isWagerable, stakeIsEmpty, type DuelStake, type DuelIdentity,
 } from '@/lib/duel';
 import { InventoryModal } from '@/components/InventoryModal';
@@ -685,10 +685,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const slug = roomMetaRef.current.slug;
     launchDuel({ id: duelId, seed, role: 'guest', room: slug, meHandle: acc.me.handle, meToken: acc.me.token, oppHandle: hostHandle, oppToken: hostToken, stake: acc.stake });
   };
+  // My wagering identity, derived from the SAME signed-in user the rest of the UI trusts (useUser reads
+  // the persisted session; getAuthIdentity's network getUser() was returning null spuriously here).
+  const meDuelIdentity = (): DuelIdentity | null => user ? { token: `discord:${user.id}`, handle: user.name.slice(0, 24) } : null;
   // Host UI: fire the challenge.
   const requestDuel = async () => {
     if (!duelTarget) { setDuelMsg('Pick who to challenge.'); return; }
-    const meId = await getDuelIdentity();
+    const meId = meDuelIdentity();
     if (!meId) { setDuelMsg('Sign in with Discord to wager.'); return; }
     if (stakeIsEmpty(duelStake)) { setDuelMsg('Set a stake first.'); return; }
     const aff = canAfford(duelStake); if (!aff.ok) { setDuelMsg(aff.reason ?? 'Insufficient stake.'); return; }
@@ -700,7 +703,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Guest UI: accept / decline.
   const acceptDuel = async () => {
     const inc = duelIncoming; if (!inc) return;
-    const meId = await getDuelIdentity();
+    const meId = meDuelIdentity();
     if (!meId) { setDuelMsg('Sign in with Discord to accept.'); return; }
     if (!canAfford(inc.stake).ok) { channelRef.current?.send({ type: 'broadcast', event: 'duel_decline', payload: { cid: inc.cid, toId: inc.fromId } }); setDuelIncoming(null); setDuelMsg('You cannot cover that stake.'); return; }
     duelAcceptedRef.current = { cid: inc.cid, fromId: inc.fromId, fromHandle: inc.fromHandle, fromToken: inc.fromToken, stake: inc.stake, me: meId };
