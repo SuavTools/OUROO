@@ -47,8 +47,9 @@ const shadeC = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16
 
 // Draw a person centred at the current origin, fitting roughly w×h, `af` = anim frame (subtle sway).
 // `armLift` 0→1 rotates arms out to the sides and overhead (jumping-jack style).
-export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: number, h: number, af: number, armLift = 0) {
-  const s = h / 50, tone = TONES[p.tone] ?? TONES[1], sway = Math.sin(af * 0.12) * 0.6 * s;
+// `shoulderShrug` scales the idle arm-sway amplitude (default 1; pass higher for dramatic dance).
+export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: number, h: number, af: number, armLift = 0, shoulderShrug = 1) {
+  const s = h / 50, tone = TONES[p.tone] ?? TONES[1], sway = Math.sin(af * 0.12) * 0.6 * s * shoulderShrug;
   const broad = p.g === 1;
   const hbW = (broad ? 9 : 7.6) * s;     // torso half-width
   const dress = p.top === 4;
