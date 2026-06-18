@@ -1569,7 +1569,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const introT = Math.min((a.emoteAf ?? 0) / 60, 1);
         const ease = introT * introT * (3 - 2 * introT);
         bob = ease * (-12 - Math.sin(a.af * 0.05) * 6);
-        spin = Math.sin(a.af * 0.03) * 0.08;
         legFold = ease;
       } else {
         bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
