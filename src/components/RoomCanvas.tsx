@@ -541,6 +541,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placeNpc, setPlaceNpc] = useState(false);
   const pendingNpcRef = useRef<NpcData | null>(null);
   const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
+  const [npcMode, setNpcMode] = useState<'choose' | 'list' | null>(null);
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
   const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
@@ -601,7 +602,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); setEditingNpcId(null); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); setEditingNpcId(null); setNpcMode(null); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -1325,7 +1326,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     channelRef.current?.send({ type: 'broadcast', event: 'npcupdate', payload: { id, kind } });
     flashHint(`${d.n} updated ☻`);
   };
-  const openNpcEditor = () => { setNpcEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
+  const openNpcEditor = () => { setNpcEditor(true); setNpcMode(null); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
   // Arm the next tile-tap to drop a game event: a Play trigger (proximity cabinet) or a Set event
   // (retargets this room's machines). The chosen rules ride along (plumbing only for now).
   const armGamePlacement = () => {
@@ -2211,11 +2212,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     if (sTriggerMode) { const k = `${gx}_${gy}`; setSTriggerTiles(cur => cur.includes(k) ? cur.filter(t => t !== k) : [...cur, k]); return; }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
-    // In decorate mode, clicking an existing placed NPC opens the editor to edit it (remove mode deletes instead).
-    if (decorOpen && !removeMode) {
-      const existingNpc = placedNpcsRef.current.find(p => p.gx === gx && p.gy === gy);
-      if (existingNpc) { setEditingNpcId(existingNpc.id); pendingNpcRef.current = existingNpc.data; openNpcEditor(); return; }
-    }
     if (placeNpc) { placeNpcAt(gx, gy); return; }
     if (tileMode) { paintTile(gx, gy); startPaintDrag(e, null); return; }                                 // admin floor-paint (drag to sweep)
     if (placingPrefab) { placePrefab(placingPrefab, gx, gy); return; }
@@ -2582,10 +2578,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 </button>
               )}
               {isMod && (
-                <button onClick={openNpcEditor} title="Design + place an NPC (admin)"
-                  className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${placeNpc || npcEditor ? 'bg-[#ffb84d]/20' : 'hover:bg-[#ffb84d]/15'}`}>
-                  <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: placeNpc || npcEditor ? '#ffb84d' : '#e0c79f' }}>☻</span>
-                  <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: placeNpc || npcEditor ? '#ffb84d' : '#e0c79f' }}>NPC</span>
+                <button onClick={() => { setNpcMode(m => m ? null : 'choose'); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); }} title="NPC tools (admin)"
+                  className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${placeNpc || npcEditor || npcMode ? 'bg-[#ffb84d]/20' : 'hover:bg-[#ffb84d]/15'}`}>
+                  <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: placeNpc || npcEditor || npcMode ? '#ffb84d' : '#e0c79f' }}>☻</span>
+                  <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: placeNpc || npcEditor || npcMode ? '#ffb84d' : '#e0c79f' }}>NPC</span>
                 </button>
               )}
               {isMod && (
@@ -2823,6 +2819,51 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : npcMode ? (
+              <div className="p-3 space-y-2">
+                {npcMode === 'choose' ? (
+                  <>
+                    <p className="text-[11px] text-[#ffb84d]/90">What would you like to do?</p>
+                    <button onClick={() => { setNpcMode(null); setEditingNpcId(null); pendingNpcRef.current = null; openNpcEditor(); }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 border border-white/15 hover:border-[#ffb84d] transition-colors text-left">
+                      <span>
+                        <span className="block text-[11px] font-bold text-white">Create New NPC</span>
+                        <span className="block text-[9px] text-white/40">Design and place a new character</span>
+                      </span>
+                      <span className="text-[10px] text-[#ffb84d]/70">▸</span>
+                    </button>
+                    <button onClick={() => setNpcMode('list')}
+                      className="w-full flex items-center justify-between px-3 py-2.5 border border-white/15 hover:border-[#ffb84d] transition-colors text-left">
+                      <span>
+                        <span className="block text-[11px] font-bold text-white">Edit Existing NPC</span>
+                        <span className="block text-[9px] text-white/40">Update a character already in this room</span>
+                      </span>
+                      <span className="text-[10px] text-[#ffb84d]/70">▸</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-[#ffb84d]/90">Select an NPC to edit.</p>
+                    {placedNpcsRef.current.length === 0 ? (
+                      <p className="text-[10px] text-white/35 italic">No NPCs placed in this room yet.</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {placedNpcsRef.current.map(p => (
+                          <button key={p.id} onClick={() => { setEditingNpcId(p.id); pendingNpcRef.current = p.data; openNpcEditor(); }}
+                            className="flex items-center justify-between gap-2 px-3 py-2 border border-white/15 hover:border-[#ffb84d] text-left transition-colors">
+                            <span>
+                              <span className="block text-[11px] font-bold text-white">{p.data.n}</span>
+                              <span className="block text-[9px] text-white/40">{p.data.l?.length ?? 0} line{(p.data.l?.length ?? 0) !== 1 ? 's' : ''} · {p.gx},{p.gy}</span>
+                            </span>
+                            <span className="text-[10px] text-[#ffb84d]/70">Edit ▸</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => setNpcMode('choose')} className="text-[10px] text-white/45 hover:text-white">← Back</button>
+                  </>
+                )}
               </div>
             ) : removeMode ? (
               <p className="text-[11px] text-center text-brandRed/80 py-4 px-3">Tap an object to pick it up — it returns to your inventory.</p>
