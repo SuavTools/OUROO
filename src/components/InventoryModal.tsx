@@ -12,9 +12,9 @@ import { IconEditor } from '@/components/IconEditor';
 import { PersonPreview } from '@/components/PersonPreview';
 import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, MOUTHS, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
-import { ITEMS } from '@/lib/items';
+import { ITEMS, activateItem } from '@/lib/items';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
-import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon, itemCount } from '@/lib/wallet';
+import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon, itemCount, consumeItem } from '@/lib/wallet';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 
 type Tab = 'items' | 'person' | 'skins' | 'furni' | 'icons';
@@ -140,6 +140,12 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
                           <span className="ml-auto text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 tabular-nums shrink-0">×{owned}</span>
                         </div>
                         <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
+                        <button
+                          onClick={() => { if (consumeItem(item.id)) { activateItem(item.id); flash(true, `${item.name} used`); } else flash(false, 'None left'); }}
+                          className="mt-auto text-[9px] uppercase tracking-wide py-1.5 border border-white/20 hover:border-white text-white/60 hover:text-white transition-colors"
+                        >
+                          Use
+                        </button>
                       </div>
                     );
                   })}

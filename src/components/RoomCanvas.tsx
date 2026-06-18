@@ -18,7 +18,7 @@ import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, itemCount } from '@/lib/wallet';
-import { ITEMS, itemById } from '@/lib/items';
+import { ITEMS, itemById, getSpeedMultiplier } from '@/lib/items';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
 import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
@@ -255,7 +255,7 @@ const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent 
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 // portalTo/portalCode ride along on PLAYER-PLACED portals (a teleporter that links to another room).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[] };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[]; shopName?: string };
 // Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
 const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
 const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
@@ -273,7 +273,10 @@ const encodeGameTrigger = (gameId: string, rules: GameRules, hidden = false) => 
 const encodeSetGame = (gameId: string, rules: GameRules) => `setgame:${encodeURIComponent(gameId)}:${encodeRules(rules)}`;
 // SHOP TRIGGERS — admin-placed shop events, invisible to players; walk close → shop modal.
 //   `shop:<item1>,<item2>,...`   each item ID is URL-encoded so commas stay clean as delimiters.
-const encodeShopTrigger = (itemIds: string[]): string => `shop:${itemIds.map(encodeURIComponent).join(',')}`;
+// Format: `shop:<encodedName>:<item1>,<item2>,...`  (name may be empty → `shop::<items>`)
+// Backwards-compat: old rows have no name segment → `shop:<items>` (no second colon).
+const encodeShopTrigger = (name: string, itemIds: string[]): string =>
+  `shop:${encodeURIComponent(name)}:${itemIds.map(encodeURIComponent).join(',')}`;
 const decodeShopItems = (s: string): string[] => s ? s.split(',').map(safeDecode).filter(Boolean) : [];
 // LORE MARKERS — admin-authored Oracle lore, persisted in room_items as `lore:<mode>:<encoded text>`.
 //   mode 'enter' → spoken once per player when they arrive in the room (tile ignored).
@@ -368,7 +371,11 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
     return { id, kind: 'arcade', gx, gy, dir: 0, elev: 0, createdBy, gameId: safeDecode(gid), gameRules: decodeRules(rules), gameHidden: hidden === '1' };
   }
   if (rawKind.startsWith('shop:')) {
-    return { id, kind: 'shop', gx, gy, dir: 0, elev: 0, createdBy, shopItems: decodeShopItems(rawKind.slice(5)) };
+    const rest = rawKind.slice(5);
+    const colon = rest.indexOf(':');
+    const shopName = colon === -1 ? '' : safeDecode(rest.slice(0, colon));
+    const itemsPart = colon === -1 ? rest : rest.slice(colon + 1);
+    return { id, kind: 'shop', gx, gy, dir: 0, elev: 0, createdBy, shopName, shopItems: decodeShopItems(itemsPart) };
   }
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
@@ -550,7 +557,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [gHidden, setGHidden] = useState(false);        // Games tab: place a hidden cabinet (Play only)
   const [shopsMode, setShopsMode] = useState(false);   // admin: the Shops tab (place shop triggers)
   const [sShopItems, setSShopItems] = useState<string[]>([]);   // item IDs selected for the shop being configured
-  const [shopPrompt, setShopPrompt] = useState<{ items: string[] } | null>(null);   // shop modal when player walks close
+  const [sShopName, setSShopName] = useState('');               // name of the shop being configured
+  const [sEditShopId, setSEditShopId] = useState<string | null>(null);   // item ID of the shop being edited (null = new)
+  const [sShowEditList, setSShowEditList] = useState(false);    // showing the "edit shops" list
+  const [shopPrompt, setShopPrompt] = useState<{ items: string[]; name: string } | null>(null);   // shop modal when player walks close
   const [mkMode, setMkMode] = useState<LoreMode>('enter');     // editor: trigger of the marker being authored
   const [mkStyle, setMkStyle] = useState<LoreStyle>('oracle'); // editor: presentation of the marker
   const [mkCrystals, setMkCrystals] = useState(100);           // editor: reward crystal amount
@@ -598,6 +608,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [eggClaimed, setEggClaimed] = useState(false);     // hidden-wall easter egg taken (this room)
   const nearMachineRef = useRef<string | null>(null);   // key of the machine currently in range (null = none); changes trigger the picker
   const nearShopRef = useRef<string | null>(null);      // key of the shop tile currently in range
+  const replacingShopIdRef = useRef<string | null>(null); // when re-placing: ID of the old shop to drop first
+  const speedMultRef = useRef(1);                        // current speed multiplier from active item effects
+  const speedCheckRef = useRef(0);                       // frame counter for periodic multiplier refresh
   const machineOverrideRef = useRef<{ gameId: string; rules: GameRules } | null>(null);   // a placed set-game event retargets this room's machines
   const nearTermRef = useRef(false);      // rising-edge guard for the terminal
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
@@ -1106,6 +1119,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (let du = 0; du < sw; du++) for (let dv = 0; dv < sh; dv++) if (planLvl(gx + du, gy + dv) < 0) { flashHint('Doesn\'t fit here'); return; }
     }
     if (!isFree && !modRef.current) consumeFurni(kind);   // take one from inventory (free basics: no-op)
+    if (isShop && replacingShopIdRef.current) { const old = itemsRef.current.find(i => i.id === replacingShopIdRef.current); if (old) dropItem(old); replacingShopIdRef.current = null; }
     const id = (crypto?.randomUUID?.() ?? `it_${Date.now()}_${Math.floor(Math.random() * 1e9)}`);
     const dbKind = isFree ? kind : encodeKind(engineKind, dir, elev);   // the room_items `kind` text (carries dir/elev or the event link)
     const item = hydrateItem(dbKind, id, gx, gy, deviceRef.current);
@@ -1171,9 +1185,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const armShopPlacement = () => {
     if (sShopItems.length === 0) { flashHint('Select at least one item first'); return; }
-    const kind = encodeShopTrigger(sShopItems);
+    const kind = encodeShopTrigger(sShopName, sShopItems);
     setPlacingKind(kind); setShopsMode(false); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null);
     flashHint('Tap a tile to place the shop ▸');
+  };
+  const saveShopEdit = () => {
+    if (sShopItems.length === 0) { flashHint('Select at least one item first'); return; }
+    const idx = itemsRef.current.findIndex(i => i.id === sEditShopId);
+    if (idx === -1) { flashHint('Shop not found'); return; }
+    const old = itemsRef.current[idx];
+    const newKind = encodeShopTrigger(sShopName, sShopItems);
+    itemsRef.current[idx] = { ...old, shopName: sShopName, shopItems: sShopItems };
+    supabase?.from('room_items').update({ kind: newKind }).eq('id', old.id).then(undefined, () => {});
+    setSEditShopId(null); setSShopName(''); setSShopItems([]); setSShowEditList(false);
+    flashHint('Shop updated ✦');
   };
   // The top editable player item on a tile (own items, or anything if you can build here).
   const topItemAt = (gx: number, gy: number): Item | undefined =>
@@ -1401,10 +1426,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       framesRef.current++;
       const me = selfRef.current;
       let moving = false;
+      if (++speedCheckRef.current >= 60) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); }
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
         if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
-        else { const s = Math.min(WALK, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; strideRef.current += s; }
+        else { const s = Math.min(WALK * speedMultRef.current, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; strideRef.current += s; }
       }
       if (moving) { if (!wasMovingRef.current || strideRef.current >= 1.05) { strideRef.current = 0; musicRef.current?.footstep(); } }
       else { me.af += me.emote ? 1 : 0.3; if (me.emote) me.emoteAf = (me.emoteAf ?? 0) + 1; strideRef.current = 1.05; }   // primed so the next walk's first step sounds at once
@@ -1455,7 +1481,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (it.kind === 'shop' && it.shopItems?.length && Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) <= 1) { nearShop = it; break; }
         }
         const nearKey = nearShop ? `${nearShop.gx},${nearShop.gy}` : null;
-        if (nearShop && nearKey !== nearShopRef.current) { musicRef.current?.chime(); setShopPrompt({ items: nearShop.shopItems! }); }
+        if (nearShop && nearKey !== nearShopRef.current) { musicRef.current?.chime(); setShopPrompt({ items: nearShop.shopItems!, name: nearShop.shopName ?? '' }); }
         nearShopRef.current = nearKey;
       }
       // ── TUTORIAL flow ── the onward door (TUT_PORTAL_TILE) + the terminal, gated by the current step.
@@ -2288,40 +2314,105 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
             {shopsMode ? (
               <div className="p-3 space-y-2.5">
-                <p className="text-[11px] text-[#1ED760]/90">Pick which items players can buy at this shop. Invisible trigger — admins see a green glow.</p>
-                {ITEMS.length === 0 ? (
-                  <p className="text-[10px] text-white/35 italic">No items defined yet — add some to src/lib/items.ts first.</p>
+                {sShowEditList ? (
+                  /* ── Edit list ── */
+                  <>
+                    <p className="text-[11px] text-[#1ED760]/90">Select a shop to edit.</p>
+                    {itemsRef.current.filter(i => i.kind === 'shop').length === 0 ? (
+                      <p className="text-[10px] text-white/35 italic">No shops placed in this room yet.</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {itemsRef.current.filter(i => i.kind === 'shop').map(s => (
+                          <button key={s.id} onClick={() => { setSShopName(s.shopName ?? ''); setSShopItems(s.shopItems ?? []); setSEditShopId(s.id); setSShowEditList(false); }}
+                            className="flex items-center justify-between gap-2 px-3 py-2 border border-white/15 hover:border-[#1ED760] text-left transition-colors">
+                            <span>
+                              <span className="block text-[11px] font-bold text-white">{s.shopName || 'Unnamed Shop'}</span>
+                              <span className="block text-[9px] text-white/40">{s.shopItems?.length ?? 0} item{(s.shopItems?.length ?? 0) !== 1 ? 's' : ''} · {s.gx},{s.gy}</span>
+                            </span>
+                            <span className="text-[10px] text-[#1ED760]/70">Edit ▸</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => setSShowEditList(false)} className="text-[10px] text-white/45 hover:text-white">← Back</button>
+                  </>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {ITEMS.map(item => {
-                      const sel = sShopItems.includes(item.id);
-                      return (
-                        <button key={item.id} onClick={() => setSShopItems(cur => sel ? cur.filter(i => i !== item.id) : [...cur, item.id])}
-                          className={`px-2.5 py-1.5 border rounded-lg text-left transition-colors ${sel ? 'border-[#1ED760] bg-[#1ED760]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
-                          <span className="block text-[11px] font-bold leading-none">{item.emoji} {item.name}</span>
-                          <span className="block text-[9px] text-white/40 mt-0.5">{CURRENCY_SYMBOL}{item.price} · {item.useType}</span>
+                  /* ── Create / Edit form ── */
+                  <>
+                    {sEditShopId && <p className="text-[11px] text-[#1ED760]/90 font-bold">Editing shop</p>}
+                    <input
+                      value={sShopName} onChange={e => setSShopName(e.target.value)} maxLength={32}
+                      placeholder="Shop name (optional)"
+                      className="w-full bg-white/5 border border-white/15 text-white text-[11px] px-2.5 py-1.5 outline-none focus:border-[#1ED760] placeholder:text-white/25"
+                    />
+                    {ITEMS.length === 0 ? (
+                      <p className="text-[10px] text-white/35 italic">No items defined yet — add some to src/lib/items.ts first.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ITEMS.map(item => {
+                          const sel = sShopItems.includes(item.id);
+                          return (
+                            <button key={item.id} onClick={() => setSShopItems(cur => sel ? cur.filter(i => i !== item.id) : [...cur, item.id])}
+                              className={`px-2.5 py-1.5 border rounded-lg text-left transition-colors ${sel ? 'border-[#1ED760] bg-[#1ED760]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
+                              <span className="block text-[11px] font-bold leading-none">{item.emoji} {item.name}</span>
+                              <span className="block text-[9px] text-white/40 mt-0.5">{CURRENCY_SYMBOL}{item.price} · {item.useType}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {sEditShopId ? (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex gap-2">
+                          <button onClick={saveShopEdit} disabled={sShopItems.length === 0}
+                            className="flex-1 bg-[#1ED760] text-black font-bold uppercase text-[11px] tracking-widest px-4 py-2 rounded active:scale-95 hover:bg-white transition-colors disabled:opacity-40">
+                            Save shop ▸
+                          </button>
+                          <button onClick={() => { setSEditShopId(null); setSShopName(''); setSShopItems([]); }}
+                            className="px-3 py-2 border border-white/20 text-white/50 hover:text-white text-[11px] rounded transition-colors">
+                            Cancel
+                          </button>
+                        </div>
+                        <button
+                          disabled={sShopItems.length === 0}
+                          onClick={() => {
+                            if (sShopItems.length === 0) { flashHint('Select at least one item first'); return; }
+                            replacingShopIdRef.current = sEditShopId;
+                            const kind = encodeShopTrigger(sShopName, sShopItems);
+                            setSEditShopId(null); setSShopName(''); setSShopItems([]);
+                            setPlacingKind(kind); setShopsMode(false); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null);
+                            flashHint('Tap a new tile to move the shop ▸');
+                          }}
+                          className="w-full px-3 py-1.5 border border-white/15 text-[11px] text-white/55 hover:border-[#1ED760] hover:text-[#1ED760] transition-colors disabled:opacity-40"
+                        >
+                          Place on new tile ▸
                         </button>
-                      );
-                    })}
-                  </div>
+                        <button
+                          onClick={() => {
+                            const old = itemsRef.current.find(i => i.id === sEditShopId);
+                            if (old) dropItem(old);
+                            setSEditShopId(null); setSShopName(''); setSShopItems([]);
+                            flashHint('Shop removed');
+                          }}
+                          className="w-full px-3 py-1.5 border border-brandRed/40 text-[11px] text-brandRed/70 hover:border-brandRed hover:text-brandRed transition-colors"
+                        >
+                          Remove shop
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={armShopPlacement} disabled={sShopItems.length === 0}
+                        className="w-full bg-[#1ED760] text-black font-bold uppercase text-[11px] tracking-widest px-4 py-2 rounded active:scale-95 hover:bg-white transition-colors disabled:opacity-40">
+                        Place shop ▸
+                      </button>
+                    )}
+                    <div className="pt-1 border-t border-white/10">
+                      <button onClick={() => { setSShowEditList(true); setSEditShopId(null); setSShopName(''); setSShopItems([]); }}
+                        className="w-full px-3 py-1.5 border border-white/15 rounded-lg text-[11px] text-white/55 hover:border-white/40 hover:text-white transition-colors text-left">
+                        Edit shops in room
+                      </button>
+                    </div>
+                  </>
                 )}
-                <button onClick={armShopPlacement} disabled={sShopItems.length === 0}
-                  className="w-full bg-[#1ED760] text-black font-bold uppercase text-[11px] tracking-widest px-4 py-2 rounded active:scale-95 hover:bg-white transition-colors disabled:opacity-40">
-                  Place shop ▸
-                </button>
-                <div className="pt-1 border-t border-white/10">
-                  <button
-                    onClick={() => {
-                      const shops = itemsRef.current.filter(i => i.kind === 'shop');
-                      if (shops.length === 0) { flashHint('No shops in this room'); return; }
-                      shops.forEach(dropItem);
-                      flashHint(`Cleared ${shops.length} shop${shops.length === 1 ? '' : 's'}`);
-                    }}
-                    className="w-full px-3 py-1.5 border border-brandRed/40 rounded-lg text-[11px] text-brandRed/70 hover:border-brandRed hover:text-brandRed transition-colors text-left"
-                  >
-                    Clear all shops in room
-                  </button>
-                </div>
               </div>
             ) : gamesMode ? (
               <div className="p-3 space-y-2.5">
@@ -2652,7 +2743,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <div className="absolute inset-0 z-[65] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShopPrompt(null)}>
           <div className="w-full max-w-sm border border-[#1ED760]/40 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#1ED760]">🛍 shop</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#1ED760]">🛍 {shopPrompt.name || 'shop'}</p>
               <button onClick={() => setShopPrompt(null)} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
             </div>
             <p className="text-sm text-white/60 leading-relaxed">Browse the goods. Spend Cristais, take something useful.</p>
