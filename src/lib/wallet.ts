@@ -14,6 +14,7 @@ import { getAuthIdentity } from './auth';
 import { getLocalPlayer, getCristalScoreBasis } from './leaderboard';
 import { type CustomIcon, type IconSpec } from './icons';
 import { isFurniFree, furniPrice } from './furni';
+import { itemById } from './items';
 
 export const CURRENCY = 'Cristais';
 export const CURRENCY_SYMBOL = '✦';
@@ -31,10 +32,10 @@ const WALLET_VERSION = 2;
 // `furni` is now a QUANTITY map { kind: count } (Habbo-style inventory): buying adds to the count,
 // placing a piece consumes one, picking one up returns one. (Older wallets stored a string[] of owned
 // kinds — that's normalised to {kind:1} on read.)
-export type WalletData = { balance: number; skins: string[]; furni: Record<string, number>; icons: CustomIcon[]; scoreCredited: number; version: number };
+export type WalletData = { balance: number; skins: string[]; furni: Record<string, number>; items: Record<string, number>; icons: CustomIcon[]; scoreCredited: number; version: number };
 
 const LS_KEY = 'ouroo_wallet';
-const empty = (): WalletData => ({ balance: 0, skins: [], furni: {}, icons: [], scoreCredited: 0, version: WALLET_VERSION });
+const empty = (): WalletData => ({ balance: 0, skins: [], furni: {}, items: {}, icons: [], scoreCredited: 0, version: WALLET_VERSION });
 const normFurni = (f: unknown): Record<string, number> => {
   if (Array.isArray(f)) { const o: Record<string, number> = {}; for (const k of f) o[String(k)] = (o[String(k)] || 0) + 1; return o; }
   if (f && typeof f === 'object') { const o: Record<string, number> = {}; for (const [k, v] of Object.entries(f as Record<string, unknown>)) { const n = Math.floor(Number(v) || 0); if (n > 0) o[k] = n; } return o; }
@@ -55,12 +56,13 @@ export function getWallet(): WalletData {
     const w = JSON.parse(raw) as Partial<WalletData>;
     const skins = Array.isArray(w.skins) ? w.skins.map(String) : [];
     const furni = normFurni(w.furni);
+    const items = normFurni(w.items);  // same qty-map shape
     const icons = Array.isArray(w.icons) ? (w.icons as CustomIcon[]) : [];
     // Earn-formula migration: keep what you OWN, but reset money so the new basis re-grants cleanly.
-    if (Number(w.version) !== WALLET_VERSION) return { balance: 0, skins, furni, icons, scoreCredited: 0, version: WALLET_VERSION };
+    if (Number(w.version) !== WALLET_VERSION) return { balance: 0, skins, furni, items, icons, scoreCredited: 0, version: WALLET_VERSION };
     return {
       balance: Math.max(0, Math.floor(Number(w.balance) || 0)),
-      skins, furni, icons,
+      skins, furni, items, icons,
       scoreCredited: Math.max(0, Math.floor(Number(w.scoreCredited) || 0)),
       version: WALLET_VERSION,
     };
@@ -168,7 +170,7 @@ async function pushWallet(w: WalletData) {
     try {
       const device = await deviceToken();
       if (!device) return;
-      const { error } = await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, icons: w.icons, scoreCredited: w.scoreCredited, version: WALLET_VERSION } }, { onConflict: 'device_token' });
+      const { error } = await supabase!.from('wallets').upsert({ device_token: device, balance: w.balance, data: { skins: w.skins, furni: w.furni, items: w.items, icons: w.icons, scoreCredited: w.scoreCredited, version: WALLET_VERSION } }, { onConflict: 'device_token' });
       markCloud(error);
     } catch { /* ignore */ }
   }, 600);
@@ -191,6 +193,7 @@ export async function refreshWalletFromCloud(): Promise<void> {
       balance: Math.max(0, Math.floor(Number(data.balance) || 0)),
       skins: Array.isArray(d.skins) ? d.skins.map(String) : [],
       furni: normFurni(d.furni),
+      items: normFurni(d.items),
       icons: Array.isArray(d.icons) ? (d.icons as CustomIcon[]) : [],
       scoreCredited: Math.max(0, Math.floor(Number(d.scoreCredited) || 0)),
       version: WALLET_VERSION,
@@ -204,6 +207,23 @@ export async function syncWallet(): Promise<void> {
   await refreshWalletFromCloud();
   await reconcileNow();
 }
+
+// ---- consumable / multi-use / permanent items ----
+export function itemCount(id: string): number { return getWallet().items[id] || 0; }
+export function ownsItem(id: string): boolean { return itemCount(id) > 0; }
+export function buyItem(id: string, price: number): { ok: boolean; error?: string } {
+  const w = getWallet();
+  if (w.balance < price) return { ok: false, error: 'Cristais insuficientes' };
+  w.balance -= price; w.items[id] = (w.items[id] || 0) + 1; save(w); return { ok: true };
+}
+// Consume one charge. Returns false if not owned. Permanent items are never consumed.
+export function consumeItem(id: string): boolean {
+  const item = itemById(id);
+  if (!item || item.useType === 'permanent') return true;
+  const w = getWallet(); const n = w.items[id] || 0; if (n < 1) return false;
+  if (n <= 1) delete w.items[id]; else w.items[id] = n - 1; save(w); return true;
+}
+export function totalItemCount(): number { const w = getWallet(); return Object.values(w.items).reduce((s, n) => s + n, 0); }
 
 // React hook: live wallet that re-renders on any change.
 export function useWallet(): WalletData {

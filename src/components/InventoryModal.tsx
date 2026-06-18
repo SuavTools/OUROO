@@ -12,11 +12,12 @@ import { IconEditor } from '@/components/IconEditor';
 import { PersonPreview } from '@/components/PersonPreview';
 import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, MOUTHS, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
+import { ITEMS } from '@/lib/items';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
-import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon } from '@/lib/wallet';
+import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon, buyItem, itemCount } from '@/lib/wallet';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 
-type Tab = 'person' | 'skins' | 'furni' | 'icons';
+type Tab = 'items' | 'person' | 'skins' | 'furni' | 'icons';
 
 // The cosmetics hub: balance, owned counts, buy/equip across skins · furni · custom icons.
 // Mounted on the landing AND inside PRAÇA — pass `onEquip` so equipping updates a live avatar.
@@ -25,7 +26,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
 }) {
   const { user } = useUser();
   const wallet = useWallet();
-  const [tab, setTab] = useState<Tab>('person');
+  const [tab, setTab] = useState<Tab>('items');
   const [selected, setSelected] = useState(getSelectedSkinId());
   const [person, setPerson] = useState<PersonSpec>(() => { const s = getSelectedSkinId(); return isPersonId(s) ? parsePerson(s) : defaultPerson(); });
   const setP = (patch: Partial<PersonSpec>) => setPerson(p => ({ ...p, ...patch }));
@@ -61,10 +62,12 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
   const paidFurni = FURNI.filter(f => !isFurniFree(f.kind));
   const ownedPaidFurni = paidFurni.filter(f => furniCount(f.kind) > 0).length;
 
+  const totalItems = Object.values(wallet.items ?? {}).reduce((s, n) => s + n, 0);
   const TABS: { id: Tab; label: string; badge: string }[] = [
-    { id: 'person', label: 'Character', badge: '👤' },
+    { id: 'items', label: 'Items', badge: `${totalItems}` },
+    { id: 'person', label: 'Char', badge: '👤' },
     { id: 'skins', label: 'Skins', badge: `${ownedSkins}/${SKINS.length}` },
-    { id: 'furni', label: 'Furniture', badge: `${ownedPaidFurni}/${paidFurni.length}` },
+    { id: 'furni', label: 'Furni', badge: `${ownedPaidFurni}/${paidFurni.length}` },
     { id: 'icons', label: 'Icons', badge: `${wallet.icons.length}` },
   ];
 
@@ -99,13 +102,58 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
         <div className="flex gap-1.5 mb-4">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 border text-xs font-bold uppercase tracking-widest transition-colors ${tab === t.id ? 'border-white text-white' : 'border-white/12 text-white/45 hover:text-white/80'}`}>
+              className={`flex-1 flex items-center justify-center gap-1 py-2.5 border text-xs font-bold uppercase tracking-wide transition-colors ${tab === t.id ? 'border-white text-white' : 'border-white/12 text-white/45 hover:text-white/80'}`}>
               {t.label}<span className="text-[10px] text-white/40 tabular-nums">{t.badge}</span>
             </button>
           ))}
         </div>
 
         {toast && <p className={`text-[12px] text-center mb-3 ${toast.ok ? 'text-[#1ED760]' : 'text-brandRed'}`}>{toast.text}</p>}
+
+        {/* ITEMS */}
+        {tab === 'items' && (
+          <div>
+            {ITEMS.length === 0 ? (
+              <div className="py-10 text-center space-y-3">
+                <p className="text-3xl">🎒</p>
+                <p className="text-white/60 text-sm font-bold uppercase tracking-widest">No items yet</p>
+                <p className="text-[11px] text-white/35 max-w-xs mx-auto">
+                  Items are single-use, multi-use, or permanent objects that grant effects — like a speed boost or an emote. Coming soon.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {ITEMS.map(item => {
+                  const owned = itemCount(item.id);
+                  const useLabel = item.useType === 'single' ? 'Single use' : item.useType === 'multi' ? `${item.uses ?? '?'} uses` : 'Permanent';
+                  return (
+                    <div key={item.id} className="relative border border-white/10 p-3 flex flex-col gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl leading-none">{item.emoji}</span>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-white truncate">{item.name}</p>
+                          <p className="text-[9px] uppercase tracking-wide text-white/35">{useLabel}</p>
+                        </div>
+                        {owned > 0 && <span className="ml-auto text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 tabular-nums">×{owned}</span>}
+                      </div>
+                      <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
+                      <button
+                        onClick={() => { const r = buyItem(item.id, item.price); r.ok ? flash(true, `${item.name} acquired`) : flash(false, r.error || 'Error'); }}
+                        disabled={wallet.balance < item.price}
+                        className="mt-auto text-[9px] uppercase tracking-wide py-1.5 bg-brandYellow/15 hover:bg-brandYellow/30 text-brandYellow disabled:opacity-40 transition-colors"
+                      >
+                        {CURRENCY_SYMBOL}{item.price.toLocaleString('pt-PT')}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-white/35 mt-4">
+              Items grant temporary or permanent effects. Single-use items vanish after one activation; multi-use items deplete charge by charge; permanent items stay forever.
+            </p>
+          </div>
+        )}
 
         {/* DESIGN A PERSON */}
         {tab === 'person' && (() => {
