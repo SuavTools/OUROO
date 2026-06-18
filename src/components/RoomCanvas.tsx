@@ -2169,6 +2169,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     for (let L = 1; L <= 9; L++) { const r = worldToTile(wx, wy + L * STACK_H); const cx = Math.round(r.gx), cy = Math.round(r.gy); if (cx >= 0 && cy >= 0 && cx < GRID && cy < GRID && planLvl(cx, cy) === L) { gx = cx; gy = cy; } }
     return { gx, gy, raw };
   };
+  // Walk to the nearest open tile adjacent to (tgx, tgy). No-op if already adjacent.
+  const walkAdjacentTo = (tgx: number, tgy: number) => {
+    const me = selfRef.current;
+    const mx = clampTile(me.fx), my = clampTile(me.fy);
+    if (Math.max(Math.abs(mx - tgx), Math.abs(my - tgy)) <= 1) return;
+    const dirs: [number, number][] = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]];
+    dirs.sort(([ax,ay],[bx,by]) => Math.hypot(tgx+ax-mx,tgy+ay-my) - Math.hypot(tgx+bx-mx,tgy+by-my));
+    for (const [dx, dy] of dirs) {
+      const tx = tgx + dx, ty = tgy + dy;
+      if (tx < 0 || ty < 0 || tx >= GRID || ty >= GRID) continue;
+      const k = key(tx, ty);
+      if (solidRef.current[k] || !surfRef.current[k].length) continue;
+      const p = findPath(mx, my, me.lvl, tx, ty); if (p && p.length) { me.path = p; return; }
+    }
+  };
   const onPointerDown = (e: React.PointerEvent) => {
     setEmoteOpen(false);
     const { gx, gy } = evtTile(e);
@@ -2218,6 +2233,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const [rid, remote] of remotesRef.current) {
         if (Math.round(remote.fx) === gx && Math.round(remote.fy) === gy) {
           setInteractPrompt({ id: rid, handle: remote.handle });
+          walkAdjacentTo(gx, gy);
           return;
         }
       }
@@ -2227,6 +2243,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const npc of npcsRef.current) {
         if (Math.round(npc.fx) === gx && Math.round(npc.fy) === gy) {
           setNpcInteract({ handle: npc.handle, nid: npc.nid ?? npc.handle, mode: 'prompt' });
+          walkAdjacentTo(gx, gy);
           return;
         }
       }
