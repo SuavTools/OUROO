@@ -22,6 +22,7 @@ import {
   GRAVITY, TERMINAL_VY, JUMP_VY, AIR_JUMP_VY, COYOTE_FRAMES, JUMP_BUFFER_FRAMES,
 } from '@/lib/engine/physics';
 import { spawnBurst, updateParticles, drawParticles, type Particle } from '@/lib/engine/particles';
+import { useDuelMatch } from '@/lib/useDuelMatch';
 
 // A platform you can stand on; reaching a fresh one clears a level.
 interface Platform { x: number; top: number; width: number; reached: boolean; level: number; }
@@ -46,9 +47,14 @@ function accentColor(level: number, ticks: number): string {
   return `hsl(${hue}, ${sat}%, 58%)`;
 }
 
-export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; gameMods?: Record<string, boolean> | null; onExit?: () => void }> = ({
-  stageScale = 1, isMobileStage = false, gameMods: _gameMods = null, onExit,
+export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; gameMods?: Record<string, boolean> | null; duel?: boolean; onExit?: () => void }> = ({
+  stageScale = 1, isMobileStage = false, gameMods: _gameMods = null, duel = false, onExit,
 }) => {
+  // 1v1 duel layer (inert unless launched into the duel view): "first to lose loses" — whoever scores
+  // higher wins. In duel mode we report the score here instead of the solo leaderboard.
+  const duelMatch = useDuelMatch(duel);
+  const duelRef = useRef(duelMatch);
+  duelRef.current = duelMatch;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const synthRef = useRef<ArcadeSynth | null>(null);
   const rafRef = useRef<number>(0);
@@ -105,9 +111,11 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
 
   // Auto-submit on game over when we already know the player's name; otherwise ask for one.
+  // In a duel, the score goes to the opponent (useDuelMatch), not the solo board — skip submission.
   useEffect(() => {
     if (!gameOver || submittedRef.current) return;
     submittedRef.current = true;
+    if (duel) { setLbState('idle'); return; }
     if (!supabaseReady) { setLbState('idle'); return; }
     const known = getLocalPlayer().handle || discordUser?.name;
     if (known) doSubmit(); else setLbState('need-handle');
@@ -287,6 +295,7 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const score = st.curScore;
       setFinalScore(score);
       if (score > best) { setBest(score); try { localStorage.setItem('leap_pb', String(score)); } catch { /* ignore */ } }
+      if (duelRef.current.isDuel) duelRef.current.finish(score);   // report to the opponent; settle the pot
       setIsPlaying(false);
       setGameOver(true);
     };
@@ -371,6 +380,7 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       st.dist += st.worldSpeed;
       st.curScore = st.bonus + Math.floor(st.dist / 8);   // distance trickles in too
+      if (duel) duelRef.current.progress(st.curScore);    // stream live score to the opponent's meter
       updateParticles(st.particles, 0.18);
 
       // Death: fell past the bottom of the screen.
@@ -451,10 +461,21 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.fillText(`CHAIN ${st.combo}`, 30, 94);
         if (mult > 1) { ctx.fillStyle = accent; ctx.fillText(`×${mult}`, 30 + ctx.measureText(`CHAIN ${st.combo} `).width, 94); }
       }
-      ctx.textAlign = 'right'; ctx.fillStyle = accent; ctx.font = '900 22px Helvetica, Arial, sans-serif';
-      ctx.fillText(`LEVEL ${st.level}`, w - 28, 26);
-      ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = '700 12px monospace';
-      ctx.fillText(`BEST ${Math.max(best, st.curScore)}`, w - 28, 56);
+      ctx.textAlign = 'right';
+      if (duel) {
+        // Duel: show the opponent's live score + whether you're ahead (the "first to lose loses" tension).
+        const opp = duelRef.current.oppScore;
+        ctx.fillStyle = 'rgba(255,138,176,0.9)'; ctx.font = '900 22px Helvetica, Arial, sans-serif';
+        ctx.fillText(`${duelRef.current.oppHandle.slice(0, 12)} ${opp}`, w - 28, 26);
+        const lead = st.curScore - opp;
+        ctx.fillStyle = lead >= 0 ? '#1ED760' : '#ff5470'; ctx.font = '900 14px Helvetica, Arial, sans-serif';
+        ctx.fillText(lead >= 0 ? `+${lead} ahead` : `${lead} behind`, w - 28, 54);
+      } else {
+        ctx.fillStyle = accent; ctx.font = '900 22px Helvetica, Arial, sans-serif';
+        ctx.fillText(`LEVEL ${st.level}`, w - 28, 26);
+        ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = '700 12px monospace';
+        ctx.fillText(`BEST ${Math.max(best, st.curScore)}`, w - 28, 56);
+      }
       ctx.restore();
 
       // Level banner.
@@ -555,44 +576,74 @@ export const LeapCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <h2 className="font-helvetica font-black text-5xl tracking-tighter text-white leading-none">{finalScore}</h2>
           <p className="text-[12px] text-white/50 mt-1">level {hudLevel} {finalScore >= best ? '· new best 🏆' : `· best ${best}`}</p>
 
-          {/* Submit / handle */}
-          <div className="w-full max-w-sm mt-5">
-            {lbState === 'need-handle' && (
-              <form onSubmit={(e) => { e.preventDefault(); const v = validateHandle(lbHandle); if (!v.ok) { setLbError(v.error); return; } doSubmit(v.value); }}
-                className="flex flex-col gap-2">
-                <p className="text-[12px] text-white/55 text-center">Pick a name for the LEAP ranking:</p>
-                <div className="flex gap-2">
-                  <input value={lbHandle} onChange={(e) => { setLbHandle(e.target.value); setLbError(''); }} placeholder="YOUR NAME" autoFocus
-                    className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2.5 text-sm uppercase tracking-widest outline-none focus:border-brandYellow" />
-                  <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Submit</button>
-                </div>
-                {lbError && <p className="text-[11px] text-brandRed text-center">{lbError}</p>}
-              </form>
-            )}
-            {lbState === 'submitting' && <p className="text-center text-white/50 text-sm">Submitting…</p>}
-            {lbState === 'done' && <p className="text-center text-[#1ED760] text-sm font-bold">On the board{lbRank ? ` · #${lbRank}` : ''} ✓</p>}
-            {lbState === 'error' && <p className="text-center text-brandRed text-sm">{lbError || 'Submission failed.'}</p>}
-            {lbState === 'idle' && !supabaseReady && <p className="text-center text-white/40 text-[12px]">Ranking offline.</p>}
-          </div>
-
-          {/* LEAP leaderboard */}
-          <div className="w-full max-w-sm mt-6 border border-white/10 p-4">
-            <div className="flex items-end justify-between mb-3">
-              <h3 className="font-helvetica font-black text-lg text-white">Ranking</h3>
-              <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">LEAP</span>
+          {duel ? (
+            /* DUEL RESULT — first to lose loses (higher score wins) */
+            <div className="w-full max-w-sm mt-5 text-center">
+              {duelMatch.settling || !duelMatch.outcome ? (
+                <>
+                  <div className="animate-pulse text-white/70 text-lg font-bold">{duelMatch.friendly ? 'Checking the result…' : 'Settling the pot…'}</div>
+                  <p className="text-[12px] text-white/45 mt-2">Waiting for {duelMatch.oppHandle}…</p>
+                </>
+              ) : (
+                <>
+                  <p className={`text-[11px] uppercase tracking-[0.4em] mb-1 ${duelMatch.outcome.iWon ? 'text-[#1ED760]' : duelMatch.outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
+                    {duelMatch.outcome.iWon ? (duelMatch.friendly ? 'You win' : 'You won the pot') : duelMatch.outcome.draw ? 'Draw' : (duelMatch.friendly ? 'You lose' : 'You lost the pot')}
+                  </p>
+                  <div className="text-5xl leading-none">{duelMatch.outcome.iWon ? '🏆' : duelMatch.outcome.draw ? '🤝' : '💀'}</div>
+                  <p className="text-sm text-white/70 mt-3">You {duelMatch.outcome.myScore} · {duelMatch.oppHandle} {duelMatch.outcome.oppScore}</p>
+                  {!duelMatch.friendly && duelMatch.outcome.stakeText && (
+                    <p className={`mt-2 text-sm font-bold ${duelMatch.outcome.iWon ? 'text-[#1ED760]' : duelMatch.outcome.draw ? 'text-white/60' : 'text-brandRed'}`}>
+                      {duelMatch.outcome.iWon ? `+ ${duelMatch.outcome.stakeText}` : duelMatch.outcome.draw ? `${duelMatch.outcome.stakeText} returned` : `− ${duelMatch.outcome.stakeText}`}
+                    </p>
+                  )}
+                  {duelMatch.outcome.note && <p className="text-[12px] text-white/45 mt-2">{duelMatch.outcome.note}</p>}
+                </>
+              )}
             </div>
-            <Leaderboard game={LEAP_GAME_ID} limit={8} highlightId={lbPlayerId} refreshKey={lbRefresh} compact />
-          </div>
+          ) : (
+            <>
+              {/* Submit / handle */}
+              <div className="w-full max-w-sm mt-5">
+                {lbState === 'need-handle' && (
+                  <form onSubmit={(e) => { e.preventDefault(); const v = validateHandle(lbHandle); if (!v.ok) { setLbError(v.error); return; } doSubmit(v.value); }}
+                    className="flex flex-col gap-2">
+                    <p className="text-[12px] text-white/55 text-center">Pick a name for the LEAP ranking:</p>
+                    <div className="flex gap-2">
+                      <input value={lbHandle} onChange={(e) => { setLbHandle(e.target.value); setLbError(''); }} placeholder="YOUR NAME" autoFocus
+                        className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-3 py-2.5 text-sm uppercase tracking-widest outline-none focus:border-brandYellow" />
+                      <button type="submit" className="bg-brandYellow text-black font-bold uppercase text-xs tracking-widest px-4 hover:bg-white transition-colors active:scale-95">Submit</button>
+                    </div>
+                    {lbError && <p className="text-[11px] text-brandRed text-center">{lbError}</p>}
+                  </form>
+                )}
+                {lbState === 'submitting' && <p className="text-center text-white/50 text-sm">Submitting…</p>}
+                {lbState === 'done' && <p className="text-center text-[#1ED760] text-sm font-bold">On the board{lbRank ? ` · #${lbRank}` : ''} ✓</p>}
+                {lbState === 'error' && <p className="text-center text-brandRed text-sm">{lbError || 'Submission failed.'}</p>}
+                {lbState === 'idle' && !supabaseReady && <p className="text-center text-white/40 text-[12px]">Ranking offline.</p>}
+              </div>
+
+              {/* LEAP leaderboard */}
+              <div className="w-full max-w-sm mt-6 border border-white/10 p-4">
+                <div className="flex items-end justify-between mb-3">
+                  <h3 className="font-helvetica font-black text-lg text-white">Ranking</h3>
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">LEAP</span>
+                </div>
+                <Leaderboard game={LEAP_GAME_ID} limit={8} highlightId={lbPlayerId} refreshKey={lbRefresh} compact />
+              </div>
+            </>
+          )}
 
           <div className="flex gap-3 mt-6">
-            <button onClick={playAgain}
-              className="bg-brandYellow text-black font-bold uppercase tracking-[0.2em] text-sm px-7 py-3 hover:bg-white transition-colors active:scale-[0.98]">
-              ↺ Again
-            </button>
+            {!duel && (
+              <button onClick={playAgain}
+                className="bg-brandYellow text-black font-bold uppercase tracking-[0.2em] text-sm px-7 py-3 hover:bg-white transition-colors active:scale-[0.98]">
+                ↺ Again
+              </button>
+            )}
             {onExit && (
               <button onClick={onExit}
                 className="border border-white/20 text-white/70 font-bold uppercase tracking-[0.2em] text-sm px-6 py-3 hover:bg-white hover:text-black transition-colors">
-                Switch
+                {duel ? 'Back to Plaza' : 'Switch'}
               </button>
             )}
           </div>

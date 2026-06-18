@@ -7,6 +7,7 @@ import { DuelClimbCanvas } from '@/components/DuelClimbCanvas';
 import { RoomCanvas } from '@/components/RoomCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
+import { readTicket } from '@/lib/duel';
 import { supabaseReady } from '@/lib/supabase';
 import { amISuperAdmin } from '@/lib/chat';
 import { ProfileModal } from '@/components/ProfileModal';
@@ -113,7 +114,13 @@ export default function Home() {
 
   // Launch a game from inside the world (walking up to an arcade machine or a placed game trigger).
   // RoomCanvas records where you launched from (ouroo_game_origin) so exit returns you there.
-  const launchGame = (id: string, mods?: Record<string, boolean>) => { setGameMods(mods ?? null); setView(id === 'leap' ? 'leap' : id === 'duel' ? 'duel' : 'arcade'); };
+  // Which game the current duel runs (read from the launch ticket when entering the duel view).
+  const [duelGameId, setDuelGameId] = useState<string>('climb');
+  const launchGame = (id: string, mods?: Record<string, boolean>) => {
+    setGameMods(mods ?? null);
+    if (id === 'duel') setDuelGameId(readTicket()?.gameId ?? 'climb');
+    setView(id === 'leap' ? 'leap' : id === 'duel' ? 'duel' : 'arcade');
+  };
 
   // ==========================================================================
   // THE ARCADE
@@ -160,7 +167,9 @@ export default function Home() {
   if (view === 'duel') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <DuelClimbCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />
+        {duelGameId === 'leap'
+          ? <LeapCanvas stageScale={stage.scale} isMobileStage={stage.mobile} duel onExit={() => setView('lobby')} />
+          : <DuelClimbCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />}
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
       </main>
     );
