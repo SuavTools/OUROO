@@ -1383,18 +1383,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Rotate the top item on a tile (own items / mods) one 90° step.
   const rotateAt = (gx: number, gy: number) => { const hit = topItemAt(gx, gy); if (hit) rotateItem(hit); };
+  const deleteNpc = (id: string) => {
+    placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== id); rebuildNpcs();
+    channelRef.current?.send({ type: 'broadcast', event: 'npcdel', payload: { id } });
+    supabase?.from('room_items').delete().eq('id', id).then(undefined, () => {});
+    setNpcEditor(false); setEditingNpcId(null); flashHint('NPC deleted ☻');
+  };
   const removeAt = (gx: number, gy: number) => {
     const hit = topItemAt(gx, gy);
     if (hit) { dropItem(hit); return; }
-    // No player furni here — admins may also pick up an admin-placed NPC, or a baked-in (curated) decor piece.
+    // No player furni here — admins may also pick up a baked-in (curated) decor piece.
     if (modRef.current) {
-      const npc = placedNpcsRef.current.find(p => p.gx === gx && p.gy === gy);
-      if (npc) {
-        placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== npc.id); rebuildNpcs();
-        channelRef.current?.send({ type: 'broadcast', event: 'npcdel', payload: { id: npc.id } });
-        supabase?.from('room_items').delete().eq('id', npc.id).then(undefined, () => {});
-        flashHint('NPC removed ☻'); return;
-      }
       // Persist a tombstone so a removed curated piece stays gone for everyone.
       const cur = [...decorRef.current].reverse().find(i => { const [sw, sh] = effSpan(i.kind, i.dir || 0); return gx >= i.gx && gx < i.gx + sw && gy >= i.gy && gy < i.gy + sh; });
       if (!cur) return;
@@ -3096,6 +3095,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       <NpcEditor open={npcEditor} initial={editingNpcId ? pendingNpcRef.current : null}
         onClose={() => { setNpcEditor(false); setEditingNpcId(null); }}
+        onDelete={editingNpcId ? () => deleteNpc(editingNpcId) : undefined}
         onPlace={d => {
           if (editingNpcId) {
             updateNpc(editingNpcId, d); setEditingNpcId(null); setNpcEditor(false);

@@ -21,7 +21,8 @@ export const NpcEditor: React.FC<{
   initial?: NpcData | null;
   onPlace: (d: NpcData) => void;
   onClose: () => void;
-}> = ({ open, initial, onPlace, onClose }) => {
+  onDelete?: () => void;
+}> = ({ open, initial, onPlace, onClose, onDelete }) => {
   const initPerson = initial && isPersonId(initial.a) ? parsePerson(initial.a) : defaultPerson();
   const [appMode, setAppMode] = useState<'person' | 'skin'>(initial && !isPersonId(initial.a) ? 'skin' : 'person');
   const [openPanel, setOpenPanel] = useState<'eyes' | 'mouth' | 'hair' | null>(null);
@@ -129,6 +130,11 @@ export const NpcEditor: React.FC<{
           <button onClick={place} className="flex-1 bg-[#ffb84d] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">{initial ? 'Update NPC ▸' : 'Place NPC ▸'}</button>
           <button onClick={onClose} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
         </div>
+        {onDelete && (
+          <button onClick={onDelete} className="w-full border border-red-500/40 text-red-400 hover:bg-red-500/15 hover:text-red-300 text-xs uppercase tracking-widest py-2 transition-colors active:scale-95">
+            Delete NPC
+          </button>
+        )}
       </div>
     </div>
   );
