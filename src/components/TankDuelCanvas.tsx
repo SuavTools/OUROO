@@ -124,6 +124,7 @@ export const TankDuelCanvas: React.FC<{ stageScale?: number; isMobileStage?: boo
     s.me.x = s.me.tx = m.x; s.me.y = s.me.ty = m.y; s.me.alive = true; s.me.a = roleRef.current === 'host' ? 0 : Math.PI; s.me.aim = s.me.a;
     s.opp.x = s.opp.tx = o.x; s.opp.y = s.opp.ty = o.y; s.opp.alive = true; s.opp.aim = roleRef.current === 'host' ? Math.PI : 0;
     s.bullets = []; s.deadMe = false; s.deadOpp = false; s.fireCd = 0;
+    aimStage.current = { x: o.x, y: o.y };   // default the turret toward the opponent (until you move the mouse/aim)
   };
 
   // ---- networking ----
@@ -311,7 +312,13 @@ export const TankDuelCanvas: React.FC<{ stageScale?: number; isMobileStage?: boo
     };
 
     const draw = () => {
-      const s = st.current; const f = fitRef.current;
+      const s = st.current;
+      // Recompute the fit from the live CSS size every frame so the aim mapping can't drift / start wrong.
+      const cw = canvas.clientWidth || canvas.width, chh = canvas.clientHeight || canvas.height;
+      if (canvas.width !== cw || canvas.height !== chh) { canvas.width = cw; canvas.height = chh; }
+      const sc = Math.min(cw / W, chh / H);
+      const f = { s: sc, ox: (cw - W * sc) / 2, oy: (chh - H * sc) / 2 };
+      fitRef.current = f;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = '#05060a'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(f.s, 0, 0, f.s, f.ox, f.oy);
@@ -336,6 +343,21 @@ export const TankDuelCanvas: React.FC<{ stageScale?: number; isMobileStage?: boo
       if (practice) { if (s.dummyAlive) drawTank({ x: W / 2, y: H / 2, tx: 0, ty: 0, a: 0, aim: Math.PI, alive: true }, '#ffd23a', false); }
       else drawTank(s.opp, oppCol(), !s.opp.alive);
       drawTank(s.me, myCol(), !s.me.alive);
+
+      // AIM: trajectory line from the barrel + a reticle at the aim point (your cursor = your aim).
+      if (s.me.alive && (s.phase === 'playing' || s.phase === 'countdown')) {
+        const ax = aimStage.current.x, ay = aimStage.current.y;
+        const bx = s.me.x + Math.cos(s.me.aim) * (TANK_R + 10), by = s.me.y + Math.sin(s.me.aim) * (TANK_R + 10);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = myCol(); ctx.shadowColor = myCol();
+        ctx.globalAlpha = 0.22; ctx.lineWidth = 2; ctx.setLineDash([5, 11]);
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(ax, ay); ctx.stroke(); ctx.setLineDash([]);
+        ctx.globalAlpha = 0.9; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(ax, ay, 12, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ax - 19, ay); ctx.lineTo(ax - 6, ay); ctx.moveTo(ax + 6, ay); ctx.lineTo(ax + 19, ay);
+        ctx.moveTo(ax, ay - 19); ctx.lineTo(ax, ay - 6); ctx.moveTo(ax, ay + 6); ctx.lineTo(ax, ay + 19);
+        ctx.stroke(); ctx.restore();
+      }
 
       // HUD: round score
       ctx.save();
@@ -413,7 +435,7 @@ export const TankDuelCanvas: React.FC<{ stageScale?: number; isMobileStage?: boo
   const o = duelMatch.outcome;
   return (
     <div className="relative w-full h-full select-none overflow-hidden bg-[#05060a]" style={{ touchAction: 'none' }}>
-      <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" />
+      <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" style={{ cursor: isMobileStage ? 'auto' : 'none' }} />
 
       {/* control hint */}
       {hud.phase === 'countdown' && hud.round === 1 && (
