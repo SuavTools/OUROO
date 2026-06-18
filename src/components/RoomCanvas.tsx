@@ -117,9 +117,10 @@ type Machine = { gx: number; gy: number; games: GameSlot[]; rules?: GameRules };
 const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swarm · mine crystals' };
 const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
 const GAME_CLIMB: GameSlot = { id: CLIMB_GAME_ID, name: 'Climb Race', tag: '1v1 seeded climb · friendly or wager' };
+const GAME_TANK: GameSlot = { id: 'tank', name: 'TANKS', tag: '1v1 real-time tank duel · best of 3' };
 // Single source of truth for "which games exist" — the admin Games tab lists from this. Drop any with the
 // ⚔ duel flag to make it a wager cabinet; the flag only does something for duel-ready games (isDuelReady).
-const GAMES: GameSlot[] = [GAME_OUROO, GAME_LEAP, GAME_CLIMB];
+const GAMES: GameSlot[] = [GAME_OUROO, GAME_LEAP, GAME_CLIMB, GAME_TANK];
 const gameById = (id: string): GameSlot => GAMES.find(g => g.id === id) ?? { id, name: id.toUpperCase(), tag: '' };
 const MACHINES: Record<string, Machine[]> = {
   t_arcade: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: the single machine

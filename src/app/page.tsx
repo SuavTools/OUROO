@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ArcadeCanvas } from '@/components/ArcadeCanvas';
 import { LeapCanvas } from '@/components/LeapCanvas';
 import { DuelClimbCanvas } from '@/components/DuelClimbCanvas';
+import { TankDuelCanvas } from '@/components/TankDuelCanvas';
 import { RoomCanvas } from '@/components/RoomCanvas';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
@@ -167,7 +168,9 @@ export default function Home() {
   if (view === 'duel') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        {duelGameId === 'ouroo'
+        {duelGameId === 'tank'
+          ? <TankDuelCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />
+          : duelGameId === 'ouroo'
           ? <ArcadeCanvas stageScale={stage.scale} isMobileStage={stage.mobile} duel onExit={() => setView('lobby')} />
           : duelGameId === 'leap'
           ? <LeapCanvas stageScale={stage.scale} isMobileStage={stage.mobile} duel onExit={() => setView('lobby')} />

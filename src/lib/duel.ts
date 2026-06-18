@@ -49,7 +49,7 @@ export const makeMatchId = (): string => (typeof crypto !== 'undefined' && crypt
 export const CLIMB_GAME_ID = 'climb';
 // Games that currently run as a duel. The Climb Race is first; LEAP + OUROO get added as each game's
 // game-over path is retrofitted to "first to lose loses" (report score → higher survival/score wins).
-const DUEL_READY = new Set<string>([CLIMB_GAME_ID, 'leap', 'ouroo']);
+const DUEL_READY = new Set<string>([CLIMB_GAME_ID, 'leap', 'ouroo', 'tank']);
 export const isDuelReady = (gameId: string): boolean => DUEL_READY.has(gameId);
 
 // ---- stake (symmetric: each side antes this) ----
