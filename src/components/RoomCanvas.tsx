@@ -1665,7 +1665,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // Drunk tilt: rotate body around the feet pivot so feet stay grounded.
       // Angle and bob both scale linearly with the active item's intensity.
       const drunkTilt = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.035) * swayIntensityRef.current * 0.0175 : 0;
-      const drunkBob  = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.07)  * swayIntensityRef.current * 0.5   : 0;
+      const drunkBob  = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.07)  * 1.5 : 0;
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
       if (em === 'levitate') {
