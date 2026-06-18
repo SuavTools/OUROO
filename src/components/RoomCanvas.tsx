@@ -365,7 +365,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
@@ -681,7 +681,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
   const activateEmote = (name: string | null) => {
     const me = selfRef.current;
-    me.emote = name;
+    me.emote = name; me.emoteAf = 0;
     setCurrentEmote(name);
     setEmoteOpen(false);
     if (channelRef.current && joinedRef.current) {
@@ -1340,7 +1340,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
         .on('broadcast', { event: 'delcurated' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { delCuratedRef.current.add(id); decorRef.current = decorRef.current.filter(d => d.id !== id); rebuildHeight(); } })   // admin removed a baked-in piece
-        .on('broadcast', { event: 'emote' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return; const r = remotesRef.current.get(id); if (r) r.emote = pl.em ? String(pl.em) : null; })
+        .on('broadcast', { event: 'emote' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return; const r = remotesRef.current.get(id); if (r) { r.emote = pl.em ? String(pl.em) : null; r.emoteAf = 0; } })
         .on('broadcast', { event: 'leave' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id && remotesRef.current.delete(id)) setPopulation(remotesRef.current.size + 1); })   // someone left/refreshed → drop them now (don't wait for presence timeout)
         .subscribe(async status => {
           if (!alive) return;
@@ -1387,7 +1387,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         else { const s = Math.min(WALK, d); me.fx += dx / d * s; me.fy += dy / d * s; moving = true; me.af += 1; strideRef.current += s; }
       }
       if (moving) { if (!wasMovingRef.current || strideRef.current >= 1.05) { strideRef.current = 0; musicRef.current?.footstep(); } }
-      else { me.af += me.emote ? 1 : 0.3; strideRef.current = 1.05; }   // primed so the next walk's first step sounds at once
+      else { me.af += me.emote ? 1 : 0.3; if (me.emote) me.emoteAf = (me.emoteAf ?? 0) + 1; strideRef.current = 1.05; }   // primed so the next walk's first step sounds at once
       const targetZ = me.path.length ? me.path[0].z : me.lvl;   // climb toward the next surface as we walk
       me.z += (targetZ - me.z) * 0.25;
       if (me.bubbleLife > 0) me.bubbleLife--;
@@ -1409,7 +1409,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           lastPortalKeyRef.current = pk;
           const nowObs = buildObscuredSet().has(ct);
           if (nowObs !== inObscuredRef.current) { inObscuredRef.current = nowObs; setInObscured(nowObs); }
-          if (me.emote) { me.emote = null; setCurrentEmote(null); if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'emote', payload: { id: me.id, em: null } }); }
+          if (me.emote) { me.emote = null; me.emoteAf = 0; setCurrentEmote(null); if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'emote', payload: { id: me.id, em: null } }); }
         }
       }
       // ARCADE MACHINES — pop the game picker when the player steps onto a tile adjacent to the cabinet.
@@ -1485,7 +1485,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (voidTimerRef.current > 200) { voidTimerRef.current = 0; flashHint('The void swallows you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
         } else voidTimerRef.current = 0;
       } else voidTimerRef.current = 0;
-      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.bubbleLife > 0) r.bubbleLife--; }
+      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // pathfinding wander + speech for NPCs
         if (n.roam && n.hx != null && n.hy != null) {
@@ -1546,7 +1546,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const em = a.emote ?? null;
-      let bob: number, sway = 0, spin = 0;
+      let bob: number, sway = 0, spin = 0, legFold = 0;
       if (em === 'dance') {
         const CYCLE = 186, SEG = CYCLE / 8, t = a.af % CYCLE, pt = (t % SEG) / SEG;
         const smooth = (x: number) => x * x * (3 - 2 * x);
@@ -1566,14 +1566,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       } else if (em === 'jjack') {
         bob = -Math.max(0, Math.sin(a.af * 0.1)) * 22;
       } else if (em === 'levitate') {
-        bob = -12 - Math.sin(a.af * 0.05) * 6;
+        const introT = Math.min((a.emoteAf ?? 0) / 60, 1);
+        const ease = introT * introT * (3 - 2 * introT);
+        bob = ease * (-12 - Math.sin(a.af * 0.05) * 6);
         spin = Math.sin(a.af * 0.03) * 0.08;
+        legFold = ease;
       } else {
         bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       }
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
-      const legFold = em === 'levitate' ? 1 : 0;
       if (em === 'levitate') {
         ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(a.af * 0.08) * 0.2;
         ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.lineWidth = 1.5;
