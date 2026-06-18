@@ -211,6 +211,7 @@ export async function syncWallet(): Promise<void> {
 // ---- consumable / multi-use / permanent items ----
 export function itemCount(id: string): number { return getWallet().items[id] || 0; }
 export function ownsItem(id: string): boolean { return itemCount(id) > 0; }
+export function grantItem(id: string): void { const w = getWallet(); w.items[id] = (w.items[id] || 0) + 1; save(w); }
 export function buyItem(id: string, price: number): { ok: boolean; error?: string } {
   const w = getWallet();
   if (w.balance < price) return { ok: false, error: 'Cristais insuficientes' };

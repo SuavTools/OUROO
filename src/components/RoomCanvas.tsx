@@ -17,7 +17,7 @@ import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } f
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, itemCount } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
@@ -2762,8 +2762,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                       <span className="block text-[10px] text-white/30 mt-0.5">{useLabel}{owned > 0 ? ` · ×${owned} owned` : ''}</span>
                     </span>
                     <button
-                      onClick={() => { const r = buyItem(id, item.price); flashHint(r.ok ? `${item.name} acquired ✦` : (r.error ?? 'Error')); }}
-                      disabled={wallet.balance < item.price}
+                      onClick={() => { if (isMod) { grantItem(id); flashHint(`${item.name} acquired ✦`); } else { const r = buyItem(id, item.price); flashHint(r.ok ? `${item.name} acquired ✦` : (r.error ?? 'Error')); } }}
+                      disabled={!isMod && wallet.balance < item.price}
                       className="shrink-0 bg-[#1ED760] text-black font-bold uppercase text-[10px] tracking-widest px-3 py-2 hover:bg-white transition-colors active:scale-95 disabled:opacity-40">
                       {CURRENCY_SYMBOL}{item.price.toLocaleString('pt-PT')}
                     </button>
