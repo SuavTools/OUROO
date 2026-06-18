@@ -21,7 +21,7 @@ import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
 import {
   canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
-  stashTicket, stakeLabel, isWagerable, stakeIsEmpty, type DuelStake, type DuelIdentity,
+  stashTicket, stakeLabel, isWagerable, stakeIsEmpty, isDuelReady, CLIMB_GAME_ID, type DuelStake, type DuelIdentity,
 } from '@/lib/duel';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
@@ -103,6 +103,9 @@ type GameRules = Record<string, boolean>;
 const RULE_FLAGS: { key: string; token: string; label: string }[] = [
   { key: 'doubleCrystals', token: 'dc', label: 'Double crystals' },
   { key: 'infiniteJump', token: 'ij', label: 'Infinite jump' },
+  // `duel` turns a dropped game into a 1v1 wager cabinet: walking up opens the lobby (friendly/wager)
+  // for that game instead of a solo launch. Only takes effect for duel-ready games (see isDuelReady).
+  { key: 'duel', token: 'du', label: '⚔ 1v1 duel' },
 ];
 // Rules encode as a sorted dotted token list inside the kind string (e.g. `dc.ij`), avoiding the `:`
 // segment separator. Empty string = no rules.
@@ -113,8 +116,10 @@ const decodeRules = (s: string): GameRules => { const t = s.split('.'); const o:
 type Machine = { gx: number; gy: number; games: GameSlot[]; rules?: GameRules };
 const GAME_OUROO: GameSlot = { id: 'ouroo', name: 'OUROO', tag: 'survive the swarm · mine crystals' };
 const GAME_LEAP: GameSlot = { id: 'leap', name: 'LEAP', tag: 'climb the crystal staircase' };
-// Single source of truth for "which games exist" — the admin Games tab lists from this.
-const GAMES: GameSlot[] = [GAME_OUROO, GAME_LEAP];
+const GAME_CLIMB: GameSlot = { id: CLIMB_GAME_ID, name: 'Climb Race', tag: '1v1 seeded climb · friendly or wager' };
+// Single source of truth for "which games exist" — the admin Games tab lists from this. Drop any with the
+// ⚔ duel flag to make it a wager cabinet; the flag only does something for duel-ready games (isDuelReady).
+const GAMES: GameSlot[] = [GAME_OUROO, GAME_LEAP, GAME_CLIMB];
 const gameById = (id: string): GameSlot => GAMES.find(g => g.id === id) ?? { id, name: id.toUpperCase(), tag: '' };
 const MACHINES: Record<string, Machine[]> = {
   t_arcade: [{ gx: 5, gy: 2, games: [GAME_OUROO] }],               // tutorial: the single machine
@@ -640,7 +645,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Coordination runs over a per-cabinet presence channel (duel:lobby:<cabId>); the seeded Climb Race
   // (and, for wagers, the duels escrow row) take over once both launch. Discord is required only to wager.
   type LobbyPlayer = { id: string; handle: string; token: string | null };
-  const [duelLobby, setDuelLobby] = useState<string | null>(null);        // cabinet id whose lobby is open (null = closed)
+  const [duelLobby, setDuelLobby] = useState<{ cabId: string; gameId: string } | null>(null);   // open lobby (null = closed): cabId keys the channel, gameId is the game to duel
   const [lobbyRoster, setLobbyRoster] = useState<LobbyPlayer[]>([]);
   const [lobbyMode, setLobbyMode] = useState<'friendly' | 'wager'>('friendly');
   const [duelStake, setDuelStake] = useState<DuelStake>({ crystals: 0, items: {} });
@@ -678,12 +683,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!host || !guest) { setLobbyMsg('Waiting for an opponent.'); return; }
     if (host.id !== meId) { setLobbyMsg('Only the host starts the match.'); return; }
     const slug = roomMetaRef.current.slug;
+    const gameId = duelLobby?.gameId ?? CLIMB_GAME_ID;
     const seed = makeSeed();
     if (lobbyMode === 'friendly') {
       const matchId = makeMatchId();
       launchingDuelRef.current = true;
-      lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, seed, friendly: true, hostId: meId, hostHandle: selfRef.current.handle, guestId: guest.id } });
-      launchDuel({ id: matchId, seed, role: 'host', room: slug, meHandle: selfRef.current.handle, oppHandle: guest.handle, friendly: true });
+      lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, gameId, seed, friendly: true, hostId: meId, hostHandle: selfRef.current.handle, guestId: guest.id } });
+      launchDuel({ id: matchId, seed, gameId, role: 'host', room: slug, meHandle: selfRef.current.handle, oppHandle: guest.handle, friendly: true });
       return;
     }
     // wager
@@ -697,19 +703,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!row) { creditStake(duelStake, 1); setLobbyMsg('Could not start (offline?). Ante refunded.'); return; }
     hostStakeRef.current = duelStake;
     launchingDuelRef.current = true;
-    lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: row.id, duelId: row.id, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
-    launchDuel({ id: row.id, seed, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
+    lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: row.id, duelId: row.id, gameId, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
+    launchDuel({ id: row.id, seed, gameId, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
   };
   // Guest receives the host's start. Only the chosen guest launches; for a wager, escrow + lock first.
   const onLobbyGo = async (p: Record<string, unknown>) => {
     const meId = selfRef.current.id;
     if (String(p.guestId ?? '') !== meId || launchingDuelRef.current) return;
     const seed = Number(p.seed) >>> 0;
+    const gameId = String(p.gameId ?? CLIMB_GAME_ID);
     const hostHandle = String(p.hostHandle ?? 'Host');
     const slug = roomMetaRef.current.slug;
     if (p.friendly) {
       launchingDuelRef.current = true;
-      launchDuel({ id: String(p.matchId), seed, role: 'guest', room: slug, meHandle: selfRef.current.handle, oppHandle: hostHandle, friendly: true });
+      launchDuel({ id: String(p.matchId), seed, gameId, role: 'guest', room: slug, meHandle: selfRef.current.handle, oppHandle: hostHandle, friendly: true });
       return;
     }
     const me = meDuelIdentity();
@@ -719,7 +726,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!canAfford(stake).ok || !escrowAnte(stake)) { lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_nack', payload: { duelId, toId: String(p.hostId) } }); setLobbyMsg('You could not cover the stake.'); return; }
     launchingDuelRef.current = true;
     await markLocked(duelId, 'guest').catch(() => {});
-    launchDuel({ id: duelId, seed, role: 'guest', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: hostHandle, oppToken: String(p.hostToken ?? ''), stake, friendly: false });
+    launchDuel({ id: duelId, seed, gameId, role: 'guest', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: hostHandle, oppToken: String(p.hostToken ?? ''), stake, friendly: false });
   };
   const onLobbyNack = (p: Record<string, unknown>) => {
     if (String(p.toId ?? '') !== selfRef.current.id) return;
@@ -734,7 +741,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Join/leave the per-cabinet lobby channel while its overlay is open. Presence builds the roster; both
   // players agree on host = lowest id. Re-tracks when sign-in changes so the wager option unlocks live.
   useEffect(() => {
-    const cabId = duelLobby;
+    const cabId = duelLobby?.cabId;
     if (!cabId || !supabase) { setLobbyRoster([]); return; }
     launchingDuelRef.current = false;
     const meId = selfRef.current.id;
@@ -1808,8 +1815,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const adjTo = (gx: number, gy: number) => Math.max(Math.abs(px - gx), Math.abs(py - gy)) === 1;
         let near: Machine | null = null;
         for (const m of ms) { if (adjTo(m.gx, m.gy)) { near = override ? { gx: m.gx, gy: m.gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
-        // admin-placed play-triggers (hydrated as `arcade` items carrying a gameId) — each is its own machine
-        if (!near) for (const it of itemsRef.current) { if (it.kind === 'arcade' && it.gameId && adjTo(it.gx, it.gy)) { near = { gx: it.gx, gy: it.gy, games: [gameById(it.gameId)], rules: it.gameRules }; break; } }
+        // admin-placed play-triggers (hydrated as `arcade` items carrying a gameId) — each is its own
+        // machine. Duel-flagged duel-ready triggers are handled by the duel-cabinet block below, not here.
+        if (!near) for (const it of itemsRef.current) { if (it.kind === 'arcade' && it.gameId && !(it.gameRules?.duel && isDuelReady(it.gameId)) && adjTo(it.gx, it.gy)) { near = { gx: it.gx, gy: it.gy, games: [gameById(it.gameId)], rules: it.gameRules }; break; } }
         const nearKey = near ? `${near.gx},${near.gy}` : null;
         if (near && nearKey !== nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
         nearMachineRef.current = nearKey;
@@ -1831,10 +1839,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // DUEL CABINET — open the lobby (waiting room) when you step adjacent to a placed Duel Cabinet.
       {
         const px = clampTile(me.fx), py = clampTile(me.fy);
-        let nearCab: Item | null = null;
-        for (const it of itemsRef.current) { if (it.kind === 'duelcab' && Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) === 1) { nearCab = it; break; } }
+        let nearCab: { id: string; gameId: string } | null = null;
+        for (const it of itemsRef.current) {
+          if (Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) !== 1) continue;
+          // A dedicated duel cabinet (duelcab → Climb Race), OR any game trigger dropped with the ⚔ duel flag.
+          if (it.kind === 'duelcab') { nearCab = { id: it.id, gameId: CLIMB_GAME_ID }; break; }
+          if (it.kind === 'arcade' && it.gameId && it.gameRules?.duel && isDuelReady(it.gameId)) { nearCab = { id: it.id, gameId: it.gameId }; break; }
+        }
         const nearKey = nearCab ? nearCab.id : null;
-        if (nearCab && nearKey !== duelCabRef.current) { musicRef.current?.chime(); setDuelLobby(nearCab.id); }
+        if (nearCab && nearKey !== duelCabRef.current) { musicRef.current?.chime(); setDuelLobby({ cabId: nearCab.id, gameId: nearCab.gameId }); }
         duelCabRef.current = nearKey;
       }
       // ── TUTORIAL flow ── the onward door (TUT_PORTAL_TILE) + the terminal, gated by the current step.

@@ -42,6 +42,16 @@ export const makeSeed = (): number => Math.floor(Math.random() * 0xffffffff) >>>
 // A match id for a FRIENDLY duel (no durable row) — just names the live `duel:<id>` channel both join.
 export const makeMatchId = (): string => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `m_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
 
+// ---- which games can be played as a 1v1 duel ----
+// The wager/lobby layer is game-agnostic; a game becomes "duel-ready" once it can run a seeded, timed
+// match and report a comparable score. The Climb Race (LEAP engine) is the first. Add a gameId here +
+// route it in page.tsx's duel view as each game gets its duel-mode retrofit.
+export const CLIMB_GAME_ID = 'climb';
+// Games that currently run as a duel. The Climb Race is first; LEAP + OUROO get added as each game's
+// game-over path is retrofitted to "first to lose loses" (report score → higher survival/score wins).
+const DUEL_READY = new Set<string>([CLIMB_GAME_ID]);
+export const isDuelReady = (gameId: string): boolean => DUEL_READY.has(gameId);
+
 // ---- stake (symmetric: each side antes this) ----
 export type DuelStake = { crystals: number; items: Record<string, number> };
 export const emptyStake = (): DuelStake => ({ crystals: 0, items: {} });
@@ -170,6 +180,7 @@ export function payoutMult(role: DuelRole, winner: DuelWinner): number {
 // `friendly` duels carry no stake and no durable row — `id` is just the live channel name (makeMatchId).
 export type DuelTicket = {
   id: string; seed: number; role: DuelRole; room: string;
+  gameId: string;            // which game to run in duel mode (page.tsx routes on this)
   meHandle: string; oppHandle: string;
   friendly: boolean;
   meToken?: string; oppToken?: string;
