@@ -688,7 +688,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (lobbyMode === 'friendly') {
       const matchId = makeMatchId();
       launchingDuelRef.current = true;
-      lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, gameId, seed, friendly: true, hostId: meId, hostHandle: selfRef.current.handle, guestId: guest.id } });
+      // Await the broadcast so it flushes before launchDuel unmounts the room (and tears down this channel).
+      await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId, gameId, seed, friendly: true, hostId: meId, hostHandle: selfRef.current.handle, guestId: guest.id } });
       launchDuel({ id: matchId, seed, gameId, role: 'host', room: slug, meHandle: selfRef.current.handle, oppHandle: guest.handle, friendly: true });
       return;
     }
@@ -703,7 +704,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!row) { creditStake(duelStake, 1); setLobbyMsg('Could not start (offline?). Ante refunded.'); return; }
     hostStakeRef.current = duelStake;
     launchingDuelRef.current = true;
-    lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: row.id, duelId: row.id, gameId, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
+    // Await the broadcast so it flushes before launchDuel unmounts the room (and tears down this channel).
+    await lobbyChannelRef.current?.send({ type: 'broadcast', event: 'lobby_go', payload: { matchId: row.id, duelId: row.id, gameId, seed, friendly: false, stake: duelStake, hostId: meId, hostHandle: me.handle, hostToken: me.token, guestId: guest.id } });
     launchDuel({ id: row.id, seed, gameId, role: 'host', room: slug, meHandle: me.handle, meToken: me.token, oppHandle: guest.handle, oppToken: guest.token, stake: duelStake, friendly: false });
   };
   // Guest receives the host's start. Only the chosen guest launches; for a wager, escrow + lock first.
