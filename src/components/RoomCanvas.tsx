@@ -1662,7 +1662,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       } else {
         bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       }
-      if (isSelf && swayIntensityRef.current > 0) sway += Math.sin(framesRef.current * 0.035) * swayIntensityRef.current;
+      // Drunk tilt: rotate body around the feet pivot so feet stay grounded.
+      // Angle and bob both scale linearly with the active item's intensity.
+      const drunkTilt = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.035) * swayIntensityRef.current * 0.0175 : 0;
+      const drunkBob  = isSelf && swayIntensityRef.current > 0 ? Math.sin(framesRef.current * 0.07)  * swayIntensityRef.current * 0.5   : 0;
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
       if (em === 'levitate') {
@@ -1671,7 +1674,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.beginPath(); ctx.ellipse(sx, sy_floor, 20 + Math.sin(a.af * 0.08) * 4, 9, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
-      ctx.save(); ctx.translate(sx + sway, sy - 30 + bob); if (spin) ctx.rotate(spin);
+      ctx.save();
+      ctx.translate(sx + sway, sy);                          // feet stay grounded; dance sway still slides whole avatar
+      if (drunkTilt) ctx.rotate(drunkTilt);                  // tilt body around the feet pivot
+      ctx.translate(0, -30 + bob + drunkBob);                // move up to body centre
+      if (spin) ctx.rotate(spin);
       ctx.shadowColor = col; ctx.shadowBlur = em === 'levitate' ? 38 : (isSelf ? 22 : 12);
       if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
