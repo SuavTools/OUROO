@@ -17,7 +17,8 @@ import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } f
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, itemCount } from '@/lib/wallet';
+import { ITEMS, itemById } from '@/lib/items';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
 import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
@@ -254,7 +255,7 @@ const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent 
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 // portalTo/portalCode ride along on PLAYER-PLACED portals (a teleporter that links to another room).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[] };
 // Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
 const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
 const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
@@ -270,6 +271,10 @@ const encodePortal = (to: string, code: string, hidden = false) => `portal:${enc
 // rules is the dotted token list from encodeRules (':'-free), so the colon segments stay clean.
 const encodeGameTrigger = (gameId: string, rules: GameRules, hidden = false) => `game:${encodeURIComponent(gameId)}:${encodeRules(rules)}${hidden ? ':1' : ''}`;
 const encodeSetGame = (gameId: string, rules: GameRules) => `setgame:${encodeURIComponent(gameId)}:${encodeRules(rules)}`;
+// SHOP TRIGGERS — admin-placed shop events, invisible to players; walk close → shop modal.
+//   `shop:<item1>,<item2>,...`   each item ID is URL-encoded so commas stay clean as delimiters.
+const encodeShopTrigger = (itemIds: string[]): string => `shop:${itemIds.map(encodeURIComponent).join(',')}`;
+const decodeShopItems = (s: string): string[] => s ? s.split(',').map(safeDecode).filter(Boolean) : [];
 // LORE MARKERS — admin-authored Oracle lore, persisted in room_items as `lore:<mode>:<encoded text>`.
 //   mode 'enter' → spoken once per player when they arrive in the room (tile ignored).
 //   mode 'tile'  → spoken when a player walks close to the marker's tile (re-fires per approach).
@@ -361,6 +366,9 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   if (rawKind.startsWith('game:')) {
     const [, gid = '', rules = '', hidden = ''] = rawKind.split(':');
     return { id, kind: 'arcade', gx, gy, dir: 0, elev: 0, createdBy, gameId: safeDecode(gid), gameRules: decodeRules(rules), gameHidden: hidden === '1' };
+  }
+  if (rawKind.startsWith('shop:')) {
+    return { id, kind: 'shop', gx, gy, dir: 0, elev: 0, createdBy, shopItems: decodeShopItems(rawKind.slice(5)) };
   }
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
@@ -540,6 +548,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [gGameId, setGGameId] = useState('ouroo');      // Games tab: chosen game
   const [gRules, setGRules] = useState<GameRules>({});  // Games tab: special-rule toggles (plumbing only)
   const [gHidden, setGHidden] = useState(false);        // Games tab: place a hidden cabinet (Play only)
+  const [shopsMode, setShopsMode] = useState(false);   // admin: the Shops tab (place shop triggers)
+  const [sShopItems, setSShopItems] = useState<string[]>([]);   // item IDs selected for the shop being configured
+  const [shopPrompt, setShopPrompt] = useState<{ items: string[] } | null>(null);   // shop modal when player walks close
   const [mkMode, setMkMode] = useState<LoreMode>('enter');     // editor: trigger of the marker being authored
   const [mkStyle, setMkStyle] = useState<LoreStyle>('oracle'); // editor: presentation of the marker
   const [mkCrystals, setMkCrystals] = useState(100);           // editor: reward crystal amount
@@ -571,7 +582,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -586,6 +597,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [guestChosen, setGuestChosen] = useState(false);   // chose "continue as guest" in the creator
   const [eggClaimed, setEggClaimed] = useState(false);     // hidden-wall easter egg taken (this room)
   const nearMachineRef = useRef<string | null>(null);   // key of the machine currently in range (null = none); changes trigger the picker
+  const nearShopRef = useRef<string | null>(null);      // key of the shop tile currently in range
   const machineOverrideRef = useRef<{ gameId: string; rules: GameRules } | null>(null);   // a placed set-game event retargets this room's machines
   const nearTermRef = useRef(false);      // rising-edge guard for the terminal
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
@@ -607,7 +619,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const charDoneRef = useRef(false);
   useEffect(() => { charDoneRef.current = charDone; }, [charDone]);
   // Reset the per-room tutorial state whenever the step changes (new room = fresh speech, guards re-armed).
-  useEffect(() => { setTutLine(0); setTutCardDone(false); setSimConfirm(false); nearMachineRef.current = null; nearTermRef.current = false; tutPortalArmRef.current = false; }, [onboarding]);
+  useEffect(() => { setTutLine(0); setTutCardDone(false); setSimConfirm(false); nearMachineRef.current = null; nearShopRef.current = null; nearTermRef.current = false; tutPortalArmRef.current = false; }, [onboarding]);
   // Persisted character-creator progress (survives the Discord OAuth round-trip mid-tutorial).
   useEffect(() => {
     try { setCharDone(localStorage.getItem('ouroo_tut_char') === '1'); setGuestChosen(localStorage.getItem('ouroo_tut_guest') === '1'); } catch { /* ignore */ }
@@ -855,7 +867,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null;
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null;
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
@@ -1080,8 +1092,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const isPortal = kind.startsWith('portal:');   // a player-made portal (free; renders + behaves as a teleporter)
     const isGame = kind.startsWith('game:');        // a placed play-trigger (renders as an arcade cabinet)
     const isSetGame = kind.startsWith('setgame:');  // a retarget event (invisible, zero-footprint)
-    const isFree = isPortal || isGame || isSetGame; // admin events: no inventory, raw kind persisted as-is
-    const engineKind = isPortal ? 'teleporter' : isGame ? 'arcade' : isSetGame ? 'setgame' : kind;
+    const isShop = kind.startsWith('shop:');        // a shop trigger (invisible to players; admin-placed)
+    const isFree = isPortal || isGame || isSetGame || isShop;
+    const engineKind = isPortal ? 'teleporter' : isGame ? 'arcade' : isSetGame ? 'setgame' : isShop ? 'shop' : kind;
     // Inventory: non-mods need stock for real furni (free basics are unlimited; admin events are free). Mods build freely.
     if (!isFree && !modRef.current && furniCount(kind) < 1) { flashHint(isFurniFree(kind) ? 'Unavailable' : 'Out of stock — buy more ✦'); return; }
     if (itemsRef.current.length >= MAX_ITEMS) { flashHint('Room is full'); return; }   // generous safety ceiling only
@@ -1100,6 +1113,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (isPortal) flashHint('Portal placed ✦ walk onto it to travel');
     else if (isGame) flashHint('Game placed ✦ walk close to play');
     else if (isSetGame) { machineOverrideRef.current = { gameId: item.gameId ?? '', rules: item.gameRules ?? {} }; flashHint('Machines in this room retargeted ✦'); }
+    else if (isShop) flashHint('Shop placed ✦ walk close to browse');
     channelRef.current?.send({ type: 'broadcast', event: 'place', payload: { id, kind: isFree ? dbKind : engineKind, gx, gy, dir, elev, by: item.createdBy } });
     supabase?.from('room_items').insert({ id, room, kind: dbKind, x: gx, y: gy, created_by: item.createdBy }).then(undefined, () => {});
   };
@@ -1147,13 +1161,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
     setPlaceNpc(false); pendingNpcRef.current = null; flashHint(`${d.n} placed ☻`);
   };
-  const openNpcEditor = () => { setNpcEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
+  const openNpcEditor = () => { setNpcEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
   // Arm the next tile-tap to drop a game event: a Play trigger (proximity cabinet) or a Set event
   // (retargets this room's machines). The chosen rules ride along (plumbing only for now).
   const armGamePlacement = () => {
     const kind = gTab === 'set' ? encodeSetGame(gGameId, gRules) : encodeGameTrigger(gGameId, gRules, gHidden);
-    setPlacingKind(kind); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null);
+    setPlacingKind(kind); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null);
     flashHint(gTab === 'set' ? 'Tap a tile to retarget this room\'s machines ▸' : gHidden ? 'Tap a tile to drop the hidden cabinet ◌' : 'Tap a tile to drop the game cabinet ▸');
+  };
+  const armShopPlacement = () => {
+    if (sShopItems.length === 0) { flashHint('Select at least one item first'); return; }
+    const kind = encodeShopTrigger(sShopItems);
+    setPlacingKind(kind); setShopsMode(false); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null);
+    flashHint('Tap a tile to place the shop ▸');
   };
   // The top editable player item on a tile (own items, or anything if you can build here).
   const topItemAt = (gx: number, gy: number): Item | undefined =>
@@ -1244,7 +1264,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
     pendingLoreRef.current = { text: '', style: 'oracle', crystals: 0, skinId: '' }; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker placed ✎');
   };
-  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setMkCrystals(100); setMkSkin(''); setLoreEditor(true); setPlacingKind(null); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); };
+  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setMkCrystals(100); setMkSkin(''); setLoreEditor(true); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); };
   // Set the room's atmosphere (backdrop layer). 'auto' clears the override; otherwise upsert a `bg:` row.
   const setAtmosphere = (a: Atmo) => {
     bgRef.current = a; setBgAtmo(a);
@@ -1328,7 +1348,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'place' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || itemsRef.current.some(i => i.id === id)) return;
           const rawK = String(pl.kind);
-          if (rawK.startsWith('portal:') || rawK.startsWith('game:') || rawK.startsWith('setgame:')) { const it = hydrateItem(rawK, id, Number(pl.gx), Number(pl.gy), String(pl.by ?? '')); itemsRef.current.push(it); if (it.gameSet && it.gameId) machineOverrideRef.current = { gameId: it.gameId, rules: it.gameRules ?? {} }; }
+          if (rawK.startsWith('portal:') || rawK.startsWith('game:') || rawK.startsWith('setgame:') || rawK.startsWith('shop:')) { const it = hydrateItem(rawK, id, Number(pl.gx), Number(pl.gy), String(pl.by ?? '')); itemsRef.current.push(it); if (it.gameSet && it.gameId) machineOverrideRef.current = { gameId: it.gameId, rules: it.gameRules ?? {} }; }
           else itemsRef.current.push({ id, kind: rawK, gx: Number(pl.gx), gy: Number(pl.gy), dir: Number(pl.dir) || 0, elev: Number(pl.elev) || 0, createdBy: String(pl.by ?? '') });
           rebuildHeight();
         })
@@ -1426,6 +1446,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const nearKey = near ? `${near.gx},${near.gy}` : null;
         if (near && nearKey !== nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
         nearMachineRef.current = nearKey;
+      }
+      // SHOPS — open the shop modal when the player steps adjacent to a shop trigger
+      {
+        const px = clampTile(me.fx), py = clampTile(me.fy);
+        let nearShop: Item | null = null;
+        for (const it of itemsRef.current) {
+          if (it.kind === 'shop' && it.shopItems?.length && Math.max(Math.abs(px - it.gx), Math.abs(py - it.gy)) <= 1) { nearShop = it; break; }
+        }
+        const nearKey = nearShop ? `${nearShop.gx},${nearShop.gy}` : null;
+        if (nearShop && nearKey !== nearShopRef.current) { musicRef.current?.chime(); setShopPrompt({ items: nearShop.shopItems! }); }
+        nearShopRef.current = nearKey;
       }
       // ── TUTORIAL flow ── the onward door (TUT_PORTAL_TILE) + the terminal, gated by the current step.
       {
@@ -1803,9 +1834,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         // disguised triggers — invisible to players, but ADMINS always see a soft glow (stronger while
         // decorating) so they can find/manage them. Portals glow purple; game events glow arcade-yellow.
         // A set-game event has no visible body at all (it only retargets machines), so it's always glow-only.
-        if (ii.portalHidden || ii.gameHidden || ii.gameSet) {
+        if (ii.portalHidden || ii.gameHidden || ii.gameSet || ii.kind === 'shop') {
           if (uiRef.current.decorOpen || modRef.current) {
-            const col = ii.portalHidden ? '#cc66ff' : '#ffd23a';
+            const col = ii.portalHidden ? '#cc66ff' : ii.kind === 'shop' ? '#1ED760' : '#ffd23a';
             const pulse = 0.3 + 0.2 * Math.sin(framesRef.current * 0.08); ctx.save();
             const g = ctx.createRadialGradient(sx, sy, 1, sx, sy, TW * 0.85); g.addColorStop(0, hexA(col, 0.14 + 0.28 * pulse)); g.addColorStop(1, hexA(col, 0));
             ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, TW * 0.85, TH * 0.85, 0, 0, Math.PI * 2); ctx.fill();
@@ -2182,7 +2213,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {CATS.map(c => {
                 const on = cat === c.id && !removeMode;
                 return (
-                  <button key={c.id} onClick={() => { setCat(c.id); setGamesMode(false); setRemoveMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title={c.name}
+                  <button key={c.id} onClick={() => { setCat(c.id); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title={c.name}
                     className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${on ? 'bg-white/10' : 'hover:bg-white/5'}`}>
                     <CatIcon catId={c.id} size={22} color={on ? '#ffe65c' : '#cfd2dc'} />
                     <span className={`text-[7px] uppercase tracking-wide leading-none text-center ${on ? 'text-brandYellow' : 'text-white/50'}`}>{c.name.replace('★ ', '')}</span>
@@ -2190,29 +2221,29 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 );
               })}
               {(() => { const spin = !!(placingKind && isRotatable(placingKind)); const on = rotateMode || spin; return (
-                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setGamesMode(false); setRemoveMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); } }} title="Rotate"
+                <button onClick={() => { if (spin) { setPlaceDir(d => (d + 1) % 4); } else { setRotateMode(r => !r); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); } }} title="Rotate"
                   className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ml-auto ${on ? 'bg-[#00cfff]/15' : 'hover:bg-white/5'}`}>
                   <CatIcon catId="rotate" size={22} color={on ? '#00cfff' : '#cfd2dc'} />
                   <span className={`text-[7px] uppercase tracking-wide leading-none ${on ? 'text-[#00cfff]' : 'text-white/50'}`}>{spin ? `Turn ${placeDir + 1}/4` : 'Rotate'}</span>
                 </button>
               ); })()}
-              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setGamesMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Pick up"
+              <button onClick={() => { setRemoveMode(r => !r); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Pick up"
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${removeMode ? 'bg-brandRed/20' : 'hover:bg-white/5'}`}>
                 <CatIcon catId="remove" size={22} color={removeMode ? '#ff4e3e' : '#cfd2dc'} />
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${removeMode ? 'text-brandRed' : 'text-white/50'}`}>Pick up</span>
               </button>
-              <button onClick={() => { setBuildMode(b => { const nb = !b; if (!nb) setPlacingPrefab(null); return nb; }); setPlacingKind(null); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); }} title="Pre-made buildings"
+              <button onClick={() => { setBuildMode(b => { const nb = !b; if (!nb) setPlacingPrefab(null); return nb; }); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); }} title="Pre-made buildings"
                 className={`shrink-0 flex flex-col items-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${buildMode ? 'bg-brandYellow/20' : 'hover:bg-white/5'}`}>
                 <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: buildMode ? '#ffe65c' : '#cfd2dc' }}>🏠</span>
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${buildMode ? 'text-brandYellow' : 'text-white/50'}`}>Builds</span>
               </button>
-              <button onClick={() => { refreshRoomLists(); setPortalMaker(true); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); }} title="Place a portal to another room"
+              <button onClick={() => { refreshRoomLists(); setPortalMaker(true); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); }} title="Place a portal to another room"
                 className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#cc66ff]/15">
                 <span className="text-[18px] leading-none text-[#cc66ff]" style={{ marginTop: '-1px' }}>◎</span>
                 <span className="text-[7px] uppercase tracking-wide leading-none text-[#cc66ff]">Portal</span>
               </button>
               {isMod && (
-                <button onClick={() => { setTileMode(t => !t); setPlacingKind(null); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Paint floor tiles (admin)"
+                <button onClick={() => { setTileMode(t => !t); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Paint floor tiles (admin)"
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${tileMode ? 'bg-[#1ED760]/20' : 'hover:bg-[#1ED760]/15'}`}>
                   <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: tileMode ? '#1ED760' : '#9fe0b3' }}>▦</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: tileMode ? '#1ED760' : '#9fe0b3' }}>Tiles</span>
@@ -2226,7 +2257,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 </button>
               )}
               {isMod && (
-                <button onClick={() => { setAtmoMode(a => !a); setPlacingKind(null); setGamesMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Room atmosphere (admin)"
+                <button onClick={() => { setAtmoMode(a => !a); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Room atmosphere (admin)"
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${atmoMode ? 'bg-[#cc66ff]/20' : 'hover:bg-[#cc66ff]/15'}`}>
                   <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: atmoMode ? '#cc66ff' : '#c79fe0' }}>☁</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: atmoMode ? '#cc66ff' : '#c79fe0' }}>Atmo</span>
@@ -2240,15 +2271,59 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 </button>
               )}
               {isMod && (
-                <button onClick={() => { setGamesMode(g => !g); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Place game events (admin)"
+                <button onClick={() => { setGamesMode(g => !g); setShopsMode(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Place game events (admin)"
                   className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${gamesMode ? 'bg-[#ffd23a]/20' : 'hover:bg-[#ffd23a]/15'}`}>
                   <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: gamesMode ? '#ffd23a' : '#e0d099' }}>🕹</span>
                   <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: gamesMode ? '#ffd23a' : '#e0d099' }}>Games</span>
                 </button>
               )}
+              {isMod && (
+                <button onClick={() => { setShopsMode(s => !s); setGamesMode(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); }} title="Place shop triggers (admin)"
+                  className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${shopsMode ? 'bg-[#1ED760]/20' : 'hover:bg-[#1ED760]/15'}`}>
+                  <span className="text-[16px] leading-none" style={{ marginTop: '-1px', color: shopsMode ? '#1ED760' : '#9fe0b4' }}>🛍</span>
+                  <span className="text-[7px] uppercase tracking-wide leading-none" style={{ color: shopsMode ? '#1ED760' : '#9fe0b4' }}>Shops</span>
+                </button>
+              )}
             </div>
             {/* item grid — 2 rows, horizontal scroll, drawn thumbnails + price/owned */}
-            {gamesMode ? (
+            {shopsMode ? (
+              <div className="p-3 space-y-2.5">
+                <p className="text-[11px] text-[#1ED760]/90">Pick which items players can buy at this shop. Invisible trigger — admins see a green glow.</p>
+                {ITEMS.length === 0 ? (
+                  <p className="text-[10px] text-white/35 italic">No items defined yet — add some to src/lib/items.ts first.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {ITEMS.map(item => {
+                      const sel = sShopItems.includes(item.id);
+                      return (
+                        <button key={item.id} onClick={() => setSShopItems(cur => sel ? cur.filter(i => i !== item.id) : [...cur, item.id])}
+                          className={`px-2.5 py-1.5 border rounded-lg text-left transition-colors ${sel ? 'border-[#1ED760] bg-[#1ED760]/10 text-white' : 'border-white/15 text-white/65 hover:border-white/40'}`}>
+                          <span className="block text-[11px] font-bold leading-none">{item.emoji} {item.name}</span>
+                          <span className="block text-[9px] text-white/40 mt-0.5">{CURRENCY_SYMBOL}{item.price} · {item.useType}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <button onClick={armShopPlacement} disabled={sShopItems.length === 0}
+                  className="w-full bg-[#1ED760] text-black font-bold uppercase text-[11px] tracking-widest px-4 py-2 rounded active:scale-95 hover:bg-white transition-colors disabled:opacity-40">
+                  Place shop ▸
+                </button>
+                <div className="pt-1 border-t border-white/10">
+                  <button
+                    onClick={() => {
+                      const shops = itemsRef.current.filter(i => i.kind === 'shop');
+                      if (shops.length === 0) { flashHint('No shops in this room'); return; }
+                      shops.forEach(dropItem);
+                      flashHint(`Cleared ${shops.length} shop${shops.length === 1 ? '' : 's'}`);
+                    }}
+                    className="w-full px-3 py-1.5 border border-brandRed/40 rounded-lg text-[11px] text-brandRed/70 hover:border-brandRed hover:text-brandRed transition-colors text-left"
+                  >
+                    Clear all shops in room
+                  </button>
+                </div>
+              </div>
+            ) : gamesMode ? (
               <div className="p-3 space-y-2.5">
                 {/* event type */}
                 <div className="flex gap-1.5">
@@ -2568,6 +2643,40 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   <span className="text-brandYellow font-bold uppercase text-xs tracking-widest opacity-60 group-hover:opacity-100">Play ▸</span>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {shopPrompt && (
+        <div className="absolute inset-0 z-[65] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShopPrompt(null)}>
+          <div className="w-full max-w-sm border border-[#1ED760]/40 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#1ED760]">🛍 shop</p>
+              <button onClick={() => setShopPrompt(null)} className="text-white/40 hover:text-white text-lg leading-none">✕</button>
+            </div>
+            <p className="text-sm text-white/60 leading-relaxed">Browse the goods. Spend Cristais, take something useful.</p>
+            <div className="flex flex-col gap-2">
+              {shopPrompt.items.map(id => {
+                const item = itemById(id); if (!item) return null;
+                const owned = itemCount(id);
+                const useLabel = item.useType === 'single' ? 'Single use' : item.useType === 'multi' ? `${item.uses ?? '?'} uses` : 'Permanent';
+                return (
+                  <div key={id} className="flex items-center justify-between gap-3 border border-white/15 bg-white/[0.03] px-4 py-3">
+                    <span>
+                      <span className="block font-helvetica font-black text-base text-white leading-none">{item.emoji} {item.name}</span>
+                      <span className="block text-[11px] text-white/45 mt-1">{item.description}</span>
+                      <span className="block text-[10px] text-white/30 mt-0.5">{useLabel}{owned > 0 ? ` · ×${owned} owned` : ''}</span>
+                    </span>
+                    <button
+                      onClick={() => { const r = buyItem(id, item.price); flashHint(r.ok ? `${item.name} acquired ✦` : (r.error ?? 'Error')); }}
+                      disabled={wallet.balance < item.price}
+                      className="shrink-0 bg-[#1ED760] text-black font-bold uppercase text-[10px] tracking-widest px-3 py-2 hover:bg-white transition-colors active:scale-95 disabled:opacity-40">
+                      {CURRENCY_SYMBOL}{item.price.toLocaleString('pt-PT')}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

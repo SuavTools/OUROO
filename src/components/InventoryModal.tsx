@@ -14,7 +14,7 @@ import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, 
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { ITEMS } from '@/lib/items';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
-import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon, buyItem, itemCount } from '@/lib/wallet';
+import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon, itemCount } from '@/lib/wallet';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
 
 type Tab = 'items' | 'person' | 'skins' | 'furni' | 'icons';
@@ -113,45 +113,39 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
         {/* ITEMS */}
         {tab === 'items' && (
           <div>
-            {ITEMS.length === 0 ? (
-              <div className="py-10 text-center space-y-3">
-                <p className="text-3xl">🎒</p>
-                <p className="text-white/60 text-sm font-bold uppercase tracking-widest">No items yet</p>
-                <p className="text-[11px] text-white/35 max-w-xs mx-auto">
-                  Items are single-use, multi-use, or permanent objects that grant effects — like a speed boost or an emote. Coming soon.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {ITEMS.map(item => {
-                  const owned = itemCount(item.id);
-                  const useLabel = item.useType === 'single' ? 'Single use' : item.useType === 'multi' ? `${item.uses ?? '?'} uses` : 'Permanent';
-                  return (
-                    <div key={item.id} className="relative border border-white/10 p-3 flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl leading-none">{item.emoji}</span>
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-bold uppercase tracking-wide text-white truncate">{item.name}</p>
-                          <p className="text-[9px] uppercase tracking-wide text-white/35">{useLabel}</p>
+            {(() => {
+              const ownedItems = ITEMS.filter(item => itemCount(item.id) > 0);
+              if (ownedItems.length === 0) return (
+                <div className="py-10 text-center space-y-3">
+                  <p className="text-3xl">🎒</p>
+                  <p className="text-white/60 text-sm font-bold uppercase tracking-widest">No items</p>
+                  <p className="text-[11px] text-white/35 max-w-xs mx-auto">
+                    Find shops in the world to pick things up — items grant temporary or permanent effects when used.
+                  </p>
+                </div>
+              );
+              return (
+                <div className="grid grid-cols-2 gap-2">
+                  {ownedItems.map(item => {
+                    const owned = itemCount(item.id);
+                    const useLabel = item.useType === 'single' ? 'Single use' : item.useType === 'multi' ? `${item.uses ?? '?'} uses` : 'Permanent';
+                    return (
+                      <div key={item.id} className="border border-white/10 p-3 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl leading-none">{item.emoji}</span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-white truncate">{item.name}</p>
+                            <p className="text-[9px] uppercase tracking-wide text-white/35">{useLabel}</p>
+                          </div>
+                          <span className="ml-auto text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 tabular-nums shrink-0">×{owned}</span>
                         </div>
-                        {owned > 0 && <span className="ml-auto text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 tabular-nums">×{owned}</span>}
+                        <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
                       </div>
-                      <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
-                      <button
-                        onClick={() => { const r = buyItem(item.id, item.price); r.ok ? flash(true, `${item.name} acquired`) : flash(false, r.error || 'Error'); }}
-                        disabled={wallet.balance < item.price}
-                        className="mt-auto text-[9px] uppercase tracking-wide py-1.5 bg-brandYellow/15 hover:bg-brandYellow/30 text-brandYellow disabled:opacity-40 transition-colors"
-                      >
-                        {CURRENCY_SYMBOL}{item.price.toLocaleString('pt-PT')}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <p className="text-[11px] text-white/35 mt-4">
-              Items grant temporary or permanent effects. Single-use items vanish after one activation; multi-use items deplete charge by charge; permanent items stay forever.
-            </p>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 

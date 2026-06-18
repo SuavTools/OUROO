@@ -20,7 +20,7 @@ export const ITEMS: Item[] = [
   {
     id: 'coffee',
     name: 'Coffee',
-    description: 'A strong cup that sharpens your stride. +50% movement speed for 10 minutes.',
+    description: 'A strong cup that sharpens your stride.',
     useType: 'single',
     effect: { type: 'speed', multiplier: 1.25, durationMs: 10 * 60 * 1000 },
     price: 200,
