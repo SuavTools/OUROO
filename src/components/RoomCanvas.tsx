@@ -17,7 +17,7 @@ import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } f
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
 import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
@@ -386,6 +386,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
 };
 type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
+type InteractPeer = { id: string; handle: string };
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, Math.round(((n >> 16) & 255) * f)), g = Math.min(255, Math.round(((n >> 8) & 255) * f)), b = Math.min(255, Math.round((n & 255) * f)); return `rgb(${r},${g},${b})`; };
@@ -692,6 +693,102 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [myCount, setMyCount] = useState(0);
   const [hint, setHint] = useState('');
   const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
+
+  // ── Player-to-player interaction system ──
+  const [interactPrompt, setInteractPrompt] = useState<InteractPeer | null>(null);
+  const [interactRequest, setInteractRequest] = useState<InteractPeer | null>(null);
+  const [interactWaiting, setInteractWaiting] = useState(false);
+  const [interactSession, setInteractSession] = useState<{ peer: InteractPeer; mode: 'menu' | 'chat' | 'gift' | 'trade' } | null>(null);
+  const interactSessionRef = useRef<{ peer: InteractPeer; mode: 'menu' | 'chat' | 'gift' | 'trade' } | null>(null);
+  useEffect(() => { interactSessionRef.current = interactSession; }, [interactSession]);
+  const [privateMsgs, setPrivateMsgs] = useState<{ handle: string; text: string; mine: boolean }[]>([]);
+  const [privateInput, setPrivateInput] = useState('');
+  const [myTradeItem, setMyTradeItem] = useState<string | null>(null);
+  const [theirTradeOffer, setTheirTradeOffer] = useState<string | null>(null);
+  const myTradeItemRef = useRef<string | null>(null);
+  const theirTradeOfferRef = useRef<string | null>(null);
+  const myTradeConfirmedRef = useRef(false);
+  const theirTradeConfirmedRef = useRef(false);
+  const [myTradeConfirmed, setMyTradeConfirmed] = useState(false);
+  const [theirTradeConfirmed, setTheirTradeConfirmed] = useState(false);
+
+  const closeInteract = (notify = true) => {
+    if (notify && interactSessionRef.current) {
+      channelRef.current?.send({ type: 'broadcast', event: 'interact_close', payload: { from: selfRef.current.id, to: interactSessionRef.current.peer.id } });
+    }
+    setInteractPrompt(null); setInteractRequest(null); setInteractWaiting(false);
+    setInteractSession(null); interactSessionRef.current = null;
+    setPrivateMsgs([]); setPrivateInput('');
+    setMyTradeItem(null); setTheirTradeOffer(null);
+    myTradeItemRef.current = null; theirTradeOfferRef.current = null;
+    myTradeConfirmedRef.current = false; theirTradeConfirmedRef.current = false;
+    setMyTradeConfirmed(false); setTheirTradeConfirmed(false);
+  };
+  const executeTrade = (myItem: string, theirItem: string) => {
+    if (takeItem(myItem)) {
+      grantItem(theirItem);
+      const got = itemById(theirItem);
+      flashHint(`Trade complete! Received ${got?.emoji ?? ''} ${got?.name ?? theirItem}`);
+    }
+    setMyTradeItem(null); setTheirTradeOffer(null);
+    myTradeItemRef.current = null; theirTradeOfferRef.current = null;
+    myTradeConfirmedRef.current = false; theirTradeConfirmedRef.current = false;
+    setMyTradeConfirmed(false); setTheirTradeConfirmed(false);
+    setInteractSession(s => s ? { ...s, mode: 'menu' } : null);
+  };
+  const sendInteractRequest = () => {
+    if (!interactPrompt || !channelRef.current) return;
+    channelRef.current.send({ type: 'broadcast', event: 'interact_req', payload: { from: selfRef.current.id, to: interactPrompt.id, handle: selfRef.current.handle } });
+    setInteractWaiting(true);
+  };
+  const acceptInteract = () => {
+    if (!interactRequest || !channelRef.current) return;
+    const peer = interactRequest;
+    channelRef.current.send({ type: 'broadcast', event: 'interact_res', payload: { from: selfRef.current.id, to: peer.id, handle: selfRef.current.handle, accept: true } });
+    setInteractRequest(null);
+    const sess = { peer, mode: 'menu' as const };
+    setInteractSession(sess); interactSessionRef.current = sess;
+  };
+  const declineInteract = () => {
+    if (!interactRequest || !channelRef.current) return;
+    channelRef.current.send({ type: 'broadcast', event: 'interact_res', payload: { from: selfRef.current.id, to: interactRequest.id, handle: selfRef.current.handle, accept: false } });
+    setInteractRequest(null);
+  };
+  const sendPrivateMsg = (e: React.FormEvent) => {
+    e.preventDefault();
+    const sess = interactSessionRef.current;
+    if (!sess || !privateInput.trim() || !channelRef.current) return;
+    const text = privateInput.trim().slice(0, 300);
+    channelRef.current.send({ type: 'broadcast', event: 'interact_chat', payload: { from: selfRef.current.id, to: sess.peer.id, handle: selfRef.current.handle, text } });
+    setPrivateMsgs(prev => [...prev, { handle: selfRef.current.handle, text, mine: true }]);
+    setPrivateInput('');
+  };
+  const sendGift = () => {
+    const sess = interactSessionRef.current;
+    if (!sess || !myTradeItem || !channelRef.current) return;
+    if (!takeItem(myTradeItem)) { flashHint('Not enough items'); return; }
+    channelRef.current.send({ type: 'broadcast', event: 'interact_gift', payload: { from: selfRef.current.id, to: sess.peer.id, handle: selfRef.current.handle, itemId: myTradeItem } });
+    const item = itemById(myTradeItem);
+    flashHint(`Gifted ${item?.emoji ?? ''} ${item?.name ?? myTradeItem} to ${sess.peer.handle}`);
+    setMyTradeItem(null); myTradeItemRef.current = null;
+    setInteractSession(s => s ? { ...s, mode: 'menu' } : null);
+  };
+  const sendTradeOffer = (itemId: string) => {
+    const sess = interactSessionRef.current;
+    if (!sess || !channelRef.current) return;
+    channelRef.current.send({ type: 'broadcast', event: 'interact_trade_offer', payload: { from: selfRef.current.id, to: sess.peer.id, itemId } });
+  };
+  const confirmTrade = () => {
+    const sess = interactSessionRef.current;
+    if (!sess || !myTradeItem || !channelRef.current) return;
+    myTradeConfirmedRef.current = true;
+    setMyTradeConfirmed(true);
+    channelRef.current.send({ type: 'broadcast', event: 'interact_trade_accept', payload: { from: selfRef.current.id, to: sess.peer.id } });
+    if (theirTradeConfirmedRef.current && theirTradeOfferRef.current) {
+      executeTrade(myTradeItem, theirTradeOfferRef.current);
+    }
+  };
+
   // You can build if: you're a mod, the owner, an open ("everyone") room, or a granted handle.
   const canBuild = canBuildIn(roomMeta, myOwnerId, myHandle, isMod);
   const locked = !canBuild;
@@ -741,6 +838,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const switchRoom = (def: RoomDef) => {
     setShowRooms(false); if (def.slug === room) return;
+    closeInteract(false);
     const sp = planSpawn(planById(def.plan));
     const me = selfRef.current; me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = []; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
@@ -1416,6 +1514,60 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'delcurated' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { delCuratedRef.current.add(id); decorRef.current = decorRef.current.filter(d => d.id !== id); rebuildHeight(); } })   // admin removed a baked-in piece
         .on('broadcast', { event: 'emote' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || id === me.id) return; const r = remotesRef.current.get(id); if (r) { r.emote = pl.em ? String(pl.em) : null; r.emoteAf = 0; } })
         .on('broadcast', { event: 'leave' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id && remotesRef.current.delete(id)) setPopulation(remotesRef.current.size + 1); })   // someone left/refreshed → drop them now (don't wait for presence timeout)
+        .on('broadcast', { event: 'interact_req' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id || interactSessionRef.current) return;
+          setInteractRequest({ id: String(pl.from ?? ''), handle: String(pl.handle ?? '???') });
+        })
+        .on('broadcast', { event: 'interact_res' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const peer = { id: String(pl.from ?? ''), handle: String(pl.handle ?? '???') };
+          setInteractWaiting(false);
+          if (Boolean(pl.accept)) {
+            const sess = { peer, mode: 'menu' as const };
+            setInteractSession(sess); interactSessionRef.current = sess;
+          } else {
+            setInteractPrompt(null);
+            flashHint(`${peer.handle} declined.`);
+          }
+        })
+        .on('broadcast', { event: 'interact_close' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const fromHandle = remotesRef.current.get(String(pl.from ?? ''))?.handle ?? String(pl.from ?? 'Someone');
+          closeInteract(false);
+          flashHint(`${fromHandle} ended the interaction.`);
+        })
+        .on('broadcast', { event: 'interact_chat' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const text = String(pl.text ?? ''); const handle = String(pl.handle ?? '???');
+          if (!text) return;
+          setPrivateMsgs(prev => [...prev, { handle, text, mine: false }]);
+        })
+        .on('broadcast', { event: 'interact_gift' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const itemId = String(pl.itemId ?? ''); const fromHandle = String(pl.handle ?? '???');
+          const item = itemById(itemId); if (!item) return;
+          grantItem(itemId);
+          flashHint(`${fromHandle} gifted you ${item.emoji} ${item.name}!`);
+        })
+        .on('broadcast', { event: 'interact_trade_offer' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const itemId = String(pl.itemId ?? ''); if (!itemById(itemId)) return;
+          setTheirTradeOffer(itemId); theirTradeOfferRef.current = itemId;
+        })
+        .on('broadcast', { event: 'interact_trade_accept' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          theirTradeConfirmedRef.current = true; setTheirTradeConfirmed(true);
+          if (myTradeConfirmedRef.current && myTradeItemRef.current && theirTradeOfferRef.current) {
+            executeTrade(myTradeItemRef.current, theirTradeOfferRef.current);
+          }
+        })
         .subscribe(async status => {
           if (!alive) return;
           joinedRef.current = status === 'SUBSCRIBED';
@@ -2033,6 +2185,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         return;
       }
       if (editSelRef.current) { setEditSel(null); return; }
+    }
+    // Clicking a tile occupied by another player offers interaction (not in tutorial or decor mode).
+    if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt) {
+      for (const [rid, remote] of remotesRef.current) {
+        if (Math.round(remote.fx) === gx && Math.round(remote.fy) === gy) {
+          setInteractPrompt({ id: rid, handle: remote.handle });
+          return;
+        }
+      }
     }
     // Portals aren't tapped — you WALK onto them (see the movement loop). Tapping a portal tile just paths you there.
     const me = selfRef.current;
@@ -3057,6 +3218,174 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <style>{`@keyframes rwd-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}@keyframes rwd-pop{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}@keyframes rwd-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}`}</style>
         </div>
       ); })()}
+
+      {/* ── Interaction: initiator prompt "Interact with X?" ── */}
+      {interactPrompt && !interactWaiting && !interactSession && (
+        <div className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto w-64 bg-black/90 border border-white/20 shadow-2xl p-5 text-center">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-white/50 mb-1">Interact with</p>
+            <p className="font-mono font-bold text-white text-base mb-4">{interactPrompt.handle}</p>
+            <div className="flex gap-2">
+              <button onClick={sendInteractRequest} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors active:scale-95">Yes</button>
+              <button onClick={() => setInteractPrompt(null)} className="flex-1 border border-white/20 text-white/50 hover:text-white text-[11px] uppercase tracking-widest py-2.5 active:scale-95">No</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Interaction: waiting for response ── */}
+      {interactWaiting && (
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[80] flex items-center gap-3 bg-black/80 border border-white/15 px-4 py-2 pointer-events-auto">
+          <span className="font-mono text-[11px] text-white/60 uppercase tracking-widest">Waiting for {interactPrompt?.handle}…</span>
+          <button onClick={() => { setInteractWaiting(false); setInteractPrompt(null); }} className="text-white/40 hover:text-white text-sm leading-none">✕</button>
+        </div>
+      )}
+
+      {/* ── Interaction: incoming request ── */}
+      {interactRequest && !interactSession && (
+        <div className="absolute inset-0 z-[80] flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto w-64 bg-black/90 border border-[#00cfff]/40 shadow-2xl p-5 text-center">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#00cfff]/70 mb-1">wants to interact</p>
+            <p className="font-mono font-bold text-white text-base mb-4">{interactRequest.handle}</p>
+            <div className="flex gap-2">
+              <button onClick={acceptInteract} className="flex-1 bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors active:scale-95">Yes</button>
+              <button onClick={declineInteract} className="flex-1 border border-white/20 text-white/50 hover:text-white text-[11px] uppercase tracking-widest py-2.5 active:scale-95">No</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Interaction: active session (menu / chat / gift / trade) ── */}
+      {interactSession && (() => {
+        const { peer, mode } = interactSession;
+        const myOwnedItems = ITEMS.filter(it => itemCount(it.id) > 0);
+        const theirItem = theirTradeOffer ? itemById(theirTradeOffer) : null;
+        const myPickedItem = myTradeItem ? itemById(myTradeItem) : null;
+        return (
+          <div className="absolute inset-0 z-[80] flex items-end sm:items-center justify-center pointer-events-none" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}>
+            <div className="absolute inset-0 bg-black/50 pointer-events-auto" onClick={() => closeInteract()} />
+            <div className="pointer-events-auto relative w-full max-w-sm mx-4 bg-black/95 border border-white/20 shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
+                {mode !== 'menu' && (
+                  <button onClick={() => setInteractSession(s => s ? { ...s, mode: 'menu' } : null)} className="text-white/40 hover:text-white text-xs font-mono mr-1">←</button>
+                )}
+                <span className="flex-1 font-mono text-[11px] uppercase tracking-widest text-white/60 truncate">
+                  {mode === 'menu' ? peer.handle : mode === 'chat' ? `Chat · ${peer.handle}` : mode === 'gift' ? `Gift to ${peer.handle}` : `Trade with ${peer.handle}`}
+                </span>
+                <button onClick={() => closeInteract()} className="text-white/40 hover:text-white text-sm leading-none">✕</button>
+              </div>
+
+              {/* Menu */}
+              {mode === 'menu' && (
+                <div className="p-4 flex flex-col gap-2">
+                  <button onClick={() => setInteractSession(s => s ? { ...s, mode: 'chat' } : null)} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors text-left px-4">💬  Chat</button>
+                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setInteractSession(s => s ? { ...s, mode: 'gift' } : null); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors text-left px-4">🎁  Gift</button>
+                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setTheirTradeOffer(null); theirTradeOfferRef.current = null; setMyTradeConfirmed(false); myTradeConfirmedRef.current = false; setTheirTradeConfirmed(false); theirTradeConfirmedRef.current = false; setInteractSession(s => s ? { ...s, mode: 'trade' } : null); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors text-left px-4">⇄  Trade</button>
+                </div>
+              )}
+
+              {/* Private chat */}
+              {mode === 'chat' && (
+                <div className="flex flex-col" style={{ height: '18rem' }}>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+                    {privateMsgs.length === 0 && <p className="text-white/25 text-[11px] font-mono text-center mt-10">Say something to {peer.handle}</p>}
+                    {privateMsgs.map((m, i) => (
+                      <div key={i} className={`flex flex-col gap-0.5 ${m.mine ? 'items-end' : 'items-start'}`}>
+                        <span className="font-mono text-[9px] text-white/35 uppercase">{m.mine ? 'you' : m.handle}</span>
+                        <span className={`font-mono text-xs px-3 py-1.5 max-w-[80%] break-words ${m.mine ? 'bg-[#00cfff]/20 text-white' : 'bg-white/10 text-white'}`}>{m.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <form className="flex border-t border-white/10" onSubmit={sendPrivateMsg}>
+                    <input value={privateInput} onChange={e => setPrivateInput(e.target.value)} placeholder={`Message ${peer.handle}…`} maxLength={300} className="flex-1 bg-transparent px-3 py-2.5 text-xs font-mono text-white placeholder-white/25 outline-none" />
+                    <button type="submit" className="px-4 text-[#00cfff] text-xs font-mono hover:text-white transition-colors">Send</button>
+                  </form>
+                </div>
+              )}
+
+              {/* Gift */}
+              {mode === 'gift' && (
+                <div className="p-4">
+                  {myOwnedItems.length === 0 ? (
+                    <p className="text-white/40 text-xs font-mono text-center py-8">You have no items to gift</p>
+                  ) : (
+                    <>
+                      <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-3">Select an item</p>
+                      <div className="space-y-1.5 max-h-44 overflow-y-auto mb-3">
+                        {myOwnedItems.map(it => (
+                          <button key={it.id} onClick={() => setMyTradeItem(t => t === it.id ? null : it.id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 border text-left transition-colors ${myTradeItem === it.id ? 'border-[#00cfff] bg-[#00cfff]/10' : 'border-white/10 hover:border-white/30'}`}>
+                            <span className="text-xl leading-none">{it.emoji}</span>
+                            <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
+                            <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={sendGift} disabled={!myTradeItem}
+                        className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
+                        Gift ▸
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Trade */}
+              {mode === 'trade' && (
+                <div className="p-4 space-y-3">
+                  <div>
+                    <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-2">Your offer</p>
+                    {myPickedItem ? (
+                      <div className="flex items-center gap-3 px-3 py-2.5 border border-[#00cfff]/40 bg-[#00cfff]/5">
+                        <span className="text-xl leading-none">{myPickedItem.emoji}</span>
+                        <span className="flex-1 font-mono text-xs text-white">{myPickedItem.name}</span>
+                        {!myTradeConfirmed && <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; }} className="text-white/30 hover:text-white text-xs">✕</button>}
+                        {myTradeConfirmed && <span className="font-mono text-[10px] text-[#00cfff]">✓</span>}
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-28 overflow-y-auto">
+                        {myOwnedItems.length === 0 ? (
+                          <p className="text-white/30 text-xs font-mono text-center py-4">No items to offer</p>
+                        ) : myOwnedItems.map(it => (
+                          <button key={it.id} onClick={() => { setMyTradeItem(it.id); myTradeItemRef.current = it.id; sendTradeOffer(it.id); }}
+                            className="w-full flex items-center gap-3 px-3 py-2 border border-white/10 hover:border-white/30 text-left transition-colors">
+                            <span className="text-lg leading-none">{it.emoji}</span>
+                            <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
+                            <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-2">Their offer</p>
+                    {theirItem ? (
+                      <div className="flex items-center gap-3 px-3 py-2.5 border border-white/20 bg-white/5">
+                        <span className="text-xl leading-none">{theirItem.emoji}</span>
+                        <span className="flex-1 font-mono text-xs text-white">{theirItem.name}</span>
+                        {theirTradeConfirmed && <span className="font-mono text-[10px] text-[#00cfff]">✓ confirmed</span>}
+                      </div>
+                    ) : (
+                      <div className="h-11 flex items-center justify-center border border-white/5">
+                        <span className="text-white/25 text-[11px] font-mono">Waiting for {peer.handle}…</span>
+                      </div>
+                    )}
+                  </div>
+                  {myTradeConfirmed ? (
+                    <p className="text-center text-[11px] font-mono text-[#00cfff]/70">Waiting for {peer.handle} to confirm…</p>
+                  ) : (
+                    <button onClick={confirmTrade} disabled={!myTradeItem || !theirTradeOffer}
+                      className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
+                      Confirm Trade ▸
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <MenuModal open={menuOpen} onClose={() => setMenuOpen(false)} />
 

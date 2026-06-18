@@ -224,6 +224,11 @@ export function consumeItem(id: string): boolean {
   const w = getWallet(); const n = w.items[id] || 0; if (n < 1) return false;
   if (n <= 1) delete w.items[id]; else w.items[id] = n - 1; save(w); return true;
 }
+// Remove one unit of an item from wallet regardless of type — for gifting and trading.
+export function takeItem(id: string): boolean {
+  const w = getWallet(); const n = w.items[id] || 0; if (n < 1) return false;
+  if (n <= 1) delete w.items[id]; else w.items[id] = n - 1; save(w); return true;
+}
 export function totalItemCount(): number { const w = getWallet(); return Object.values(w.items).reduce((s, n) => s + n, 0); }
 
 // React hook: live wallet that re-renders on any change.
