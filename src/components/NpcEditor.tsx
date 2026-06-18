@@ -126,7 +126,7 @@ export const NpcEditor: React.FC<{
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={place} className="flex-1 bg-[#ffb84d] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Place NPC ▸</button>
+          <button onClick={place} className="flex-1 bg-[#ffb84d] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">{initial ? 'Update NPC ▸' : 'Place NPC ▸'}</button>
           <button onClick={onClose} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
         </div>
       </div>

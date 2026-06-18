@@ -540,6 +540,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [npcEditor, setNpcEditor] = useState(false);
   const [placeNpc, setPlaceNpc] = useState(false);
   const pendingNpcRef = useRef<NpcData | null>(null);
+  const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
   const [paintMat, setPaintMat] = useState(2);       // material to paint (2 = grass); -1 = clear to default
   const paintMatRef = useRef(2);
   useEffect(() => { paintMatRef.current = paintMat; }, [paintMat]);
@@ -600,7 +601,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); setEditingNpcId(null); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -1316,6 +1317,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
     setPlaceNpc(false); pendingNpcRef.current = null; flashHint(`${d.n} placed ☻`);
   };
+  const updateNpc = (id: string, d: NpcData) => {
+    const existing = placedNpcsRef.current.find(p => p.id === id); if (!existing) return;
+    existing.data = d; rebuildNpcs();
+    const kind = encodeNpc(d);
+    supabase?.from('room_items').update({ kind }).eq('id', id).then(undefined, () => {});
+    channelRef.current?.send({ type: 'broadcast', event: 'npcupdate', payload: { id, kind } });
+    flashHint(`${d.n} updated ☻`);
+  };
   const openNpcEditor = () => { setNpcEditor(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); };
   // Arm the next tile-tap to drop a game event: a Play trigger (proximity cabinet) or a Set event
   // (retargets this room's machines). The chosen rules ride along (plumbing only for now).
@@ -1534,6 +1543,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'move' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const it = itemsRef.current.find(i => i.id === String(pl?.id ?? '')); if (it) { it.gx = Number(pl.gx); it.gy = Number(pl.gy); rebuildHeight(); } })
         .on('broadcast', { event: 'npc' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || placedNpcsRef.current.some(p => p.id === id)) return; const nd = decodeNpc(String(pl.kind)); if (nd) { placedNpcsRef.current.push({ id, gx: Number(pl.x), gy: Number(pl.y), data: nd }); rebuildNpcs(); } })
         .on('broadcast', { event: 'npcdel' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== id); rebuildNpcs(); } })
+        .on('broadcast', { event: 'npcupdate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const nd = decodeNpc(String(pl?.kind ?? '')); const existing = placedNpcsRef.current.find(p => p.id === id); if (existing && nd) { existing.data = nd; rebuildNpcs(); } })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
@@ -2202,6 +2212,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     if (sTriggerMode) { const k = `${gx}_${gy}`; setSTriggerTiles(cur => cur.includes(k) ? cur.filter(t => t !== k) : [...cur, k]); return; }
     if (placeLore) { placeTileLoreAt(gx, gy); return; }
+    // In decorate mode, clicking an existing placed NPC opens the editor to edit it (remove mode deletes instead).
+    if (decorOpen && !removeMode) {
+      const existingNpc = placedNpcsRef.current.find(p => p.gx === gx && p.gy === gy);
+      if (existingNpc) { setEditingNpcId(existingNpc.id); pendingNpcRef.current = existingNpc.data; openNpcEditor(); return; }
+    }
     if (placeNpc) { placeNpcAt(gx, gy); return; }
     if (tileMode) { paintTile(gx, gy); startPaintDrag(e, null); return; }                                 // admin floor-paint (drag to sweep)
     if (placingPrefab) { placePrefab(placingPrefab, gx, gy); return; }
@@ -3079,8 +3094,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </div>
       )}
 
-      <NpcEditor open={npcEditor} onClose={() => setNpcEditor(false)}
-        onPlace={d => { pendingNpcRef.current = d; setNpcEditor(false); setPlaceNpc(true); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setEditSel(null); flashHint('Tap a tile to drop the NPC ☻'); }} />
+      <NpcEditor open={npcEditor} initial={editingNpcId ? pendingNpcRef.current : null}
+        onClose={() => { setNpcEditor(false); setEditingNpcId(null); }}
+        onPlace={d => {
+          if (editingNpcId) {
+            updateNpc(editingNpcId, d); setEditingNpcId(null); setNpcEditor(false);
+          } else {
+            pendingNpcRef.current = d; setNpcEditor(false); setPlaceNpc(true);
+            setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setEditSel(null);
+            flashHint('Tap a tile to drop the NPC ☻');
+          }
+        }} />
 
       {portalMaker && (
         <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setPortalMaker(false)}>
