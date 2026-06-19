@@ -526,6 +526,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
   const koUntilRef = useRef(0);
   const lastAttackRef = useRef(0);             // weapon-cooldown gate
+  const swingWeaponRef = useRef<() => void>(() => {});   // F key / punch button → radius swing
   const dmgFxRef = useRef<{ fx: number; fy: number; z: number; text: string; color: string; life: number }[]>([]);   // floating damage numbers (grid-anchored)
   const projRef = useRef<{ fx0: number; fy0: number; z0: number; fx1: number; fy1: number; z1: number; life: number; max: number; color: string }[]>([]);   // magic bolts in flight
   const broadcastHPRef = useRef<() => void>(() => {});
@@ -549,6 +550,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const iv = setInterval(() => { const h = getHP(); setSelfHp(prev => (prev.hp !== h.hp || prev.absorb !== h.absorb || prev.max !== h.max) ? h : prev); }, 1500);
     return () => clearInterval(iv);
   }, [roomMeta.combat]);
+  // F (anywhere, not while typing) → swing your weapon at everyone in reach. Wired once; reads live state via ref.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'f' && e.key !== 'F' || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (!roomMetaRef.current.combat) return;
+      e.preventDefault();
+      swingWeaponRef.current?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); };
   useEffect(() => { if (showRooms) refreshRoomLists(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showRooms]);
   // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
@@ -1036,23 +1050,33 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       respawnSelf();
     }
   };
-  // I tapped a player in a combat room → swing if they're in range, else walk toward them.
-  const attackPlayer = (targetId: string, target: Avatar) => {
+  // Swing my equipped weapon (F key / punch button). No aiming: hits EVERY player within reach — a
+  // radius, not a direction. Fists reach 1 tile; weapons reach further (weapon.range). Open PvP.
+  const swingWeapon = () => {
     const me = selfRef.current;
-    if (koUntilRef.current > Date.now()) return;
-    const tgx = clampTile(target.fx), tgy = clampTile(target.fy);
+    if (!roomMetaRef.current.combat) return;
+    if (koUntilRef.current > Date.now()) return;              // can't swing while knocked out
     const wp = equippedWeaponSpec();
-    if (tileDist(clampTile(me.fx), clampTile(me.fy), tgx, tgy) > wp.range) { walkAdjacentTo(tgx, tgy); return; }
     const now = Date.now();
-    if (now - lastAttackRef.current < wp.cooldownMs) return;   // weapon still on cooldown
+    if (now - lastAttackRef.current < wp.cooldownMs) return;  // weapon still on cooldown
     lastAttackRef.current = now;
-    me.attackUntil = now + 280;
+    me.attackUntil = now + 280;                               // the swing animates even on a whiff
     musicRef.current?.footstep();
-    channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: targetId, wp: wp.id, style: wp.style } });
-    if (wp.style === 'magic') {
-      projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: target.fx, fy1: target.fy, z1: target.z + 0.4, life: 18, max: 18, color: '#b98cff' });
-    }
+    const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
+    remotesRef.current.forEach((r, rid) => {
+      if (r.koUntil && r.koUntil > now) return;               // skip players already down
+      if (tileDist(mgx, mgy, clampTile(r.fx), clampTile(r.fy)) > wp.range) return;   // out of reach
+      channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style } });
+      // Optimistic local prediction: drop their bar + flash NOW instead of after the hp round-trip.
+      // The victim is authoritative — their 'hp' broadcast reconciles this a moment later.
+      if (r.hp != null) r.hp = Math.max(0, r.hp - wp.damage);
+      r.hitUntil = now + 220;
+      if (wp.style === 'magic') {
+        projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 18, max: 18, color: '#b98cff' });
+      }
+    });
   };
+  swingWeaponRef.current = swingWeapon;
 
   const executeTrade = (my: TradeOffer, their: TradeOffer) => {
     let gave = false;
@@ -2696,12 +2720,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (koUntilRef.current > Date.now()) return;   // knocked out — no input until you respawn
     const { gx, gy } = evtTile(e);
     if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
-    // COMBAT — in a PvP room, tapping another player swings your equipped weapon (open PvP, no consent).
-    if (roomMetaRef.current.combat && !tutorial && !decorOpen && !placingKind && !removeMode && !rotateMode && !tileMode) {
-      for (const [rid, remote] of remotesRef.current) {
-        if (Math.round(remote.fx) === gx && Math.round(remote.fy) === gy) { attackPlayer(rid, remote); return; }
-      }
-    }
+    // COMBAT — in a PvP room there's no tap-targeting: you walk with taps (to get in reach) and swing
+    // with F / the punch button, which hits everyone within your weapon's radius. So taps fall through
+    // to normal movement below.
     // Hidden easter egg — the wall at the top-centre of the Terminal room pays out, once.
     // Requires the player to be adjacent (Chebyshev ≤ 1); clicking from afar falls through
     // to the solid-tile redirect so they walk up first.
@@ -2930,6 +2951,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
             </span>
             <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
+            <button
+              onPointerDown={(e) => { e.preventDefault(); swingWeaponRef.current?.(); }}
+              title="Hit everyone in reach (or press F)"
+              className="ml-1 text-sm leading-none border border-brandRed/50 bg-black/60 text-white px-2 py-1 hover:bg-brandRed hover:text-black active:scale-90 transition-all select-none"
+            >👊 <span className="text-[9px] font-mono uppercase tracking-wider opacity-70">F</span></button>
           </div>
         )}
       </div>
