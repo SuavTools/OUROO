@@ -31,7 +31,7 @@ import { InventoryModal } from '@/components/InventoryModal';
 import { CatIcon, FurniSprite, PrefabThumb } from '@/components/UiIcon';
 import { PREFABS, PREFAB_GROUPS, type Prefab } from '@/lib/prefabs';
 import { drawFurniSprite, effSpan } from '@/lib/furniRender';
-import { type RoomRow, fetchRooms, fetchMyRooms, roomByCode, roomBySlug, setRoomPublic, createRoom, deleteRoom, updateRoomPerms } from '@/lib/rooms';
+import { type RoomRow, fetchRooms, fetchMyRooms, fetchDiscoveredRooms, roomByCode, roomBySlug, setRoomPublic, createRoom, deleteRoom, updateRoomPerms, recordRoomVisit } from '@/lib/rooms';
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
 import { RoomMusic } from '@/lib/roomMusic';
 import { Oracle } from '@/components/Oracle';
@@ -60,7 +60,7 @@ const wrapBubble = (text: string): string[] => {
 // import can't insert unbounded rows. Place as much as you like.
 const MAX_ITEMS = 100000;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean; discoverable?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
 // ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
@@ -524,6 +524,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [permsList, setPermsList] = useState<string[]>([]);
   const [permsHandle, setPermsHandle] = useState('');
   const [permsCombat, setPermsCombat] = useState(false);   // PvP toggle (mod-gated) in the perms modal
+  const [permsDiscoverable, setPermsDiscoverable] = useState(false);   // discoverable toggle in perms modal
   // ---- combat / hp ----
   const [selfHp, setSelfHp] = useState<{ hp: number; max: number; absorb: number }>(() => ({ hp: MAX_HP, max: MAX_HP, absorb: 0 }));
   const [koUntil, setKoUntil] = useState(0);   // self knockout: WASTED overlay + respawn countdown
@@ -567,7 +568,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); };
+  const [discoveredRooms, setDiscoveredRooms] = useState<RoomRow[]>([]);
+  const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); fetchDiscoveredRooms().then(setDiscoveredRooms); };
   useEffect(() => { if (showRooms) refreshRoomLists(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showRooms]);
   // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
   useEffect(() => {
@@ -1259,7 +1261,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const finishCharacter = () => { setCharDone(true); try { localStorage.setItem('ouroo_tut_char', '1'); } catch { /* ignore */ } };
   // "Enter the simulation?" → fade to white → Your Room.
   const enterSimulation = () => { setSimConfirm(false); setSimFade(true); setTimeout(() => { setSimFade(false); onSetStepRef.current?.('yourroom'); }, 1200); };
-  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan, outdoor: OUTDOOR_SLUGS.has(r.slug), combat: r.combat_enabled });
+  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan, outdoor: OUTDOOR_SLUGS.has(r.slug), combat: r.combat_enabled, discoverable: r.discoverable });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
     const res = await createRoom(newRoomName, !newRoomPrivate, newRoomPlan);
@@ -1335,7 +1337,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (room === r.slug) switchRoom(roomOf('town'));
     refreshRoomLists();
   };
-  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); setPermsCombat(r.combat_enabled ?? false); };
+  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); setPermsCombat(r.combat_enabled ?? false); setPermsDiscoverable(r.discoverable ?? false); };
   const addPermHandle = () => {
     const h = permsHandle.trim(); if (!h) return;
     if (!permsList.some(x => x.toLowerCase() === h.toLowerCase())) setPermsList(l => [...l, h]);
@@ -1344,12 +1346,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const savePerms = async () => {
     if (!permsRoom) return;
     const list = Array.from(new Set(permsList.map(h => h.trim()).filter(Boolean)));
-    const ok = await updateRoomPerms(permsRoom.slug, permsAll, list, permsCombat);
+    const ok = await updateRoomPerms(permsRoom.slug, permsAll, list, permsCombat, permsDiscoverable);
     if (!ok) { flashHint('Failed to save permissions'); return; }
     if (permsPublic !== permsRoom.public) await setRoomPublic(permsRoom.slug, permsPublic);   // flip public ↔ invite-only
     // Reflect immediately in local lists + the live room if it's the one open.
-    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic, combat_enabled: permsCombat } : r));
-    if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list, combat: permsCombat }));
+    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic, combat_enabled: permsCombat, discoverable: permsDiscoverable } : r));
+    if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list, combat: permsCombat, discoverable: permsDiscoverable }));
     refreshRoomLists();   // public flag changed → refresh the public-room list (portal picker + browser)
     setPermsRoom(null); flashHint('Permissions saved ✓');
   };
@@ -2074,6 +2076,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }).catch(() => {});
             if (!alive) return;
             ingestItemRows(await fetchAllRoomItems(sb, room));
+            if (roomMetaRef.current.discoverable) recordRoomVisit(room).catch(() => {});
           } else {
             setConnected(false);
             if (alive && (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')) {   // self-heal: rebuild the channel
@@ -3590,7 +3593,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       {showRooms && (() => {
         const myKeys = new Set(myRooms.map(r => r.slug));
-        const community = personalRooms.filter(r => r.owner !== myOwnerId && !myKeys.has(r.slug));
+        const community = personalRooms.filter(r => r.owner !== myOwnerId && !myKeys.has(r.slug) && !r.discoverable);
+        const discovered = discoveredRooms.filter(r => r.owner !== myOwnerId && !myKeys.has(r.slug));
         const roomBtn = (d: RoomDef, tag?: string) => (
           <button key={d.slug} onClick={() => switchRoom(d)} className={`flex items-center gap-3 p-3 border transition-colors ${d.slug === room ? 'border-white bg-white/5' : 'border-white/15 hover:border-white/40'}`}>
             <span className="w-4 h-4 rounded-full shrink-0" style={{ background: d.accent, boxShadow: `0 0 10px ${d.accent}` }} />
@@ -3631,6 +3635,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {community.length > 0 && (<>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Community rooms</p>
                 <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{community.map(r => roomBtn(roomDefOf(r)))}</div>
+              </>)}
+
+              {discovered.length > 0 && (<>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[#cc44ff]/70 mt-5 mb-2">Discovered rooms</p>
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{discovered.map(r => roomBtn(roomDefOf(r)))}</div>
               </>)}
 
               <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Join with a code</p>
@@ -3689,6 +3698,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <span className="text-sm text-white">⚔ Combat zone<br /><span className="text-[11px] text-white/45">Players can attack &amp; loot each other here (5% of Cristais + items on a knockout). Mods only.</span></span>
               </label>
             )}
+            <label className="flex items-center gap-3 p-3 border border-[#cc44ff]/30 cursor-pointer hover:border-[#cc44ff]/55 mt-2">
+              <input type="checkbox" checked={permsDiscoverable} onChange={e => setPermsDiscoverable(e.target.checked)} className="accent-[#cc44ff] w-4 h-4" />
+              <span className="text-sm text-white">✦ Discoverable<br /><span className="text-[11px] text-white/45">Hidden from the community browser until a player physically enters the room (via portal or invite code).</span></span>
+            </label>
 
             <p className={`text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2 ${permsAll ? 'opacity-40' : ''}`}>People with permission</p>
             <div className={`flex flex-col gap-2 ${permsAll ? 'opacity-40 pointer-events-none' : ''}`}>

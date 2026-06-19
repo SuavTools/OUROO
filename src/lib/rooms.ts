@@ -5,14 +5,14 @@ import { supabase } from './supabase';
 import { getAuthIdentity } from './auth';
 import { getLocalPlayer } from './leaderboard';
 
-export type RoomRow = { slug: string; name: string; owner: string; accent: string; floor: string; public: boolean; code: string; build_all: boolean; rights: string[]; plan: string; combat_enabled: boolean };
+export type RoomRow = { slug: string; name: string; owner: string; accent: string; floor: string; public: boolean; code: string; build_all: boolean; rights: string[]; plan: string; combat_enabled: boolean; discoverable: boolean };
 
 const ACCENTS = ['#00cfff', '#ff44aa', '#ffd23a', '#1ED760', '#cc44ff', '#ff6a3a'];
 // `*` (not an explicit column list) so a row still loads if the optional `combat_enabled` column
 // hasn't been migrated in yet — norm() defaults it to false. Old rooms therefore stay safe.
 const SEL = '*';
 // Normalise a raw row: rights/plan/combat_enabled may come back null (pre-migration) — always expose sane values.
-const norm = (r: Record<string, unknown>): RoomRow => ({ ...(r as RoomRow), rights: Array.isArray(r.rights) ? (r.rights as string[]) : [], plan: typeof r.plan === 'string' && r.plan ? (r.plan as string) : 'salao', combat_enabled: !!r.combat_enabled });
+const norm = (r: Record<string, unknown>): RoomRow => ({ ...(r as RoomRow), rights: Array.isArray(r.rights) ? (r.rights as string[]) : [], plan: typeof r.plan === 'string' && r.plan ? (r.plan as string) : 'salao', combat_enabled: !!r.combat_enabled, discoverable: !!r.discoverable });
 // Short shareable code (no ambiguous chars) for inviting people to a room.
 const newCode = () => Array.from({ length: 6 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
 
@@ -65,10 +65,10 @@ export async function createRoom(name: string, isPublic = true, plan = 'salao'):
   if (!supabase) return { ok: false, error: 'Offline.' };
   const oid = await ownerId();
   const rnd = (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}${Math.random()}`).replace(/[^a-z0-9]/gi, '').slice(0, 12);
-  const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'My Room', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic, code: newCode(), build_all: false, rights: [], plan, combat_enabled: false };
-  // Don't insert combat_enabled — let the DB default fill it. This keeps room creation working even if
-  // the combat migration hasn't been applied yet (the column would otherwise be rejected).
-  const { combat_enabled: _omit, ...insertRow } = room;
+  const room: RoomRow = { slug: `u_${rnd}`, name: name.trim().slice(0, 24) || 'My Room', owner: oid, accent: ACCENTS[rnd.charCodeAt(0) % ACCENTS.length], floor: '#161628', public: isPublic, code: newCode(), build_all: false, rights: [], plan, combat_enabled: false, discoverable: false };
+  // Don't insert combat_enabled/discoverable — let DB defaults fill them. Keeps creation working
+  // even if these migrations haven't been applied yet (unknown columns would be rejected).
+  const { combat_enabled: _omit, discoverable: _omit2, ...insertRow } = room;
   const { error } = await supabase.from('rooms').insert(insertRow);
   if (error) {
     const m = error.message || '';
@@ -80,19 +80,39 @@ export async function createRoom(name: string, isPublic = true, plan = 'salao'):
 
 // Update a room's build permissions (owner-gated in the UI). `rights` = handles allowed to build.
 // `combat_enabled` flags the room as a PvP zone (mod-gated in the UI) — players can fight + loot there.
-export async function updateRoomPerms(slug: string, build_all: boolean, rights: string[], combat_enabled?: boolean): Promise<boolean> {
+// `discoverable` hides the room from the community browser until a player has physically entered it.
+export async function updateRoomPerms(slug: string, build_all: boolean, rights: string[], combat_enabled?: boolean, discoverable?: boolean): Promise<boolean> {
   if (!supabase) return false;
   const clean = Array.from(new Set(rights.map(h => h.trim()).filter(Boolean))).slice(0, 50);
   const patch: Record<string, unknown> = { build_all, rights: clean };
   if (combat_enabled !== undefined) patch.combat_enabled = combat_enabled;
+  if (discoverable !== undefined) patch.discoverable = discoverable;
   const { error } = await supabase.from('rooms').update(patch).eq('slug', slug);
   if (!error) return true;
-  // If the combat_enabled column isn't migrated in yet, still save the build permissions.
-  if (combat_enabled !== undefined && /column .* does not exist|combat_enabled|schema cache/i.test(error.message || '')) {
+  // If optional columns aren't migrated in yet, fall back to saving just build permissions.
+  if (/column .* does not exist|combat_enabled|discoverable|schema cache/i.test(error.message || '')) {
     const { error: e2 } = await supabase.from('rooms').update({ build_all, rights: clean }).eq('slug', slug);
     return !e2;
   }
   return false;
+}
+
+// Record that the current player has visited a discoverable room (first-visit only; idempotent).
+export async function recordRoomVisit(slug: string): Promise<void> {
+  if (!supabase) return;
+  const oid = await ownerId();
+  try { await supabase.from('room_visits').upsert([{ owner_id: oid, room_slug: slug }], { onConflict: 'owner_id,room_slug', ignoreDuplicates: true }); } catch { /* ignore */ }
+}
+
+// Fetch all discoverable rooms the current player has previously visited (for "Discovered Rooms" list).
+export async function fetchDiscoveredRooms(): Promise<RoomRow[]> {
+  if (!supabase) return [];
+  const oid = await ownerId();
+  const { data: visits } = await supabase.from('room_visits').select('room_slug').eq('owner_id', oid);
+  const slugs = (visits ?? []).map((v: Record<string, unknown>) => v.room_slug as string);
+  if (!slugs.length) return [];
+  const { data } = await supabase.from('rooms').select(SEL).in('slug', slugs).eq('discoverable', true);
+  return (data ?? []).map(norm);
 }
 
 // Delete a room and all its placed furniture (owner-gated in the UI).
