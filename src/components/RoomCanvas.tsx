@@ -92,7 +92,7 @@ const tutSlugFor = (step: string): string | null => (({ oracle: 't_oracle', arca
 // Secret/lore sectors are gone for now — the lore sequence is being rebuilt. Kept as an empty map so
 // player-made portals (which resolve public slugs / room codes) still compile.
 const SECRET_ROOMS: Record<string, RoomDef> = {};
-type Portal = { gx: number; gy: number; code: string; to: string; reward?: number; user?: boolean };
+type Portal = { gx: number; gy: number; code: string; to: string; reward?: number; user?: boolean; message?: string };
 // Curated portal-maze cleared — only player-made portals (stored as room_items) exist right now.
 const PORTALS: Record<string, Portal[]> = {};
 // ARCADE MACHINES — the games live INSIDE the world now. Walk CLOSE to a machine and a modal opens
@@ -269,7 +269,7 @@ const PlanThumb: React.FC<{ plan: RoomPlan; accent: string }> = ({ plan, accent 
 
 // Furni catalogue + economy helpers now live in @/lib/furni (shared with the inventory).
 // portalTo/portalCode ride along on PLAYER-PLACED portals (a teleporter that links to another room).
-type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[]; shopName?: string; shopTriggers?: Array<{gx: number; gy: number}> };
+type Item = { id: string; kind: string; gx: number; gy: number; dir?: number; elev?: number; createdBy?: string; portalTo?: string; portalCode?: string; portalHidden?: boolean; portalMessage?: string; gameId?: string; gameRules?: GameRules; gameHidden?: boolean; gameSet?: boolean; shopItems?: string[]; shopName?: string; shopTriggers?: Array<{gx: number; gy: number}> };
 // Direction + elevation persist inside the room_items `kind` text as `kind@dir^elev` (no migration).
 const encodeKind = (kind: string, dir: number, elev = 0) => `${kind}${dir ? `@${dir}` : ''}${elev ? `^${elev}` : ''}`;
 const decodeKind = (raw: string): { kind: string; dir: number; elev: number } => { const m = raw.match(/^([^@^]+)(?:@(\d+))?(?:\^(\d+(?:\.\d+)?))?$/); return m ? { kind: m[1], dir: m[2] ? (Number(m[2]) % 4 + 4) % 4 : 0, elev: m[3] ? Number(m[3]) : 0 } : { kind: raw, dir: 0, elev: 0 }; };
@@ -277,7 +277,11 @@ const decodeKind = (raw: string): { kind: string; dir: number; elev: number } =>
 //   `portal:<encoded dest>:<encoded access-code>[:1]`.  A trailing `:1` marks a HIDDEN trigger (no
 //   visible teleporter sprite — a disguised floor trigger). encodeURIComponent escapes any @ / ^ / :
 //   in the dest/code, so the segments stay clean; we hydrate it into a `teleporter` item with the link.
-const encodePortal = (to: string, code: string, hidden = false) => `portal:${encodeURIComponent(to)}:${encodeURIComponent(code)}${hidden ? ':1' : ''}`;
+const encodePortal = (to: string, code: string, hidden = false, message = '') => {
+  const base = `portal:${encodeURIComponent(to)}:${encodeURIComponent(code)}`;
+  if (!message) return `${base}${hidden ? ':1' : ''}`;
+  return `${base}:${hidden ? '1' : ''}:${encodeURIComponent(message)}`;
+};
 // GAME TRIGGERS — admin-placed game events, persisted in the SAME room_items table (no migration):
 //   `game:<gameId>:<rules>[:1]`     PLAY trigger: walk close → picker → launch <gameId> with <rules>.
 //                                   trailing `:1` = a HIDDEN cabinet (disguised floor trigger).
@@ -376,8 +380,8 @@ async function fetchAllRoomItems(sb: NonNullable<typeof supabase>, room: string)
 const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
 const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, createdBy: string): Item => {
   if (rawKind.startsWith('portal:')) {
-    const [, to = '', code = '', hidden = ''] = rawKind.split(':');
-    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: safeDecode(to), portalCode: safeDecode(code), portalHidden: hidden === '1' };
+    const [, to = '', code = '', hidden = '', msg = ''] = rawKind.split(':');
+    return { id, kind: 'teleporter', gx, gy, dir: 0, elev: 0, createdBy, portalTo: safeDecode(to), portalCode: safeDecode(code), portalHidden: hidden === '1', portalMessage: msg ? safeDecode(msg) : undefined };
   }
   if (rawKind.startsWith('setgame:')) {
     const [, gid = '', rules = ''] = rawKind.split(':');
@@ -662,6 +666,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
+  const [portalMessagePrompt, setPortalMessagePrompt] = useState<Portal | null>(null);   // message modal before portal travel
   const [machinePrompt, setMachinePrompt] = useState<Machine | null>(null);   // game picker when you walk close to an arcade machine
   // ── Tutorial in-room state ──
   const [tutLine, setTutLine] = useState(0);        // index into the current step's Oracle speech
@@ -888,10 +893,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [pmRoomCode, setPmRoomCode] = useState('');  // the destination room's invite code (when pmDest==='code')
   const [pmAccess, setPmAccess] = useState('');      // optional access code the next person must speak
   const [pmHidden, setPmHidden] = useState(false);   // disguised trigger — no visible teleporter sprite
+  const [pmMessage, setPmMessage] = useState('');    // optional message shown to the player before travel
   const makePortal = () => {
     const to = pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest;
     if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
-    setPlacingKind(encodePortal(to, pmAccess.trim(), pmHidden)); setRemoveMode(false); setRotateMode(false); setTileMode(false);
+    setPlacingKind(encodePortal(to, pmAccess.trim(), pmHidden, pmMessage.trim())); setRemoveMode(false); setRotateMode(false); setTileMode(false);
     setPortalMaker(false); flashHint(pmHidden ? 'Tap a tile to drop the hidden trigger ◌' : 'Tap a tile to drop the portal ✦');
   };
   // Ambient room music — the SUAV signal (generated, royalty-free; see lib/roomMusic). Off persists per device.
@@ -1257,7 +1263,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const c = (PORTALS[roomMetaRef.current.slug] ?? []).find(pt => pt.gx === gx && pt.gy === gy);
     if (c) return c;
     const items = itemsRef.current;   // scan back-to-front WITHOUT copying (runs while exploring; rooms can hold thousands)
-    for (let i = items.length - 1; i >= 0; i--) { const up = items[i]; if (up.portalTo && up.gx === gx && up.gy === gy) return { gx, gy, code: up.portalCode || '', to: up.portalTo, user: true }; }
+    for (let i = items.length - 1; i >= 0; i--) { const up = items[i]; if (up.portalTo && up.gx === gx && up.gy === gy) return { gx, gy, code: up.portalCode || '', to: up.portalTo, user: true, message: up.portalMessage }; }
     return null;
   };
   // Resolve a portal destination: a curated secret slug, a public room slug, or `code:<INVITE>` (any room).
@@ -1290,6 +1296,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // The movement loop is mounted once, so it must call the LATEST travelTo (fresh `room`/personalRooms) —
   // a stale closure compared def.slug against the INITIAL room, which silently no-op'd return-trip portals.
   const travelToRef = useRef(travelTo); useEffect(() => { travelToRef.current = travelTo; });
+  // Move the player off a portal tile to an adjacent walkable tile (used when they decline a message portal).
+  const nudgeOffPortal = (pt: Portal) => {
+    const me = selfRef.current;
+    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+      const nx = pt.gx + dx, ny = pt.gy + dy;
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+      const k = ny * GRID + nx;
+      if (!solidRef.current[k] && surfRef.current[k].length) { me.tx = nx; me.ty = ny; me.path = []; break; }
+    }
+    setPortalMessagePrompt(null);
+  };
   // Speak a portal's code → travel. (No code → handled directly on walk-on; see the movement loop.)
   const tryPortal = async () => {
     const p = portalPrompt; if (!p) return;
@@ -2112,7 +2129,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (ct !== portalTileRef.current) {   // only scan when our tile actually changes (not every frame)
           portalTileRef.current = ct;
           const pt = portalAtTile(cgx, cgy); const pk = pt ? `${pt.gx},${pt.gy}` : null;
-          if (pt && lastPortalKeyRef.current !== pk) { if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelToRef.current(pt); } }
+          if (pt && lastPortalKeyRef.current !== pk) { if (pt.message) { setPortalMessagePrompt(pt); } else if (pt.code) { setPortalPrompt(pt); setPortalCode(''); } else { travelToRef.current(pt); } }
           lastPortalKeyRef.current = pk;
           const nowObs = buildObscuredSet().has(ct);
           if (nowObs !== inObscuredRef.current) { inObscuredRef.current = nowObs; setInObscured(nowObs); }
@@ -3670,6 +3687,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         </div>
       )}
 
+      {portalMessagePrompt && (
+        <div className="absolute inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="w-full max-w-xs border border-[#cc66ff]/30 bg-black p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#cc66ff]">◎ portal message</p>
+            <p className="text-sm text-white/80 leading-relaxed whitespace-pre-line text-left">{portalMessagePrompt.message}</p>
+            <p className="text-[10px] uppercase tracking-widest text-white/40">Continue?</p>
+            <div className="flex gap-2">
+              <button onClick={() => { const p = portalMessagePrompt; setPortalMessagePrompt(null); if (p.code) { setPortalPrompt(p); setPortalCode(''); } else { travelToRef.current(p); } }}
+                className="flex-1 bg-[#cc66ff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Yes ▸</button>
+              <button onClick={() => nudgeOffPortal(portalMessagePrompt)}
+                className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">No</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {portalPrompt && (
         <div className="absolute inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => { setPortalPrompt(null); setPortalCode(''); }}>
           <div className="w-full max-w-xs border border-[#00cfff]/30 bg-black p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
@@ -3925,6 +3958,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <input type="checkbox" checked={pmHidden} onChange={e => setPmHidden(e.target.checked)} className="accent-[#cc66ff]" />
               Hidden trigger — no visible door (a disguised spot players have to find)
             </label>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Message <span className="text-white/25 normal-case tracking-normal">(optional — shown before travel with a Yes/No prompt)</span></p>
+              <textarea value={pmMessage} onChange={e => setPmMessage(e.target.value)} maxLength={300} placeholder="Leave blank for no message"
+                className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#cc66ff] resize-none" rows={3} />
+            </div>
             <div className="flex gap-2 pt-1">
               <button onClick={makePortal} className="flex-1 bg-[#cc66ff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Place portal ▸</button>
               <button onClick={() => setPortalMaker(false)} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
