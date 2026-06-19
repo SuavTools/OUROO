@@ -2106,15 +2106,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // Floor indicators (shadow + glow) snap to the actual surface level so they don't lerp through
       // platform side-face geometry while the body sprite smoothly transitions between elevations.
       const sy_floor = iso(a.fx, a.fy, a.lvl).sy + wade;
-      const planBase = Math.max(0, planRef.current[key(clampTile(a.fx), clampTile(a.fy))] ?? 0);
-      const elevated = a.lvl > planBase + 0.1;
-      const sy_ground = elevated ? iso(a.fx, a.fy, planBase).sy + wade : sy_floor;
       const pi = a.skinId && a.skinId.startsWith('person:') ? parsePerson(a.skinId) : null;
       const col = pi ? personPrimaryColor(pi) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
       const flying = isSelf && flyRef.current;   // Wings active → hover + aura + flapping wings (self only)
+      const planBase = flying ? Math.max(0, planRef.current[key(clampTile(a.fx), clampTile(a.fy))] ?? 0) : 0;
+      const sy_ground = flying ? iso(a.fx, a.fy, planBase).sy + wade : sy_floor;
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-      if (!elevated) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 18, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      if (!flying) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 18, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
       ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const em = a.emote ?? null;
       let bob: number, sway = 0, spin = 0, legFold = 0;
