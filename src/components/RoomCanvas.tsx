@@ -1867,7 +1867,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       framesRef.current++;
       const me = selfRef.current;
       let moving = false;
-      if (++speedCheckRef.current >= 30) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity(); const fa = getFlyActive(); flyRef.current = fa; if (fa !== flyingUiRef.current) { flyingUiRef.current = fa; setFlying(fa); } }
+      if (++speedCheckRef.current >= 30) {
+        speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity();
+        const fa = getFlyActive(); flyRef.current = fa;
+        if (fa !== flyingUiRef.current) {
+          flyingUiRef.current = fa; setFlying(fa);
+          if (!fa) {   // Wings expired mid-air → land on the surface below so you don't hang in the sky
+            const k = key(clampTile(me.fx), clampTile(me.fy)), s = surfRef.current[k];
+            me.lvl = s && s.length ? Math.max(...s) : Math.max(0, planLvl(clampTile(me.fx), clampTile(me.fy))); me.path = [];
+          }
+        }
+      }
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
         if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
@@ -2527,6 +2537,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const tx = gx + dx, ty = gy + dy;
       if (planLvl(tx, ty) >= 0) { const fp = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, tx, ty); if (fp && fp.length) { me.path = fp; return; } }
     }
+    // Wings: a plain tap flies you straight to that tile at your CURRENT altitude, gliding over furniture
+    // and walls. Tap where you want to be, then ▼ to land — no surface snapping, no solid-tile redirect.
+    if (flyRef.current) { const fp = flyPathTo(gx, gy); if (fp.length) me.path = fp; return; }
     // Clicking ON furniture/construction redirects to the nearest open tile instead of no-op'ing.
     // Exception: if the player is already inside an obscured area, don't eject them — just stay put.
     let dest = { gx, gy };
@@ -2549,26 +2562,43 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!reachable.length) return;
     me.path = [{ gx: tx, gy: ty, z: Math.max(...reachable) }];
   };
-  // Wings vertical command (▲/▼ pad): glide to the next walkable surface above (dir>0) or below (dir<0)
-  // the one we're on. Picks the smallest level-gap in that direction, breaking ties by nearest tile — so
-  // staying on the current column wins when it has a surface there, else we drift to the closest one. Floor
-  // by floor: each press lands us on the next deck, and me.lvl updates on arrival so repeats keep climbing.
+  // Wings vertical command (▲/▼ pad): FREE altitude. Each press rises/sinks exactly one level — mid-air
+  // hovering allowed, no snapping to surfaces. Up goes a few levels above the tallest build (open sky);
+  // down stops at the ground under you. Keeps any in-progress horizontal glide, just at the new height.
   const flyVert = (dir: number) => {
     if (!flyRef.current) return;
-    const me = selfRef.current; const surf = surfRef.current, S = solidRef.current;
-    const px = clampTile(me.fx), py = clampTile(me.fy), cur = me.lvl;
-    let best: { gx: number; gy: number; z: number; score: number } | null = null;
-    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
-      const k = key(gx, gy); if (S[k] || !surf[k].length) continue;
-      const dist = Math.max(Math.abs(gx - px), Math.abs(gy - py));
-      for (const z of surf[k]) {
-        if (dir > 0 ? z <= cur + 0.2 : z >= cur - 0.2) continue;   // wrong direction (or same level)
-        const score = Math.abs(z - cur) * 100 + dist;             // nearest level first, then nearest tile
-        if (!best || score < best.score) best = { gx, gy, z, score };
+    const me = selfRef.current;
+    const floor = Math.max(0, planLvl(clampTile(me.fx), clampTile(me.fy)));   // can't sink below the ground beneath you
+    const ceil = Math.ceil(peakRef.current) + 4;                              // a few levels of open sky above the tallest build
+    const z = Math.max(floor, Math.min(ceil, Math.round(me.lvl) + dir));      // free 1-level step, clamped to [ground, sky]
+    if (z === me.lvl) { flashHint(dir > 0 ? 'Already at max height' : 'Already on the ground'); return; }
+    me.lvl = z;                                          // change altitude in place; me.z lerps for a smooth rise/sink
+    for (const wp of me.path) wp.z = z;                  // keep flying horizontally, now at the new altitude
+  };
+  // Free-flight route while Wings is active: BFS over in-footprint tiles, ignoring surfaces, furniture and
+  // walls (you're airborne) — holds your current altitude the whole way so you glide over everything. Land
+  // by pressing ▼ to descend onto a roof/floor. Returns constant-z waypoints, or [] if unreachable/off-map.
+  const flyPathTo = (tx: number, ty: number) => {
+    const me = selfRef.current; const z = me.lvl;
+    const sx = clampTile(me.fx), sy = clampTile(me.fy);
+    if ((sx === tx && sy === ty) || planLvl(tx, ty) < 0) return [];
+    const startK = key(sx, sy); const prev = new Map<number, number>();
+    const seen = new Set([startK]); const q: number[] = [startK];
+    const N = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    while (q.length) {
+      const k = q.shift()!; const cx = k % GRID, cy = (k / GRID) | 0;
+      if (cx === tx && cy === ty) {
+        const path: { gx: number; gy: number; z: number }[] = []; let c = k;
+        while (c !== startK) { path.unshift({ gx: c % GRID, gy: (c / GRID) | 0, z }); c = prev.get(c)!; }
+        return path;
+      }
+      for (const [dx, dy] of N) {
+        const nx = cx + dx, ny = cy + dy; if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
+        const k2 = key(nx, ny); if (seen.has(k2) || planLvl(nx, ny) < 0) continue;   // stay over the room footprint
+        seen.add(k2); prev.set(k2, k); q.push(k2);
       }
     }
-    if (!best) { flashHint(dir > 0 ? 'Nothing higher to fly to' : 'Already at ground level'); return; }
-    me.path = [{ gx: best.gx, gy: best.gy, z: best.z }];
+    return [];
   };
   // ── Click-drag floor/carpet painting ──
   const isFloorPaint = (kind: string): boolean => { const d = defOf(kind); const [sw, sh] = d.span ?? [1, 1]; return !!d.walk && (d.h ?? 0) <= 1 && sw === 1 && sh === 1 && d.special !== 'stair'; };
