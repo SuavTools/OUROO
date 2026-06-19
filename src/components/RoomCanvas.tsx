@@ -511,6 +511,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [roomMeta, setRoomMeta] = useState<RoomDef>(roomOf(startSlug));   // current room's def (official or personal)
   const roomMetaRef = useRef<RoomDef>(roomMeta);
   const [showRooms, setShowRooms] = useState(false);
+  const [roomSearch, setRoomSearch] = useState('');
   const [personalRooms, setPersonalRooms] = useState<RoomRow[]>([]);
   const [myRooms, setMyRooms] = useState<RoomRow[]>([]);
   const [newRoomName, setNewRoomName] = useState('');
@@ -570,7 +571,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   }, []);
   const [discoveredRooms, setDiscoveredRooms] = useState<RoomRow[]>([]);
   const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); fetchDiscoveredRooms().then(setDiscoveredRooms); };
-  useEffect(() => { if (showRooms) refreshRoomLists(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showRooms]);
+  useEffect(() => { if (showRooms) { refreshRoomLists(); setRoomSearch(''); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showRooms]);
   // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
   useEffect(() => {
     const el = outerRef.current; if (!el) return;
@@ -3604,20 +3605,37 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </button>
         );
         const copyCode = (c: string) => { try { navigator.clipboard?.writeText(c); flashHint(`Code ${c} copied`); } catch { /* ignore */ } };
+        const q = roomSearch.trim().toLowerCase();
+        const matchName = (name: string) => name.toLowerCase().includes(q);
+        const filteredOfficial = ROOMS.filter(r => matchName(r.name));
+        const filteredTut = Object.values(TUT_ROOMS).filter(r => matchName(r.name));
+        const filteredMy = myRooms.filter(r => matchName(r.name));
+        const filteredCommunity = community.filter(r => matchName(r.name));
+        const filteredDiscovered = discovered.filter(r => matchName(r.name));
         return (
           <div className="absolute inset-0 z-50 bg-black/80 flex justify-center overflow-y-auto px-6 py-10" onClick={() => setShowRooms(false)}>
             <div className="w-full max-w-sm bg-black border border-white/15 p-5 h-fit" onClick={e => e.stopPropagation()}>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Official rooms</p>
-              <div className="flex flex-col gap-2">{ROOMS.map(r => roomBtn(r))}</div>
+              <input
+                autoFocus
+                value={roomSearch}
+                onChange={e => setRoomSearch(e.target.value)}
+                placeholder="Search rooms…"
+                className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#00cfff] mb-5"
+              />
 
-              {isMod && (<>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-[#1ED760]/70 mt-5 mb-2">Tutorial rooms · admin</p>
-                <div className="flex flex-col gap-2">{Object.values(TUT_ROOMS).map(r => roomBtn(r, 'solo'))}</div>
+              {filteredOfficial.length > 0 && (<>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Official rooms</p>
+                <div className="flex flex-col gap-2">{filteredOfficial.map(r => roomBtn(r))}</div>
               </>)}
 
-              {myRooms.length > 0 && (<>
+              {isMod && filteredTut.length > 0 && (<>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[#1ED760]/70 mt-5 mb-2">Tutorial rooms · admin</p>
+                <div className="flex flex-col gap-2">{filteredTut.map(r => roomBtn(r, 'solo'))}</div>
+              </>)}
+
+              {filteredMy.length > 0 && (<>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Your rooms</p>
-                <div className="flex flex-col gap-2">{myRooms.map(r => (
+                <div className="flex flex-col gap-2">{filteredMy.map(r => (
                   <div key={r.slug} className={`flex items-center gap-2 p-3 border ${r.slug === room ? 'border-white bg-white/5' : 'border-white/15'}`}>
                     <button onClick={() => switchRoom(roomDefOf(r))} className="flex items-center gap-3 flex-1 min-w-0 text-left">
                       <span className="w-4 h-4 rounded-full shrink-0" style={{ background: r.accent, boxShadow: `0 0 10px ${r.accent}` }} />
@@ -3632,15 +3650,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 ))}</div>
               </>)}
 
-              {community.length > 0 && (<>
+              {filteredCommunity.length > 0 && (<>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Community rooms</p>
-                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{community.map(r => roomBtn(roomDefOf(r)))}</div>
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{filteredCommunity.map(r => roomBtn(roomDefOf(r)))}</div>
               </>)}
 
-              {discovered.length > 0 && (<>
+              {filteredDiscovered.length > 0 && (<>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-[#cc44ff]/70 mt-5 mb-2">Discovered rooms</p>
-                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{discovered.map(r => roomBtn(roomDefOf(r)))}</div>
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">{filteredDiscovered.map(r => roomBtn(roomDefOf(r)))}</div>
               </>)}
+
+              {q && filteredOfficial.length === 0 && filteredMy.length === 0 && filteredCommunity.length === 0 && filteredDiscovered.length === 0 && (!isMod || filteredTut.length === 0) && (
+                <p className="text-[11px] text-white/35 mt-1">No rooms match "{roomSearch.trim()}"</p>
+              )}
 
               <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2">Join with a code</p>
               <div className="flex gap-2">
