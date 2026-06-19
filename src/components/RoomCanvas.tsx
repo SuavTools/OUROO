@@ -2379,8 +2379,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const weaponId = isSelf ? equippedWeaponSpec().id : a.weapon;
       if (weaponId && weaponId !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; pops on a swing — only visible in combat rooms
         const wsp = weaponOf(weaponId);
-        ctx.save(); ctx.font = `700 ${swinging ? 24 : 17}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.translate(sx + 15, handY); ctx.rotate(swinging ? -0.5 : 0.35);
+        ctx.save(); ctx.font = `700 ${swinging ? 30 : 22}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.translate(sx + 15, handY); ctx.rotate(swinging ? Math.PI - 0.5 : Math.PI + 0.35);
         ctx.fillText(wsp.emoji, 0, 0); ctx.restore();
       }
       if (swinging) {   // a quick white slash arc
