@@ -1004,12 +1004,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // ---- combat ----
   // The combat fields we attach to every presence track() so joiners/movers see health bars + held weapon.
   const combatTrack = () => { const h = getHP(); return { hp: h.hp, maxHp: h.max, absorb: h.absorb, wp: equippedWeaponSpec().id }; };
-  // Push my current hp + weapon to the room (after a hit, heal, equip change, or respawn). Also re-tracks
-  // presence so a fresh joiner reads the same numbers — same shape as broadcastItemEffect().
-  const broadcastHP = () => {
+  // Push my current hp + weapon to the room (after a hit, heal, equip change, or respawn). The live 'hp'
+  // BROADCAST fires every time (cheap, snappy bars). The presence TRACK is throttled — mid-session re-track
+  // churns presence (see the movement loop's "bounced the channel" note), and in a fight broadcastHP runs
+  // on every hit/heal, so re-tracking each time made avatars flicker/vanish. Presence is just the joiner
+  // fallback, so once every few seconds (or when forced, e.g. respawn) is plenty.
+  const lastHpTrackRef = useRef(0);
+  const broadcastHP = (forceTrack = false) => {
     const ch = channelRef.current; if (!ch || !joinedRef.current) return;
     const me = selfRef.current; const h = getHP(); const wp = equippedWeaponSpec().id;
     ch.send({ type: 'broadcast', event: 'hp', payload: { id: me.id, hp: h.hp, maxHp: h.max, absorb: h.absorb, wp } });
+    const now = Date.now();
+    if (!forceTrack && now - lastHpTrackRef.current < 4000) return;   // skip the heavy presence re-track
+    lastHpTrackRef.current = now;
     const swEf = getSwayEffect(); const spEf = getSpeedEffect();
     ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() });
   };
@@ -1025,9 +1032,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.lvl = sp.lvl; me.z = sp.lvl; me.path = [];
     const hp = respawnHP(); setSelfHp(hp);
     koUntilRef.current = Date.now() + KO_MS; setKoUntil(koUntilRef.current);
-    broadcastHP();
+    broadcastHP(true);   // force the presence re-track so everyone sees the new spawn position + full hp at once
     const ch = channelRef.current;
-    if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } });
+    if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, tp: true } });
   };
   // Someone swung at me → MY client computes the damage to MY hp (authoritative over my own health).
   const onIncomingAttack = (pl: Record<string, unknown>) => {
@@ -1883,7 +1890,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const lvl = Number(pl.lvl) || 0; const h = pl.h != null ? String(pl.h) : null; const s = pl.s != null ? String(pl.s) : null; const ic = parseIcon(pl.icon);
           let r = remotesRef.current.get(id);
           if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
-          else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp); }
+          else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (pl.tp) { r.fx = fx; r.fy = fy; r.z = lvl; }   // tp = respawn teleport: snap, don't slide across the room
+            if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp); }
         })
         .on('broadcast', { event: 'say' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
