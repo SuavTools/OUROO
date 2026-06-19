@@ -1212,7 +1212,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const gx = it.gx + du, gy = it.gy + dv; if (gx >= GRID || gy >= GRID) continue;
         const k = key(gx, gy); const base = planRef.current[k]; if (base < 0) continue;   // can't sit on a void tile
         if (base + elev + (d.h || 0) > peak) peak = base + elev + (d.h || 0);   // track the topmost point for the camera
-        if (d.pass || (!d.walk && (d.cat === 'constr' || d.obscures) && elev >= 2)) { /* walk-through or elevated overhead cover: never blocks, never raises the floor */ }
+        if (d.pass || (!d.walk && (d.cat === 'constr' || d.obscures) && elev >= 2)) { const top = base + elev + (d.h || 0); if (top > BT[k]) BT[k] = top; /* still doesn't block walking or raise the floor, but wings must clear it */ }
         else if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; const top = base + elev + d.h; if (top > BT[k]) BT[k] = top; }
         else if (sit != null) { surf[k].push(base + elev + sit); if (elev <= 0.01) grounded[k] = 1; }
         else { S[k] = 1; const top = base + elev + (d.h || 0); if (top > BT[k]) BT[k] = top; }
