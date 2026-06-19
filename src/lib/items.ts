@@ -110,3 +110,25 @@ export function getSwayIntensity(): number {
   }
   return intensity;
 }
+
+// Returns the active sway effect with its expiry, for broadcasting to other users.
+export function getSwayEffect(): { intensity: number; expiresAt: number } {
+  const now = Date.now(); let intensity = 0; let expiresAt = 0;
+  for (const e of loadEffects()) {
+    if (e.effect.type === 'sway' && e.expiresAt > now && e.effect.intensity > intensity) {
+      intensity = e.effect.intensity; expiresAt = e.expiresAt;
+    }
+  }
+  return { intensity, expiresAt };
+}
+
+// Returns the active speed effect with its expiry, for broadcasting to other users.
+export function getSpeedEffect(): { multiplier: number; expiresAt: number } {
+  const now = Date.now(); let multiplier = 1; let expiresAt = 0;
+  for (const e of loadEffects()) {
+    if (e.effect.type === 'speed' && e.expiresAt > now) {
+      multiplier *= e.effect.multiplier; expiresAt = Math.max(expiresAt, e.expiresAt);
+    }
+  }
+  return { multiplier, expiresAt };
+}

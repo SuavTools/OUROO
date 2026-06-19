@@ -18,7 +18,7 @@ import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
-import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity } from '@/lib/items';
+import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect } from '@/lib/items';
 import {
   canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
   stashTicket, stakeLabel, isWagerable, stakeIsEmpty, isDuelReady, CLIMB_GAME_ID, type DuelStake, type DuelIdentity,
@@ -943,6 +943,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!sess || !channelRef.current) return;
     channelRef.current.send({ type: 'broadcast', event: 'interact_mode', payload: { from: selfRef.current.id, to: sess.peer.id, mode } });
   };
+  const broadcastItemEffect = () => {
+    if (!channelRef.current) return;
+    const { intensity: swayIntensity, expiresAt: swayExpiry } = getSwayEffect();
+    const { multiplier: speedMult, expiresAt: speedExpiry } = getSpeedEffect();
+    channelRef.current.send({ type: 'broadcast', event: 'item_effect', payload: { id: selfRef.current.id, swayIntensity, swayExpiry, speedMult, speedExpiry } });
+  };
   const executeTrade = (myItem: string, theirItem: string) => {
     if (takeItem(myItem)) {
       grantItem(theirItem);
@@ -1800,6 +1806,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (String(pl.to ?? '') !== me.id) return;
           const m = pl.mode as string | null;
           setPeerMode(m === 'chat' || m === 'gift' || m === 'trade' ? m : null);
+        })
+        .on('broadcast', { event: 'item_effect' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          const id = String(pl.id ?? ''); if (!id || id === me.id) return;
+          const r = remotesRef.current.get(id); if (!r) return;
+          r.swayIntensity = Number(pl.swayIntensity) || 0;
+          r.swayExpiry    = Number(pl.swayExpiry)    || 0;
+          r.speedMult     = Number(pl.speedMult)     || 1;
+          r.speedExpiry   = Number(pl.speedExpiry)   || 0;
         })
         .subscribe(async status => {
           if (!alive) return;
@@ -3903,7 +3918,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       {isSuper && <AdminModal open={adminOpen} onClose={() => setAdminOpen(false)} />}
 
-      <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'character') finishCharacter(); }} onEquip={equipAppearance} title={onboarding === 'character' ? 'Design your character' : 'Character'} />
+      <InventoryModal open={invOpen} onClose={() => { setInvOpen(false); if (onboarding === 'character') finishCharacter(); }} onEquip={equipAppearance} onItemUsed={broadcastItemEffect} title={onboarding === 'character' ? 'Design your character' : 'Character'} />
 
       <BinaryRain visible={!roomReady} />
     </div>

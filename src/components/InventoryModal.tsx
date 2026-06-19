@@ -21,8 +21,8 @@ type Tab = 'items' | 'person' | 'skins' | 'furni' | 'icons';
 
 // The cosmetics hub: balance, owned counts, buy/equip across skins · furni · custom icons.
 // Mounted on the landing AND inside PRAÇA — pass `onEquip` so equipping updates a live avatar.
-export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: {
-  open: boolean; onClose: () => void; onEquip?: (appearanceId: string) => void; title?: string;
+export function InventoryModal({ open, onClose, onEquip, onItemUsed, title = 'Inventory' }: {
+  open: boolean; onClose: () => void; onEquip?: (appearanceId: string) => void; onItemUsed?: (itemId: string) => void; title?: string;
 }) {
   const { user } = useUser();
   const wallet = useWallet();
@@ -141,7 +141,7 @@ export function InventoryModal({ open, onClose, onEquip, title = 'Inventory' }: 
                         </div>
                         <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
                         <button
-                          onClick={() => { if (consumeItem(item.id)) { activateItem(item.id); flash(true, `${item.name} used`); } else flash(false, 'None left'); }}
+                          onClick={() => { if (consumeItem(item.id)) { activateItem(item.id); flash(true, `${item.name} used`); onItemUsed?.(item.id); } else flash(false, 'None left'); }}
                           className="mt-auto text-[9px] uppercase tracking-wide py-1.5 border border-white/20 hover:border-white text-white/60 hover:text-white transition-colors"
                         >
                           Use
