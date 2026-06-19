@@ -897,6 +897,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const theirTradeConfirmedRef = useRef(false);
   const [myTradeConfirmed, setMyTradeConfirmed] = useState(false);
   const [theirTradeConfirmed, setTheirTradeConfirmed] = useState(false);
+  const [peerMode, setPeerMode] = useState<'chat' | 'gift' | 'trade' | null>(null);
 
   // ── NPC interaction (gift only; no accept/decline needed) ──
   const [npcInteract, setNpcInteract] = useState<{ handle: string; nid: string; mode: 'prompt' | 'gift' } | null>(null);
@@ -935,6 +936,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     myTradeItemRef.current = null; theirTradeOfferRef.current = null;
     myTradeConfirmedRef.current = false; theirTradeConfirmedRef.current = false;
     setMyTradeConfirmed(false); setTheirTradeConfirmed(false);
+    setPeerMode(null);
+  };
+  const broadcastMode = (mode: 'chat' | 'gift' | 'trade' | null) => {
+    const sess = interactSessionRef.current;
+    if (!sess || !channelRef.current) return;
+    channelRef.current.send({ type: 'broadcast', event: 'interact_mode', payload: { from: selfRef.current.id, to: sess.peer.id, mode } });
   };
   const executeTrade = (myItem: string, theirItem: string) => {
     if (takeItem(myItem)) {
@@ -1787,6 +1794,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (myTradeConfirmedRef.current && myTradeItemRef.current && theirTradeOfferRef.current) {
             executeTrade(myTradeItemRef.current, theirTradeOfferRef.current);
           }
+        })
+        .on('broadcast', { event: 'interact_mode' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const m = pl.mode as string | null;
+          setPeerMode(m === 'chat' || m === 'gift' || m === 'trade' ? m : null);
         })
         .subscribe(async status => {
           if (!alive) return;
@@ -3705,7 +3718,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {/* Header */}
               <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10">
                 {mode !== 'menu' && (
-                  <button onClick={() => setInteractSession(s => s ? { ...s, mode: 'menu' } : null)} className="text-white/40 hover:text-white text-xs font-mono mr-1">←</button>
+                  <button onClick={() => { setInteractSession(s => s ? { ...s, mode: 'menu' } : null); broadcastMode(null); }} className="text-white/40 hover:text-white text-xs font-mono mr-1">←</button>
                 )}
                 <span className="flex-1 font-mono text-[11px] uppercase tracking-widest text-white/60 truncate">
                   {mode === 'menu' ? peer.handle : mode === 'chat' ? `Chat · ${peer.handle}` : mode === 'gift' ? `Gift to ${peer.handle}` : `Trade with ${peer.handle}`}
@@ -3716,9 +3729,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {/* Menu */}
               {mode === 'menu' && (
                 <div className="p-4 flex flex-col gap-2">
-                  <button onClick={() => setInteractSession(s => s ? { ...s, mode: 'chat' } : null)} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors text-left px-4">💬  Chat</button>
-                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setInteractSession(s => s ? { ...s, mode: 'gift' } : null); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors text-left px-4">🎁  Gift</button>
-                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setTheirTradeOffer(null); theirTradeOfferRef.current = null; setMyTradeConfirmed(false); myTradeConfirmedRef.current = false; setTheirTradeConfirmed(false); theirTradeConfirmedRef.current = false; setInteractSession(s => s ? { ...s, mode: 'trade' } : null); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors text-left px-4">⇄  Trade</button>
+                  <button onClick={() => { setInteractSession(s => s ? { ...s, mode: 'chat' } : null); broadcastMode('chat'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
+                    <span>💬  Chat</span>
+                    {peerMode === 'chat' && <span className="font-mono text-[10px] text-[#00cfff] border border-[#00cfff] px-1.5 py-0.5 leading-none">{peer.handle}</span>}
+                  </button>
+                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setInteractSession(s => s ? { ...s, mode: 'gift' } : null); broadcastMode('gift'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
+                    <span>🎁  Gift</span>
+                    {peerMode === 'gift' && <span className="font-mono text-[10px] text-[#00cfff] border border-[#00cfff] px-1.5 py-0.5 leading-none">{peer.handle}</span>}
+                  </button>
+                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setTheirTradeOffer(null); theirTradeOfferRef.current = null; setMyTradeConfirmed(false); myTradeConfirmedRef.current = false; setTheirTradeConfirmed(false); theirTradeConfirmedRef.current = false; setInteractSession(s => s ? { ...s, mode: 'trade' } : null); broadcastMode('trade'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
+                    <span>⇄  Trade</span>
+                    {peerMode === 'trade' && <span className="font-mono text-[10px] text-[#00cfff] border border-[#00cfff] px-1.5 py-0.5 leading-none">{peer.handle}</span>}
+                  </button>
                 </div>
               )}
 
