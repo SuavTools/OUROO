@@ -2983,11 +2983,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
             </span>
             <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
-            <button
-              onPointerDown={(e) => { e.preventDefault(); swingWeaponRef.current?.(); }}
-              title="Hit everyone in reach (or press F)"
-              className="ml-1 text-sm leading-none border border-brandRed/50 bg-black/60 text-white px-2 py-1 hover:bg-brandRed hover:text-black active:scale-90 transition-all select-none"
-            >👊 <span className="text-[9px] font-mono uppercase tracking-wider opacity-70">F</span></button>
+            <div className="ml-1 flex flex-col items-center gap-0.5">
+              <button
+                onPointerDown={(e) => { e.preventDefault(); swingWeaponRef.current?.(); }}
+                title="Hit everyone in reach (or press F)"
+                className="text-sm leading-none border border-brandRed/50 bg-black/60 text-white px-2 py-1 hover:bg-brandRed hover:text-black active:scale-90 transition-all select-none"
+              >👊</button>
+              <span className="hidden sm:block text-[8px] font-mono uppercase tracking-wider text-white/50 leading-none">Press F to attack</span>
+            </div>
           </div>
         )}
       </div>
