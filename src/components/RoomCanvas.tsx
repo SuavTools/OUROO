@@ -398,7 +398,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; hpStamp?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 type InteractPeer = { id: string; handle: string };
 type TradeOffer = { type: 'item'; id: string } | { type: 'furni'; kind: string } | { type: 'crystals'; amount: number };
@@ -1070,6 +1070,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // Optimistic local prediction: drop their bar + flash NOW instead of after the hp round-trip.
       // The victim is authoritative — their 'hp' broadcast reconciles this a moment later.
       if (r.hp != null) r.hp = Math.max(0, r.hp - wp.damage);
+      r.hpStamp = now;   // claim hp as live so presence sync doesn't flicker it back up before the broadcast lands
       r.hitUntil = now + 220;
       if (wp.style === 'magic') {
         projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 18, max: 18, color: '#b98cff' });
@@ -1864,7 +1865,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const speedMult = Number(meta.speedMult) || 1; const speedExpiry = Number(meta.speedExpiry) || 0;
           const hp = meta.hp != null ? Number(meta.hp) : undefined; const maxHp = Number(meta.maxHp) || MAX_HP; const absorb = Number(meta.absorb) || 0; const weapon = meta.wp != null ? String(meta.wp) : undefined;
           if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, swayIntensity, swayExpiry, speedMult, speedExpiry, hp, maxHp, absorb, weapon });
-          else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; if (hp != null) r.hp = hp; r.maxHp = maxHp; r.absorb = absorb; if (weapon != null) r.weapon = weapon; }
+          else {
+            r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; r.maxHp = maxHp; if (weapon != null) r.weapon = weapon;
+            // hp/absorb from presence are a lagging cache — only trust them as a fallback when no live
+            // 'hp' broadcast (or our own optimistic hit) has touched this player for a few seconds.
+            // During an active fight the live broadcast owns hp; otherwise presence sync flickers the bar.
+            if (hp != null && Date.now() - (r.hpStamp ?? 0) > 4000) { r.hp = hp; r.absorb = absorb; }
+          }
         }
         for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
         setPopulation(remotesRef.current.size + 1);
@@ -1992,7 +1999,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'hp' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl.id ?? ''); if (!id || id === me.id) return;
           const r = remotesRef.current.get(id); if (!r) return;
-          r.hp = Number(pl.hp); r.maxHp = Number(pl.maxHp) || MAX_HP; r.absorb = Number(pl.absorb) || 0; if (pl.wp != null) r.weapon = String(pl.wp);
+          r.hp = Number(pl.hp); r.maxHp = Number(pl.maxHp) || MAX_HP; r.absorb = Number(pl.absorb) || 0; r.hpStamp = Date.now(); if (pl.wp != null) r.weapon = String(pl.wp);
         })
         .on('broadcast', { event: 'attack' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>;
@@ -2002,7 +2009,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         })
         .on('broadcast', { event: 'ko' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl.id ?? ''); if (!id) return;
-          const r = remotesRef.current.get(id); if (r) { r.koUntil = Date.now() + KO_MS; r.hp = 0; }
+          const r = remotesRef.current.get(id); if (r) { r.koUntil = Date.now() + KO_MS; r.hp = 0; r.hpStamp = Date.now(); }
           const by = String(pl.by ?? '');
           const byHandle = by === me.id ? me.handle : (remotesRef.current.get(by)?.handle ?? 'someone');
           const victimHandle = id === me.id ? me.handle : (r?.handle ?? 'someone');
