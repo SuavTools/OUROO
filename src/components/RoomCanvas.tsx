@@ -17,7 +17,7 @@ import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } f
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect, getFlyActive } from '@/lib/items';
 import {
   canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
@@ -397,6 +397,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
 type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 type InteractPeer = { id: string; handle: string };
+type TradeOffer = { type: 'item'; id: string } | { type: 'furni'; kind: string } | { type: 'crystals'; amount: number };
 
 const hexA = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 const shade = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, Math.round(((n >> 16) & 255) * f)), g = Math.min(255, Math.round(((n >> 8) & 255) * f)), b = Math.min(255, Math.round((n & 255) * f)); return `rgb(${r},${g},${b})`; };
@@ -892,15 +893,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   useEffect(() => { interactSessionRef.current = interactSession; }, [interactSession]);
   const [privateMsgs, setPrivateMsgs] = useState<{ handle: string; text: string; mine: boolean }[]>([]);
   const [privateInput, setPrivateInput] = useState('');
-  const [myTradeItem, setMyTradeItem] = useState<string | null>(null);
-  const [theirTradeOffer, setTheirTradeOffer] = useState<string | null>(null);
-  const myTradeItemRef = useRef<string | null>(null);
-  const theirTradeOfferRef = useRef<string | null>(null);
+  const [myOffer, setMyOffer] = useState<TradeOffer | null>(null);
+  const myOfferRef = useRef<TradeOffer | null>(null);
+  const [theirOffer, setTheirOffer] = useState<TradeOffer | null>(null);
+  const theirOfferRef = useRef<TradeOffer | null>(null);
   const myTradeConfirmedRef = useRef(false);
   const theirTradeConfirmedRef = useRef(false);
   const [myTradeConfirmed, setMyTradeConfirmed] = useState(false);
   const [theirTradeConfirmed, setTheirTradeConfirmed] = useState(false);
   const [peerMode, setPeerMode] = useState<'chat' | 'gift' | 'trade' | null>(null);
+  const [giftTab, setGiftTab] = useState<'item' | 'crystals' | 'furni'>('item');
+  const [tradeTab, setTradeTab] = useState<'item' | 'crystals' | 'furni'>('item');
+  const [offerCrystals, setOfferCrystals] = useState('');
 
   // ── NPC interaction (gift only; no accept/decline needed) ──
   const [npcInteract, setNpcInteract] = useState<{ handle: string; nid: string; mode: 'prompt' | 'gift' } | null>(null);
@@ -935,11 +939,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     setInteractPrompt(null); setInteractRequest(null); setInteractWaiting(false);
     setInteractSession(null); interactSessionRef.current = null;
     setPrivateMsgs([]); setPrivateInput('');
-    setMyTradeItem(null); setTheirTradeOffer(null);
-    myTradeItemRef.current = null; theirTradeOfferRef.current = null;
+    setMyOffer(null); setTheirOffer(null);
+    myOfferRef.current = null; theirOfferRef.current = null;
     myTradeConfirmedRef.current = false; theirTradeConfirmedRef.current = false;
     setMyTradeConfirmed(false); setTheirTradeConfirmed(false);
-    setPeerMode(null);
+    setPeerMode(null); setGiftTab('item'); setTradeTab('item'); setOfferCrystals('');
   };
   const broadcastMode = (mode: 'chat' | 'gift' | 'trade' | null) => {
     const sess = interactSessionRef.current;
@@ -954,14 +958,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     channelRef.current.send({ type: 'broadcast', event: 'item_effect', payload: { id: me.id, swayIntensity, swayExpiry, speedMult, speedExpiry } });
     channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity, swayExpiry, speedMult, speedExpiry });
   };
-  const executeTrade = (myItem: string, theirItem: string) => {
-    if (takeItem(myItem)) {
-      grantItem(theirItem);
-      const got = itemById(theirItem);
-      flashHint(`Trade complete! Received ${got?.emoji ?? ''} ${got?.name ?? theirItem}`);
+  const executeTrade = (my: TradeOffer, their: TradeOffer) => {
+    let gave = false;
+    if (my.type === 'item') gave = takeItem(my.id);
+    else if (my.type === 'furni') gave = consumeFurni(my.kind);
+    else gave = spend(my.amount);
+    if (gave) {
+      if (their.type === 'item') grantItem(their.id);
+      else if (their.type === 'furni') grantFurni(their.kind, 1);
+      else addBalance(their.amount);
+      const label = their.type === 'item' ? `${itemById(their.id)?.emoji ?? ''} ${itemById(their.id)?.name ?? their.id}` : their.type === 'furni' ? `${defOf(their.kind).emoji} ${defOf(their.kind).name}` : `${CURRENCY_SYMBOL}${their.amount}`;
+      flashHint(`Trade complete! Received ${label}`);
     }
-    setMyTradeItem(null); setTheirTradeOffer(null);
-    myTradeItemRef.current = null; theirTradeOfferRef.current = null;
+    setMyOffer(null); setTheirOffer(null);
+    myOfferRef.current = null; theirOfferRef.current = null;
     myTradeConfirmedRef.current = false; theirTradeConfirmedRef.current = false;
     setMyTradeConfirmed(false); setTheirTradeConfirmed(false);
     setInteractSession(s => s ? { ...s, mode: 'menu' } : null);
@@ -995,27 +1005,38 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const sendGift = () => {
     const sess = interactSessionRef.current;
-    if (!sess || !myTradeItem || !channelRef.current) return;
-    if (!takeItem(myTradeItem)) { flashHint('Not enough items'); return; }
-    channelRef.current.send({ type: 'broadcast', event: 'interact_gift', payload: { from: selfRef.current.id, to: sess.peer.id, handle: selfRef.current.handle, itemId: myTradeItem } });
-    const item = itemById(myTradeItem);
-    flashHint(`Gifted ${item?.emoji ?? ''} ${item?.name ?? myTradeItem} to ${sess.peer.handle}`);
-    setMyTradeItem(null); myTradeItemRef.current = null;
+    if (!sess || !myOffer || !channelRef.current) return;
+    if (myOffer.type === 'item') {
+      if (!takeItem(myOffer.id)) { flashHint('Not enough items'); return; }
+      channelRef.current.send({ type: 'broadcast', event: 'interact_gift', payload: { from: selfRef.current.id, to: sess.peer.id, handle: selfRef.current.handle, itemId: myOffer.id } });
+      const item = itemById(myOffer.id);
+      flashHint(`Gifted ${item?.emoji ?? ''} ${item?.name ?? myOffer.id} to ${sess.peer.handle}`);
+    } else if (myOffer.type === 'crystals') {
+      if (!spend(myOffer.amount)) { flashHint('Not enough Cristais'); return; }
+      channelRef.current.send({ type: 'broadcast', event: 'interact_gift_crystals', payload: { from: selfRef.current.id, to: sess.peer.id, handle: selfRef.current.handle, amount: myOffer.amount } });
+      flashHint(`Gifted ${CURRENCY_SYMBOL}${myOffer.amount} to ${sess.peer.handle}`);
+    } else if (myOffer.type === 'furni') {
+      if (!consumeFurni(myOffer.kind)) { flashHint('Not enough furniture'); return; }
+      channelRef.current.send({ type: 'broadcast', event: 'interact_gift_furni', payload: { from: selfRef.current.id, to: sess.peer.id, handle: selfRef.current.handle, kind: myOffer.kind } });
+      const f = defOf(myOffer.kind);
+      flashHint(`Gifted ${f.emoji} ${f.name} to ${sess.peer.handle}`);
+    }
+    setMyOffer(null); myOfferRef.current = null; setOfferCrystals('');
     setInteractSession(s => s ? { ...s, mode: 'menu' } : null);
   };
-  const sendTradeOffer = (itemId: string) => {
+  const sendTradeOffer = (offer: TradeOffer) => {
     const sess = interactSessionRef.current;
     if (!sess || !channelRef.current) return;
-    channelRef.current.send({ type: 'broadcast', event: 'interact_trade_offer', payload: { from: selfRef.current.id, to: sess.peer.id, itemId } });
+    channelRef.current.send({ type: 'broadcast', event: 'interact_trade_offer', payload: { from: selfRef.current.id, to: sess.peer.id, offer } });
   };
   const confirmTrade = () => {
     const sess = interactSessionRef.current;
-    if (!sess || !myTradeItem || !channelRef.current) return;
+    if (!sess || !myOfferRef.current || !channelRef.current) return;
     myTradeConfirmedRef.current = true;
     setMyTradeConfirmed(true);
     channelRef.current.send({ type: 'broadcast', event: 'interact_trade_accept', payload: { from: selfRef.current.id, to: sess.peer.id } });
-    if (theirTradeConfirmedRef.current && theirTradeOfferRef.current) {
-      executeTrade(myTradeItem, theirTradeOfferRef.current);
+    if (theirTradeConfirmedRef.current && theirOfferRef.current) {
+      executeTrade(myOfferRef.current, theirOfferRef.current);
     }
   };
 
@@ -1798,18 +1819,37 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           grantItem(itemId);
           flashHint(`${fromHandle} gifted you ${item.emoji} ${item.name}!`);
         })
+        .on('broadcast', { event: 'interact_gift_crystals' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const amount = Math.floor(Number(pl.amount ?? 0)); if (amount <= 0) return;
+          addBalance(amount);
+          flashHint(`${String(pl.handle ?? '???')} gifted you ${CURRENCY_SYMBOL}${amount}!`);
+        })
+        .on('broadcast', { event: 'interact_gift_furni' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          if (String(pl.to ?? '') !== me.id) return;
+          const kind = String(pl.kind ?? ''); if (!kind) return;
+          const f = defOf(kind);
+          grantFurni(kind, 1);
+          flashHint(`${String(pl.handle ?? '???')} gifted you ${f.emoji} ${f.name}!`);
+        })
         .on('broadcast', { event: 'interact_trade_offer' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>;
           if (String(pl.to ?? '') !== me.id) return;
-          const itemId = String(pl.itemId ?? ''); if (!itemById(itemId)) return;
-          setTheirTradeOffer(itemId); theirTradeOfferRef.current = itemId;
+          const offer = pl.offer as TradeOffer | undefined;
+          if (!offer?.type) return;
+          if (offer.type === 'item' && !itemById(offer.id)) return;
+          if (offer.type === 'furni' && !offer.kind) return;
+          if (offer.type === 'crystals' && !(Number(offer.amount) > 0)) return;
+          setTheirOffer(offer); theirOfferRef.current = offer;
         })
         .on('broadcast', { event: 'interact_trade_accept' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>;
           if (String(pl.to ?? '') !== me.id) return;
           theirTradeConfirmedRef.current = true; setTheirTradeConfirmed(true);
-          if (myTradeConfirmedRef.current && myTradeItemRef.current && theirTradeOfferRef.current) {
-            executeTrade(myTradeItemRef.current, theirTradeOfferRef.current);
+          if (myTradeConfirmedRef.current && myOfferRef.current && theirOfferRef.current) {
+            executeTrade(myOfferRef.current, theirOfferRef.current);
           }
         })
         .on('broadcast', { event: 'interact_mode' }, ({ payload }) => {
@@ -3819,8 +3859,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {interactSession && (() => {
         const { peer, mode } = interactSession;
         const myOwnedItems = ITEMS.filter(it => itemCount(it.id) > 0);
-        const theirItem = theirTradeOffer ? itemById(theirTradeOffer) : null;
-        const myPickedItem = myTradeItem ? itemById(myTradeItem) : null;
+        const myOwnedFurni = Object.entries(wallet.furni).filter(([, n]) => n > 0).map(([kind, count]) => ({ kind, count, def: defOf(kind) }));
+        const offerLabel = (o: TradeOffer) => o.type === 'item' ? `${itemById(o.id)?.emoji ?? ''} ${itemById(o.id)?.name ?? o.id}` : o.type === 'furni' ? `${defOf(o.kind).emoji} ${defOf(o.kind).name}` : `${CURRENCY_SYMBOL}${o.amount.toLocaleString('pt-PT')}`;
         return (
           <div className="absolute inset-0 z-[80] flex items-end sm:items-center justify-center pointer-events-none" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)' }}>
             <div className="absolute inset-0 bg-black/50 pointer-events-auto" onClick={() => closeInteract()} />
@@ -3843,11 +3883,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                     <span>💬  Chat</span>
                     {peerMode === 'chat' && <span className="font-mono text-[10px] text-[#00cfff] border border-[#00cfff] px-1.5 py-0.5 leading-none">{peer.handle}</span>}
                   </button>
-                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setInteractSession(s => s ? { ...s, mode: 'gift' } : null); broadcastMode('gift'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
+                  <button onClick={() => { setMyOffer(null); myOfferRef.current = null; setOfferCrystals(''); setGiftTab('item'); setInteractSession(s => s ? { ...s, mode: 'gift' } : null); broadcastMode('gift'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
                     <span>🎁  Gift</span>
                     {peerMode === 'gift' && <span className="font-mono text-[10px] text-[#00cfff] border border-[#00cfff] px-1.5 py-0.5 leading-none">{peer.handle}</span>}
                   </button>
-                  <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; setTheirTradeOffer(null); theirTradeOfferRef.current = null; setMyTradeConfirmed(false); myTradeConfirmedRef.current = false; setTheirTradeConfirmed(false); theirTradeConfirmedRef.current = false; setInteractSession(s => s ? { ...s, mode: 'trade' } : null); broadcastMode('trade'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
+                  <button onClick={() => { setMyOffer(null); myOfferRef.current = null; setTheirOffer(null); theirOfferRef.current = null; setMyTradeConfirmed(false); myTradeConfirmedRef.current = false; setTheirTradeConfirmed(false); theirTradeConfirmedRef.current = false; setOfferCrystals(''); setTradeTab('item'); setInteractSession(s => s ? { ...s, mode: 'trade' } : null); broadcastMode('trade'); }} className="w-full py-3 border border-white/15 text-white font-mono text-[11px] uppercase tracking-widest hover:bg-white/10 transition-colors px-4 flex items-center justify-between">
                     <span>⇄  Trade</span>
                     {peerMode === 'trade' && <span className="font-mono text-[10px] text-[#00cfff] border border-[#00cfff] px-1.5 py-0.5 leading-none">{peer.handle}</span>}
                   </button>
@@ -3876,27 +3916,93 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {/* Gift */}
               {mode === 'gift' && (
                 <div className="p-4">
-                  {myOwnedItems.length === 0 ? (
+                  <div className="flex gap-1 mb-3">
+                    {(['item', 'crystals', 'furni'] as const).map(tab => (
+                      <button key={tab} onClick={() => { setGiftTab(tab); setMyOffer(null); myOfferRef.current = null; setOfferCrystals(''); }}
+                        className={`flex-1 py-1 font-mono text-[10px] uppercase tracking-widest border transition-colors ${giftTab === tab ? 'border-[#00cfff] text-[#00cfff]' : 'border-white/10 text-white/40 hover:text-white/70'}`}>
+                        {tab === 'item' ? 'Items' : tab === 'crystals' ? `${CURRENCY_SYMBOL} Cristais` : 'Furniture'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {giftTab === 'item' && (myOwnedItems.length === 0 ? (
                     <p className="text-white/40 text-xs font-mono text-center py-8">You have no items to gift</p>
                   ) : (
                     <>
                       <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-3">Select an item</p>
                       <div className="space-y-1.5 max-h-44 overflow-y-auto mb-3">
-                        {myOwnedItems.map(it => (
-                          <button key={it.id} onClick={() => setMyTradeItem(t => t === it.id ? null : it.id)}
-                            className={`w-full flex items-center gap-3 px-3 py-2.5 border text-left transition-colors ${myTradeItem === it.id ? 'border-[#00cfff] bg-[#00cfff]/10' : 'border-white/10 hover:border-white/30'}`}>
-                            <span className="text-xl leading-none">{it.emoji}</span>
-                            <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
-                            <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
-                          </button>
-                        ))}
+                        {myOwnedItems.map(it => {
+                          const sel = myOffer?.type === 'item' && myOffer.id === it.id;
+                          return (
+                            <button key={it.id} onClick={() => { const o: TradeOffer = { type: 'item', id: it.id }; const next = sel ? null : o; setMyOffer(next); myOfferRef.current = next; }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 border text-left transition-colors ${sel ? 'border-[#00cfff] bg-[#00cfff]/10' : 'border-white/10 hover:border-white/30'}`}>
+                              <span className="text-xl leading-none">{it.emoji}</span>
+                              <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
+                              <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                      <button onClick={sendGift} disabled={!myTradeItem}
+                      <button onClick={sendGift} disabled={!myOffer || myOffer.type !== 'item'}
                         className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
                         Gift ▸
                       </button>
                     </>
+                  ))}
+
+                  {giftTab === 'crystals' && (
+                    <>
+                      <p className="text-white/35 text-[10px] font-mono uppercase tracking-widest mb-2">Balance: {CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</p>
+                      <input type="number" min={1} max={wallet.balance} value={offerCrystals} placeholder="Amount"
+                        onChange={e => {
+                          const raw = e.target.value;
+                          setOfferCrystals(raw);
+                          const n = Math.max(0, Math.min(wallet.balance, Math.floor(Number(raw) || 0)));
+                          const o = n > 0 ? { type: 'crystals' as const, amount: n } : null;
+                          setMyOffer(o); myOfferRef.current = o;
+                        }}
+                        className="w-full bg-white/5 border border-white/20 px-3 py-2 font-mono text-sm text-white mb-2 outline-none" />
+                      <div className="flex gap-1 mb-3">
+                        {[10, 50, 100, 500].map(n => (
+                          <button key={n} onClick={() => {
+                            const amt = Math.min(n, wallet.balance);
+                            setOfferCrystals(String(amt));
+                            const o = amt > 0 ? { type: 'crystals' as const, amount: amt } : null;
+                            setMyOffer(o); myOfferRef.current = o;
+                          }} className="flex-1 py-1 font-mono text-[10px] border border-white/10 text-white/40 hover:text-white/70 transition-colors">+{n}</button>
+                        ))}
+                      </div>
+                      <button onClick={sendGift} disabled={!myOffer || myOffer.type !== 'crystals'}
+                        className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
+                        Gift {myOffer?.type === 'crystals' ? `${CURRENCY_SYMBOL}${myOffer.amount}` : CURRENCY_SYMBOL} ▸
+                      </button>
+                    </>
                   )}
+
+                  {giftTab === 'furni' && (myOwnedFurni.length === 0 ? (
+                    <p className="text-white/40 text-xs font-mono text-center py-8">You have no furniture to gift</p>
+                  ) : (
+                    <>
+                      <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-3">Select furniture</p>
+                      <div className="space-y-1.5 max-h-44 overflow-y-auto mb-3">
+                        {myOwnedFurni.map(({ kind, count, def }) => {
+                          const sel = myOffer?.type === 'furni' && myOffer.kind === kind;
+                          return (
+                            <button key={kind} onClick={() => { const o: TradeOffer = { type: 'furni', kind }; const next = sel ? null : o; setMyOffer(next); myOfferRef.current = next; }}
+                              className={`w-full flex items-center gap-3 px-3 py-2.5 border text-left transition-colors ${sel ? 'border-[#00cfff] bg-[#00cfff]/10' : 'border-white/10 hover:border-white/30'}`}>
+                              <span className="text-xl leading-none">{def.emoji}</span>
+                              <span className="flex-1 font-mono text-xs text-white">{def.name}</span>
+                              <span className="font-mono text-[10px] text-white/40">×{count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button onClick={sendGift} disabled={!myOffer || myOffer.type !== 'furni'}
+                        className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
+                        Gift ▸
+                      </button>
+                    </>
+                  ))}
                 </div>
               )}
 
@@ -3905,34 +4011,77 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <div className="p-4 space-y-3">
                   <div>
                     <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-2">Your offer</p>
-                    {myPickedItem ? (
+                    {myOffer ? (
                       <div className="flex items-center gap-3 px-3 py-2.5 border border-[#00cfff]/40 bg-[#00cfff]/5">
-                        <span className="text-xl leading-none">{myPickedItem.emoji}</span>
-                        <span className="flex-1 font-mono text-xs text-white">{myPickedItem.name}</span>
-                        {!myTradeConfirmed && <button onClick={() => { setMyTradeItem(null); myTradeItemRef.current = null; }} className="text-white/30 hover:text-white text-xs">✕</button>}
+                        <span className="flex-1 font-mono text-xs text-white">{offerLabel(myOffer)}</span>
+                        {!myTradeConfirmed && <button onClick={() => { setMyOffer(null); myOfferRef.current = null; setOfferCrystals(''); }} className="text-white/30 hover:text-white text-xs">✕</button>}
                         {myTradeConfirmed && <span className="font-mono text-[10px] text-[#00cfff]">✓</span>}
                       </div>
                     ) : (
-                      <div className="space-y-1 max-h-28 overflow-y-auto">
-                        {myOwnedItems.length === 0 ? (
-                          <p className="text-white/30 text-xs font-mono text-center py-4">No items to offer</p>
-                        ) : myOwnedItems.map(it => (
-                          <button key={it.id} onClick={() => { setMyTradeItem(it.id); myTradeItemRef.current = it.id; sendTradeOffer(it.id); }}
-                            className="w-full flex items-center gap-3 px-3 py-2 border border-white/10 hover:border-white/30 text-left transition-colors">
-                            <span className="text-lg leading-none">{it.emoji}</span>
-                            <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
-                            <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
-                          </button>
-                        ))}
-                      </div>
+                      <>
+                        <div className="flex gap-1 mb-2">
+                          {(['item', 'crystals', 'furni'] as const).map(tab => (
+                            <button key={tab} onClick={() => { setTradeTab(tab); setOfferCrystals(''); }}
+                              className={`flex-1 py-1 font-mono text-[10px] uppercase tracking-widest border transition-colors ${tradeTab === tab ? 'border-[#00cfff] text-[#00cfff]' : 'border-white/10 text-white/40 hover:text-white/70'}`}>
+                              {tab === 'item' ? 'Items' : tab === 'crystals' ? CURRENCY_SYMBOL : 'Furni'}
+                            </button>
+                          ))}
+                        </div>
+                        {tradeTab === 'item' && (
+                          <div className="space-y-1 max-h-28 overflow-y-auto">
+                            {myOwnedItems.length === 0 ? (
+                              <p className="text-white/30 text-xs font-mono text-center py-4">No items to offer</p>
+                            ) : myOwnedItems.map(it => (
+                              <button key={it.id} onClick={() => { const o: TradeOffer = { type: 'item', id: it.id }; setMyOffer(o); myOfferRef.current = o; sendTradeOffer(o); }}
+                                className="w-full flex items-center gap-3 px-3 py-2 border border-white/10 hover:border-white/30 text-left transition-colors">
+                                <span className="text-lg leading-none">{it.emoji}</span>
+                                <span className="flex-1 font-mono text-xs text-white">{it.name}</span>
+                                <span className="font-mono text-[10px] text-white/40">×{itemCount(it.id)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {tradeTab === 'crystals' && (
+                          <>
+                            <p className="text-white/35 text-[10px] font-mono mb-1.5">Balance: {CURRENCY_SYMBOL}{wallet.balance.toLocaleString('pt-PT')}</p>
+                            <div className="flex gap-1.5 mb-1">
+                              <input type="number" min={1} max={wallet.balance} value={offerCrystals} placeholder="Amount"
+                                onChange={e => setOfferCrystals(String(Math.max(0, Math.min(wallet.balance, Math.floor(Number(e.target.value) || 0)))))}
+                                className="flex-1 bg-white/5 border border-white/20 px-2 py-1.5 font-mono text-xs text-white outline-none" />
+                              <button onClick={() => { const n = Math.min(wallet.balance, Math.floor(Number(offerCrystals) || 0)); if (n <= 0) return; const o: TradeOffer = { type: 'crystals', amount: n }; setMyOffer(o); myOfferRef.current = o; sendTradeOffer(o); }}
+                                disabled={!offerCrystals || Number(offerCrystals) <= 0}
+                                className="px-3 py-1.5 bg-white/10 font-mono text-[10px] uppercase text-white/70 hover:text-white border border-white/10 disabled:opacity-30">Set</button>
+                            </div>
+                            <div className="flex gap-1">
+                              {[10, 50, 100].map(n => (
+                                <button key={n} onClick={() => setOfferCrystals(String(Math.min(n, wallet.balance)))}
+                                  className="flex-1 py-1 font-mono text-[10px] border border-white/10 text-white/40 hover:text-white/70 transition-colors">+{n}</button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {tradeTab === 'furni' && (
+                          <div className="space-y-1 max-h-28 overflow-y-auto">
+                            {myOwnedFurni.length === 0 ? (
+                              <p className="text-white/30 text-xs font-mono text-center py-4">No furniture to offer</p>
+                            ) : myOwnedFurni.map(({ kind, count, def }) => (
+                              <button key={kind} onClick={() => { const o: TradeOffer = { type: 'furni', kind }; setMyOffer(o); myOfferRef.current = o; sendTradeOffer(o); }}
+                                className="w-full flex items-center gap-3 px-3 py-2 border border-white/10 hover:border-white/30 text-left transition-colors">
+                                <span className="text-lg leading-none">{def.emoji}</span>
+                                <span className="flex-1 font-mono text-xs text-white">{def.name}</span>
+                                <span className="font-mono text-[10px] text-white/40">×{count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   <div>
                     <p className="text-white/40 text-[10px] font-mono uppercase tracking-widest mb-2">Their offer</p>
-                    {theirItem ? (
+                    {theirOffer ? (
                       <div className="flex items-center gap-3 px-3 py-2.5 border border-white/20 bg-white/5">
-                        <span className="text-xl leading-none">{theirItem.emoji}</span>
-                        <span className="flex-1 font-mono text-xs text-white">{theirItem.name}</span>
+                        <span className="flex-1 font-mono text-xs text-white">{offerLabel(theirOffer)}</span>
                         {theirTradeConfirmed && <span className="font-mono text-[10px] text-[#00cfff]">✓ confirmed</span>}
                       </div>
                     ) : (
@@ -3944,7 +4093,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   {myTradeConfirmed ? (
                     <p className="text-center text-[11px] font-mono text-[#00cfff]/70">Waiting for {peer.handle} to confirm…</p>
                   ) : (
-                    <button onClick={confirmTrade} disabled={!myTradeItem || !theirTradeOffer}
+                    <button onClick={confirmTrade} disabled={!myOffer || !theirOffer}
                       className="w-full bg-[#00cfff] text-black font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-95">
                       Confirm Trade ▸
                     </button>
