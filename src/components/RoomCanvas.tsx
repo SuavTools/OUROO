@@ -2157,10 +2157,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.beginPath(); ctx.ellipse(sx, sy_floor, 20 + Math.sin(a.af * 0.08) * 4, 9, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
-      if (flying) {   // pulsing lift-ring on the surface, right under the hovering body
+      if (flying) {   // pulsing lift-ring on the ground tile below the hovering body
         ctx.save(); ctx.globalAlpha = 0.35 + Math.sin(a.af * 0.1) * 0.15;
         ctx.strokeStyle = '#bff2ff'; ctx.shadowColor = '#9fe3ff'; ctx.shadowBlur = 16; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(a.af * 0.1) * 3, 7, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(sx, sy_ground, 15 + Math.sin(a.af * 0.1) * 3, 7, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
       ctx.save();
