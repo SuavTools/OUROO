@@ -2053,7 +2053,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const by = String(pl.by ?? '');
           const byHandle = by === me.id ? me.handle : (remotesRef.current.get(by)?.handle ?? 'someone');
           const victimHandle = id === me.id ? me.handle : (r?.handle ?? 'someone');
-          pushFeed('⚔', `${byHandle} knocked out ${victimHandle}`);
+          pushFeed('⚔', `${byHandle} cooked ${victimHandle}`);
         })
         .on('broadcast', { event: 'loot' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; if (String(pl.to ?? '') !== me.id) return;
@@ -3014,7 +3014,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       {/* WASTED — knockout overlay with a respawn countdown. */}
       {koUntil > Date.now() && (
         <div className="absolute inset-0 z-[68] flex flex-col items-center justify-center bg-brandRed/10 backdrop-blur-[2px] pointer-events-none">
-          <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>KNOCKED OUT</p>
+          <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>You got cooked.</p>
           <p className="text-white/70 text-sm mt-2 uppercase tracking-[0.3em]">Back up in {Math.max(1, Math.ceil((koUntil - Date.now()) / 1000))}s</p>
         </div>
       )}
