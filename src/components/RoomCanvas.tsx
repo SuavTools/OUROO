@@ -947,7 +947,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!channelRef.current) return;
     const { intensity: swayIntensity, expiresAt: swayExpiry } = getSwayEffect();
     const { multiplier: speedMult, expiresAt: speedExpiry } = getSpeedEffect();
-    channelRef.current.send({ type: 'broadcast', event: 'item_effect', payload: { id: selfRef.current.id, swayIntensity, swayExpiry, speedMult, speedExpiry } });
+    const me = selfRef.current;
+    channelRef.current.send({ type: 'broadcast', event: 'item_effect', payload: { id: me.id, swayIntensity, swayExpiry, speedMult, speedExpiry } });
+    channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity, swayExpiry, speedMult, speedExpiry });
   };
   const executeTrade = (myItem: string, theirItem: string) => {
     if (takeItem(myItem)) {
@@ -1051,7 +1053,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const equipAppearance = (id: string) => {
     const me = selfRef.current; me.skinId = id;
     const ap = resolveAppearance(id); me.icon = ap.kind === 'icon' ? ap.spec : null;
-    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
+    const swEf = getSwayEffect(); const spEf = getSpeedEffect();
+    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt });
   };
 
   const pushFeed = (handle: string, text: string) => { const id = ++feedId.current; setFeed(f => [...f.slice(-5), { id, handle, text }]); };
@@ -1710,8 +1713,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         for (const k in state) {
           const meta = state[k]?.[0]; if (!meta) continue; const id = String(meta.id ?? k); if (id === me.id) continue;
           seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id); const lvl = Number(meta.lvl) || 0;
-          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 });
-          else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; }
+          const swayIntensity = Number(meta.swayIntensity) || 0; const swayExpiry = Number(meta.swayExpiry) || 0;
+          const speedMult = Number(meta.speedMult) || 1; const speedExpiry = Number(meta.speedExpiry) || 0;
+          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, swayIntensity, swayExpiry, speedMult, speedExpiry });
+          else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; }
         }
         for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
         setPopulation(remotesRef.current.size + 1);
@@ -1823,7 +1828,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             setConnected(true);
             const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
             if (!alive) return;
-            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl }).catch(() => {});
+            const swEf = getSwayEffect(); const spEf = getSpeedEffect();
+            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt }).catch(() => {});
             if (!alive) return;
             ingestItemRows(await fetchAllRoomItems(sb, room));
           } else {
@@ -1837,7 +1843,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
     connect();
 
-    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl }); } };
+    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; const swEf = getSwayEffect(); const spEf = getSpeedEffect(); channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt }); } };
     // On unload (refresh / tab close / navigation) announce a leave so others drop us immediately,
     // then untrack — instead of leaving a frozen ghost until Supabase's presence heartbeat times out.
     const onLeave = () => { try { channelRef.current?.send({ type: 'broadcast', event: 'leave', payload: { id: me.id } }); channelRef.current?.untrack(); } catch { /* ignore */ } };
