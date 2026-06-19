@@ -98,7 +98,7 @@ export const ITEMS: Item[] = [
     useType: 'permanent',
     effect: { type: 'weapon', damage: 28, range: 1, cooldownMs: 850, style: 'melee' },
     price: 1500,
-    emoji: '⚔️',
+    emoji: '🗡️',
   },
   {
     id: 'staff',
