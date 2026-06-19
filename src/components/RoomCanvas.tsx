@@ -459,6 +459,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
   const solidRef = useRef<Uint8Array>(new Uint8Array(GRID * GRID));        // 1 = blocked
+  const blockTopRef = useRef<Float32Array>(new Float32Array(GRID * GRID)); // max obstacle top height per tile (walls + roofs) — used by Wings fly clearance
   const planRef = useRef<Int8Array>(planMask(planById('salao')));          // base floor level per tile (-1 = void)
   const waterRef = useRef<Uint8Array>(planWaterMask(planById('salao')));    // 1 = pool/water tile
   const matRef = useRef<Uint8Array>(planMaterialMask(planById('salao')));   // floor material per tile (from the plan)
@@ -1201,7 +1202,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // elev 0 (cover the ground); floating pieces (elev>0) leave the ground exposed → a tunnel under +
   // a deck above. Solids block the whole tile.
   const rebuildHeight = () => {
-    const surf = surfRef.current, S = solidRef.current; S.fill(0);
+    const surf = surfRef.current, S = solidRef.current, BT = blockTopRef.current; S.fill(0); BT.fill(0);
     for (let i = 0; i < surf.length; i++) surf[i].length = 0;
     const grounded = new Uint8Array(GRID * GRID); let peak = WALL_H;
     for (const it of (decorRef.current.length ? itemsRef.current.concat(decorRef.current) : itemsRef.current)) {
@@ -1212,9 +1213,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const k = key(gx, gy); const base = planRef.current[k]; if (base < 0) continue;   // can't sit on a void tile
         if (base + elev + (d.h || 0) > peak) peak = base + elev + (d.h || 0);   // track the topmost point for the camera
         if (d.pass || (!d.walk && (d.cat === 'constr' || d.obscures) && elev >= 2)) { /* walk-through or elevated overhead cover: never blocks, never raises the floor */ }
-        else if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; }
+        else if (d.walk) { surf[k].push(base + elev + d.h); if (elev <= 0.01) grounded[k] = 1; const top = base + elev + d.h; if (top > BT[k]) BT[k] = top; }
         else if (sit != null) { surf[k].push(base + elev + sit); if (elev <= 0.01) grounded[k] = 1; }
-        else S[k] = 1;
+        else { S[k] = 1; const top = base + elev + (d.h || 0); if (top > BT[k]) BT[k] = top; }
       }
     }
     // Keep the whole build in frame: if it grew taller than before, re-fit the camera (zoom out a touch).
@@ -2630,6 +2631,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (cx === tx && cy === ty) {
         const path: { gx: number; gy: number; z: number }[] = []; let c = k;
         while (c !== startK) { path.unshift({ gx: c % GRID, gy: (c / GRID) | 0, z }); c = prev.get(c)!; }
+        // Auto-raise altitude over walls/blocks/roofs — running max so the player stays up once risen
+        let rz = z;
+        for (const wp of path) { const bt = blockTopRef.current[key(wp.gx, wp.gy)]; if (bt > rz) rz = bt + 1; wp.z = rz; }
         return path;
       }
       for (const [dx, dy] of N) {
