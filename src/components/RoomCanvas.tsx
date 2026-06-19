@@ -18,7 +18,7 @@ import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
-import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect } from '@/lib/items';
+import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect, getFlyActive } from '@/lib/items';
 import {
   canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
   stashTicket, stakeLabel, isWagerable, stakeIsEmpty, isDuelReady, CLIMB_GAME_ID, type DuelStake, type DuelIdentity,
@@ -633,6 +633,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const sTriggerTilesRef = useRef<Set<string>>(new Set()); // mirrors sTriggerTiles state for use in the draw loop
   const speedMultRef = useRef(1);                        // current speed multiplier from active item effects
   const swayIntensityRef = useRef(0);                    // current drunk sway intensity from active item effects
+  const flyRef = useRef(false);                          // Wings active → can climb any height (reach roofs)
   const speedCheckRef = useRef(0);                       // frame counter for periodic effect refresh
   const machineOverrideRef = useRef<{ gameId: string; rules: GameRules } | null>(null);   // a placed set-game event retargets this room's machines
   const nearTermRef = useRef(false);      // rising-edge guard for the terminal
@@ -1398,10 +1399,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Level-aware BFS over (tile, surface) nodes: step to a neighbour surface within ±1 of the current
   // level. From the ground you can't reach a high deck (gap>1) so you pass UNDER it; ramps/stairs add
   // the intermediate surfaces to climb ON. Returns waypoints {gx,gy,z}.
-  const findPath = (sx: number, sy: number, slvl: number, tx: number, ty: number) => {
+  const findPath = (sx: number, sy: number, slvl: number, tx: number, ty: number, fly = flyRef.current) => {
     const surf = surfRef.current, S = solidRef.current; const tk = key(tx, ty);
     if (S[tk] || !surf[tk].length || (sx === tx && sy === ty)) return [];
-    const obscured = buildObscuredSet();
+    // Wings: ignore the ±1-level step limit and the obscured-structure routing guards, so you can
+    // climb straight up onto rooftops and upper floors. Solid walls still block (you fly over via
+    // adjacent walkable surfaces, never through them). Only the wing-wearer flies — NPCs pass fly=false.
+    const obscured = fly ? new Set<number>() : buildObscuredSet();
     const playerObscured = obscured.has(key(sx, sy));
     // Block routing to an obscured tile from outside — unless already standing within 1 tile of it.
     // If the player is already inside an obscured area, lift all restrictions so they can navigate freely.
@@ -1431,7 +1435,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (dx && dy && S[key(cx + dx, cy)] && S[key(cx, cy + dy)]) continue;   // no diagonal through a corner
         for (let si = surf[k2].length - 1; si >= 0; si--) {   // prefer highest reachable surface (step ON, not under)
           const sz = surf[k2][si];
-          if (Math.abs(sz - cur.l) > 1.001) continue;
+          if (!fly && Math.abs(sz - cur.l) > 1.001) continue;
           const i2 = id(k2, sz); if (seen.has(i2)) continue;
           seen.add(i2); prev.set(i2, cid); info.set(i2, { gx: nx, gy: ny, z: sz }); q.push({ k: k2, l: sz });
         }
@@ -1861,7 +1865,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       framesRef.current++;
       const me = selfRef.current;
       let moving = false;
-      if (++speedCheckRef.current >= 60) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity(); }
+      if (++speedCheckRef.current >= 30) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity(); flyRef.current = getFlyActive(); }
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
         if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
@@ -2012,7 +2016,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               const hx = n.hx, hy = n.hy;
               const tx = Math.max(hx - 4, Math.min(hx + 4, Math.round(hx + Math.cos(ang) * dist)));
               const ty = Math.max(hy - 4, Math.min(hy + 4, Math.round(hy + Math.sin(ang) * dist)));
-              const p = findPath(clampTile(n.fx), clampTile(n.fy), n.lvl, tx, ty);
+              const p = findPath(clampTile(n.fx), clampTile(n.fy), n.lvl, tx, ty, false);   // NPCs never fly
               if (p && p.length) { n.path = p; n.wanderCool = 540 + Math.floor(Math.random() * 301); }   // 9–14 s at 60 Hz
               else n.wanderCool = 60;   // short retry if no path found
             }
@@ -2052,6 +2056,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const pi = a.skinId && a.skinId.startsWith('person:') ? parsePerson(a.skinId) : null;
       const col = pi ? personPrimaryColor(pi) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
+      const flying = isSelf && flyRef.current;   // Wings active → hover + aura + flapping wings (self only)
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -2083,6 +2088,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       } else {
         bob = moving ? Math.sin(a.af * 0.3) * 3 : Math.sin(a.af * 0.07) * 1.1;   // idle breathing when still
       }
+      if (flying) bob += -14 - Math.sin(a.af * 0.06) * 4;   // float clear of the surface, gentle hover
       // Drunk tilt: rotate body around the feet pivot so feet stay grounded.
       // Angle and bob both scale linearly with the active item's intensity.
       const activeSway = isSelf ? swayIntensityRef.current : ((a.swayExpiry ?? 0) > Date.now() ? (a.swayIntensity ?? 0) : 0);
@@ -2096,12 +2102,31 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.beginPath(); ctx.ellipse(sx, sy_floor, 20 + Math.sin(a.af * 0.08) * 4, 9, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
+      if (flying) {   // pulsing lift-ring on the surface, right under the hovering body
+        ctx.save(); ctx.globalAlpha = 0.35 + Math.sin(a.af * 0.1) * 0.15;
+        ctx.strokeStyle = '#bff2ff'; ctx.shadowColor = '#9fe3ff'; ctx.shadowBlur = 16; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(a.af * 0.1) * 3, 7, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       ctx.save();
       ctx.translate(sx + sway, sy);                          // feet stay grounded; dance sway still slides whole avatar
       if (drunkTilt) ctx.rotate(drunkTilt);                  // tilt body around the feet pivot
       ctx.translate(0, -30 + bob + drunkBob);                // move up to body centre
       if (spin) ctx.rotate(spin);
       ctx.shadowColor = col; ctx.shadowBlur = em === 'levitate' ? 38 : (isSelf ? 22 : 12);
+      if (flying) {   // feathered wings behind the body, flapping with the hover cadence
+        const flap = (Math.sin(a.af * 0.22) + 1) * 0.5;   // 0..1
+        ctx.save(); ctx.globalAlpha = 0.85; ctx.fillStyle = '#eaffff'; ctx.shadowColor = '#9fe3ff'; ctx.shadowBlur = 14;
+        for (const s of [-1, 1]) {
+          ctx.save();
+          ctx.translate(s * 11, -6);
+          ctx.rotate(s * (0.45 + flap * 0.5));   // sweep up on the flap
+          ctx.beginPath(); ctx.ellipse(s * 7, 0, 7, 18, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+        ctx.restore();
+        ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;   // restore body glow
+      }
       if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
@@ -2518,7 +2543,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (tx < 0 || ty < 0 || tx >= GRID || ty >= GRID) return;
     const k = key(tx, ty);
     if (solidRef.current[k] || !surfRef.current[k].length) return;
-    const reachable = surfRef.current[k].filter(z => Math.abs(z - me.lvl) <= 1.001);
+    const reachable = surfRef.current[k].filter(z => flyRef.current || Math.abs(z - me.lvl) <= 1.001);
     if (!reachable.length) return;
     me.path = [{ gx: tx, gy: ty, z: Math.max(...reachable) }];
   };

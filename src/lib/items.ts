@@ -4,6 +4,7 @@ export type ItemEffect =
   | { type: 'speed'; multiplier: number; durationMs: number }
   | { type: 'sway'; intensity: number; durationMs: number }
   | { type: 'jump'; multiplier: number; durationMs: number }
+  | { type: 'fly'; durationMs: number }
   | { type: 'emote_unlock'; emoteId: string };
 
 export type Item = {
@@ -62,6 +63,15 @@ export const ITEMS: Item[] = [
     effect: { type: 'sway', intensity: 7, durationMs: 20 * 60 * 1000 },
     price: 300,
     emoji: '🍹',
+  },
+  {
+    id: 'wings',
+    name: 'Wings',
+    description: 'Lifts you off the ground — climb straight up onto rooftops and upper floors. No stairs needed.',
+    useType: 'single',
+    effect: { type: 'fly', durationMs: 5 * 60 * 1000 },
+    price: 500,
+    emoji: '🪽',
   },
 ];
 
@@ -131,4 +141,19 @@ export function getSpeedEffect(): { multiplier: number; expiresAt: number } {
     }
   }
   return { multiplier, expiresAt };
+}
+
+// True while a Wings effect is active — lets the player climb any height (reach roofs/upper floors).
+export function getFlyActive(): boolean {
+  const now = Date.now();
+  return loadEffects().some(e => e.effect.type === 'fly' && e.expiresAt > now);
+}
+
+// Ms remaining on the active fly effect (0 = none) — used for HUD/UI countdowns.
+export function getFlyRemainingMs(): number {
+  const now = Date.now(); let rem = 0;
+  for (const e of loadEffects()) {
+    if (e.effect.type === 'fly' && e.expiresAt > now) rem = Math.max(rem, e.expiresAt - now);
+  }
+  return rem;
 }
