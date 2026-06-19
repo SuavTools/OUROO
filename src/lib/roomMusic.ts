@@ -70,6 +70,25 @@ export class RoomMusic {
     const ng = this.ctx.createGain(); ng.gain.value = 0.02;
     ns.connect(bp); bp.connect(ng); ng.connect(this.sfx); ns.start(t);
   }
+  // A snappy punch/swing hit — same thud-and-scuff shape as footstep but with the noise
+  // bandpass shifted up (~2800 Hz) so it reads as a "thwack" rather than a footfall.
+  punch() {
+    this.ensure(); if (!this.ctx || !this.sfx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(220 + Math.random() * 40, t); o.frequency.exponentialRampToValueAtTime(72, t + 0.07);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.07, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+    o.connect(g); g.connect(this.sfx); o.start(t); o.stop(t + 0.13);
+    const len = Math.floor(this.ctx.sampleRate * 0.045);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const ns = this.ctx.createBufferSource(); ns.buffer = buf;
+    const bp = this.ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2800; bp.Q.value = 1.2;
+    const ng = this.ctx.createGain(); ng.gain.value = 0.03;
+    ns.connect(bp); bp.connect(ng); ng.connect(this.sfx); ns.start(t);
+  }
+
   isMuted() { return this.muted; }
 
   // Approaching an NPC: a soft two-note "signal recognises you" chime — ethereal, lowpassed bell.

@@ -1074,7 +1074,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (now - lastAttackRef.current < wp.cooldownMs) return;  // weapon still on cooldown
     lastAttackRef.current = now;
     me.attackUntil = now + 280;                               // the swing animates even on a whiff
-    musicRef.current?.footstep();
+    musicRef.current?.punch();
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
     remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
