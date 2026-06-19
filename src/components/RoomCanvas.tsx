@@ -566,6 +566,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [bgAtmo, setBgAtmo] = useState<Atmo>('auto');   // current room atmosphere (mirrors bgRef, for the editor)
   const [inObscured, setInObscured] = useState(false);  // true while the player is inside an obscured (hidden) area
   const inObscuredRef = useRef(false);                   // shadow ref so the animation loop can gate setState
+  const [flying, setFlying] = useState(false);           // true while Wings is active → show the ▲/▼ fly pad
+  const flyingUiRef = useRef(false);                     // shadow ref so the loop only setState()s on change
   const [atmoMode, setAtmoMode] = useState(false);      // showing the atmosphere palette in Decorate
   const [gamesMode, setGamesMode] = useState(false);    // admin: the Games tab (place game triggers / set-game events)
   const [gTab, setGTab] = useState<'play' | 'set'>('play');   // Games tab: which event type to place
@@ -1865,7 +1867,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       framesRef.current++;
       const me = selfRef.current;
       let moving = false;
-      if (++speedCheckRef.current >= 30) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity(); flyRef.current = getFlyActive(); }
+      if (++speedCheckRef.current >= 30) { speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity(); const fa = getFlyActive(); flyRef.current = fa; if (fa !== flyingUiRef.current) { flyingUiRef.current = fa; setFlying(fa); } }
       if (me.path.length) {
         const wp = me.path[0]; const dx = wp.gx - me.fx, dy = wp.gy - me.fy; const d = Math.hypot(dx, dy);
         if (d < 0.12) { me.fx = wp.gx; me.fy = wp.gy; me.lvl = wp.z; me.path.shift(); }
@@ -2546,6 +2548,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const reachable = surfRef.current[k].filter(z => flyRef.current || Math.abs(z - me.lvl) <= 1.001);
     if (!reachable.length) return;
     me.path = [{ gx: tx, gy: ty, z: Math.max(...reachable) }];
+  };
+  // Wings vertical command (▲/▼ pad): glide to the next walkable surface above (dir>0) or below (dir<0)
+  // the one we're on. Picks the smallest level-gap in that direction, breaking ties by nearest tile — so
+  // staying on the current column wins when it has a surface there, else we drift to the closest one. Floor
+  // by floor: each press lands us on the next deck, and me.lvl updates on arrival so repeats keep climbing.
+  const flyVert = (dir: number) => {
+    if (!flyRef.current) return;
+    const me = selfRef.current; const surf = surfRef.current, S = solidRef.current;
+    const px = clampTile(me.fx), py = clampTile(me.fy), cur = me.lvl;
+    let best: { gx: number; gy: number; z: number; score: number } | null = null;
+    for (let gy = 0; gy < GRID; gy++) for (let gx = 0; gx < GRID; gx++) {
+      const k = key(gx, gy); if (S[k] || !surf[k].length) continue;
+      const dist = Math.max(Math.abs(gx - px), Math.abs(gy - py));
+      for (const z of surf[k]) {
+        if (dir > 0 ? z <= cur + 0.2 : z >= cur - 0.2) continue;   // wrong direction (or same level)
+        const score = Math.abs(z - cur) * 100 + dist;             // nearest level first, then nearest tile
+        if (!best || score < best.score) best = { gx, gy, z, score };
+      }
+    }
+    if (!best) { flashHint(dir > 0 ? 'Nothing higher to fly to' : 'Already at ground level'); return; }
+    me.path = [{ gx: best.gx, gy: best.gy, z: best.z }];
   };
   // ── Click-drag floor/carpet painting ──
   const isFloorPaint = (kind: string): boolean => { const d = defOf(kind); const [sw, sh] = d.span ?? [1, 1]; return !!d.walk && (d.h ?? 0) <= 1 && sw === 1 && sh === 1 && d.special !== 'stair'; };
@@ -3299,6 +3322,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <div key={i} className="w-8 h-8" />
               )
             )}
+          </div>
+        </div>
+      )}
+
+      {flying && (
+        <div className="absolute right-3 z-40" style={{ bottom: `calc(max(0.75rem, env(safe-area-inset-bottom)) + ${inObscured ? 122 : 0}px)` }}>
+          <div className="bg-black/60 border border-[#9fe3ff]/30 rounded-xl p-1.5 flex flex-col gap-1">
+            <button onPointerDown={() => flyVert(1)} title="Fly up a level"
+              className="w-10 h-10 flex items-center justify-center text-[#bff2ff] hover:text-white hover:bg-[#9fe3ff]/15 active:bg-[#9fe3ff]/25 active:scale-90 rounded transition-all text-lg leading-none select-none">▲</button>
+            <button onPointerDown={() => flyVert(-1)} title="Fly down a level"
+              className="w-10 h-10 flex items-center justify-center text-[#bff2ff] hover:text-white hover:bg-[#9fe3ff]/15 active:bg-[#9fe3ff]/25 active:scale-90 rounded transition-all text-lg leading-none select-none">▼</button>
           </div>
         </div>
       )}
