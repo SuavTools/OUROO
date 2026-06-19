@@ -1,3 +1,5 @@
+import { healHP, addAbsorb } from './combat';
+
 export type UseType = 'single' | 'multi' | 'permanent';
 
 export type ItemEffect =
@@ -5,7 +7,13 @@ export type ItemEffect =
   | { type: 'sway'; intensity: number; durationMs: number }
   | { type: 'jump'; multiplier: number; durationMs: number }
   | { type: 'fly'; durationMs: number }
-  | { type: 'emote_unlock'; emoteId: string };
+  | { type: 'emote_unlock'; emoteId: string }
+  // combat (see combat.ts): weapons + permanent shields are EQUIPPED from the inventory; heals +
+  // absorb shields are USED (consumed) like the buff items above.
+  | { type: 'weapon'; damage: number; range: number; cooldownMs: number; style: 'melee' | 'magic' }
+  | { type: 'shield'; defense: number }          // permanent, equipped: fraction of damage reduced (0..0.9)
+  | { type: 'shield_absorb'; absorb: number }    // consumable: grants a one-off damage-soak buffer
+  | { type: 'heal'; hp: number };                // consumable: restores hp
 
 export type Item = {
   id: string;
@@ -73,6 +81,72 @@ export const ITEMS: Item[] = [
     price: 500,
     emoji: '🪽',
   },
+  // ---- combat: weapons (equip one at a time; fists are the free default in combat.ts) ----
+  {
+    id: 'knife',
+    name: 'Knife',
+    description: 'Quick and close. Equip it to hit harder than your fists in combat zones.',
+    useType: 'permanent',
+    effect: { type: 'weapon', damage: 18, range: 1, cooldownMs: 600, style: 'melee' },
+    price: 600,
+    emoji: '🔪',
+  },
+  {
+    id: 'sword',
+    name: 'Sword',
+    description: 'Heavy swings, serious damage. The honest way to end an alley scrap.',
+    useType: 'permanent',
+    effect: { type: 'weapon', damage: 28, range: 1, cooldownMs: 850, style: 'melee' },
+    price: 1500,
+    emoji: '⚔️',
+  },
+  {
+    id: 'staff',
+    name: 'Magic Staff',
+    description: 'Hurls a bolt from a distance — strike foes three tiles away.',
+    useType: 'permanent',
+    effect: { type: 'weapon', damage: 22, range: 3, cooldownMs: 950, style: 'magic' },
+    price: 2200,
+    emoji: '🪄',
+  },
+  // ---- combat: shields ----
+  {
+    id: 'iron_guard',
+    name: 'Iron Guard',
+    description: 'A permanent shield. Equip it to soak 30% of every hit you take.',
+    useType: 'permanent',
+    effect: { type: 'shield', defense: 0.3 },
+    price: 1200,
+    emoji: '🛡️',
+  },
+  {
+    id: 'bubble_shield',
+    name: 'Bubble Shield',
+    description: 'Pop it for a 50-point barrier that absorbs damage before your health. One-time use.',
+    useType: 'single',
+    effect: { type: 'shield_absorb', absorb: 50 },
+    price: 300,
+    emoji: '🫧',
+  },
+  // ---- combat: heals (always bought, consumed on use) ----
+  {
+    id: 'food',
+    name: 'Food',
+    description: 'A quick bite. Restores 25 health.',
+    useType: 'single',
+    effect: { type: 'heal', hp: 25 },
+    price: 120,
+    emoji: '🍔',
+  },
+  {
+    id: 'medkit',
+    name: 'Medication',
+    description: 'Proper patch-up. Restores 60 health.',
+    useType: 'single',
+    effect: { type: 'heal', hp: 60 },
+    price: 350,
+    emoji: '💊',
+  },
 ];
 
 export const itemById = (id: string): Item | undefined => ITEMS.find(i => i.id === id);
@@ -96,6 +170,11 @@ const saveEffects = (effects: StoredEffect[]) => {
 export function activateItem(id: string): boolean {
   const item = itemById(id); if (!item) return false;
   const ef = item.effect;
+  // Combat consumables apply straight to the combat module's hp/absorb state, not the buff store.
+  if (ef.type === 'heal') { healHP(ef.hp); return true; }
+  if (ef.type === 'shield_absorb') { addAbsorb(ef.absorb); return true; }
+  // Weapons + permanent shields are equipped from the inventory UI, never "activated" here.
+  if (ef.type === 'weapon' || ef.type === 'shield') return true;
   const expiresAt = 'durationMs' in ef ? Date.now() + ef.durationMs : Number.MAX_SAFE_INTEGER;
   const effects = loadEffects().filter(e => e.effect.type !== ef.type); // replace same-type effect
   effects.push({ itemId: id, effect: ef, expiresAt });

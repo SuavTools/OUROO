@@ -13,6 +13,7 @@ import { PersonPreview } from '@/components/PersonPreview';
 import { type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId, TONES, HAIR, HATS, TOPS, PANTS, SHOES, MOUTHS, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS } from '@/lib/person';
 import { CATS, FURNI, furniPrice, isFurniFree } from '@/lib/furni';
 import { ITEMS, activateItem } from '@/lib/items';
+import { getEquipped, equipWeapon, equipShield, weaponOf, shieldOf } from '@/lib/combat';
 import { skinPrice, isSkinOwned, isIconId, iconLocalId, iconAppearanceId, resolveAppearance } from '@/lib/catalog';
 import { CURRENCY_SYMBOL, useWallet, buySkin, buyFurni, furniCount, removeIcon, itemCount, consumeItem } from '@/lib/wallet';
 import { CatIcon, FurniSprite } from '@/components/UiIcon';
@@ -38,8 +39,10 @@ export function InventoryModal({ open, onClose, onEquip, onItemUsed, title = 'In
   const [editorOpen, setEditorOpen] = useState(false);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const flash = (ok: boolean, text: string) => { setToast({ ok, text }); setTimeout(() => setToast(null), 2200); };
+  const [eqWeapon, setEqWeapon] = useState<string | null>(() => getEquipped().weapon);
+  const [eqShield, setEqShield] = useState<string | null>(() => getEquipped().shield);
 
-  useEffect(() => { if (open) { const s = getSelectedSkinId(); setSelected(s); if (isPersonId(s)) setPerson(parsePerson(s)); } }, [open]);
+  useEffect(() => { if (open) { const s = getSelectedSkinId(); setSelected(s); if (isPersonId(s)) setPerson(parsePerson(s)); const eq = getEquipped(); setEqWeapon(eq.weapon); setEqShield(eq.shield); } }, [open]);
   useEffect(() => {
     if (!open) return;
     amIModerator().then(setIsMod);
@@ -57,6 +60,8 @@ export function InventoryModal({ open, onClose, onEquip, onItemUsed, title = 'In
   const equip = (id: string) => { setSelectedSkinId(id); setSelected(id); onEquip?.(id); flash(true, 'Equipped'); };
   const doBuySkin = (id: string) => { const sk = skinById(id); const p = skinPrice(sk); if (p == null) return; const r = buySkin(id, p); r.ok ? flash(true, `${sk.name} purchased`) : flash(false, r.error || 'Error'); };
   const doBuyFurni = (kind: string) => { const r = buyFurni(kind); r.ok ? flash(true, 'Purchased') : flash(false, r.error || 'Error'); };
+  const doEquipWeapon = (id: string | null) => { equipWeapon(id); setEqWeapon(id); flash(true, id ? `${weaponOf(id).name} equipped` : 'Fists equipped'); };
+  const doEquipShield = (id: string | null) => { equipShield(id); setEqShield(id); flash(true, id ? `${shieldOf(id)?.name ?? 'Shield'} equipped` : 'Shield removed'); };
 
   const ownedSkins = SKINS.filter(s => isSkinOwned(s, best, codeUnlocks, isMod)).length;
   const paidFurni = FURNI.filter(f => !isFurniFree(f.kind));
@@ -111,49 +116,118 @@ export function InventoryModal({ open, onClose, onEquip, onItemUsed, title = 'In
         {toast && <p className={`text-[12px] text-center mb-3 ${toast.ok ? 'text-[#1ED760]' : 'text-brandRed'}`}>{toast.text}</p>}
 
         {/* ITEMS */}
-        {tab === 'items' && (
-          <div>
-            {(() => {
-              const ownedItems = ITEMS.filter(item => itemCount(item.id) > 0);
-              if (ownedItems.length === 0) return (
-                <div className="py-10 text-center space-y-3">
-                  <p className="text-3xl">🎒</p>
-                  <p className="text-white/60 text-sm font-bold uppercase tracking-widest">No items</p>
-                  <p className="text-[11px] text-white/35 max-w-xs mx-auto">
-                    Find shops in the world to pick things up — items grant temporary or permanent effects when used.
-                  </p>
+        {tab === 'items' && (() => {
+          const owned = ITEMS.filter(item => itemCount(item.id) > 0);
+          const weapons = owned.filter(i => i.effect.type === 'weapon');
+          const shields = owned.filter(i => i.effect.type === 'shield');
+          const heals = owned.filter(i => i.effect.type === 'heal');
+          const absorbs = owned.filter(i => i.effect.type === 'shield_absorb');
+          const COMBAT_TYPES = ['weapon', 'shield', 'heal', 'shield_absorb'];
+          const consumables = owned.filter(i => !COMBAT_TYPES.includes(i.effect.type));
+          const useLabelOf = (item: typeof ITEMS[number]) => item.useType === 'single' ? 'Single use' : item.useType === 'multi' ? `${item.uses ?? '?'} uses` : 'Permanent';
+
+          const ItemCard = ({ item, action }: { item: typeof ITEMS[number]; action: ReactNode }) => (
+            <div className="border border-white/10 p-3 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl leading-none">{item.emoji}</span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-white truncate">{item.name}</p>
+                  <p className="text-[9px] uppercase tracking-wide text-white/35">{useLabelOf(item)}</p>
                 </div>
-              );
-              return (
-                <div className="grid grid-cols-2 gap-2">
-                  {ownedItems.map(item => {
-                    const owned = itemCount(item.id);
-                    const useLabel = item.useType === 'single' ? 'Single use' : item.useType === 'multi' ? `${item.uses ?? '?'} uses` : 'Permanent';
-                    return (
-                      <div key={item.id} className="border border-white/10 p-3 flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl leading-none">{item.emoji}</span>
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-bold uppercase tracking-wide text-white truncate">{item.name}</p>
-                            <p className="text-[9px] uppercase tracking-wide text-white/35">{useLabel}</p>
-                          </div>
-                          <span className="ml-auto text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 tabular-nums shrink-0">×{owned}</span>
-                        </div>
-                        <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
-                        <button
-                          onClick={() => { if (consumeItem(item.id)) { activateItem(item.id); flash(true, `${item.name} used`); onItemUsed?.(item.id); } else flash(false, 'None left'); }}
-                          className="mt-auto text-[9px] uppercase tracking-wide py-1.5 border border-white/20 hover:border-white text-white/60 hover:text-white transition-colors"
-                        >
-                          Use
-                        </button>
-                      </div>
-                    );
-                  })}
+                <span className="ml-auto text-[10px] font-bold text-white bg-white/10 px-1.5 py-0.5 tabular-nums shrink-0">×{itemCount(item.id)}</span>
+              </div>
+              <p className="text-[10px] text-white/50 leading-snug">{item.description}</p>
+              {action}
+            </div>
+          );
+          const UseBtn = ({ item }: { item: typeof ITEMS[number] }) => (
+            <button
+              onClick={() => { if (consumeItem(item.id)) { activateItem(item.id); flash(true, `${item.name} used`); onItemUsed?.(item.id); } else flash(false, 'None left'); }}
+              className="mt-auto text-[9px] uppercase tracking-wide py-1.5 border border-white/20 hover:border-white text-white/60 hover:text-white transition-colors">
+              Use
+            </button>
+          );
+          const Section = ({ label, children }: { label: string; children: ReactNode }) => (
+            <div className="space-y-2">
+              <p className="text-[10px] uppercase tracking-[0.25em] text-white/40">{label}</p>
+              <div className="grid grid-cols-2 gap-2">{children}</div>
+            </div>
+          );
+
+          if (owned.length === 0) return (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-3xl">🎒</p>
+              <p className="text-white/60 text-sm font-bold uppercase tracking-widest">No items</p>
+              <p className="text-[11px] text-white/35 max-w-xs mx-auto">
+                Find shops in the world to pick things up — gear up with weapons, shields, food and potions.
+              </p>
+            </div>
+          );
+
+          return (
+            <div className="space-y-5">
+              {/* Loadout summary */}
+              <div className="flex items-center gap-3 border border-brandRed/30 bg-brandRed/[0.06] px-3 py-2">
+                <span className="text-[10px] uppercase tracking-[0.25em] text-brandRed/80">Loadout</span>
+                <span className="text-xs text-white">{weaponOf(eqWeapon).emoji} {weaponOf(eqWeapon).name}</span>
+                <span className="text-white/25">·</span>
+                <span className="text-xs text-white">{eqShield ? `${shieldOf(eqShield)?.emoji ?? '🛡️'} ${shieldOf(eqShield)?.name}` : '🛡️ No shield'}</span>
+              </div>
+
+              {/* Weapons (equip one) */}
+              <Section label="Weapons">
+                <div className="border border-white/10 p-3 flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl leading-none">🤜</span>
+                    <div className="min-w-0"><p className="text-[11px] font-bold uppercase tracking-wide text-white truncate">Fists</p><p className="text-[9px] uppercase tracking-wide text-white/35">Default</p></div>
+                  </div>
+                  <p className="text-[10px] text-white/50 leading-snug">Your bare hands. Always available.</p>
+                  <button onClick={() => doEquipWeapon(null)} disabled={!eqWeapon}
+                    className={`mt-auto text-[9px] uppercase tracking-wide py-1.5 border transition-colors ${!eqWeapon ? 'border-brandRed text-brandRed bg-brandRed/10' : 'border-white/20 hover:border-white text-white/60 hover:text-white'}`}>
+                    {!eqWeapon ? 'Equipped' : 'Equip'}
+                  </button>
                 </div>
-              );
-            })()}
-          </div>
-        )}
+                {weapons.map(item => (
+                  <ItemCard key={item.id} item={item} action={
+                    <button onClick={() => doEquipWeapon(eqWeapon === item.id ? null : item.id)}
+                      className={`mt-auto text-[9px] uppercase tracking-wide py-1.5 border transition-colors ${eqWeapon === item.id ? 'border-brandRed text-brandRed bg-brandRed/10' : 'border-white/20 hover:border-white text-white/60 hover:text-white'}`}>
+                      {eqWeapon === item.id ? 'Unequip' : 'Equip'}
+                    </button>
+                  } />
+                ))}
+              </Section>
+
+              {/* Shields */}
+              {(shields.length > 0 || absorbs.length > 0) && (
+                <Section label="Shields">
+                  {shields.map(item => (
+                    <ItemCard key={item.id} item={item} action={
+                      <button onClick={() => doEquipShield(eqShield === item.id ? null : item.id)}
+                        className={`mt-auto text-[9px] uppercase tracking-wide py-1.5 border transition-colors ${eqShield === item.id ? 'border-brandRed text-brandRed bg-brandRed/10' : 'border-white/20 hover:border-white text-white/60 hover:text-white'}`}>
+                        {eqShield === item.id ? 'Unequip' : 'Equip'}
+                      </button>
+                    } />
+                  ))}
+                  {absorbs.map(item => <ItemCard key={item.id} item={item} action={<UseBtn item={item} />} />)}
+                </Section>
+              )}
+
+              {/* Heals */}
+              {heals.length > 0 && (
+                <Section label="Food & Meds">
+                  {heals.map(item => <ItemCard key={item.id} item={item} action={<UseBtn item={item} />} />)}
+                </Section>
+              )}
+
+              {/* Other consumables */}
+              {consumables.length > 0 && (
+                <Section label="Consumables">
+                  {consumables.map(item => <ItemCard key={item.id} item={item} action={<UseBtn item={item} />} />)}
+                </Section>
+              )}
+            </div>
+          );
+        })()}
 
         {/* DESIGN A PERSON */}
         {tab === 'person' && (() => {

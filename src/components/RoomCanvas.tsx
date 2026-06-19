@@ -20,6 +20,10 @@ import { resolveAppearance } from '@/lib/catalog';
 import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect, getFlyActive } from '@/lib/items';
 import {
+  getHP, equippedWeaponSpec, equippedShieldSpec, weaponOf, applyDamage, respawnHP,
+  computeLoot, dropLoot, grantLoot, lootIsEmpty, subscribeCombat, tileDist, MAX_HP, KO_MS, type Loot,
+} from '@/lib/combat';
+import {
   canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
   stashTicket, stakeLabel, isWagerable, stakeIsEmpty, isDuelReady, CLIMB_GAME_ID, type DuelStake, type DuelIdentity,
 } from '@/lib/duel';
@@ -56,7 +60,7 @@ const wrapBubble = (text: string): string[] => {
 // import can't insert unbounded rows. Place as much as you like.
 const MAX_ITEMS = 100000;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
 // ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
@@ -394,7 +398,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 type InteractPeer = { id: string; handle: string };
 type TradeOffer = { type: 'item'; id: string } | { type: 'furni'; kind: string } | { type: 'crystals'; amount: number };
@@ -515,12 +519,36 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [permsPublic, setPermsPublic] = useState(false);   // room is a public main room (pickable portal destination)
   const [permsList, setPermsList] = useState<string[]>([]);
   const [permsHandle, setPermsHandle] = useState('');
+  const [permsCombat, setPermsCombat] = useState(false);   // PvP toggle (mod-gated) in the perms modal
+  // ---- combat / hp ----
+  const [selfHp, setSelfHp] = useState<{ hp: number; max: number; absorb: number }>(() => ({ hp: MAX_HP, max: MAX_HP, absorb: 0 }));
+  const [koUntil, setKoUntil] = useState(0);   // self knockout: WASTED overlay + respawn countdown
+  const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
+  const koUntilRef = useRef(0);
+  const lastAttackRef = useRef(0);             // weapon-cooldown gate
+  const dmgFxRef = useRef<{ fx: number; fy: number; z: number; text: string; color: string; life: number }[]>([]);   // floating damage numbers (grid-anchored)
+  const projRef = useRef<{ fx0: number; fy0: number; z0: number; fx1: number; fy1: number; z1: number; life: number; max: number; color: string }[]>([]);   // magic bolts in flight
+  const broadcastHPRef = useRef<() => void>(() => {});
   const [myOwnerId, setMyOwnerId] = useState('');
   const ownerIdRef = useRef('');
   const [myHandle, setMyHandle] = useState('Guest');
   const myHandleRef = useRef('Guest');
   const themeRef = useRef<RoomDef>(roomMeta);
   useEffect(() => { themeRef.current = roomMeta; roomMetaRef.current = roomMeta; }, [roomMeta]);
+  // Combat: keep the HUD hp in sync + re-broadcast my hp/weapon whenever combat state changes (hit, heal, equip).
+  useEffect(() => { setSelfHp(getHP()); return subscribeCombat(() => { setSelfHp(getHP()); broadcastHPRef.current?.(); }); }, []);
+  // Tick the WASTED respawn countdown while knocked out.
+  useEffect(() => {
+    if (koUntil <= Date.now()) return;
+    const iv = setInterval(() => { if (Date.now() >= koUntil) setKoUntil(0); else setKoTick(t => t + 1); }, 200);
+    return () => clearInterval(iv);
+  }, [koUntil]);
+  // In a combat room, refresh the HUD periodically so passive regen shows on your own bar.
+  useEffect(() => {
+    if (!roomMeta.combat) return;
+    const iv = setInterval(() => { const h = getHP(); setSelfHp(prev => (prev.hp !== h.hp || prev.absorb !== h.absorb || prev.max !== h.max) ? h : prev); }, 1500);
+    return () => clearInterval(iv);
+  }, [roomMeta.combat]);
   const refreshRoomLists = () => { fetchRooms().then(setPersonalRooms); fetchMyRooms().then(setMyRooms); };
   useEffect(() => { if (showRooms) refreshRoomLists(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [showRooms]);
   // Keep the room a fixed 1280×720 stage, scaled uniformly to fit its container — resizing rescales, never stretches.
@@ -957,8 +985,75 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const { multiplier: speedMult, expiresAt: speedExpiry } = getSpeedEffect();
     const me = selfRef.current;
     channelRef.current.send({ type: 'broadcast', event: 'item_effect', payload: { id: me.id, swayIntensity, swayExpiry, speedMult, speedExpiry } });
-    channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity, swayExpiry, speedMult, speedExpiry });
+    channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity, swayExpiry, speedMult, speedExpiry, ...combatTrack() });
   };
+  // ---- combat ----
+  // The combat fields we attach to every presence track() so joiners/movers see health bars + held weapon.
+  const combatTrack = () => { const h = getHP(); return { hp: h.hp, maxHp: h.max, absorb: h.absorb, wp: equippedWeaponSpec().id }; };
+  // Push my current hp + weapon to the room (after a hit, heal, equip change, or respawn). Also re-tracks
+  // presence so a fresh joiner reads the same numbers — same shape as broadcastItemEffect().
+  const broadcastHP = () => {
+    const ch = channelRef.current; if (!ch || !joinedRef.current) return;
+    const me = selfRef.current; const h = getHP(); const wp = equippedWeaponSpec().id;
+    ch.send({ type: 'broadcast', event: 'hp', payload: { id: me.id, hp: h.hp, maxHp: h.max, absorb: h.absorb, wp } });
+    const swEf = getSwayEffect(); const spEf = getSpeedEffect();
+    ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() });
+  };
+  broadcastHPRef.current = broadcastHP;
+  const spawnDmg = (fx: number, fy: number, z: number, amount: number, color: string) => {
+    dmgFxRef.current.push({ fx, fy, z, text: `-${Math.max(1, Math.round(amount))}`, color, life: 54 });
+    if (dmgFxRef.current.length > 24) dmgFxRef.current.shift();
+  };
+  // Reset to the room's spawn tile at full hp and lock movement for the knockout window.
+  const respawnSelf = () => {
+    const me = selfRef.current;
+    const sp = planSpawn(planById(roomMetaRef.current.plan ?? 'salao'));
+    me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.lvl = sp.lvl; me.z = sp.lvl; me.path = [];
+    const hp = respawnHP(); setSelfHp(hp);
+    koUntilRef.current = Date.now() + KO_MS; setKoUntil(koUntilRef.current);
+    broadcastHP();
+    const ch = channelRef.current;
+    if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl } });
+  };
+  // Someone swung at me → MY client computes the damage to MY hp (authoritative over my own health).
+  const onIncomingAttack = (pl: Record<string, unknown>) => {
+    const me = selfRef.current;
+    if (String(pl.to ?? '') !== me.id) return;            // only the target processes it
+    if (!roomMetaRef.current.combat) return;              // safety: ignore outside PvP rooms
+    if (koUntilRef.current > Date.now()) return;          // already down — invulnerable while respawning
+    const wp = weaponOf(String(pl.wp ?? 'fists'));
+    const res = applyDamage(wp, equippedShieldSpec());
+    setSelfHp({ hp: res.hp, max: res.max, absorb: res.absorb });
+    me.hitUntil = Date.now() + 220;
+    spawnDmg(me.fx, me.fy, me.z, res.taken, '#ff5a5a');
+    broadcastHP();
+    if (res.dead) {
+      const killer = String(pl.from ?? '');
+      const loot = computeLoot();
+      dropLoot(loot);
+      channelRef.current?.send({ type: 'broadcast', event: 'ko', payload: { id: me.id, by: killer } });
+      if (!lootIsEmpty(loot)) channelRef.current?.send({ type: 'broadcast', event: 'loot', payload: { from: me.id, to: killer, crystals: loot.crystals, items: loot.items } });
+      respawnSelf();
+    }
+  };
+  // I tapped a player in a combat room → swing if they're in range, else walk toward them.
+  const attackPlayer = (targetId: string, target: Avatar) => {
+    const me = selfRef.current;
+    if (koUntilRef.current > Date.now()) return;
+    const tgx = clampTile(target.fx), tgy = clampTile(target.fy);
+    const wp = equippedWeaponSpec();
+    if (tileDist(clampTile(me.fx), clampTile(me.fy), tgx, tgy) > wp.range) { walkAdjacentTo(tgx, tgy); return; }
+    const now = Date.now();
+    if (now - lastAttackRef.current < wp.cooldownMs) return;   // weapon still on cooldown
+    lastAttackRef.current = now;
+    me.attackUntil = now + 280;
+    musicRef.current?.footstep();
+    channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: targetId, wp: wp.id, style: wp.style } });
+    if (wp.style === 'magic') {
+      projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: target.fx, fy1: target.fy, z1: target.z + 0.4, life: 18, max: 18, color: '#b98cff' });
+    }
+  };
+
   const executeTrade = (my: TradeOffer, their: TradeOffer) => {
     let gave = false;
     if (my.type === 'item') gave = takeItem(my.id);
@@ -1113,7 +1208,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const finishCharacter = () => { setCharDone(true); try { localStorage.setItem('ouroo_tut_char', '1'); } catch { /* ignore */ } };
   // "Enter the simulation?" → fade to white → Your Room.
   const enterSimulation = () => { setSimConfirm(false); setSimFade(true); setTimeout(() => { setSimFade(false); onSetStepRef.current?.('yourroom'); }, 1200); };
-  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan, outdoor: OUTDOOR_SLUGS.has(r.slug) });
+  const roomDefOf = (r: RoomRow): RoomDef => ({ slug: r.slug, name: r.name, accent: r.accent, floor: r.floor, owner: r.owner, buildAll: r.build_all, rights: r.rights, plan: r.plan, outdoor: OUTDOOR_SLUGS.has(r.slug), combat: r.combat_enabled });
   const doCreateRoom = async () => {
     if (!requireAccount()) return;
     const res = await createRoom(newRoomName, !newRoomPrivate, newRoomPlan);
@@ -1178,7 +1273,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (room === r.slug) switchRoom(roomOf('town'));
     refreshRoomLists();
   };
-  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); };
+  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); setPermsCombat(r.combat_enabled ?? false); };
   const addPermHandle = () => {
     const h = permsHandle.trim(); if (!h) return;
     if (!permsList.some(x => x.toLowerCase() === h.toLowerCase())) setPermsList(l => [...l, h]);
@@ -1187,12 +1282,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const savePerms = async () => {
     if (!permsRoom) return;
     const list = Array.from(new Set(permsList.map(h => h.trim()).filter(Boolean)));
-    const ok = await updateRoomPerms(permsRoom.slug, permsAll, list);
+    const ok = await updateRoomPerms(permsRoom.slug, permsAll, list, permsCombat);
     if (!ok) { flashHint('Failed to save permissions'); return; }
     if (permsPublic !== permsRoom.public) await setRoomPublic(permsRoom.slug, permsPublic);   // flip public ↔ invite-only
     // Reflect immediately in local lists + the live room if it's the one open.
-    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic } : r));
-    if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list }));
+    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic, combat_enabled: permsCombat } : r));
+    if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list, combat: permsCombat }));
     refreshRoomLists();   // public flag changed → refresh the public-room list (portal picker + browser)
     setPermsRoom(null); flashHint('Permissions saved ✓');
   };
@@ -1743,8 +1838,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id); const lvl = Number(meta.lvl) || 0;
           const swayIntensity = Number(meta.swayIntensity) || 0; const swayExpiry = Number(meta.swayExpiry) || 0;
           const speedMult = Number(meta.speedMult) || 1; const speedExpiry = Number(meta.speedExpiry) || 0;
-          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, swayIntensity, swayExpiry, speedMult, speedExpiry });
-          else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; }
+          const hp = meta.hp != null ? Number(meta.hp) : undefined; const maxHp = Number(meta.maxHp) || MAX_HP; const absorb = Number(meta.absorb) || 0; const weapon = meta.wp != null ? String(meta.wp) : undefined;
+          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, swayIntensity, swayExpiry, speedMult, speedExpiry, hp, maxHp, absorb, weapon });
+          else { r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; if (hp != null) r.hp = hp; r.maxHp = maxHp; r.absorb = absorb; if (weapon != null) r.weapon = weapon; }
         }
         for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
         setPopulation(remotesRef.current.size + 1);
@@ -1756,7 +1852,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const lvl = Number(pl.lvl) || 0; const h = pl.h != null ? String(pl.h) : null; const s = pl.s != null ? String(pl.s) : null; const ic = parseIcon(pl.icon);
           let r = remotesRef.current.get(id);
           if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
-          else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; }
+          else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp); }
         })
         .on('broadcast', { event: 'say' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
@@ -1868,6 +1964,36 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           r.speedMult     = Number(pl.speedMult)     || 1;
           r.speedExpiry   = Number(pl.speedExpiry)   || 0;
         })
+        // ---- combat ----
+        .on('broadcast', { event: 'hp' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>; const id = String(pl.id ?? ''); if (!id || id === me.id) return;
+          const r = remotesRef.current.get(id); if (!r) return;
+          r.hp = Number(pl.hp); r.maxHp = Number(pl.maxHp) || MAX_HP; r.absorb = Number(pl.absorb) || 0; if (pl.wp != null) r.weapon = String(pl.wp);
+        })
+        .on('broadcast', { event: 'attack' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          const from = String(pl.from ?? ''); const a = remotesRef.current.get(from);
+          if (a) { a.attackUntil = Date.now() + 280; if (pl.wp != null) a.weapon = String(pl.wp); }   // show the attacker's swing
+          onIncomingAttack(pl);
+        })
+        .on('broadcast', { event: 'ko' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>; const id = String(pl.id ?? ''); if (!id) return;
+          const r = remotesRef.current.get(id); if (r) { r.koUntil = Date.now() + KO_MS; r.hp = 0; }
+          const by = String(pl.by ?? '');
+          const byHandle = by === me.id ? me.handle : (remotesRef.current.get(by)?.handle ?? 'someone');
+          const victimHandle = id === me.id ? me.handle : (r?.handle ?? 'someone');
+          pushFeed('⚔', `${byHandle} knocked out ${victimHandle}`);
+        })
+        .on('broadcast', { event: 'loot' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>; if (String(pl.to ?? '') !== me.id) return;
+          const loot: Loot = { crystals: Number(pl.crystals) || 0, items: (pl.items && typeof pl.items === 'object') ? pl.items as Record<string, number> : {} };
+          if (lootIsEmpty(loot)) return;
+          grantLoot(loot);
+          const fromHandle = remotesRef.current.get(String(pl.from ?? ''))?.handle ?? 'them';
+          const parts: string[] = []; if (loot.crystals > 0) parts.push(`${CURRENCY_SYMBOL}${loot.crystals.toLocaleString('pt-PT')}`);
+          const ic = Object.values(loot.items).reduce((s, n) => s + n, 0); if (ic > 0) parts.push(`${ic} item${ic > 1 ? 's' : ''}`);
+          flashHint(`Looted ${parts.join(' + ')} from ${fromHandle}`);
+        })
         .subscribe(async status => {
           if (!alive) return;
           joinedRef.current = status === 'SUBSCRIBED';
@@ -1876,7 +2002,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
             if (!alive) return;
             const swEf = getSwayEffect(); const spEf = getSpeedEffect();
-            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt }).catch(() => {});
+            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }).catch(() => {});
             if (!alive) return;
             ingestItemRows(await fetchAllRoomItems(sb, room));
           } else {
@@ -1890,7 +2016,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
     connect();
 
-    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; const swEf = getSwayEffect(); const spEf = getSpeedEffect(); channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt }); } };
+    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; const swEf = getSwayEffect(); const spEf = getSpeedEffect(); channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }); } };
     // On unload (refresh / tab close / navigation) announce a leave so others drop us immediately,
     // then untrack — instead of leaving a frozen ghost until Supabase's presence heartbeat times out.
     const onLeave = () => { try { channelRef.current?.send({ type: 'broadcast', event: 'leave', payload: { id: me.id } }); channelRef.current?.untrack(); } catch { /* ignore */ } };
@@ -1907,6 +2033,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const update = () => {
       framesRef.current++;
       const me = selfRef.current;
+      // Combat FX lifetimes + knockout movement lock (fixed-timestep so they're refresh-rate independent).
+      if (dmgFxRef.current.length) dmgFxRef.current = dmgFxRef.current.filter(d => { d.life--; d.z += 0.012; return d.life > 0; });
+      if (projRef.current.length) projRef.current = projRef.current.filter(p => { p.life--; return p.life > 0; });
+      if (koUntilRef.current > Date.now()) me.path = [];   // stay down (no walking) while knocked out
       let moving = false;
       if (++speedCheckRef.current >= 30) {
         speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity();
@@ -1931,7 +2061,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (me.bubbleLife > 0) me.bubbleLife--;
       const ch = channelRef.current;
       if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
-        const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl });
+        const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id });
         if (moving && ++posAccum.current >= 8) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() });   // final position; no mid-session re-track (that bounced the channel)
       }
@@ -2186,6 +2316,29 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
+      // ---- combat overlays (screen space) ----
+      const nowT = Date.now();
+      const swinging = !!a.attackUntil && a.attackUntil > nowT;
+      const handY = sy - 26 + bob;
+      const weaponId = isSelf ? equippedWeaponSpec().id : a.weapon;
+      if (weaponId && weaponId !== 'fists') {   // held weapon by the hand; pops on a swing
+        const wsp = weaponOf(weaponId);
+        ctx.save(); ctx.font = `700 ${swinging ? 24 : 17}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.translate(sx + 15, handY); ctx.rotate(swinging ? -0.5 : 0.35);
+        ctx.fillText(wsp.emoji, 0, 0); ctx.restore();
+      }
+      if (swinging) {   // a quick white slash arc
+        const k = Math.max(0, Math.min(1, (a.attackUntil! - nowT) / 280));
+        ctx.save(); ctx.globalAlpha = 0.7 * k; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(sx + 14, handY, 20, -0.9, 0.7); ctx.stroke(); ctx.restore();
+      }
+      if (a.hitUntil && a.hitUntil > nowT) {   // red flash when struck
+        const k = (a.hitUntil - nowT) / 220;
+        ctx.save(); ctx.globalAlpha = 0.5 * k; ctx.fillStyle = '#ff2a2a'; ctx.beginPath(); ctx.ellipse(sx, sy - 26, 19, 28, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+      if (a.koUntil && a.koUntil > nowT && !isSelf) {   // remote knocked-out marker
+        ctx.save(); ctx.font = '700 18px serif'; ctx.textAlign = 'center'; ctx.fillText('💫', sx, sy - 64); ctx.restore();
+      }
     };
     // Avatar NAME LABEL + chat BUBBLE — drawn in a separate pass AFTER everything, so a tall piece of
     // furniture in front can never hide who someone is or what they just said.
@@ -2198,6 +2351,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.fillStyle = 'rgba(6,6,10,0.9)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();   // solid plate so the name reads over any avatar/atmosphere
       ctx.strokeStyle = isSelf ? hexA(col, 0.85) : 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = isSelf ? col : '#fff'; ctx.fillText(a.handle, sx, ny); ctx.restore();
+      // HP bar (PvP rooms only) — sits just above the name plate. Self reads live hp; remotes use synced values.
+      if (themeRef.current.combat) {
+        let hp = 0, max = MAX_HP, absorb = 0, have = false;
+        if (isSelf) { const h = getHP(); hp = h.hp; max = h.max; absorb = h.absorb; have = true; }
+        else if (a.hp != null) { hp = a.hp; max = a.maxHp ?? MAX_HP; absorb = a.absorb ?? 0; have = true; }
+        if (have) {
+          const bw = 36, bh = 4, bx = sx - bw / 2, by = sy - 2;
+          const frac = Math.max(0, Math.min(1, hp / max));
+          ctx.save();
+          ctx.fillStyle = 'rgba(6,6,10,0.9)'; ctx.beginPath(); ctx.roundRect(bx - 1, by - 1, bw + 2, bh + 2, 2); ctx.fill();
+          ctx.fillStyle = frac > 0.5 ? '#1ED760' : frac > 0.25 ? '#ffb020' : '#ff3b3b';
+          ctx.fillRect(bx, by, bw * frac, bh);
+          if (absorb > 0) { const aw = Math.min(bw, bw * (absorb / max)); ctx.fillStyle = '#7fd0ff'; ctx.fillRect(bx, by - 2.5, aw, 2); }   // shield buffer pip
+          ctx.restore();
+        }
+      }
       if (a.bubbleLife > 0 && a.bubble) {
         const alpha = Math.min(1, a.bubbleLife / 30); ctx.save(); ctx.globalAlpha = alpha; ctx.font = '600 15px Helvetica, Arial';
         const lines = wrapBubble(a.bubble); const lh = 19, padY = 7;
@@ -2474,6 +2643,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const n of npcsRef.current) drawAvatarLabel(n, false);
       for (const r of remotesRef.current.values()) drawAvatarLabel(r, false);
       drawAvatarLabel(selfRef.current, true);   // your own name on top of the pile
+      // Magic bolts in flight (interpolate start→target by elapsed fraction).
+      for (const p of projRef.current) {
+        const f = 1 - p.life / p.max;
+        const gx = p.fx0 + (p.fx1 - p.fx0) * f, gy = p.fy0 + (p.fy1 - p.fy0) * f, gz = p.z0 + (p.z1 - p.z0) * f;
+        const { sx, sy } = iso(gx, gy, gz);
+        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+      // Floating damage numbers.
+      for (const d of dmgFxRef.current) {
+        const { sx, sy } = iso(d.fx, d.fy, d.z);
+        ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, d.life / 30)); ctx.font = '800 15px Helvetica, Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        ctx.strokeText(d.text, sx, sy - 40); ctx.fillStyle = d.color; ctx.fillText(d.text, sx, sy - 40); ctx.restore();
+      }
       ctx.restore();
     };
 
@@ -2509,8 +2693,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const onPointerDown = (e: React.PointerEvent) => {
     setEmoteOpen(false);
+    if (koUntilRef.current > Date.now()) return;   // knocked out — no input until you respawn
     const { gx, gy } = evtTile(e);
     if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
+    // COMBAT — in a PvP room, tapping another player swings your equipped weapon (open PvP, no consent).
+    if (roomMetaRef.current.combat && !tutorial && !decorOpen && !placingKind && !removeMode && !rotateMode && !tileMode) {
+      for (const [rid, remote] of remotesRef.current) {
+        if (Math.round(remote.fx) === gx && Math.round(remote.fy) === gy) { attackPlayer(rid, remote); return; }
+      }
+    }
     // Hidden easter egg — the wall at the top-centre of the Terminal room pays out, once.
     // Requires the player to be adjacent (Chebyshev ≤ 1); clicking from afar falls through
     // to the solid-tile redirect so they walk up first.
@@ -2551,8 +2742,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       if (editSelRef.current) { setEditSel(null); return; }
     }
-    // Clicking a tile occupied by another player offers interaction (not in tutorial or decor mode).
-    if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
+    // Clicking a tile occupied by another player offers interaction (not in tutorial, decor, or a PvP room — there a tap attacks).
+    if (!tutorial && !decorOpen && !roomMetaRef.current.combat && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
       for (const [rid, remote] of remotesRef.current) {
         if (Math.round(remote.fx) === gx && Math.round(remote.fy) === gy) {
           setInteractPrompt({ id: rid, handle: remote.handle });
@@ -2730,7 +2921,26 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{isTutRoom(room) ? '· tutorial ·' : supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
+        {/* Combat HUD — weapon + health, plus the PvP-zone warning. */}
+        {roomMeta.combat && !tutorial && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">⚔ Combat</span>
+            <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
+            <span className="relative w-28 h-2.5 bg-white/10 border border-black/40 overflow-hidden">
+              <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
+            </span>
+            <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
+          </div>
+        )}
       </div>
+
+      {/* WASTED — knockout overlay with a respawn countdown. */}
+      {koUntil > Date.now() && (
+        <div className="absolute inset-0 z-[68] flex flex-col items-center justify-center bg-brandRed/10 backdrop-blur-[2px] pointer-events-none">
+          <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>KNOCKED OUT</p>
+          <p className="text-white/70 text-sm mt-2 uppercase tracking-[0.3em]">Back up in {Math.max(1, Math.ceil((koUntil - Date.now()) / 1000))}s</p>
+        </div>
+      )}
 
       {/* Town money jar — real money spent on the game, all-time. Not explained; it just sits there. */}
       {room === 'town' && (
@@ -3347,6 +3557,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               <input type="checkbox" checked={permsAll} onChange={e => setPermsAll(e.target.checked)} className="accent-[#1ED760] w-4 h-4" />
               <span className="text-sm text-white">Everyone can build<br /><span className="text-[11px] text-white/45">Any visitor can drop and pick up furniture.</span></span>
             </label>
+            {isMod && (
+              <label className="flex items-center gap-3 p-3 border border-brandRed/30 cursor-pointer hover:border-brandRed/55 mt-2">
+                <input type="checkbox" checked={permsCombat} onChange={e => setPermsCombat(e.target.checked)} className="accent-brandRed w-4 h-4" />
+                <span className="text-sm text-white">⚔ Combat zone<br /><span className="text-[11px] text-white/45">Players can attack &amp; loot each other here (5% of Cristais + items on a knockout). Mods only.</span></span>
+              </label>
+            )}
 
             <p className={`text-[11px] uppercase tracking-[0.3em] text-white/40 mt-5 mb-2 ${permsAll ? 'opacity-40' : ''}`}>People with permission</p>
             <div className={`flex flex-col gap-2 ${permsAll ? 'opacity-40 pointer-events-none' : ''}`}>
