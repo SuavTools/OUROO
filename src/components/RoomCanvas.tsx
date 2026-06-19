@@ -1065,7 +1065,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
     remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
-      if (tileDist(mgx, mgy, clampTile(r.fx), clampTile(r.fy)) > wp.range) return;   // out of reach
+      if (tileDist(mgx, mgy, clampTile(r.tx), clampTile(r.ty)) > wp.range) return;   // out of reach
       channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style } });
       // Optimistic local prediction: drop their bar + flash NOW instead of after the hp round-trip.
       // The victim is authoritative — their 'hp' broadcast reconciles this a moment later.
@@ -2086,7 +2086,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const ch = channelRef.current;
       if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id });
-        if (moving && ++posAccum.current >= 8) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
+        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 4 : 8)) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() });   // final position; no mid-session re-track (that bounced the channel)
       }
       wasMovingRef.current = moving;
@@ -2206,7 +2206,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (voidTimerRef.current > 200) { voidTimerRef.current = 0; flashHint('The void swallows you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
         } else voidTimerRef.current = 0;
       } else voidTimerRef.current = 0;
-      for (const r of remotesRef.current.values()) { r.fx += (r.tx - r.fx) * 0.3; r.fy += (r.ty - r.fy) * 0.3; r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--; }
+      for (const r of remotesRef.current.values()) { const ddx = r.tx - r.fx, ddy = r.ty - r.fy; if (ddx * ddx + ddy * ddy > 2.25) { r.fx = r.tx; r.fy = r.ty; } else { r.fx += ddx * 0.3; r.fy += ddy * 0.3; } r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--; }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // pathfinding wander + speech for NPCs
         if (n.roam && n.hx != null && n.hy != null) {
