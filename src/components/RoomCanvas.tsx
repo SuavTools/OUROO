@@ -662,7 +662,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); setEditingNpcId(null); setNpcMode(null); };
+  const closeDecor = () => { setDecorOpen(false); setDecorMin(false); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setGamesMode(false); setShopsMode(false); setPlaceLore(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcEditor(false); setPlaceNpc(false); setEditingNpcId(null); setNpcMode(null); setPortalMode(null); setPortalEditing(null); setPortalMaker(false); };
   const [entered] = useState(true);   // instant spawn — you arrive straight in the Plaza lore room (no lobby gate)
   const [portalPrompt, setPortalPrompt] = useState<Portal | null>(null);   // code prompt when you walk onto a coded portal
   const [portalCode, setPortalCode] = useState('');
@@ -889,6 +889,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [arrivalModal, setArrivalModal] = useState<{ title: string; body: string; reward: number } | null>(null);   // first-visit reward + onboarding
   // Player portal-maker: pick a destination + optional access code, then drop the portal onto a tile.
   const [portalMaker, setPortalMaker] = useState(false);
+  const [portalEditing, setPortalEditing] = useState<string | null>(null);  // item id of portal being edited
+  const [portalMode, setPortalMode] = useState<'choose' | 'list' | null>(null);
   const [pmDest, setPmDest] = useState('town');      // a public slug, or 'code' to link by room code
   const [pmRoomCode, setPmRoomCode] = useState('');  // the destination room's invite code (when pmDest==='code')
   const [pmAccess, setPmAccess] = useState('');      // optional access code the next person must speak
@@ -899,6 +901,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
     setPlacingKind(encodePortal(to, pmAccess.trim(), pmHidden, pmMessage.trim())); setRemoveMode(false); setRotateMode(false); setTileMode(false);
     setPortalMaker(false); flashHint(pmHidden ? 'Tap a tile to drop the hidden trigger ◌' : 'Tap a tile to drop the portal ✦');
+  };
+  const savePortalEdit = () => {
+    if (!portalEditing) return;
+    const it = itemsRef.current.find(i => i.id === portalEditing);
+    if (!it) { setPortalEditing(null); setPortalMaker(false); return; }
+    const to = pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest;
+    if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
+    const newKind = encodePortal(to, pmAccess.trim(), pmHidden, pmMessage.trim());
+    it.portalTo = to; it.portalCode = pmAccess.trim() || undefined; it.portalHidden = pmHidden; it.portalMessage = pmMessage.trim() || undefined;
+    supabase?.from('room_items').update({ kind: newKind }).eq('id', portalEditing).then(undefined, () => {});
+    setPortalEditing(null); setPortalMaker(false); flashHint('Portal updated ✦');
   };
   // Ambient room music — the SUAV signal (generated, royalty-free; see lib/roomMusic). Off persists per device.
   const musicRef = useRef<RoomMusic | null>(null);
@@ -3179,8 +3192,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <span className="text-[18px] leading-none" style={{ marginTop: '-1px', color: buildMode ? '#ffe65c' : '#cfd2dc' }}>🏠</span>
                 <span className={`text-[7px] uppercase tracking-wide leading-none ${buildMode ? 'text-brandYellow' : 'text-white/50'}`}>Builds</span>
               </button>
-              <button onClick={() => { refreshRoomLists(); setPortalMaker(true); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); }} title="Place a portal to another room"
-                className="shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors hover:bg-[#cc66ff]/15">
+              <button onClick={() => { refreshRoomLists(); setPortalMode(m => m ? null : 'choose'); setPortalMaker(false); setPortalEditing(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setPlacingKind(null); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); setEditSel(null); setNpcMode(null); }} title="Portal tools"
+                className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-[3.1rem] py-1 rounded-lg transition-colors ${portalMode ? 'bg-[#cc66ff]/20' : 'hover:bg-[#cc66ff]/15'}`}>
                 <span className="text-[18px] leading-none text-[#cc66ff]" style={{ marginTop: '-1px' }}>◎</span>
                 <span className="text-[7px] uppercase tracking-wide leading-none text-[#cc66ff]">Portal</span>
               </button>
@@ -3447,6 +3460,58 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                     </div>
                   ))}
                 </div>
+              </div>
+            ) : portalMode ? (
+              <div className="p-3 space-y-2">
+                {portalMode === 'choose' ? (
+                  <>
+                    <p className="text-[11px] text-[#cc66ff]/90">What would you like to do?</p>
+                    <button onClick={() => { setPmDest('town'); setPmRoomCode(''); setPmAccess(''); setPmHidden(false); setPmMessage(''); setPortalEditing(null); setPortalMode(null); setPortalMaker(true); }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 border border-white/15 hover:border-[#cc66ff] transition-colors text-left">
+                      <span>
+                        <span className="block text-[11px] font-bold text-white">Add New Portal</span>
+                        <span className="block text-[9px] text-white/40">Place a door that leads to another room</span>
+                      </span>
+                      <span className="text-[10px] text-[#cc66ff]/70">▸</span>
+                    </button>
+                    <button onClick={() => setPortalMode('list')}
+                      className="w-full flex items-center justify-between px-3 py-2.5 border border-white/15 hover:border-[#cc66ff] transition-colors text-left">
+                      <span>
+                        <span className="block text-[11px] font-bold text-white">Edit Existing Portal</span>
+                        <span className="block text-[9px] text-white/40">Update a portal already in this room</span>
+                      </span>
+                      <span className="text-[10px] text-[#cc66ff]/70">▸</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[11px] text-[#cc66ff]/90">Select a portal to edit.</p>
+                    {itemsRef.current.filter(i => i.portalTo).length === 0 ? (
+                      <p className="text-[10px] text-white/35 italic">No portals placed in this room yet.</p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {itemsRef.current.filter(i => i.portalTo).map(p => {
+                          const dest = p.portalTo!;
+                          const destLabel = dest.startsWith('code:') ? `code: ${dest.slice(5)}` : (ROOMS.find(r => r.slug === dest)?.name ?? dest);
+                          return (
+                            <button key={p.id} onClick={() => {
+                              if (dest.startsWith('code:')) { setPmDest('code'); setPmRoomCode(dest.slice(5)); } else { setPmDest(dest); setPmRoomCode(''); }
+                              setPmAccess(p.portalCode || ''); setPmHidden(p.portalHidden || false); setPmMessage(p.portalMessage || '');
+                              setPortalEditing(p.id); setPortalMode(null); setPortalMaker(true);
+                            }} className="flex items-center justify-between gap-2 px-3 py-2 border border-white/15 hover:border-[#cc66ff] text-left transition-colors">
+                              <span>
+                                <span className="block text-[11px] font-bold text-white">→ {destLabel}</span>
+                                <span className="block text-[9px] text-white/40">{p.portalCode ? `code: ${p.portalCode}` : 'open'}{p.portalHidden ? ' · hidden' : ''} · {p.gx},{p.gy}</span>
+                              </span>
+                              <span className="text-[10px] text-[#cc66ff]/70">Edit ▸</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <button onClick={() => setPortalMode('choose')} className="text-[10px] text-white/45 hover:text-white">← Back</button>
+                  </>
+                )}
               </div>
             ) : npcMode ? (
               <div className="p-3 space-y-2">
@@ -3929,11 +3994,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }} />
 
       {portalMaker && (
-        <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setPortalMaker(false)}>
+        <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => { setPortalMaker(false); setPortalEditing(null); }}>
           <div className="w-full max-w-sm border border-[#cc66ff]/40 bg-black p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#cc66ff]">◎ new portal</p>
-              <p className="text-sm text-white/60 leading-relaxed mt-1">Drop a door that leads somewhere else. People walk onto it to travel — find it, walk to it.</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#cc66ff]">{portalEditing ? '◎ edit portal' : '◎ new portal'}</p>
+              <p className="text-sm text-white/60 leading-relaxed mt-1">{portalEditing ? 'Update this portal\'s destination, access code, or message.' : 'Drop a door that leads somewhere else. People walk onto it to travel — find it, walk to it.'}</p>
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Leads to</p>
@@ -3967,8 +4032,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#cc66ff] resize-none" rows={3} />
             </div>
             <div className="flex gap-2 pt-1">
-              <button onClick={makePortal} className="flex-1 bg-[#cc66ff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">Place portal ▸</button>
-              <button onClick={() => setPortalMaker(false)} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
+              <button onClick={portalEditing ? savePortalEdit : makePortal} className="flex-1 bg-[#cc66ff] text-black font-bold uppercase text-xs tracking-widest py-3 active:scale-95 hover:bg-white transition-colors">{portalEditing ? 'Save changes ▸' : 'Place portal ▸'}</button>
+              <button onClick={() => { setPortalMaker(false); setPortalEditing(null); }} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Cancel</button>
             </div>
           </div>
         </div>
