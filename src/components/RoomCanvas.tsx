@@ -2113,7 +2113,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const planBase = flying ? Math.max(0, planRef.current[key(clampTile(a.fx), clampTile(a.fy))] ?? 0) : 0;
       const sy_ground = flying ? iso(a.fx, a.fy, planBase).sy + wade : sy_floor;
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-      if (!flying) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 18, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 18, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const em = a.emote ?? null;
       let bob: number, sway = 0, spin = 0, legFold = 0;
