@@ -402,7 +402,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; hpStamp?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; hpStamp?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; vx?: number; vy?: number; rxAt?: number; };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 type InteractPeer = { id: string; handle: string };
 type TradeOffer = { type: 'item'; id: string } | { type: 'furni'; kind: string } | { type: 'crystals'; amount: number };
@@ -1922,9 +1922,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const fx = Number(pl.fx), fy = Number(pl.fy); if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
           const lvl = Number(pl.lvl) || 0; const h = pl.h != null ? String(pl.h) : null; const s = pl.s != null ? String(pl.s) : null; const ic = parseIcon(pl.icon);
           let r = remotesRef.current.get(id);
-          if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100 }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
-          else { r.tx = fx; r.ty = fy; r.lvl = lvl; if (pl.tp) { r.fx = fx; r.fy = fy; r.z = lvl; }   // tp = respawn teleport: snap, don't slide across the room
-            if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp); }
+          if (!r) { r = { handle: h ?? '…', skinId: s ?? 'diamond-gold', icon: ic, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, vx: 0, vy: 0, rxAt: performance.now() }; remotesRef.current.set(id, r); setPopulation(remotesRef.current.size + 1); }
+          else {
+            const now = performance.now(); const dt = now - (r.rxAt ?? now);
+            if (!pl.tp && dt > 0 && dt < 500) {   // velocity from consecutive updates; ignore teleports and stale gaps
+              const dtTicks = dt / (1000 / 60);
+              const rawVx = (fx - r.tx) / dtTicks, rawVy = (fy - r.ty) / dtTicks;
+              r.vx = Math.max(-WALK * 1.5, Math.min(WALK * 1.5, rawVx));
+              r.vy = Math.max(-WALK * 1.5, Math.min(WALK * 1.5, rawVy));
+            } else { r.vx = 0; r.vy = 0; }
+            r.rxAt = now; r.tx = fx; r.ty = fy; r.lvl = lvl;
+            if (pl.tp) { r.fx = fx; r.fy = fy; r.z = lvl; }   // tp = respawn teleport: snap, don't slide across the room
+            if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp);
+          }
         })
         .on('broadcast', { event: 'say' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const text = String(pl?.text ?? '');
@@ -2135,7 +2145,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const ch = channelRef.current;
       if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id });
-        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 4 : 8)) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
+        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 4 : 5)) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() });   // final position; no mid-session re-track (that bounced the channel)
       }
       wasMovingRef.current = moving;
@@ -2255,7 +2265,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (voidTimerRef.current > 200) { voidTimerRef.current = 0; flashHint('The void swallows you — back to Town.'); musicRef.current?.portal(); switchRoomRef.current(TOWN); }
         } else voidTimerRef.current = 0;
       } else voidTimerRef.current = 0;
-      for (const r of remotesRef.current.values()) { const ddx = r.tx - r.fx, ddy = r.ty - r.fy; if (ddx * ddx + ddy * ddy > 2.25) { r.fx = r.tx; r.fy = r.ty; } else { r.fx += ddx * 0.3; r.fy += ddy * 0.3; } r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(r.tx - r.fx, r.ty - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--; }
+      for (const r of remotesRef.current.values()) {
+        // Dead-reckoning: extrapolate from last received position using observed velocity,
+        // capped at 12 ticks (~200ms) so a stalled update doesn't slide them forever.
+        const ticksSinceRx = (performance.now() - (r.rxAt ?? 0)) / (1000 / 60);
+        const extrap = Math.min(ticksSinceRx, 12);
+        const extraX = r.tx + (r.vx ?? 0) * extrap, extraY = r.ty + (r.vy ?? 0) * extrap;
+        const ddx = extraX - r.fx, ddy = extraY - r.fy;
+        if (ddx * ddx + ddy * ddy > 2.25) { r.fx = extraX; r.fy = extraY; } else { r.fx += ddx * 0.3; r.fy += ddy * 0.3; }
+        r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(extraX - r.fx, extraY - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--;
+      }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // pathfinding wander + speech for NPCs
         if (n.roam && n.hx != null && n.hy != null) {
