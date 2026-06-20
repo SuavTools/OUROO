@@ -3396,23 +3396,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         {/* Combat HUD — weapon + health, plus the PvP-zone warning. Shows in PvP rooms, or anywhere a
             hazardous NPC is fightable (huntable). */}
         {(roomMeta.combat || huntable) && !tutorial && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">{roomMeta.combat ? '⚔ Combat' : '⚔ Hostiles'}</span>
-            <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
-            {equippedWeaponSpec().id === 'pistol' && (
-              <span className="text-[10px] tabular-nums font-bold text-white/70">🔋{wallet.items['pistol_ammo'] ?? 0}</span>
-            )}
-            <span className="relative w-28 h-2.5 bg-white/10 border border-black/40 overflow-hidden">
-              <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
-            </span>
-            <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
-            <div className="ml-1 flex flex-col items-center gap-0.5">
+          <div className="mt-2 flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">{roomMeta.combat ? '⚔ Combat' : '⚔ Hostiles'}</span>
               <button
                 onPointerDown={(e) => { e.preventDefault(); swingWeaponRef.current?.(); }}
                 title="Hit everyone in reach (or press F)"
-                className="text-sm leading-none border border-brandRed/50 bg-black/60 text-white px-2 py-1 hover:bg-brandRed hover:text-black active:scale-90 transition-all select-none"
-              >👊</button>
-              <span className="hidden sm:block text-[8px] font-mono uppercase tracking-wider text-white/50 leading-none">Press F to attack</span>
+                className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60 hover:text-white leading-none select-none bg-transparent border-none p-0 cursor-pointer"
+              >Press F to attack</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
+              {equippedWeaponSpec().id === 'pistol' && (
+                <span className="text-[10px] tabular-nums font-bold text-white/70">🔋{wallet.items['pistol_ammo'] ?? 0}</span>
+              )}
+              <span className="relative w-28 h-2.5 bg-white/10 border border-black/40 overflow-hidden">
+                <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
+              </span>
+              <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
             </div>
           </div>
         )}
