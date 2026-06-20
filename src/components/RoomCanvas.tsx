@@ -2607,14 +2607,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         weapHandX = shoulderX + 12 * s_dp * Math.sin(armTheta);
         weapHandY = shoulderY + 12 * s_dp * Math.cos(armTheta);
       }
-      if (wsp && wsp.id !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; pops on a swing — only visible in combat rooms
-        const swingRot = swinging
-          ? (wsp.style === 'melee' ? Math.PI + 0.35 + weaponArmLift * 0.85   // CW: returns to rest when lift→0
-              : wsp.style === 'gun' ? Math.PI - 0.5                           // gun: CCW tilt
-              : Math.PI + 0.85)                                               // magic: CW tilt
-          : Math.PI + 0.35;
+      if (wsp && wsp.id !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; only visible in combat rooms
+        // Weapon is glued to the hand — rotates with the arm (same CCW angle) from its rest orientation.
+        const weapRot = Math.PI + 0.35 - weaponArmLift * Math.PI * 0.5;
         ctx.save(); ctx.font = `700 ${swinging ? 30 : 22}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.translate(weapHandX, weapHandY); ctx.rotate(swingRot);
+        ctx.translate(weapHandX, weapHandY); ctx.rotate(weapRot);
         if (wsp.style === 'gun') ctx.scale(1, -1);
         ctx.fillText(wsp.emoji, 0, 0); ctx.restore();
       }
