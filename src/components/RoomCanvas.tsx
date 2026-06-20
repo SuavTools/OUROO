@@ -188,7 +188,8 @@ const encodeNpc = (d: NpcData) => `npc:${encodeURIComponent(JSON.stringify(d))}`
 const decodeNpc = (raw: string): NpcData | null => {
   try { const o = JSON.parse(decodeURIComponent(raw.slice(4))); if (!o || typeof o.n !== 'string') return null;
     const h = sanitizeHazard(o.h);
-    return { n: String(o.n).slice(0, 24), a: String(o.a || 'diamond-gold'), l: Array.isArray(o.l) ? o.l.map(String).slice(0, 8) : [], ...(h ? { h } : {}) }; }
+    const sz = Math.min(4, Math.max(1, Number(o.sz) || 1));
+    return { n: String(o.n).slice(0, 24), a: String(o.a || 'diamond-gold'), l: Array.isArray(o.l) ? o.l.map(String).slice(0, 8) : [], ...(h ? { h } : {}), ...(sz !== 1 ? { sz } : {}) }; }
   catch { return null; }
 };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
@@ -462,7 +463,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number; bodyScale?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
   const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
   const npcHpRef = useRef<Map<string, number>>(new Map());   // mid-fight NPC hp by nid — survives rebuildNpcs so a concurrent placement doesn't heal a boss
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
@@ -1803,7 +1804,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         hp = (defeated || peaceful) ? 0 : (npcHpRef.current.get(p.id) ?? h.maxHp);
       }
       const lines = (peaceful && h?.deadLines?.length) ? h.deadLines : p.data.l;
-      return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0, hz: h, defeated, peaceful, hp, maxHp: h?.maxHp, lastNpcAtk: 0, respawnAt };
+      const bodyScale = Math.min(4, Math.max(1, p.data.sz ?? 1));
+      return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0, hz: h, defeated, peaceful, hp, maxHp: h?.maxHp, lastNpcAtk: 0, respawnAt, bodyScale };
     });
     npcsRef.current = [...curated, ...placed];
     rebuildHuntable();
@@ -2520,14 +2522,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const sy_floor = iso(a.fx, a.fy, a.lvl).sy + wade;
       const pi = a.skinId && a.skinId.startsWith('person:') ? parsePerson(a.skinId) : null;
       const cr = a.skinId && isCreatureId(a.skinId) ? parseCreature(a.skinId) : null;
+      const bodyScale = (a as { bodyScale?: number }).bodyScale ?? 1;   // big-NPC scale (default 1)
       const col = pi ? personPrimaryColor(pi) : cr ? cr.color : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
       const flying = isSelf ? flyRef.current : !!(a.flying);   // Wings active → hover + aura + flapping wings
       const planBase = flying ? Math.max(0, planRef.current[key(clampTile(a.fx), clampTile(a.fy))] ?? 0) : 0;
       const sy_ground = flying ? iso(a.fx, a.fy, planBase).sy + wade : sy_floor;
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 18, 8, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 12, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 18 * bodyScale, 8 * bodyScale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 12 * bodyScale, 5 * bodyScale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       const em = a.emote ?? null;
       let bob: number, sway = 0, spin = 0, legFold = 0;
       if (em === 'dance') {
@@ -2587,6 +2590,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.save();
       ctx.translate(sx + sway, sy);                          // feet stay grounded; dance sway still slides whole avatar
       if (drunkTilt) ctx.rotate(drunkTilt);                  // tilt body around the feet pivot
+      if (bodyScale !== 1) ctx.scale(bodyScale, bodyScale);  // grow big NPCs upward from their feet
       ctx.translate(0, -30 + bob + drunkBob);                // move up to body centre
       if (spin) ctx.rotate(spin);
       ctx.shadowColor = col; ctx.shadowBlur = em === 'levitate' ? 38 : (isSelf ? 22 : 12);
@@ -2615,7 +2619,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.restore();
       }
       if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold, weaponArmLift);
-      else if (cr) drawSkinShape(ctx, cr.shape, cr.color, 40, 52, a.af);
+      else if (cr) drawSkinShape(ctx, cr.shape, cr.color, 40, 52, a.af, cr.accent);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
@@ -2666,6 +2670,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // HP bar — sits just above the name plate. Self/remotes show in PvP rooms; hazardous NPCs show
       // their own bar anywhere (but not once they're peaceful/defeated). Self reads live hp.
       const haz = a as { hz?: HazardSpec; defeated?: boolean; peaceful?: boolean };
+      const npcLift = (((a as { bodyScale?: number }).bodyScale ?? 1) - 1) * 50;   // raise bar/bubble clear of a big body
       const liveHazNpc = !!haz.hz && !haz.peaceful && !haz.defeated;
       const hideNpcBar = !!haz.hz && (haz.peaceful || haz.defeated);
       if ((themeRef.current.combat || liveHazNpc) && !hideNpcBar) {
@@ -2673,7 +2678,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (isSelf) { const h = getHP(); hp = h.hp; max = h.max; absorb = h.absorb; have = true; }
         else if (a.hp != null) { hp = a.hp; max = a.maxHp ?? MAX_HP; absorb = a.absorb ?? 0; have = true; }
         if (have) {
-          const bw = 36, bh = 4, bx = sx - bw / 2, by = sy - 2;
+          const bw = 36, bh = 4, bx = sx - bw / 2, by = sy - 2 - npcLift;
           const frac = Math.max(0, Math.min(1, hp / max));
           ctx.save();
           ctx.fillStyle = 'rgba(6,6,10,0.9)'; ctx.beginPath(); ctx.roundRect(bx - 1, by - 1, bw + 2, bh + 2, 2); ctx.fill();
@@ -2687,7 +2692,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const alpha = Math.min(1, a.bubbleLife / 30); ctx.save(); ctx.globalAlpha = alpha; ctx.font = '600 15px Helvetica, Arial';
         const lines = wrapBubble(a.bubble); const lh = 19, padY = 7;
         const tw = Math.max(...lines.map(l => ctx.measureText(l).width)), bw = tw + 22, bh = lines.length * lh + padY * 2;
-        const bx = sx - bw / 2, by = sy - 88 - bh;   // sit above the 2× scaled head (top ≈ sy-71)
+        const bx = sx - bw / 2, by = sy - 88 - bh - npcLift;   // sit above the 2× scaled head (top ≈ sy-71), clearing big bodies
         ctx.fillStyle = 'rgba(10,10,18,0.94)'; ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(sx - 6, by + bh); ctx.lineTo(sx + 6, by + bh); ctx.lineTo(sx, by + bh + 8); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';

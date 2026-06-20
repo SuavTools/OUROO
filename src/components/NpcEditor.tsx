@@ -16,7 +16,7 @@ import { SkinPreview } from '@/components/SkinPreview';
 // Persisted in room_items as `npc:<encodeURIComponent(JSON)>`. n = name, a = appearance id
 // (a `person:` spec or a skin id), l = the lines spoken on approach, h = optional hazard config
 // (makes the NPC killable — see HazardSpec).
-export type NpcData = { n: string; a: string; l: string[]; h?: HazardSpec };
+export type NpcData = { n: string; a: string; l: string[]; h?: HazardSpec; sz?: number };   // sz = body scale (1 = normal)
 
 // What happens once-per-player when you land the killing blow. Each maps onto a system that
 // already exists: toast=pushFeed, beat=ouroo_lore one-time line, skin=grantSkin, portal=a flag a
@@ -116,6 +116,8 @@ export const NpcEditor: React.FC<{
   const [skinSel, setSkinSel] = useState<string>(initial && !isPersonId(initial.a) && !isCreatureId(initial.a) ? initial.a : 'diamond-gold');
   const [creatureShape, setCreatureShape] = useState<SkinShape>(initCreature?.shape ?? 'dragon');
   const [creatureColor, setCreatureColor] = useState<string>(initCreature?.color ?? '#7bd16b');
+  const [creatureAccent, setCreatureAccent] = useState<string>(initCreature?.accent ?? '#3a6b35');
+  const [size, setSize] = useState<number>(initial?.sz ?? 1);
   const [name, setName] = useState(initial?.n ?? '');
   const [linesText, setLinesText] = useState((initial?.l ?? []).join('\n'));
 
@@ -155,7 +157,7 @@ export const NpcEditor: React.FC<{
   });
 
   const place = () => {
-    const a = appMode === 'person' ? encodePerson(person) : appMode === 'creature' ? encodeCreature(creatureShape, creatureColor) : skinSel;
+    const a = appMode === 'person' ? encodePerson(person) : appMode === 'creature' ? encodeCreature(creatureShape, creatureColor, creatureAccent) : skinSel;
     const l = splitLines(linesText);
     let h: HazardSpec | undefined;
     if (hazard) {
@@ -172,7 +174,7 @@ export const NpcEditor: React.FC<{
         deadLines: policy === 'once' ? splitLines(deadLinesText) : undefined,
       });
     }
-    onPlace({ n: name.trim().slice(0, 24) || 'NPC', a, l, ...(h ? { h } : {}) });
+    onPlace({ n: name.trim().slice(0, 24) || 'NPC', a, l, ...(h ? { h } : {}), ...(size !== 1 ? { sz: size } : {}) });
   };
 
   return (
@@ -200,18 +202,19 @@ export const NpcEditor: React.FC<{
           <div className="space-y-3">
             <div className="flex items-center gap-4">
               <div className="w-24 h-28 bg-black/50 border border-white/10 flex items-center justify-center shrink-0">
-                <SkinPreview skin={{ id: '_c', name: '', shape: creatureShape, color: creatureColor, unlock: { type: 'default' } }} size={104} />
+                <SkinPreview skin={{ id: '_c', name: '', shape: creatureShape, color: creatureColor, unlock: { type: 'default' } }} accent={creatureAccent} size={104} />
               </div>
               <div className="grid grid-cols-3 gap-1.5 flex-1">
                 {CREATURE_SHAPES.map(c => (
                   <button key={c.shape} onClick={() => setCreatureShape(c.shape)} title={c.name}
                     className={`aspect-square flex items-center justify-center border rounded-md transition-colors ${creatureShape === c.shape ? 'border-[#ffb84d] bg-[#ffb84d]/15' : 'border-white/12 bg-white/[0.03] hover:border-white/40'}`}>
-                    <SkinPreview skin={{ id: c.shape, name: c.name, shape: c.shape, color: creatureColor, unlock: { type: 'default' } }} size={42} />
+                    <SkinPreview skin={{ id: c.shape, name: c.name, shape: c.shape, color: creatureColor, unlock: { type: 'default' } }} accent={creatureAccent} size={42} />
                   </button>
                 ))}
               </div>
             </div>
-            <Row label="Colour">{Swatches([...CLOTH_COLORS, ...HAIR_COLORS], creatureColor, setCreatureColor)}</Row>
+            <Row label="Body colour">{Swatches([...CLOTH_COLORS, ...HAIR_COLORS], creatureColor, setCreatureColor)}</Row>
+            <Row label="Accent colour">{Swatches([...CLOTH_COLORS, ...HAIR_COLORS], creatureAccent, setCreatureAccent)}</Row>
           </div>
         ) : appMode === 'person' ? (
           <div className="space-y-3">
@@ -258,6 +261,17 @@ export const NpcEditor: React.FC<{
             </div>
           </div>
         )}
+
+        {/* Size — applies to any NPC (a colossal boss dragon, a giant guard…) */}
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Size</p>
+          <div className="flex gap-1">
+            {([['Normal', 1], ['Big', 1.6], ['Huge', 2.4], ['Colossal', 3.4]] as const).map(([lbl, v]) => (
+              <button key={lbl} onClick={() => setSize(v)}
+                className={`flex-1 text-[10px] uppercase tracking-wide py-1.5 border transition-colors ${Math.abs(size - v) < 0.01 ? 'border-[#ffb84d] bg-[#ffb84d]/15 text-white' : 'border-white/12 text-white/55 hover:border-white/30'}`}>{lbl}</button>
+            ))}
+          </div>
+        </div>
 
         <div>
           <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Lines on approach <span className="text-white/25 normal-case tracking-normal">(one per line — they speak when you walk up)</span></p>
