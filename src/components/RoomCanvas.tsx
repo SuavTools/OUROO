@@ -2603,6 +2603,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.restore();
         ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;   // restore body glow
       }
+      if (wsp && wsp.style === 'magic' && themeRef.current.combat) {
+        const p = Math.sin(a.af * 0.1);
+        ctx.save();
+        ctx.globalAlpha = 0.18 + p * 0.08;
+        ctx.fillStyle = '#cc44ff'; ctx.shadowColor = '#9900ff'; ctx.shadowBlur = 28 + p * 8;
+        ctx.beginPath(); ctx.ellipse(0, 0, 22, 30, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.55 + p * 0.2;
+        ctx.strokeStyle = '#dd88ff'; ctx.shadowBlur = 16 + p * 8; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(0, 0, 22, 30, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
       if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold, weaponArmLift);
       else if (cr) drawSkinShape(ctx, cr.shape, cr.color, 40, 52, a.af);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
