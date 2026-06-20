@@ -1525,7 +1525,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       let unseen = true; try { unseen = localStorage.getItem(`ouroo_lore_${mk.id}`) !== '1'; localStorage.setItem(`ouroo_lore_${mk.id}`, '1'); } catch { /* ignore */ }
       if (unseen) fireMarker(mk);
     }
-    setRoomReady(true);
   };
   // Apply the current room's floor plan (shape + base levels), then rebuild walkability. Repositions
   // you to the plan's spawn if your tile became void after a shape change.
@@ -1880,7 +1879,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       remotesRef.current.clear(); itemsRef.current = []; matOverrideRef.current.clear(); rebuildHeight(); setPopulation(1); setConnected(false);
       if (!supabase) return;
       let aliveTut = true;
-      fetchAllRoomItems(supabase, room).then(rows => { if (aliveTut) ingestItemRows(rows); });
+      fetchAllRoomItems(supabase, room).then(rows => { if (aliveTut) { ingestItemRows(rows); setRoomReady(true); } });
       return () => { aliveTut = false; };
     }
     if (!supabase || !entered) return;   // wait for the lobby "Enter" so the join is deliberate + clean
@@ -1888,13 +1887,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const sb = supabase;
     const me = selfRef.current;
     remotesRef.current.clear(); itemsRef.current = []; rebuildHeight(); setPopulation(1); setConnected(false);
-    let alive = true; let rejoinTimer: ReturnType<typeof setTimeout> | null = null;
+    let alive = true; let connectGen = 0; let rejoinTimer: ReturnType<typeof setTimeout> | null = null;
 
     // (Re)create + subscribe the room channel. Auto-rejoins itself if the socket/channel drops.
     const connect = () => {
       if (!alive) return;
+      const myGen = ++connectGen;
       const ch = sb.channel(`room:${room}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
       channelRef.current = ch;
+      let presenceSynced = false;
       const rebuild = () => {
         const state = ch.presenceState() as Record<string, Array<Record<string, unknown>>>;
         const seen = new Set<string>([me.id]);
@@ -1915,6 +1916,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         for (const id of [...remotesRef.current.keys()]) if (!seen.has(id)) remotesRef.current.delete(id);
         setPopulation(remotesRef.current.size + 1);
+        presenceSynced = true;
       };
       ch.on('presence', { event: 'sync' }, rebuild)
         .on('broadcast', { event: 'pos' }, ({ payload }) => {
@@ -2077,20 +2079,33 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           flashHint(`Looted ${parts.join(' + ')} from ${fromHandle}`);
         })
         .subscribe(async status => {
-          if (!alive) return;
+          if (!alive || connectGen !== myGen) return;
           joinedRef.current = status === 'SUBSCRIBED';
           if (status === 'SUBSCRIBED') {
             setConnected(true);
-            const [a, itemRows] = await Promise.all([
-              getAuthIdentity().catch(() => null),
-              fetchAllRoomItems(sb, room),
-            ]);
+            // Start item fetch immediately in the background — don't gate track() on it.
+            const itemsP = fetchAllRoomItems(sb, room);
+            // Resolve identity first, then track (track needs the correct handle).
+            const a = await getAuthIdentity().catch(() => null);
+            if (!alive || connectGen !== myGen) return;
             if (a?.handle) me.handle = a.handle;
-            if (!alive) return;
             const swEf = getSwayEffect(); const spEf = getSpeedEffect();
             await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }).catch(() => {});
-            if (!alive) return;
+            if (!alive || connectGen !== myGen) return;
+            // Wait for furniture AND the first presence sync (which populates remote avatars +
+            // their effects). Both run in parallel; whichever is slower sets the pace.
+            // The 600ms cap ensures a bad network never holds the loading screen indefinitely.
+            const [itemRows] = await Promise.all([
+              itemsP,
+              new Promise<void>(resolve => {
+                if (presenceSynced) { resolve(); return; }
+                const iv = setInterval(() => { if (presenceSynced || !alive || connectGen !== myGen) { clearInterval(iv); resolve(); } }, 25);
+                setTimeout(() => { clearInterval(iv); resolve(); }, 600);
+              }),
+            ]);
+            if (!alive || connectGen !== myGen) return;
             ingestItemRows(itemRows);
+            setRoomReady(true);
             if (roomMetaRef.current.discoverable) recordRoomVisit(room).catch(() => {});
           } else {
             setConnected(false);
