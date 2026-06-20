@@ -86,7 +86,7 @@ const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', 
 const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
 // Bet-band presets for the perms-panel "make this room an arena" toggle (max 0 = no ceiling).
 const ARENA_TIERS: { label: string; min: number; max: number }[] = [
-  { label: 'Pit', min: 10, max: 250 }, { label: 'Colosseum', min: 250, max: 5000 }, { label: 'Vault', min: 5000, max: 0 },
+  { label: 'Pit', min: 10, max: 250 }, { label: 'Arena', min: 250, max: 1000 }, { label: 'Colosseum', min: 1000, max: 5000 }, { label: 'Vault', min: 5000, max: 0 },
 ];
 const TUT_BY_SLUG: Record<string, RoomDef> = Object.fromEntries(Object.values(TUT_ROOMS).map(r => [r.slug, r]));
 const roomOf = (slug: string) => TUT_BY_SLUG[slug] ?? ROOMS.find(r => r.slug === slug) ?? TOWN;
