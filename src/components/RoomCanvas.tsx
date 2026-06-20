@@ -403,7 +403,7 @@ const hydrateItem = (rawKind: string, id: string, gx: number, gy: number, create
   const dk = decodeKind(rawKind);
   return { id, kind: dk.kind, dir: dk.dir, elev: dk.elev, gx, gy, createdBy };
 };
-type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; hpStamp?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; vx?: number; vy?: number; rxAt?: number; };
+type Avatar = { handle: string; skinId: string; icon?: IconSpec | null; fx: number; fy: number; tx: number; ty: number; z: number; lvl: number; bubble: string; bubbleLife: number; af: number; emote?: string | null; emoteAf?: number; swayIntensity?: number; swayExpiry?: number; speedMult?: number; speedExpiry?: number; hp?: number; maxHp?: number; absorb?: number; hpStamp?: number; weapon?: string; koUntil?: number; hitUntil?: number; attackUntil?: number; vx?: number; vy?: number; rxAt?: number; flying?: boolean; };
 type Self = Avatar & { id: string; path: { gx: number; gy: number; z: number }[] };
 type InteractPeer = { id: string; handle: string };
 type TradeOffer = { type: 'item'; id: string } | { type: 'furni'; kind: string } | { type: 'crystals'; amount: number };
@@ -1026,7 +1026,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const { multiplier: speedMult, expiresAt: speedExpiry } = getSpeedEffect();
     const me = selfRef.current;
     channelRef.current.send({ type: 'broadcast', event: 'item_effect', payload: { id: me.id, swayIntensity, swayExpiry, speedMult, speedExpiry } });
-    channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity, swayExpiry, speedMult, speedExpiry, ...combatTrack() });
+    channelRef.current.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity, swayExpiry, speedMult, speedExpiry, fly: flyRef.current ? 1 : 0, ...combatTrack() });
   };
   // ---- combat ----
   // The combat fields we attach to every presence track() so joiners/movers see health bars + held weapon.
@@ -1045,7 +1045,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!forceTrack && now - lastHpTrackRef.current < 4000) return;   // skip the heavy presence re-track
     lastHpTrackRef.current = now;
     const swEf = getSwayEffect(); const spEf = getSpeedEffect();
-    ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() });
+    ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, fly: flyRef.current ? 1 : 0, ...combatTrack() });
   };
   broadcastHPRef.current = broadcastHP;
   const spawnDmg = (fx: number, fy: number, z: number, amount: number, color: string) => {
@@ -1325,7 +1325,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const me = selfRef.current; me.skinId = id;
     const ap = resolveAppearance(id); me.icon = ap.kind === 'icon' ? ap.spec : null;
     const swEf = getSwayEffect(); const spEf = getSpeedEffect();
-    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt });
+    channelRef.current?.track({ id: me.id, handle: me.handle, skinId: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, fly: flyRef.current ? 1 : 0 });
   };
 
   const pushFeed = (handle: string, text: string) => { const id = ++feedId.current; setFeed(f => [...f.slice(-5), { id, handle, text }]); };
@@ -2018,10 +2018,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           seen.add(id); const fx = Number(meta.fx), fy = Number(meta.fy); let r = remotesRef.current.get(id); const lvl = Number(meta.lvl) || 0;
           const swayIntensity = Number(meta.swayIntensity) || 0; const swayExpiry = Number(meta.swayExpiry) || 0;
           const speedMult = Number(meta.speedMult) || 1; const speedExpiry = Number(meta.speedExpiry) || 0;
-          const hp = meta.hp != null ? Number(meta.hp) : undefined; const maxHp = Number(meta.maxHp) || MAX_HP; const absorb = Number(meta.absorb) || 0; const weapon = meta.wp != null ? String(meta.wp) : undefined;
-          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, swayIntensity, swayExpiry, speedMult, speedExpiry, hp, maxHp, absorb, weapon });
+          const hp = meta.hp != null ? Number(meta.hp) : undefined; const maxHp = Number(meta.maxHp) || MAX_HP; const absorb = Number(meta.absorb) || 0; const weapon = meta.wp != null ? String(meta.wp) : undefined; const flying = Boolean(meta.fly);
+          if (!r) remotesRef.current.set(id, { handle: String(meta.handle ?? '???'), skinId: String(meta.skinId ?? 'diamond-gold'), icon: null, fx, fy, tx: fx, ty: fy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: Math.random() * 100, swayIntensity, swayExpiry, speedMult, speedExpiry, hp, maxHp, absorb, weapon, flying });
           else {
-            r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; r.maxHp = maxHp; if (weapon != null) r.weapon = weapon;
+            r.handle = String(meta.handle ?? r.handle); r.skinId = String(meta.skinId ?? r.skinId); r.lvl = lvl; r.swayIntensity = swayIntensity; r.swayExpiry = swayExpiry; r.speedMult = speedMult; r.speedExpiry = speedExpiry; r.maxHp = maxHp; if (weapon != null) r.weapon = weapon; r.flying = flying;
             // hp/absorb from presence are a lagging cache — only trust them as a fallback when no live
             // 'hp' broadcast (or our own optimistic hit) has touched this player for a few seconds.
             // During an active fight the live broadcast owns hp; otherwise presence sync flickers the bar.
@@ -2049,7 +2049,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             } else { r.vx = 0; r.vy = 0; }
             r.rxAt = now; r.tx = fx; r.ty = fy; r.lvl = lvl;
             if (pl.tp) { r.fx = fx; r.fy = fy; r.z = lvl; }   // tp = respawn teleport: snap, don't slide across the room
-            if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp);
+            if (h) r.handle = h; if (s) r.skinId = s; r.icon = ic; if (pl.wp != null) r.weapon = String(pl.wp); if (pl.fly != null) r.flying = Boolean(pl.fly);
           }
         })
         .on('broadcast', { event: 'say' }, ({ payload }) => {
@@ -2219,7 +2219,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             if (!alive || connectGen !== myGen) return;
             if (a?.handle) me.handle = a.handle;
             const swEf = getSwayEffect(); const spEf = getSpeedEffect();
-            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }).catch(() => {});
+            await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, fly: flyRef.current ? 1 : 0, ...combatTrack() }).catch(() => {});
             if (!alive || connectGen !== myGen) return;
             // Wait for furniture AND the first presence sync (which populates remote avatars +
             // their effects). Both run in parallel; whichever is slower sets the pace.
@@ -2247,7 +2247,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     };
     connect();
 
-    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; const swEf = getSwayEffect(); const spEf = getSpeedEffect(); channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }); } };
+    const onResume = () => { if (document.visibilityState === 'visible' && channelRef.current && joinedRef.current) { const m = selfRef.current; const swEf = getSwayEffect(); const spEf = getSpeedEffect(); channelRef.current.track({ id: m.id, handle: m.handle, skinId: m.skinId, fx: m.fx, fy: m.fy, lvl: m.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, fly: flyRef.current ? 1 : 0, ...combatTrack() }); } };
     // On unload (refresh / tab close / navigation) announce a leave so others drop us immediately,
     // then untrack — instead of leaving a frozen ghost until Supabase's presence heartbeat times out.
     const onLeave = () => { try { channelRef.current?.send({ type: 'broadcast', event: 'leave', payload: { id: me.id } }); channelRef.current?.untrack(); } catch { /* ignore */ } };
@@ -2274,6 +2274,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const fa = getFlyActive(); flyRef.current = fa;
         if (fa !== flyingUiRef.current) {
           flyingUiRef.current = fa; setFlying(fa);
+          if (channelRef.current && joinedRef.current) channelRef.current.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id, fly: fa ? 1 : 0 } });
           if (!fa) {   // Wings expired mid-air → land on the surface below so you don't hang in the sky
             const k = key(clampTile(me.fx), clampTile(me.fy)), s = surfRef.current[k];
             me.lvl = s && s.length ? Math.max(...s) : Math.max(0, planLvl(clampTile(me.fx), clampTile(me.fy))); me.path = [];
@@ -2292,7 +2293,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (me.bubbleLife > 0) me.bubbleLife--;
       const ch = channelRef.current;
       if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
-        const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id });
+        const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id, fly: flyRef.current ? 1 : 0 });
         if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 2 : 5)) { posAccum.current = 0; heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) { heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }   // final position; no mid-session re-track (that bounced the channel)
         // Keep-alive: broadcast position every ~5 s while still so others can detect our disconnect within ~12 s.
@@ -2521,7 +2522,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const cr = a.skinId && isCreatureId(a.skinId) ? parseCreature(a.skinId) : null;
       const col = pi ? personPrimaryColor(pi) : cr ? cr.color : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
-      const flying = isSelf && flyRef.current;   // Wings active → hover + aura + flapping wings (self only)
+      const flying = isSelf ? flyRef.current : !!(a.flying);   // Wings active → hover + aura + flapping wings
       const planBase = flying ? Math.max(0, planRef.current[key(clampTile(a.fx), clampTile(a.fy))] ?? 0) : 0;
       const sy_ground = flying ? iso(a.fx, a.fy, planBase).sy + wade : sy_floor;
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
