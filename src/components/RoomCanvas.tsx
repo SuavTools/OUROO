@@ -10,7 +10,7 @@ import { supabase, supabaseReady } from '@/lib/supabase';
 import { getLocalPlayer } from '@/lib/leaderboard';
 import { getAuthIdentity, useUser, signInWithDiscord } from '@/lib/auth';
 import { amIModerator, amISuperAdmin } from '@/lib/chat';
-import { drawSkinShape, skinById, getSelectedSkinId, SKINS } from '@/lib/skins';
+import { drawSkinShape, skinById, getSelectedSkinId, SKINS, isCreatureId, parseCreature } from '@/lib/skins';
 import { grantSkin, getJarTotal } from '@/lib/economy';
 import { validateMessage } from '@/lib/names';
 import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } from '@/lib/furni';
@@ -2518,7 +2518,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // platform side-face geometry while the body sprite smoothly transitions between elevations.
       const sy_floor = iso(a.fx, a.fy, a.lvl).sy + wade;
       const pi = a.skinId && a.skinId.startsWith('person:') ? parsePerson(a.skinId) : null;
-      const col = pi ? personPrimaryColor(pi) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
+      const cr = a.skinId && isCreatureId(a.skinId) ? parseCreature(a.skinId) : null;
+      const col = pi ? personPrimaryColor(pi) : cr ? cr.color : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       const moving = isSelf ? selfRef.current.path.length > 0 : Math.hypot(a.tx - a.fx, a.ty - a.fy) > 0.02;
       const flying = isSelf && flyRef.current;   // Wings active → hover + aura + flapping wings (self only)
       const planBase = flying ? Math.max(0, planRef.current[key(clampTile(a.fx), clampTile(a.fy))] ?? 0) : 0;
@@ -2602,6 +2603,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;   // restore body glow
       }
       if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold, weaponArmLift);
+      else if (cr) drawSkinShape(ctx, cr.shape, cr.color, 40, 52, a.af);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
@@ -2643,7 +2645,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const drawAvatarLabel = (a: Avatar, isSelf: boolean) => {
       const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
-      const col = a.skinId && a.skinId.startsWith('person:') ? personPrimaryColor(parsePerson(a.skinId)) : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
+      const col = a.skinId && a.skinId.startsWith('person:') ? personPrimaryColor(parsePerson(a.skinId)) : a.skinId && isCreatureId(a.skinId) ? parseCreature(a.skinId).color : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
       ctx.save(); ctx.font = '700 11px Helvetica, Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const nw = ctx.measureText(a.handle).width + 14, ny = sy + 14;
       ctx.fillStyle = 'rgba(6,6,10,0.9)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();   // solid plate so the name reads over any avatar/atmosphere

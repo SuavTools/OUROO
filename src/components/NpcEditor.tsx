@@ -8,7 +8,7 @@ import {
   type PersonSpec, defaultPerson, encodePerson, parsePerson, isPersonId,
   TONES, HAIR, HATS, TOPS, PANTS, SHOES, MOUTHS, ACCS, EYES, HAIR_COLORS, CLOTH_COLORS,
 } from '@/lib/person';
-import { SKINS, skinById } from '@/lib/skins';
+import { SKINS, skinById, isCreatureId, parseCreature, encodeCreature, CREATURE_SHAPES, type SkinShape } from '@/lib/skins';
 import { ITEMS } from '@/lib/items';
 import { PersonPreview } from '@/components/PersonPreview';
 import { SkinPreview } from '@/components/SkinPreview';
@@ -108,10 +108,14 @@ export const NpcEditor: React.FC<{
   onDelete?: () => void;
 }> = ({ open, initial, onPlace, onClose, onDelete }) => {
   const initPerson = initial && isPersonId(initial.a) ? parsePerson(initial.a) : defaultPerson();
-  const [appMode, setAppMode] = useState<'person' | 'skin'>(initial && !isPersonId(initial.a) ? 'skin' : 'person');
+  const initCreature = initial && isCreatureId(initial.a) ? parseCreature(initial.a) : null;
+  const [appMode, setAppMode] = useState<'person' | 'skin' | 'creature'>(
+    initCreature ? 'creature' : initial && !isPersonId(initial.a) ? 'skin' : 'person');
   const [openPanel, setOpenPanel] = useState<'eyes' | 'mouth' | 'hair' | null>(null);
   const [person, setPerson] = useState<PersonSpec>(initPerson);
-  const [skinSel, setSkinSel] = useState<string>(initial && !isPersonId(initial.a) ? initial.a : 'diamond-gold');
+  const [skinSel, setSkinSel] = useState<string>(initial && !isPersonId(initial.a) && !isCreatureId(initial.a) ? initial.a : 'diamond-gold');
+  const [creatureShape, setCreatureShape] = useState<SkinShape>(initCreature?.shape ?? 'dragon');
+  const [creatureColor, setCreatureColor] = useState<string>(initCreature?.color ?? '#7bd16b');
   const [name, setName] = useState(initial?.n ?? '');
   const [linesText, setLinesText] = useState((initial?.l ?? []).join('\n'));
 
@@ -151,7 +155,7 @@ export const NpcEditor: React.FC<{
   });
 
   const place = () => {
-    const a = appMode === 'person' ? encodePerson(person) : skinSel;
+    const a = appMode === 'person' ? encodePerson(person) : appMode === 'creature' ? encodeCreature(creatureShape, creatureColor) : skinSel;
     const l = splitLines(linesText);
     let h: HazardSpec | undefined;
     if (hazard) {
@@ -185,14 +189,31 @@ export const NpcEditor: React.FC<{
             className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-[#ffb84d]" />
         </div>
 
-        {/* appearance: design a person, or pick any skin */}
+        {/* appearance: design a person, pick a skin, or pick a creature (animal / robot / mythical) */}
         <div className="flex gap-1">
-          {(['person', 'skin'] as const).map(m => (
-            <button key={m} onClick={() => setAppMode(m)} className={`flex-1 text-[11px] uppercase tracking-widest py-2 border transition-colors ${appMode === m ? 'bg-[#ffb84d] text-black border-[#ffb84d]' : 'text-white/60 border-white/20 hover:border-white/40'}`}>{m === 'person' ? 'Design a person' : 'Pick a skin'}</button>
+          {(['person', 'skin', 'creature'] as const).map(m => (
+            <button key={m} onClick={() => setAppMode(m)} className={`flex-1 text-[11px] uppercase tracking-widest py-2 border transition-colors ${appMode === m ? 'bg-[#ffb84d] text-black border-[#ffb84d]' : 'text-white/60 border-white/20 hover:border-white/40'}`}>{m === 'person' ? 'Person' : m === 'skin' ? 'Skin' : 'Creature'}</button>
           ))}
         </div>
 
-        {appMode === 'person' ? (
+        {appMode === 'creature' ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="w-24 h-28 bg-black/50 border border-white/10 flex items-center justify-center shrink-0">
+                <SkinPreview skin={{ id: '_c', name: '', shape: creatureShape, color: creatureColor, unlock: { type: 'default' } }} size={104} />
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 flex-1">
+                {CREATURE_SHAPES.map(c => (
+                  <button key={c.shape} onClick={() => setCreatureShape(c.shape)} title={c.name}
+                    className={`aspect-square flex items-center justify-center border rounded-md transition-colors ${creatureShape === c.shape ? 'border-[#ffb84d] bg-[#ffb84d]/15' : 'border-white/12 bg-white/[0.03] hover:border-white/40'}`}>
+                    <SkinPreview skin={{ id: c.shape, name: c.name, shape: c.shape, color: creatureColor, unlock: { type: 'default' } }} size={42} />
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Row label="Colour">{Swatches([...CLOTH_COLORS, ...HAIR_COLORS], creatureColor, setCreatureColor)}</Row>
+          </div>
+        ) : appMode === 'person' ? (
           <div className="space-y-3">
             <div className="flex items-start gap-4 border border-white/12 bg-black/40 p-3">
               <div className="w-24 h-28 bg-black/50 border border-white/10 flex items-center justify-center shrink-0"><PersonPreview spec={person} size={104} animate /></div>

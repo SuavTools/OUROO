@@ -1,7 +1,9 @@
 // In-game character skins: shape (diamond / chariot / unicorn) × colour.
 // Unlocked by best score, or by a secret lore-code (redeemed separately).
 
-export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave' | 'star' | 'heart' | 'shark' | 'crocbomber' | 'ballerina';
+export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave' | 'star' | 'heart' | 'shark' | 'crocbomber' | 'ballerina'
+  // creatures — used by hazardous NPCs (animals / robots / mythical), recolourable via `creature:` ids
+  | 'dragon' | 'wolf' | 'spider' | 'snake' | 'bat' | 'slime' | 'ghost' | 'robot' | 'drone';
 export type Skin = {
   id: string;
   name: string;
@@ -53,6 +55,24 @@ export const SKINS: Skin[] = [
 export const DEFAULT_SKIN_ID = 'diamond-gold';
 export const skinById = (id: string): Skin => SKINS.find(s => s.id === id) ?? SKINS[0];
 
+// ── creature appearances ── a SkinShape + a free colour, encoded as `creature:<shape>:<color>`
+// (mirrors how `person:` works). Used by hazardous NPCs; never enters the player skin catalog.
+export const CREATURE_SHAPES: { shape: SkinShape; name: string }[] = [
+  { shape: 'dragon', name: 'Dragon' }, { shape: 'wolf', name: 'Wolf' }, { shape: 'spider', name: 'Spider' },
+  { shape: 'snake', name: 'Snake' }, { shape: 'bat', name: 'Bat' }, { shape: 'slime', name: 'Slime' },
+  { shape: 'ghost', name: 'Ghost' }, { shape: 'robot', name: 'Robot' }, { shape: 'drone', name: 'Drone' },
+];
+const CREATURE_SET = new Set<string>(CREATURE_SHAPES.map(c => c.shape));
+export const isCreatureId = (id: string): boolean => id.startsWith('creature:');
+export function parseCreature(id: string): { shape: SkinShape; color: string } {
+  const [, shape, color] = id.split(':');
+  return {
+    shape: (CREATURE_SET.has(shape) ? shape : 'dragon') as SkinShape,
+    color: /^#[0-9a-fA-F]{3,8}$/.test(color || '') ? color : '#7bd16b',
+  };
+}
+export const encodeCreature = (shape: SkinShape, color: string): string => `creature:${shape}:${color}`;
+
 // Compact score label: 50000 → "50k", 1500000 → "1.5M".
 export function fmtScore(n: number): string {
   if (n >= 1_000_000) return `${String(n / 1_000_000).replace(/\.0$/, '')}M`;
@@ -75,6 +95,128 @@ export function setSelectedSkinId(id: string) { localStorage.setItem('ouroo_skin
 // ---- shared canvas drawing (used by the game player + dashboard previews) ----
 // All draw centred at the current transform origin, sized to w×h, `af` = anim frame.
 export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, color: string, w: number, h: number, af: number) {
+  // ── creatures (hazardous NPCs) — all face right, centred at origin, glow + frame-based motion ──
+  if (shape === 'dragon') {
+    const W = w * 1.15, H = h, flap = Math.sin(af * 0.18) * 0.5 + 0.5, sway = Math.sin(af * 0.12) * W * 0.03;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 13;
+    // serpentine S body, drawn as overlapping tapering segments: tail (bottom-left) coils up to head (top-right)
+    const spine: [number, number][] = [[-W * 0.34, H * 0.46], [-W * 0.12, H * 0.38], [W * 0.05, H * 0.18], [W * 0.07, -H * 0.04], [-W * 0.04, -H * 0.24], [W * 0.07, -H * 0.4], [W * 0.2, -H * 0.5]];
+    for (let i = 0; i < spine.length; i++) { const t = i / (spine.length - 1), r = H * 0.17 * (1 - t * 0.6); ctx.beginPath(); ctx.ellipse(spine[i][0] + sway * t, spine[i][1], r * 0.95, r, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.beginPath(); ctx.moveTo(-W * 0.34, H * 0.46); ctx.lineTo(-W * 0.52, H * 0.52); ctx.lineTo(-W * 0.36, H * 0.34); ctx.closePath(); ctx.fill();   // tail spade
+    // raised bat wings from the upper back, scalloped trailing edge (far dim, near full)
+    for (const [s, a] of [[0.7, 0.5], [1, 1]] as const) {
+      ctx.globalAlpha = a; const bx = W * 0.0, by = -H * 0.14;
+      ctx.beginPath(); ctx.moveTo(bx, by);
+      ctx.lineTo(bx - W * 0.46 * s, by - H * (0.36 + flap * 0.18));
+      ctx.quadraticCurveTo(bx - W * 0.34 * s, by - H * 0.1, bx - W * 0.28 * s, by - H * 0.04);
+      ctx.quadraticCurveTo(bx - W * 0.32 * s, by + H * 0.04, bx - W * 0.16 * s, by + H * 0.04);
+      ctx.quadraticCurveTo(bx - W * 0.18 * s, by + H * 0.1, bx - W * 0.04, by + H * 0.06);
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    // head at the top: snout-right, two horns swept back
+    const hx = W * 0.2 + sway, hy = -H * 0.52;
+    ctx.beginPath(); ctx.ellipse(hx, hy, W * 0.16, H * 0.11, -0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(hx + W * 0.02, hy - H * 0.03); ctx.lineTo(hx + W * 0.32, hy + H * 0.0); ctx.lineTo(hx + W * 0.02, hy + H * 0.06); ctx.closePath(); ctx.fill();   // snout
+    for (const dx of [-W * 0.05, W * 0.04]) { ctx.beginPath(); ctx.moveTo(hx + dx, hy - H * 0.06); ctx.lineTo(hx + dx - W * 0.08, hy - H * 0.24); ctx.lineTo(hx + dx + W * 0.03, hy - H * 0.06); ctx.closePath(); ctx.fill(); }   // horns
+    ctx.fillStyle = '#1a0008'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(hx + W * 0.07, hy - H * 0.01, W * 0.03, 0, 7); ctx.fill();   // eye
+    return;
+  }
+  if (shape === 'wolf') {
+    const W = w * 1.15, H = h, gait = Math.sin(af * 0.3), tw = Math.sin(af * 0.2) * H * 0.08;
+    ctx.fillStyle = color; ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12; ctx.lineWidth = Math.max(3, W * 0.09); ctx.lineCap = 'round';
+    const ly = H * 0.16;
+    ctx.beginPath(); ctx.moveTo(-W * 0.28, ly); ctx.lineTo(-W * 0.28 + gait * W * 0.06, H * 0.46); ctx.moveTo(W * 0.26, ly); ctx.lineTo(W * 0.26 - gait * W * 0.06, H * 0.46); ctx.stroke();   // legs (pair A)
+    ctx.beginPath(); ctx.moveTo(-W * 0.16, ly); ctx.lineTo(-W * 0.16 - gait * W * 0.06, H * 0.46); ctx.moveTo(W * 0.14, ly); ctx.lineTo(W * 0.14 + gait * W * 0.06, H * 0.46); ctx.stroke();   // legs (pair B)
+    ctx.beginPath(); ctx.ellipse(0, 0, W * 0.4, H * 0.22, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.beginPath(); ctx.moveTo(-W * 0.36, -H * 0.02); ctx.quadraticCurveTo(-W * 0.62, -H * 0.1 + tw, -W * 0.52, -H * 0.28 + tw); ctx.lineTo(-W * 0.34, -H * 0.1); ctx.closePath(); ctx.fill();   // tail
+    ctx.beginPath(); ctx.ellipse(W * 0.42, -H * 0.08, W * 0.2, H * 0.18, 0, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.beginPath(); ctx.moveTo(W * 0.58, -H * 0.08); ctx.lineTo(W * 0.78, -H * 0.02); ctx.lineTo(W * 0.58, H * 0.05); ctx.closePath(); ctx.fill();   // snout
+    ctx.beginPath(); ctx.moveTo(W * 0.3, -H * 0.22); ctx.lineTo(W * 0.36, -H * 0.44); ctx.lineTo(W * 0.46, -H * 0.24); ctx.closePath(); ctx.fill();   // ear
+    ctx.fillStyle = '#000'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(W * 0.47, -H * 0.1, W * 0.03, 0, 7); ctx.fill();   // eye
+    return;
+  }
+  if (shape === 'spider') {
+    const W = w, H = h, wig = Math.sin(af * 0.3) * H * 0.04;
+    ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.lineWidth = Math.max(2, W * 0.05); ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i++) {
+      const ly = -H * 0.14 + i * H * 0.1, k = (i % 2 === 0 ? 1 : -1) * wig;
+      ctx.beginPath(); ctx.moveTo(-W * 0.1, ly); ctx.quadraticCurveTo(-W * 0.4, ly - H * 0.04 + k, -W * 0.5, ly + H * 0.13 + k); ctx.moveTo(W * 0.1, ly); ctx.quadraticCurveTo(W * 0.4, ly - H * 0.04 - k, W * 0.5, ly + H * 0.13 - k); ctx.stroke();
+    }
+    ctx.fillStyle = color; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.ellipse(0, H * 0.1, W * 0.26, H * 0.22, 0, 0, Math.PI * 2); ctx.fill();   // abdomen
+    ctx.beginPath(); ctx.ellipse(0, -H * 0.16, W * 0.18, H * 0.15, 0, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.fillStyle = '#ff2b2b'; ctx.shadowColor = '#ff2b2b'; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(-W * 0.07, -H * 0.18, W * 0.03, 0, 7); ctx.arc(W * 0.07, -H * 0.18, W * 0.03, 0, 7); ctx.fill();
+    return;
+  }
+  if (shape === 'snake') {
+    const W = w * 1.2, H = h;
+    ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 12; ctx.lineWidth = Math.max(5, H * 0.16); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    const N = 6; for (let i = 0; i <= N; i++) { const t = i / N, x = -W * 0.5 + t * W, y = Math.sin(t * Math.PI * 2.2 + af * 0.15) * H * 0.18; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+    ctx.stroke();
+    const hy = Math.sin(Math.PI * 2.2 + af * 0.15) * H * 0.18;
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(W * 0.5, hy, W * 0.11, H * 0.12, 0, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.strokeStyle = '#ff3333'; ctx.shadowBlur = 0; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(W * 0.59, hy); ctx.lineTo(W * 0.7, hy); ctx.stroke();   // tongue
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(W * 0.52, hy - H * 0.03, W * 0.025, 0, 7); ctx.fill();   // eye
+    return;
+  }
+  if (shape === 'bat') {
+    const W = w * 1.25, H = h, flap = Math.sin(af * 0.25) * H * 0.12;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    for (const s of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(0, -H * 0.02);
+      ctx.quadraticCurveTo(s * W * 0.28, -H * 0.18 - flap, s * W * 0.5, -H * 0.05 - flap);
+      ctx.quadraticCurveTo(s * W * 0.42, -flap, s * W * 0.44, H * 0.1 - flap);
+      ctx.quadraticCurveTo(s * W * 0.3, H * 0.02, s * W * 0.18, H * 0.08);
+      ctx.quadraticCurveTo(s * W * 0.12, 0, 0, H * 0.04); ctx.closePath(); ctx.fill();
+    }
+    ctx.beginPath(); ctx.ellipse(0, 0, W * 0.12, H * 0.2, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.beginPath(); ctx.moveTo(-W * 0.08, -H * 0.16); ctx.lineTo(-W * 0.12, -H * 0.34); ctx.lineTo(-W * 0.01, -H * 0.18); ctx.closePath(); ctx.moveTo(W * 0.08, -H * 0.16); ctx.lineTo(W * 0.12, -H * 0.34); ctx.lineTo(W * 0.01, -H * 0.18); ctx.closePath(); ctx.fill();   // ears
+    ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(-W * 0.05, -H * 0.06, W * 0.025, 0, 7); ctx.arc(W * 0.05, -H * 0.06, W * 0.025, 0, 7); ctx.fill();
+    return;
+  }
+  if (shape === 'slime') {
+    const W = w, H = h, sq = Math.sin(af * 0.12) * 0.07, bw = W * (0.46 + sq), bh = H * (0.42 - sq * 1.5);
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.moveTo(-bw, H * 0.28); ctx.quadraticCurveTo(-bw, -bh, 0, -bh); ctx.quadraticCurveTo(bw, -bh, bw, H * 0.28); ctx.closePath(); ctx.fill();   // dome
+    ctx.beginPath(); ctx.ellipse(0, H * 0.28, bw, H * 0.06, 0, 0, Math.PI * 2); ctx.fill();   // base
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.ellipse(-W * 0.16, -H * 0.1, W * 0.09, H * 0.12, -0.3, 0, Math.PI * 2); ctx.fill();   // shine
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-W * 0.12, H * 0.02, W * 0.05, 0, 7); ctx.arc(W * 0.12, H * 0.02, W * 0.05, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-W * 0.1, 0, W * 0.018, 0, 7); ctx.arc(W * 0.14, 0, W * 0.018, 0, 7); ctx.fill();
+    return;
+  }
+  if (shape === 'ghost') {
+    const W = w, H = h, cy = -H * 0.05, R = W * 0.34, baseY = H * 0.32;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 18; ctx.globalAlpha = 0.92;
+    ctx.beginPath(); ctx.arc(0, cy, R, Math.PI, Math.PI * 2); ctx.lineTo(R, baseY);
+    const segs = 4; let x = R; for (let i = 0; i < segs; i++) { const nx = R - (i + 1) * (2 * R / segs), dip = (i % 2 === 0 ? 1 : 0.4) * H * 0.1 + Math.sin(af * 0.2 + i) * H * 0.02; ctx.quadraticCurveTo((x + nx) / 2, baseY + dip, nx, baseY); x = nx; }
+    ctx.lineTo(-R, cy); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(18,8,36,0.85)'; ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.ellipse(-W * 0.12, -H * 0.06, W * 0.06, H * 0.09, 0, 0, Math.PI * 2); ctx.ellipse(W * 0.12, -H * 0.06, W * 0.06, H * 0.09, 0, 0, Math.PI * 2); ctx.fill();   // eyes
+    ctx.beginPath(); ctx.ellipse(0, H * 0.11, W * 0.06, H * 0.06, 0, 0, Math.PI * 2); ctx.fill();   // mouth
+    return;
+  }
+  if (shape === 'robot') {
+    const W = w, H = h, bob = Math.sin(af * 0.15) * H * 0.02;
+    ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
+    ctx.fillRect(-W * 0.22, H * 0.2, W * 0.16, H * 0.28); ctx.fillRect(W * 0.06, H * 0.2, W * 0.16, H * 0.28);   // legs
+    ctx.beginPath(); ctx.roundRect(-W * 0.3, -H * 0.18 + bob, W * 0.6, H * 0.42, W * 0.06); ctx.fill();   // body
+    ctx.fillRect(-W * 0.42, -H * 0.12 + bob, W * 0.1, H * 0.3); ctx.fillRect(W * 0.32, -H * 0.12 + bob, W * 0.1, H * 0.3);   // arms
+    ctx.beginPath(); ctx.roundRect(-W * 0.2, -H * 0.46 + bob, W * 0.4, H * 0.3, W * 0.05); ctx.fill();   // head
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -H * 0.46 + bob); ctx.lineTo(0, -H * 0.6 + bob); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -H * 0.63 + bob, W * 0.04, 0, 7); ctx.fill();   // antenna
+    ctx.fillStyle = '#00eaff'; ctx.shadowColor = '#00eaff'; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(-W * 0.08, -H * 0.32 + bob, W * 0.05, 0, 7); ctx.arc(W * 0.08, -H * 0.32 + bob, W * 0.05, 0, 7); ctx.fill();   // eyes
+    return;
+  }
+  if (shape === 'drone') {
+    const W = w, H = h, spin = af * 0.6;
+    ctx.save(); ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.ellipse(0, -H * 0.28, W * 0.34 * Math.abs(Math.cos(spin)) + W * 0.04, H * 0.04, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -H * 0.28); ctx.lineTo(0, -H * 0.1); ctx.stroke();   // shaft
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.02, W * 0.3, H * 0.26, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.fillStyle = '#fff'; ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(0, H * 0.0, W * 0.14, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ff3333'; ctx.shadowColor = '#ff3333'; ctx.shadowBlur = 8; ctx.beginPath(); ctx.arc(W * 0.03, 0, W * 0.06, 0, 7); ctx.fill();   // eye
+    return;
+  }
   if (shape === 'shark') {   // Tralalero Tralala — finned shark emblem with a toothy grin
     const W = w, H = h, wig = Math.sin(af * 0.2) * 3;
     ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 14;
