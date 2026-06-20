@@ -490,6 +490,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const hoverRef = useRef<{ gx: number; gy: number } | null>(null);
   const framesRef = useRef(0);
   const posAccum = useRef(0);
+  const heartbeatAccum = useRef(0);
   const wasMovingRef = useRef(false);
   const strideRef = useRef(0);   // distance walked since the last footstep sound
   const lastPortalKeyRef = useRef<string | null>(null);   // rising-edge guard so a portal fires once per arrival
@@ -2164,8 +2165,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const ch = channelRef.current;
       if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id });
-        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 4 : 5)) { posAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
-        if (wasMovingRef.current && !moving) ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() });   // final position; no mid-session re-track (that bounced the channel)
+        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 4 : 5)) { posAccum.current = 0; heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
+        if (wasMovingRef.current && !moving) { heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }   // final position; no mid-session re-track (that bounced the channel)
+        // Keep-alive: broadcast position every ~5 s while still so others can detect our disconnect within ~12 s.
+        if (!moving && ++heartbeatAccum.current >= 300) { heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
       }
       wasMovingRef.current = moving;
       // PORTALS activate by WALKING ONTO them — fires the instant your tile becomes a portal tile (whether
@@ -2294,6 +2297,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (ddx * ddx + ddy * ddy > 2.25) { r.fx = extraX; r.fy = extraY; } else { r.fx += ddx * 0.3; r.fy += ddy * 0.3; }
         r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(extraX - r.fx, extraY - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--;
       }
+      // Stale detection: avatars that haven't sent a pos in >12 s are treated as gone.
+      // The 5-second heartbeat pos means connected users always have a fresh rxAt; only
+      // disconnected ones (hard refresh, network drop) go silent and hit this threshold.
+      { const nowMs = performance.now(); let pruned = false;
+        for (const [id, r] of remotesRef.current) { if (r.rxAt && nowMs - r.rxAt > 12_000) { remotesRef.current.delete(id); pruned = true; } }
+        if (pruned) setPopulation(remotesRef.current.size + 1); }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // pathfinding wander + speech for NPCs
         if (n.roam && n.hx != null && n.hy != null) {
