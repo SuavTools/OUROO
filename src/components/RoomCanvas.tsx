@@ -2615,7 +2615,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const armTheta = -weaponArmLift * Math.PI * 0.5;
         const shoulderX = (sx + sway) + ((pi.g === 1 ? 9 : 7.6) + 1.4) * s_dp;
         const shoulderY = (sy - 30 + bob) + (-7 + 1) * s_dp;
-        weapHandX = shoulderX + 12 * s_dp * Math.sin(armTheta);
+        weapHandX = shoulderX - 12 * s_dp * Math.sin(armTheta);
         weapHandY = shoulderY + 12 * s_dp * Math.cos(armTheta);
       } else {
         weapHandX = sx + 15; weapHandY = handY;
