@@ -7,7 +7,7 @@
 // best-effort mirrors. This is cheat-resistant against casual players, NOT determined ones — the same
 // posture as the rest of the economy.
 
-import { itemById } from './items';
+import { itemById, getFistBoostMultiplier } from './items';
 import { getWallet, getBalance, spend, addBalance, takeItem, grantItem, itemCount } from './wallet';
 
 // ---- balance knobs ----
@@ -132,7 +132,11 @@ export function equipShield(id: string | null) { writeEquipped({ ...getEquipped(
 // is no longer owned (e.g. it got looted off me).
 export function equippedWeaponSpec(): WeaponSpec {
   const { weapon } = getEquipped();
-  if (weapon && weapon !== 'fists' && itemCount(weapon) <= 0) return FISTS;
+  const usingFists = !weapon || weapon === 'fists' || itemCount(weapon) <= 0;
+  if (usingFists) {
+    const boost = getFistBoostMultiplier();
+    return boost > 1 ? { ...FISTS, damage: Math.round(FISTS.damage * boost) } : FISTS;
+  }
   return weaponOf(weapon);
 }
 export function equippedShieldSpec(): ShieldSpec | null {

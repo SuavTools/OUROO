@@ -14,16 +14,18 @@ export type ItemEffect =
   | { type: 'shield'; defense: number }          // permanent, equipped: fraction of damage reduced (0..0.9)
   | { type: 'shield_absorb'; absorb: number }    // consumable: grants a one-off damage-soak buffer
   | { type: 'heal'; hp: number }                 // consumable: restores hp
-  | { type: 'ammo_recharge'; weaponId: string }; // consumable: charges are stored as itemCount, consumed per shot
+  | { type: 'ammo_recharge'; weaponId: string }  // consumable: charges are stored as itemCount, consumed per shot
+  | { type: 'fist_boost'; multiplier: number; durationMs: number }; // temporary fist damage multiplier
 
 export type Item = {
   id: string;
   name: string;
   description: string;
   useType: UseType;
-  uses?: number;   // charges per unit purchased, for 'multi' only
+  uses?: number;          // charges per unit purchased, for 'multi' only
   effect: ItemEffect;
-  price: number;   // Cristais
+  extraEffects?: ItemEffect[];   // secondary effects activated alongside the primary
+  price: number;          // Cristais
   emoji: string;
 };
 
@@ -40,36 +42,40 @@ export const ITEMS: Item[] = [
   {
     id: 'beer',
     name: 'Beer',
-    description: 'Cold and honest. Takes the edge off.',
+    description: 'Cold and honest. Takes the edge off — and doubles your fist damage.',
     useType: 'single',
     effect: { type: 'sway', intensity: 3, durationMs: 8 * 60 * 1000 },
+    extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 8 * 60 * 1000 }],
     price: 100,
     emoji: '🍺',
   },
   {
     id: 'wine',
     name: 'Wine',
-    description: 'Aged slowly. Best enjoyed in company.',
+    description: 'Aged slowly. Best enjoyed in company — and doubles your fist damage.',
     useType: 'single',
     effect: { type: 'sway', intensity: 5, durationMs: 12 * 60 * 1000 },
+    extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 12 * 60 * 1000 }],
     price: 150,
     emoji: '🍷',
   },
   {
     id: 'spirit',
     name: 'Spirit',
-    description: 'Burns going down. The room shifts a little.',
+    description: 'Burns going down. The room shifts — and doubles your fist damage.',
     useType: 'single',
     effect: { type: 'sway', intensity: 10, durationMs: 3 * 60 * 1000 },
+    extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 3 * 60 * 1000 }],
     price: 250,
     emoji: '🥃',
   },
   {
     id: 'cocktail',
     name: 'Cocktail',
-    description: 'Mixed with care. You feel it settle in.',
+    description: 'Mixed with care. You feel it settle in — and doubles your fist damage.',
     useType: 'single',
     effect: { type: 'sway', intensity: 7, durationMs: 20 * 60 * 1000 },
+    extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 20 * 60 * 1000 }],
     price: 300,
     emoji: '🍹',
   },
@@ -189,18 +195,27 @@ const saveEffects = (effects: StoredEffect[]) => {
 // Activate an item's effect. Call consumeItem() from wallet before this.
 export function activateItem(id: string): boolean {
   const item = itemById(id); if (!item) return false;
-  const ef = item.effect;
-  // Combat consumables apply straight to the combat module's hp/absorb state, not the buff store.
-  if (ef.type === 'heal') { healHP(ef.hp); return true; }
-  if (ef.type === 'shield_absorb') { addAbsorb(ef.absorb); return true; }
-  // Weapons + permanent shields are equipped from the inventory UI, never "activated" here.
-  // Ammo charges are stored as itemCount and consumed per shot in swingWeapon — nothing to activate.
-  if (ef.type === 'weapon' || ef.type === 'shield' || ef.type === 'ammo_recharge') return true;
-  const expiresAt = 'durationMs' in ef ? Date.now() + ef.durationMs : Number.MAX_SAFE_INTEGER;
-  const effects = loadEffects().filter(e => e.effect.type !== ef.type); // replace same-type effect
-  effects.push({ itemId: id, effect: ef, expiresAt });
-  saveEffects(effects);
+  const applyEffect = (ef: ItemEffect) => {
+    if (ef.type === 'heal') { healHP(ef.hp); return; }
+    if (ef.type === 'shield_absorb') { addAbsorb(ef.absorb); return; }
+    if (ef.type === 'weapon' || ef.type === 'shield' || ef.type === 'ammo_recharge') return;
+    const expiresAt = 'durationMs' in ef ? Date.now() + ef.durationMs : Number.MAX_SAFE_INTEGER;
+    const effects = loadEffects().filter(e => e.effect.type !== ef.type);
+    effects.push({ itemId: id, effect: ef, expiresAt });
+    saveEffects(effects);
+  };
+  applyEffect(item.effect);
+  for (const ef of item.extraEffects ?? []) applyEffect(ef);
   return true;
+}
+
+// Returns the active fist damage multiplier (1 = no boost).
+export function getFistBoostMultiplier(): number {
+  const now = Date.now();
+  for (const e of loadEffects()) {
+    if (e.effect.type === 'fist_boost' && e.expiresAt > now) return e.effect.multiplier;
+  }
+  return 1;
 }
 
 // Returns the combined speed multiplier from all active speed effects (1 = no boost).
