@@ -188,7 +188,7 @@ const encodeNpc = (d: NpcData) => `npc:${encodeURIComponent(JSON.stringify(d))}`
 const decodeNpc = (raw: string): NpcData | null => {
   try { const o = JSON.parse(decodeURIComponent(raw.slice(4))); if (!o || typeof o.n !== 'string') return null;
     const h = sanitizeHazard(o.h);
-    const sz = Math.min(4, Math.max(1, Number(o.sz) || 1));
+    const sz = Math.min(5, Math.max(1, Number(o.sz) || 1));
     return { n: String(o.n).slice(0, 24), a: String(o.a || 'diamond-gold'), l: Array.isArray(o.l) ? o.l.map(String).slice(0, 8) : [], ...(h ? { h } : {}), ...(sz !== 1 ? { sz } : {}) }; }
   catch { return null; }
 };
@@ -1804,7 +1804,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         hp = (defeated || peaceful) ? 0 : (npcHpRef.current.get(p.id) ?? h.maxHp);
       }
       const lines = (peaceful && h?.deadLines?.length) ? h.deadLines : p.data.l;
-      const bodyScale = Math.min(4, Math.max(1, p.data.sz ?? 1));
+      const bodyScale = Math.min(5, Math.max(1, p.data.sz ?? 1));
       return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0, hz: h, defeated, peaceful, hp, maxHp: h?.maxHp, lastNpcAtk: 0, respawnAt, bodyScale };
     });
     npcsRef.current = [...curated, ...placed];

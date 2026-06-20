@@ -266,7 +266,7 @@ export const NpcEditor: React.FC<{
         <div>
           <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Size</p>
           <div className="flex gap-1">
-            {([['Normal', 1], ['Big', 1.6], ['Huge', 2.4], ['Colossal', 3.4]] as const).map(([lbl, v]) => (
+            {([['Normal', 1], ['Big', 1.6], ['Huge', 2.4], ['Colossal', 3.4], ['Titan', 5]] as const).map(([lbl, v]) => (
               <button key={lbl} onClick={() => setSize(v)}
                 className={`flex-1 text-[10px] uppercase tracking-wide py-1.5 border transition-colors ${Math.abs(size - v) < 0.01 ? 'border-[#ffb84d] bg-[#ffb84d]/15 text-white' : 'border-white/12 text-white/55 hover:border-white/30'}`}>{lbl}</button>
             ))}
