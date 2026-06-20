@@ -1103,7 +1103,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       r.hpStamp = now;   // claim hp as live so presence sync doesn't flicker it back up before the broadcast lands
       r.hitUntil = now + 220;
       if (wp.style === 'magic') {
-        projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 18, max: 18, color: '#b98cff' });
+        const boltColor = wp.id === 'pistol' ? '#ffd700' : '#b98cff';
+        projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 18, max: 18, color: boltColor });
       }
     });
   };
