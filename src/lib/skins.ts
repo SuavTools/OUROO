@@ -249,8 +249,10 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     ctx.fillStyle = accent; ctx.fillRect(-W * 0.22, H * 0.2, W * 0.16, H * 0.28); ctx.fillRect(W * 0.06, H * 0.2, W * 0.16, H * 0.28);   // legs (accent)
     ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-W * 0.3, -H * 0.18 + bob, W * 0.6, H * 0.42, W * 0.06); ctx.fill();   // body
     ctx.fillStyle = accent; ctx.fillRect(-W * 0.42, -H * 0.12 + bob, W * 0.1, H * 0.3); ctx.fillRect(W * 0.32, -H * 0.12 + bob, W * 0.1, H * 0.3);   // arms (accent)
-    ctx.fillStyle = accent; ctx.shadowBlur = 0; ctx.beginPath(); ctx.roundRect(-W * 0.14, -H * 0.06 + bob, W * 0.28, H * 0.16, W * 0.03); ctx.fill();   // chest panel
-    ctx.beginPath(); ctx.arc(-W * 0.24, -H * 0.12 + bob, W * 0.03, 0, 7); ctx.arc(W * 0.24, -H * 0.12 + bob, W * 0.03, 0, 7); ctx.arc(-W * 0.24, H * 0.18 + bob, W * 0.03, 0, 7); ctx.arc(W * 0.24, H * 0.18 + bob, W * 0.03, 0, 7); ctx.fill();   // rivets
+    const pw = W * 0.26, ph = H * 0.2, py = -H * 0.04 + bob;   // centred chest plate
+    ctx.fillStyle = accent; ctx.shadowBlur = 0; ctx.beginPath(); ctx.roundRect(-pw / 2, py, pw, ph, W * 0.03); ctx.fill();
+    ctx.fillStyle = color; for (const rx of [-pw / 2 + W * 0.035, pw / 2 - W * 0.035]) for (const ry of [py + H * 0.035, py + ph - H * 0.035]) { ctx.beginPath(); ctx.arc(rx, ry, W * 0.018, 0, 7); ctx.fill(); }   // corner rivets
+    ctx.fillStyle = '#00eaff'; ctx.shadowColor = '#00eaff'; ctx.shadowBlur = 6; ctx.beginPath(); ctx.arc(0, py + ph / 2, W * 0.035, 0, 7); ctx.fill();   // core light
     ctx.shadowColor = color; ctx.shadowBlur = 14;
     ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(-W * 0.2, -H * 0.46 + bob, W * 0.4, H * 0.3, W * 0.05); ctx.fill();   // head
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -H * 0.46 + bob); ctx.lineTo(0, -H * 0.6 + bob); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -H * 0.63 + bob, W * 0.04, 0, 7); ctx.fill();   // antenna
