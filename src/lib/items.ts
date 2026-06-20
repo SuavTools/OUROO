@@ -102,12 +102,12 @@ export const ITEMS: Item[] = [
   },
   {
     id: 'staff',
-    name: 'Magic Staff',
-    description: 'Hurls a bolt from a distance — strike foes three tiles away.',
+    name: 'Pistol',
+    description: 'A compact firearm — shoot targets up to three tiles away.',
     useType: 'permanent',
     effect: { type: 'weapon', damage: 22, range: 3, cooldownMs: 950, style: 'magic' },
     price: 2200,
-    emoji: '🪄',
+    emoji: '🔫',
   },
   // ---- combat: shields ----
   {
