@@ -80,16 +80,11 @@ const TUT_ROOMS: Record<string, RoomDef> = {
 const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'mega',   outdoor: true };
 const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'enorme' };
 const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'grove',  day: true, outdoor: true };
-// Staked PvP, TIERED by bet band so whales fight whales and minnows fight minnows. Bet on entry,
-// win the smaller of the two bets per kill (cap 2× your stake), lose your stake to your killer and
-// get ejected. arenaMax 0 = no ceiling (top tier). Combat + arena both on.
-const ARENA_PIT:   RoomDef = { slug: 'arena-pit',       name: 'The Pit',       accent: '#9aa6b2', floor: '#13130f', plan: 'salao', combat: true, arena: true, arenaMin: 10,    arenaMax: 250 };
-const ARENA_COL:   RoomDef = { slug: 'arena-colosseum', name: 'The Colosseum', accent: '#ff4e3e', floor: '#1a0e0e', plan: 'salao', combat: true, arena: true, arenaMin: 250,   arenaMax: 5000 };
-const ARENA_VAULT: RoomDef = { slug: 'arena-vault',     name: 'The Vault',     accent: '#ffd23a', floor: '#1a160a', plan: 'salao', combat: true, arena: true, arenaMin: 5000,  arenaMax: 0 };
 // The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
-// Town is the social hub, the Woods are the wild edge, the arenas are tiered staked PvP.
-const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS, ARENA_PIT, ARENA_COL, ARENA_VAULT];
-// Bet-band presets, reused by the perms-panel "make this room an arena" toggle (max 0 = no ceiling).
+// Town is the social hub, the Woods are the wild edge. Staked arenas are made per-room by mods via
+// the perms panel (an `arena:<min>:<max>` marker), not hardcoded here.
+const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
+// Bet-band presets for the perms-panel "make this room an arena" toggle (max 0 = no ceiling).
 const ARENA_TIERS: { label: string; min: number; max: number }[] = [
   { label: 'Pit', min: 10, max: 250 }, { label: 'Colosseum', min: 250, max: 5000 }, { label: 'Vault', min: 5000, max: 0 },
 ];
