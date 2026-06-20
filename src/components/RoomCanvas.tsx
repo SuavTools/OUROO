@@ -2598,7 +2598,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       let weapHandX = sx + 15, weapHandY = handY;
       if (pi && weaponArmLift > 0) {
         const s_dp = 56 / 50;
-        const armTheta = -weaponArmLift * Math.PI * 0.75;   // CCW rotation, same angle used in drawPerson
+        const armTheta = +weaponArmLift * Math.PI * 0.75;   // CW rotation, same angle used in drawPerson
         const shoulderX = (sx + sway) + ((pi.g === 1 ? 9 : 7.6) + 1.4) * s_dp;
         const shoulderY = (sy - 30 + bob) + (-7 + 1) * s_dp;
         weapHandX = shoulderX + 12 * s_dp * Math.sin(armTheta);
@@ -2606,7 +2606,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       if (wsp && wsp.id !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; pops on a swing — only visible in combat rooms
         const swingRot = swinging
-          ? (wsp.style === 'melee' ? (Math.PI - 0.5) - weaponArmLift * Math.PI * 0.75 : Math.PI - 0.5)
+          ? (wsp.style === 'melee' ? Math.PI + 0.35 + weaponArmLift * 0.85   // CW: returns to rest when lift→0
+              : wsp.style === 'gun' ? Math.PI - 0.5                           // gun: CCW tilt
+              : Math.PI + 0.85)                                               // magic: CW tilt
           : Math.PI + 0.35;
         ctx.save(); ctx.font = `700 ${swinging ? 30 : 22}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.translate(weapHandX, weapHandY); ctx.rotate(swingRot);
