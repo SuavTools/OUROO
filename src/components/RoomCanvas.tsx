@@ -2061,6 +2061,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const pl = payload as Record<string, unknown>;
           const from = String(pl.from ?? ''); const a = remotesRef.current.get(from);
           if (a) { a.attackUntil = Date.now() + 280; if (pl.wp != null) a.weapon = String(pl.wp); }   // show the attacker's swing
+          // Show the projectile to everyone watching (attacker already pushed it locally).
+          if (a) {
+            const toId = String(pl.to ?? ''); const self = selfRef.current;
+            const tgt = toId === self.id ? self : remotesRef.current.get(toId);
+            if (tgt) {
+              const style = String(pl.style ?? '');
+              if (style === 'gun') projRef.current.push({ fx0: a.fx, fy0: a.fy, z0: a.z + 0.4, fx1: tgt.fx, fy1: tgt.fy, z1: tgt.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
+              else if (style === 'magic') projRef.current.push({ fx0: a.fx, fy0: a.fy, z0: a.z + 0.4, fx1: tgt.fx, fy1: tgt.fy, z1: tgt.z + 0.4, life: 18, max: 18, color: '#b98cff' });
+            }
+          }
           onIncomingAttack(pl);
         })
         .on('broadcast', { event: 'ko' }, ({ payload }) => {
