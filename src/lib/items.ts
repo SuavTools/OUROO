@@ -13,7 +13,8 @@ export type ItemEffect =
   | { type: 'weapon'; damage: number; range: number; cooldownMs: number; style: 'melee' | 'magic' | 'gun' }
   | { type: 'shield'; defense: number }          // permanent, equipped: fraction of damage reduced (0..0.9)
   | { type: 'shield_absorb'; absorb: number }    // consumable: grants a one-off damage-soak buffer
-  | { type: 'heal'; hp: number };                // consumable: restores hp
+  | { type: 'heal'; hp: number }                 // consumable: restores hp
+  | { type: 'ammo_recharge'; weaponId: string }; // consumable: charges are stored as itemCount, consumed per shot
 
 export type Item = {
   id: string;
@@ -112,11 +113,21 @@ export const ITEMS: Item[] = [
   {
     id: 'pistol',
     name: 'Pistol',
-    description: 'A compact firearm — shoot targets up to three tiles away.',
+    description: 'A compact firearm — shoot targets up to three tiles away. Requires Pistol Ammo to fire.',
     useType: 'permanent',
     effect: { type: 'weapon', damage: 20, range: 3, cooldownMs: 700, style: 'gun' },
     price: 1800,
     emoji: '🔫',
+  },
+  {
+    id: 'pistol_ammo',
+    name: 'Pistol Ammo',
+    description: 'Loads 6 shots into your Pistol. The pistol won\'t fire without it.',
+    useType: 'multi',
+    uses: 6,
+    effect: { type: 'ammo_recharge', weaponId: 'pistol' },
+    price: 300,
+    emoji: '🔋',
   },
   // ---- combat: shields ----
   {
@@ -183,7 +194,8 @@ export function activateItem(id: string): boolean {
   if (ef.type === 'heal') { healHP(ef.hp); return true; }
   if (ef.type === 'shield_absorb') { addAbsorb(ef.absorb); return true; }
   // Weapons + permanent shields are equipped from the inventory UI, never "activated" here.
-  if (ef.type === 'weapon' || ef.type === 'shield') return true;
+  // Ammo charges are stored as itemCount and consumed per shot in swingWeapon — nothing to activate.
+  if (ef.type === 'weapon' || ef.type === 'shield' || ef.type === 'ammo_recharge') return true;
   const expiresAt = 'durationMs' in ef ? Date.now() + ef.durationMs : Number.MAX_SAFE_INTEGER;
   const effects = loadEffects().filter(e => e.effect.type !== ef.type); // replace same-type effect
   effects.push({ itemId: id, effect: ef, expiresAt });

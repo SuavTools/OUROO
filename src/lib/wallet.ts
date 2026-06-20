@@ -221,7 +221,9 @@ export function grantItem(id: string): void { const w = getWallet(); w.items[id]
 export function buyItem(id: string, price: number): { ok: boolean; error?: string } {
   const w = getWallet();
   if (w.balance < price) return { ok: false, error: 'Cristais insuficientes' };
-  w.balance -= price; w.items[id] = (w.items[id] || 0) + 1; save(w); return { ok: true };
+  const item = itemById(id);
+  const grant = (item?.useType === 'multi' && item.uses && item.uses > 1) ? item.uses : 1;
+  w.balance -= price; w.items[id] = (w.items[id] || 0) + grant; save(w); return { ok: true };
 }
 // Consume one charge. Returns false if not owned. Permanent items are never consumed.
 export function consumeItem(id: string): boolean {

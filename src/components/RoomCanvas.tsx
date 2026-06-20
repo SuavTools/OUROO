@@ -17,7 +17,7 @@ import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } f
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, getBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, getBalance, buyItem, grantItem, itemCount, takeItem, consumeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect, getFlyActive } from '@/lib/items';
 import {
   getHP, equippedWeaponSpec, equippedShieldSpec, weaponOf, applyDamage, respawnHP,
@@ -1163,9 +1163,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (koUntilRef.current > Date.now()) return;              // can't swing while knocked out
     if (arenaCountdownRef.current !== null) return;           // can't swing during entry countdown
     const wp = equippedWeaponSpec();
+    if (wp.id === 'pistol' && itemCount('pistol_ammo') <= 0) { flashHint('No ammo — buy Pistol Ammo ✦'); return; }
     const now = Date.now();
     if (now - lastAttackRef.current < wp.cooldownMs) return;  // weapon still on cooldown
     lastAttackRef.current = now;
+    if (wp.id === 'pistol') consumeItem('pistol_ammo');       // spend one shot on commit
     me.attackUntil = now + 280;                               // the swing animates even on a whiff
     musicRef.current?.punch();
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
@@ -3397,6 +3399,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <div className="mt-2 flex items-center gap-2">
             <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">{roomMeta.combat ? '⚔ Combat' : '⚔ Hostiles'}</span>
             <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
+            {equippedWeaponSpec().id === 'pistol' && (
+              <span className="text-[10px] tabular-nums font-bold text-white/70">🔋{wallet.items['pistol_ammo'] ?? 0}</span>
+            )}
             <span className="relative w-28 h-2.5 bg-white/10 border border-black/40 overflow-hidden">
               <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
             </span>
