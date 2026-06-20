@@ -60,7 +60,7 @@ const wrapBubble = (text: string): string[] => {
 // import can't insert unbounded rows. Place as much as you like.
 const MAX_ITEMS = 100000;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean; arena?: boolean; discoverable?: boolean };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean; arena?: boolean; arenaMin?: number; arenaMax?: number; discoverable?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
 // ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
@@ -80,12 +80,15 @@ const TUT_ROOMS: Record<string, RoomDef> = {
 const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'mega',   outdoor: true };
 const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'enorme' };
 const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'grove',  day: true, outdoor: true };
-// Staked PvP: bet on entry, win the smaller of the two bets per kill (cap 2× your stake), lose your
-// stake to your killer and get ejected. Combat + arena both on.
-const ARENA: RoomDef  = { slug: 'arena',  name: 'The Colosseum', accent: '#ff4e3e', floor: '#1a0e0e', plan: 'salao', combat: true, arena: true };
+// Staked PvP, TIERED by bet band so whales fight whales and minnows fight minnows. Bet on entry,
+// win the smaller of the two bets per kill (cap 2× your stake), lose your stake to your killer and
+// get ejected. arenaMax 0 = no ceiling (top tier). Combat + arena both on.
+const ARENA_PIT:   RoomDef = { slug: 'arena-pit',       name: 'The Pit',       accent: '#9aa6b2', floor: '#13130f', plan: 'salao', combat: true, arena: true, arenaMin: 10,    arenaMax: 250 };
+const ARENA_COL:   RoomDef = { slug: 'arena-colosseum', name: 'The Colosseum', accent: '#ff4e3e', floor: '#1a0e0e', plan: 'salao', combat: true, arena: true, arenaMin: 250,   arenaMax: 5000 };
+const ARENA_VAULT: RoomDef = { slug: 'arena-vault',     name: 'The Vault',     accent: '#ffd23a', floor: '#1a160a', plan: 'salao', combat: true, arena: true, arenaMin: 5000,  arenaMax: 0 };
 // The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
-// Town is the social hub, the Woods are the wild edge, the Colosseum is staked PvP.
-const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS, ARENA];
+// Town is the social hub, the Woods are the wild edge, the arenas are tiered staked PvP.
+const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS, ARENA_PIT, ARENA_COL, ARENA_VAULT];
 const TUT_BY_SLUG: Record<string, RoomDef> = Object.fromEntries(Object.values(TUT_ROOMS).map(r => [r.slug, r]));
 const roomOf = (slug: string) => TUT_BY_SLUG[slug] ?? ROOMS.find(r => r.slug === slug) ?? TOWN;
 const isTutRoom = (slug: string) => slug.startsWith('t_');
@@ -1396,8 +1399,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const switchRoomRef = useRef(switchRoom); useEffect(() => { switchRoomRef.current = switchRoom; });   // latest switchRoom for the animation loop
 
-  // ---- arena staking ----
-  const ARENA_MIN_STAKE = 10;
+  // ---- arena staking ---- each tier has a bet band [min, max] (max 0 = no ceiling).
+  const arenaBand = (def: RoomDef) => ({ min: def.arenaMin ?? 10, max: def.arenaMax && def.arenaMax > 0 ? def.arenaMax : Infinity });
   // Entering an arena (and not already staked) → ask for a bet. Leaving / already-staked → no prompt.
   useEffect(() => {
     if (roomMeta.arena && !arenaRef.current && !tutorial) { setStakeInput(''); setStakePrompt(true); }
@@ -1405,11 +1408,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
   const confirmStake = () => {
+    const def = roomMetaRef.current; const { min, max } = arenaBand(def);
     const amt = Math.floor(Number(stakeInput) || 0);
-    if (amt < ARENA_MIN_STAKE) { flashHint(`Minimum bet ${CURRENCY_SYMBOL}${ARENA_MIN_STAKE}`); return; }
+    if (amt < min) { flashHint(`Minimum bet ${CURRENCY_SYMBOL}${min.toLocaleString('pt-PT')}`); return; }
+    if (amt > max) { flashHint(`This tier caps at ${CURRENCY_SYMBOL}${max.toLocaleString('pt-PT')}`); return; }
     if (getBalance() < amt) { flashHint('Not enough Cristais'); return; }
     spend(amt);
-    writeArena({ slug: roomMetaRef.current.slug, stake: amt, balance: amt });
+    writeArena({ slug: def.slug, stake: amt, balance: amt });
     setStakePrompt(false); setStakeInput('');
     flashHint(`Staked ${CURRENCY_SYMBOL}${amt.toLocaleString('pt-PT')} — fight to double it ⚔`);
   };
@@ -3973,7 +3978,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
               {filteredOfficial.length > 0 && (<>
                 <p className="text-[11px] uppercase tracking-[0.3em] text-white/40 mb-2">Official rooms</p>
-                <div className="flex flex-col gap-2">{filteredOfficial.map(r => roomBtn(r))}</div>
+                <div className="flex flex-col gap-2">{filteredOfficial.map(r => roomBtn(r, r.arena ? `⚔ ${CURRENCY_SYMBOL}${(r.arenaMin ?? 0).toLocaleString('pt-PT')}${r.arenaMax ? `–${r.arenaMax.toLocaleString('pt-PT')}` : '+'}` : ''))}</div>
               </>)}
 
               {isMod && filteredTut.length > 0 && (<>
@@ -4171,18 +4176,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
 
       {stakePrompt && (() => {
         const bal = getBalance();
+        const { min, max } = arenaBand(roomMeta);
+        const bandLabel = max === Infinity ? `${CURRENCY_SYMBOL}${min.toLocaleString('pt-PT')}+` : `${CURRENCY_SYMBOL}${min.toLocaleString('pt-PT')}–${max.toLocaleString('pt-PT')}`;
         const amt = Math.floor(Number(stakeInput) || 0);
-        const ok = amt >= ARENA_MIN_STAKE && amt <= bal;
+        const ok = amt >= min && amt <= max && amt <= bal;
         return (
           <div className="absolute inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={declineStake}>
-            <div className="w-full max-w-xs border border-brandRed/40 bg-black p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
-              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ the colosseum</p>
-              <p className="text-sm text-white/70 leading-relaxed">Bet to enter. Each kill pays the <span className="text-white">smaller</span> of the two bets — double your stake and cash out, or lose it and get ejected.</p>
+            <div className="w-full max-w-xs border bg-black p-6 text-center space-y-4" style={{ borderColor: `${roomMeta.accent}66` }} onClick={e => e.stopPropagation()}>
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em]" style={{ color: roomMeta.accent }}>⚔ {roomMeta.name}</p>
+              <p className="text-[11px] uppercase tracking-[0.25em] text-white/40">stakes {bandLabel}</p>
+              <p className="text-sm text-white/70 leading-relaxed">Each kill pays the <span className="text-white">smaller</span> of the two bets — double your stake and cash out, or lose it and get ejected.</p>
               <p className="text-[11px] text-white/45">Your purse: <span className="text-white/80 tabular-nums">{CURRENCY_SYMBOL}{bal.toLocaleString('pt-PT')}</span></p>
-              <input value={stakeInput} onChange={e => setStakeInput(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" autoFocus placeholder={`bet (min ${ARENA_MIN_STAKE})`} onKeyDown={e => { if (e.key === 'Enter' && ok) confirmStake(); }}
-                className="w-full bg-white/5 border border-white/15 text-white text-center px-3 py-2.5 text-base tabular-nums font-bold outline-none focus:border-brandRed" />
+              <input value={stakeInput} onChange={e => setStakeInput(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" autoFocus placeholder={`bet ${bandLabel}`} onKeyDown={e => { if (e.key === 'Enter' && ok) confirmStake(); }}
+                className="w-full bg-white/5 border border-white/15 text-white text-center px-3 py-2.5 text-base tabular-nums font-bold outline-none focus:border-white/40" />
               <div className="flex gap-2">
-                <button disabled={!ok} onClick={confirmStake} className={`flex-1 font-bold uppercase text-xs tracking-widest py-3 transition-colors ${ok ? 'bg-brandRed text-black hover:bg-white active:scale-95' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>Bet {amt > 0 ? `${CURRENCY_SYMBOL}${amt.toLocaleString('pt-PT')} ` : ''}▸</button>
+                <button disabled={!ok} onClick={confirmStake} className={`flex-1 font-bold uppercase text-xs tracking-widest py-3 transition-colors ${ok ? 'text-black hover:opacity-90 active:scale-95' : 'bg-white/10 text-white/30 cursor-not-allowed'}`} style={ok ? { background: roomMeta.accent } : undefined}>Bet {amt > 0 ? `${CURRENCY_SYMBOL}${amt.toLocaleString('pt-PT')} ` : ''}▸</button>
                 <button onClick={declineStake} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Leave</button>
               </div>
             </div>
