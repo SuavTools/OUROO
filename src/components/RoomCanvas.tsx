@@ -2555,7 +2555,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const weaponId = isSelf ? equippedWeaponSpec().id : a.weapon;
       const wsp = weaponId ? weaponOf(weaponId) : null;
       // Right arm rotates upward when swinging a melee weapon (person avatars only).
-      const weaponArmLift = (pi && swinging && wsp && wsp.style === 'melee') ? k_atk : 0;
+      const weaponArmLift = (pi && swinging && wsp) ? k_atk : 0;
       if (em === 'levitate') {
         ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(a.af * 0.08) * 0.2;
         ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.lineWidth = 1.5;
