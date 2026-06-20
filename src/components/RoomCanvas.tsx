@@ -1243,6 +1243,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const switchRoom = (def: RoomDef) => {
     setShowRooms(false); if (def.slug === room) return;
+    // Eagerly announce departure so others drop the avatar immediately — don't wait for the effect cleanup.
+    try { const me = selfRef.current; channelRef.current?.send({ type: 'broadcast', event: 'leave', payload: { id: me.id } }); channelRef.current?.untrack(); } catch { /* ignore */ }
     closeInteract(false);
     const sp = planSpawn(planById(def.plan));
     const me = selfRef.current; me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = []; me.bubble = ''; me.bubbleLife = 0;
