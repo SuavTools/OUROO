@@ -21,7 +21,7 @@ import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, ref
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect, getFlyActive } from '@/lib/items';
 import {
   getHP, equippedWeaponSpec, equippedShieldSpec, weaponOf, applyDamage, respawnHP,
-  computeLoot, dropLoot, grantLoot, lootIsEmpty, subscribeCombat, tileDist, MAX_HP, KO_MS, type Loot,
+  computeLoot, dropLoot, grantLoot, lootIsEmpty, subscribeCombat, tileDist, MAX_HP, KO_MS, type Loot, type WeaponSpec,
 } from '@/lib/combat';
 import {
   canAfford, escrowAnte, creditStake, makeSeed, makeMatchId, createDuel, markLocked, voidDuel,
@@ -40,7 +40,7 @@ import { GlitchSequence } from '@/components/GlitchSequence';
 import { BinaryRain } from '@/components/BinaryRain';
 import { AdminModal } from '@/components/AdminModal';
 import { SkinPreview } from '@/components/SkinPreview';
-import { NpcEditor, type NpcData } from '@/components/NpcEditor';
+import { NpcEditor, type NpcData, type HazardSpec, type KillTrigger, sanitizeHazard } from '@/components/NpcEditor';
 
 const STAGE_W = 1280, STAGE_H = 720;
 const GRID = PLAN_GRID;   // max grid (array stride); the actual room footprint comes from its plan
@@ -187,7 +187,8 @@ type NpcDef = { handle: string; skinId: string; gx: number; gy: number; lvl?: nu
 const encodeNpc = (d: NpcData) => `npc:${encodeURIComponent(JSON.stringify(d))}`;
 const decodeNpc = (raw: string): NpcData | null => {
   try { const o = JSON.parse(decodeURIComponent(raw.slice(4))); if (!o || typeof o.n !== 'string') return null;
-    return { n: String(o.n).slice(0, 24), a: String(o.a || 'diamond-gold'), l: Array.isArray(o.l) ? o.l.map(String).slice(0, 8) : [] }; }
+    const h = sanitizeHazard(o.h);
+    return { n: String(o.n).slice(0, 24), a: String(o.a || 'diamond-gold'), l: Array.isArray(o.l) ? o.l.map(String).slice(0, 8) : [], ...(h ? { h } : {}) }; }
   catch { return null; }
 };
 const CURATED_ITEMS: Record<string, [string, number, number, number?, number?][]> = {
@@ -461,8 +462,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
   const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
+  const npcHpRef = useRef<Map<string, number>>(new Map());   // mid-fight NPC hp by nid — survives rebuildNpcs so a concurrent placement doesn't heal a boss
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
   const sessionRef = useRef('');  // unique per tab/session — presence key + broadcast id (so two sessions don't collide)
   const surfRef = useRef<number[][]>(Array.from({ length: GRID * GRID }, () => []));  // walkable surface levels per tile (layered)
@@ -529,6 +531,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [permsDiscoverable, setPermsDiscoverable] = useState(false);   // discoverable toggle in perms modal
   // ---- combat / hp ----
   const [selfHp, setSelfHp] = useState<{ hp: number; max: number; absorb: number }>(() => ({ hp: MAX_HP, max: MAX_HP, absorb: 0 }));
+  const [huntable, setHuntable] = useState(false);   // a fightable hazardous NPC is present → show combat HUD/punch even outside PvP rooms
+  const huntableRef = useRef(false);
   const [koUntil, setKoUntil] = useState(0);   // self knockout: WASTED overlay + respawn countdown
   const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
   const koUntilRef = useRef(0);
@@ -563,7 +567,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (e.key !== 'f' && e.key !== 'F' || e.repeat) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      if (!roomMetaRef.current.combat) return;
+      if (!roomMetaRef.current.combat && !huntableRef.current) return;
       e.preventDefault();
       swingWeaponRef.current?.();
     };
@@ -1081,10 +1085,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
   };
   // Swing my equipped weapon (F key / punch button). No aiming: hits EVERY player within reach — a
-  // radius, not a direction. Fists reach 1 tile; weapons reach further (weapon.range). Open PvP.
+  // radius, not a direction. Fists reach 1 tile; weapons reach further (weapon.range). Open PvP in
+  // combat rooms; ALSO whittles down hazardous NPCs anywhere one is placed (huntable).
   const swingWeapon = () => {
     const me = selfRef.current;
-    if (!roomMetaRef.current.combat) return;
+    const pvp = roomMetaRef.current.combat;
+    if (!pvp && !huntableRef.current) return;                 // nothing to swing at here
     if (koUntilRef.current > Date.now()) return;              // can't swing while knocked out
     const wp = equippedWeaponSpec();
     const now = Date.now();
@@ -1093,7 +1099,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     me.attackUntil = now + 280;                               // the swing animates even on a whiff
     musicRef.current?.punch();
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
-    remotesRef.current.forEach((r, rid) => {
+    if (pvp) remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
       if (tileDist(mgx, mgy, clampTile(r.tx), clampTile(r.ty)) > wp.range) return;   // out of reach
       channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style } });
@@ -1108,8 +1114,87 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
       }
     });
+    // Hazardous NPCs — fought per-player, entirely local. Closest-in-reach takes the hit.
+    for (const n of npcsRef.current) {
+      const nid = n.nid; if (!nid || !n.hz || n.defeated || n.peaceful || n.hp == null) continue;
+      if (tileDist(mgx, mgy, clampTile(n.tx), clampTile(n.ty)) > wp.range) continue;
+      n.hp = Math.max(0, n.hp - wp.damage); npcHpRef.current.set(nid, n.hp);
+      n.hitUntil = now + 220;
+      spawnDmg(n.fx, n.fy, n.z, wp.damage, '#ffd84a');
+      if (wp.style === 'magic') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 18, max: 18, color: '#b98cff' });
+      if (n.hp <= 0) defeatNpc(n);
+    }
   };
   swingWeaponRef.current = swingWeapon;
+
+  // ── hazardous NPC helpers ── per-player defeat state lives in localStorage, keyed by room+nid.
+  // e = ever beaten (permanent — gates no-refarm reward + 'once' peace). u = "down until" timestamp
+  // (ms): a respawning NPC is dead until then; u < 0 means permanently down (policy 'once').
+  const NOREFARM_RESPAWN_MS = 20_000;
+  const npcDefeatKey = (nid: string) => `ouroo_npc_${roomMetaRef.current.slug}_${nid}`;
+  const loadNpcDefeat = (nid: string): { e: boolean; u: number } => {
+    try { const o = JSON.parse(localStorage.getItem(npcDefeatKey(nid)) || ''); return { e: !!o.e, u: Number(o.u) || 0 }; } catch { return { e: false, u: 0 }; }
+  };
+  const saveNpcDefeat = (nid: string, e: boolean, u: number) => { try { localStorage.setItem(npcDefeatKey(nid), JSON.stringify({ e, u })); } catch { /* ignore */ } };
+
+  // Fire the one-shot on-kill trigger (toast / lore beat / skin grant / portal-flag unlock). Guarded
+  // by its own localStorage flag so it only ever pops once per player, even on a farmable NPC.
+  const fireKillTrigger = (nid: string, trig: KillTrigger, handle: string) => {
+    const fk = `ouroo_npckill_${roomMetaRef.current.slug}_${nid}`;
+    try { if (localStorage.getItem(fk) === '1') return; localStorage.setItem(fk, '1'); } catch { /* ignore */ }
+    if (trig.kind === 'toast') { pushFeed('💀', trig.text); flashHint(trig.text); }
+    else if (trig.kind === 'beat') { try { localStorage.setItem(`ouroo_lore_${roomMetaRef.current.slug}_${nid}`, '0'); } catch { /* ignore */ } pushFeed(handle, trig.text); flashHint(trig.text); }
+    else if (trig.kind === 'skin') { grantSkin(trig.skinId); flashHint(`Unlocked skin: ${trig.skinId} ✦`); }
+    else if (trig.kind === 'portal') { try { localStorage.setItem(`ouroo_flag_${trig.flag}`, '1'); } catch { /* ignore */ } flashHint('A way forward opens…'); }
+  };
+
+  // Killing blow landed on a hazardous NPC: grant the reward (subject to policy), fire the trigger,
+  // and record the defeat. 'once' → peaceful forever; 'no-refarm' → reward only the first time;
+  // 'farmable' → reward every kill, respawns on a timer (handled in rebuildNpcs / the update loop).
+  const defeatNpc = (n: typeof npcsRef.current[number]) => {
+    const nid = n.nid, h = n.hz; if (!nid || !h) return;
+    const prior = loadNpcDefeat(nid).e;                       // already beaten before this kill?
+    const rewardable = h.policy === 'farmable' || !prior;     // no-refarm/once only pay the first time
+    if (rewardable) {
+      if (h.loot.crystals) addBalance(h.loot.crystals);
+      for (const [id, q] of Object.entries(h.loot.items ?? {})) for (let i = 0; i < q; i++) grantItem(id);
+      if (h.onKill) fireKillTrigger(nid, h.onKill, n.handle);
+      const bits = [h.loot.crystals ? `${h.loot.crystals} ${CURRENCY_SYMBOL}` : '', ...Object.entries(h.loot.items ?? {}).map(([id, q]) => `${itemById(id)?.name ?? id}${q > 1 ? `×${q}` : ''}`)].filter(Boolean);
+      flashHint(bits.length ? `Defeated ${n.handle} — looted ${bits.join(', ')}` : `Defeated ${n.handle}`);
+    } else flashHint(`Defeated ${n.handle} again`);
+    // schedule the respawn: 'once' → permanent peace (-1); others come back and stay a threat.
+    const perma = h.policy === 'once';
+    const downUntil = perma ? -1 : Date.now() + (h.policy === 'farmable' ? (h.respawnMs ?? 600_000) : NOREFARM_RESPAWN_MS);
+    saveNpcDefeat(nid, true, downUntil);
+    npcHpRef.current.delete(nid);
+    n.hp = 0; n.defeated = true; n.respawnAt = perma ? Infinity : downUntil; n.path = [];
+    musicRef.current?.chime();
+    // death puff
+    for (let i = 0; i < 8; i++) { if (dmgFxRef.current.length < 24) dmgFxRef.current.push({ fx: n.fx, fy: n.fy, z: n.z + Math.random() * 0.6, text: '✦', color: '#ffd84a', life: 30 + (i * 2) }); }
+    if (perma) { n.defeated = false; n.peaceful = true; n.lines = (h.deadLines && h.deadLines.length) ? h.deadLines : n.lines; }
+    rebuildHuntable();
+  };
+
+  // NPC auto-swings at me (contact damage). Reuses MY victim-side damage path so my shield/absorb/
+  // respawn all apply. Being killed by an NPC costs no loot (there's no recipient).
+  const npcAttackPlayer = (n: typeof npcsRef.current[number]) => {
+    const h = n.hz; if (!h || !h.contactDamage) return;
+    const me = selfRef.current;
+    if (koUntilRef.current > Date.now()) return;
+    const synthetic: WeaponSpec = { id: 'npc', name: n.handle, emoji: '⚔', damage: h.contactDamage, range: 1, cooldownMs: h.attackCooldownMs, style: 'melee' };
+    const res = applyDamage(synthetic, equippedShieldSpec());
+    setSelfHp({ hp: res.hp, max: res.max, absorb: res.absorb });
+    me.hitUntil = Date.now() + 220; n.attackUntil = Date.now() + 280;
+    spawnDmg(me.fx, me.fy, me.z, res.taken, '#ff5a5a');
+    if (roomMetaRef.current.combat) broadcastHP();             // let other players see my bar drop (PvP rooms)
+    if (res.dead) respawnSelf();
+  };
+
+  // Recompute whether any fightable hazardous NPC is present (drives the combat HUD outside PvP rooms).
+  const rebuildHuntable = () => {
+    const on = npcsRef.current.some(n => n.hz && !n.peaceful && !n.defeated);
+    huntableRef.current = on; setHuntable(on);
+  };
 
   const executeTrade = (my: TradeOffer, their: TradeOffer) => {
     let gave = false;
@@ -1407,7 +1492,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null; setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]);
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; npcHpRef.current.clear(); bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null; setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]);
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
@@ -1696,8 +1781,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const rebuildNpcs = () => {
     const slug = roomMetaRef.current.slug;
     const curated = (CURATED_NPCS[slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
-    const placed = placedNpcsRef.current.map(p => { const lvl = Math.max(0, planLvl(p.gx, p.gy)); return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines: p.data.l, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0 }; });
+    const placed = placedNpcsRef.current.map(p => {
+      const lvl = Math.max(0, planLvl(p.gx, p.gy));
+      const h = p.data.h;
+      // resolve hazard state: 'once' beaten → peaceful forever; a respawning NPC is "down" until its
+      // timer (defeated, no bar) then comes back live. e = ever beaten (gates no-refarm reward).
+      let defeated = false, peaceful = false, hp: number | undefined, respawnAt = 0;
+      if (h) {
+        const saved = loadNpcDefeat(p.id);
+        peaceful = h.policy === 'once' && saved.e;
+        if (!peaceful && saved.e && saved.u > 0 && Date.now() < saved.u) { defeated = true; respawnAt = saved.u; }   // still down, awaiting respawn
+        hp = (defeated || peaceful) ? 0 : (npcHpRef.current.get(p.id) ?? h.maxHp);
+      }
+      const lines = (peaceful && h?.deadLines?.length) ? h.deadLines : p.data.l;
+      return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0, hz: h, defeated, peaceful, hp, maxHp: h?.maxHp, lastNpcAtk: 0, respawnAt };
+    });
     npcsRef.current = [...curated, ...placed];
+    rebuildHuntable();
   };
   // Drop a designed NPC at a tile (admin). Persists as an `npc:` row + live-broadcasts to the room.
   const placeNpcAt = (gx: number, gy: number) => {
@@ -2319,6 +2419,39 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         if (pruned) setPopulation(remotesRef.current.size + 1); }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // pathfinding wander + speech for NPCs
+        // ── respawn: a downed (non-'once') hazardous NPC comes back to full hp once its timer elapses ──
+        if (n.hz && n.defeated && !n.peaceful && n.respawnAt && Number.isFinite(n.respawnAt) && Date.now() >= n.respawnAt) {
+          n.defeated = false; n.hp = n.hz.maxHp; n.respawnAt = 0; n.lastNpcAtk = 0;
+          if (n.nid) npcHpRef.current.set(n.nid, n.hp); rebuildHuntable();
+        }
+        // a downed hazardous NPC lies still (no wander/speech) until it respawns
+        if (n.hz && n.defeated && !n.peaceful) { if (n.bubbleLife > 0) n.bubbleLife--; n.path = []; n.near = false; continue; }
+        // ── hazardous NPC aggro: a live, hostile NPC chases the player and auto-swings in melee reach ──
+        if (n.hz && !n.peaceful && !n.defeated && n.hp != null && n.hz.contactDamage > 0) {
+          const distP = Math.hypot(n.fx - sf.fx, n.fy - sf.fy);
+          if (distP <= 7) {   // wakes up within 7 tiles
+            const now = Date.now();
+            if (distP <= 1.5) {   // in reach → hold position and swing on cooldown
+              n.path = []; n.af += 0.6;
+              if (now - (n.lastNpcAtk ?? 0) >= n.hz.attackCooldownMs) { n.lastNpcAtk = now; npcAttackPlayer(n); }
+            } else {   // chase: repath toward the player's tile a few times a second
+              if (!n.path.length || (n.wanderCool ?? 0) <= 0) {
+                const p = findPath(clampTile(n.fx), clampTile(n.fy), n.lvl, clampTile(sf.fx), clampTile(sf.fy), false);
+                n.path = p && p.length ? p.slice(0, 6) : []; n.wanderCool = 18;
+              }
+              if (n.path.length) {
+                const wp = n.path[0]; const dx = wp.gx - n.fx, dy = wp.gy - n.fy, d = Math.hypot(dx, dy);
+                if (d < 0.12) { n.fx = wp.gx; n.fy = wp.gy; n.z = wp.z; n.lvl = wp.z; n.tx = wp.gx; n.ty = wp.gy; n.path.shift(); }
+                else { const s = Math.min(WALK * 0.7, d); n.fx += dx / d * s; n.fy += dy / d * s; }   // a touch slower than you, so you can kite
+              }
+              n.af += 1; if ((n.wanderCool ?? 0) > 0) n.wanderCool--;
+            }
+            if (n.bubbleLife > 0) n.bubbleLife--;
+            if (n.cool && n.cool > 0) n.cool--;
+            n.near = distP < 2.4;
+            continue;   // skip normal wander/speech while in combat
+          }
+        }
         if (n.roam && n.hx != null && n.hy != null) {
           if (n.path.length) {   // advance along current path (collision-aware waypoints)
             const wp = n.path[0]; const dx = wp.gx - n.fx, dy = wp.gy - n.fy, d = Math.hypot(dx, dy);
@@ -2502,8 +2635,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       ctx.fillStyle = 'rgba(6,6,10,0.9)'; ctx.beginPath(); ctx.roundRect(sx - nw / 2, ny - 8, nw, 16, 8); ctx.fill();   // solid plate so the name reads over any avatar/atmosphere
       ctx.strokeStyle = isSelf ? hexA(col, 0.85) : 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = isSelf ? col : '#fff'; ctx.fillText(a.handle, sx, ny); ctx.restore();
-      // HP bar (PvP rooms only) — sits just above the name plate. Self reads live hp; remotes use synced values.
-      if (themeRef.current.combat) {
+      // HP bar — sits just above the name plate. Self/remotes show in PvP rooms; hazardous NPCs show
+      // their own bar anywhere (but not once they're peaceful/defeated). Self reads live hp.
+      const haz = a as { hz?: HazardSpec; defeated?: boolean; peaceful?: boolean };
+      const liveHazNpc = !!haz.hz && !haz.peaceful && !haz.defeated;
+      const hideNpcBar = !!haz.hz && (haz.peaceful || haz.defeated);
+      if ((themeRef.current.combat || liveHazNpc) && !hideNpcBar) {
         let hp = 0, max = MAX_HP, absorb = 0, have = false;
         if (isSelf) { const h = getHP(); hp = h.hp; max = h.max; absorb = h.absorb; have = true; }
         else if (a.hp != null) { hp = a.hp; max = a.maxHp ?? MAX_HP; absorb = a.absorb ?? 0; have = true; }
@@ -2913,6 +3050,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
       for (const npc of npcsRef.current) {
         if (Math.round(npc.fx) === gx && Math.round(npc.fy) === gy) {
+          if (npc.hz && !npc.peaceful && !npc.defeated) { walkAdjacentTo(gx, gy); flashHint(`${npc.handle} is hostile — press F to attack`); return; }   // fight it, don't chat it
           setNpcInteract({ handle: npc.handle, nid: npc.nid ?? npc.handle, mode: 'prompt' });
           walkAdjacentTo(gx, gy);
           return;
@@ -3078,10 +3216,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       <div className="absolute top-3 left-4 z-40 pointer-events-none">
         <p className="font-helvetica font-black text-xl text-white leading-none uppercase">{roomMeta.name}</p>
         <p className="text-[11px] uppercase tracking-[0.2em] text-white/45 mt-1">{isTutRoom(room) ? '· tutorial ·' : supabaseReady ? (connected ? `${population} ${population === 1 ? 'person' : 'people'}` : 'connecting…') : 'offline'}</p>
-        {/* Combat HUD — weapon + health, plus the PvP-zone warning. */}
-        {roomMeta.combat && !tutorial && (
+        {/* Combat HUD — weapon + health, plus the PvP-zone warning. Shows in PvP rooms, or anywhere a
+            hazardous NPC is fightable (huntable). */}
+        {(roomMeta.combat || huntable) && !tutorial && (
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">⚔ Combat</span>
+            <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">{roomMeta.combat ? '⚔ Combat' : '⚔ Hostiles'}</span>
             <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
             <span className="relative w-28 h-2.5 bg-white/10 border border-black/40 overflow-hidden">
               <span className="absolute inset-y-0 left-0" style={{ width: `${Math.max(0, Math.min(100, selfHp.hp / selfHp.max * 100))}%`, background: selfHp.hp / selfHp.max > 0.5 ? '#1ED760' : selfHp.hp / selfHp.max > 0.25 ? '#ffb020' : '#ff3b3b' }} />
