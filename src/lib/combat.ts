@@ -21,7 +21,7 @@ export const LOOT_SHARE = 0.05;            // killer takes 5% of the victim's Cr
 const ABSORB_CAP = 200;                    // sanity cap on stacked consumable-shield buffer
 
 // ---- weapon / shield specs (resolved from the item catalog) ----
-export type WeaponSpec = { id: string; name: string; emoji: string; damage: number; range: number; cooldownMs: number; style: 'melee' | 'magic' };
+export type WeaponSpec = { id: string; name: string; emoji: string; damage: number; range: number; cooldownMs: number; style: 'melee' | 'magic' | 'gun' };
 export type ShieldSpec = { id: string; name: string; emoji: string; defense: number };  // defense = fraction reduced, 0..0.9
 
 // Fists — the free default everyone swings with when no weapon is equipped.

@@ -10,7 +10,7 @@ export type ItemEffect =
   | { type: 'emote_unlock'; emoteId: string }
   // combat (see combat.ts): weapons + permanent shields are EQUIPPED from the inventory; heals +
   // absorb shields are USED (consumed) like the buff items above.
-  | { type: 'weapon'; damage: number; range: number; cooldownMs: number; style: 'melee' | 'magic' }
+  | { type: 'weapon'; damage: number; range: number; cooldownMs: number; style: 'melee' | 'magic' | 'gun' }
   | { type: 'shield'; defense: number }          // permanent, equipped: fraction of damage reduced (0..0.9)
   | { type: 'shield_absorb'; absorb: number }    // consumable: grants a one-off damage-soak buffer
   | { type: 'heal'; hp: number };                // consumable: restores hp
@@ -114,7 +114,7 @@ export const ITEMS: Item[] = [
     name: 'Pistol',
     description: 'A compact firearm — shoot targets up to three tiles away.',
     useType: 'permanent',
-    effect: { type: 'weapon', damage: 20, range: 3, cooldownMs: 700, style: 'magic' },
+    effect: { type: 'weapon', damage: 20, range: 3, cooldownMs: 700, style: 'gun' },
     price: 1800,
     emoji: '🔫',
   },
