@@ -1097,9 +1097,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (now - lastAttackRef.current < wp.cooldownMs) return;  // weapon still on cooldown
     lastAttackRef.current = now;
     me.attackUntil = now + 280;                               // the swing animates even on a whiff
-    channelRef.current?.send({ type: 'broadcast', event: 'swing', payload: { id: me.id, wp: wp.id } });
     musicRef.current?.punch();
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
+    // Flush a fresh position first so all observers have an accurate snapshot at hit-time.
+    channelRef.current?.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: wp.id } });
     if (pvp) remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
       if (tileDist(mgx, mgy, clampTile(r.tx), clampTile(r.ty)) > wp.range) return;   // out of reach
@@ -1130,6 +1131,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       else if (wp.style === 'gun') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
       if (n.hp <= 0) defeatNpc(n);
     }
+    // Swing animation goes last — purely cosmetic, lower priority than pos/attack/hp in the send queue.
+    channelRef.current?.send({ type: 'broadcast', event: 'swing', payload: { id: me.id, wp: wp.id } });
   };
   swingWeaponRef.current = swingWeapon;
 
@@ -2290,7 +2293,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const ch = channelRef.current;
       if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id });
-        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 4 : 5)) { posAccum.current = 0; heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
+        if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 2 : 5)) { posAccum.current = 0; heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) { heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }   // final position; no mid-session re-track (that bounced the channel)
         // Keep-alive: broadcast position every ~5 s while still so others can detect our disconnect within ~12 s.
         if (!moving && ++heartbeatAccum.current >= 300) { heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
