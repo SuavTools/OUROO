@@ -2081,18 +2081,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           joinedRef.current = status === 'SUBSCRIBED';
           if (status === 'SUBSCRIBED') {
             setConnected(true);
-            const a = await getAuthIdentity().catch(() => null); if (a?.handle) me.handle = a.handle;
+            const [a, itemRows] = await Promise.all([
+              getAuthIdentity().catch(() => null),
+              fetchAllRoomItems(sb, room),
+            ]);
+            if (a?.handle) me.handle = a.handle;
             if (!alive) return;
             const swEf = getSwayEffect(); const spEf = getSpeedEffect();
             await ch.track({ id: me.id, handle: me.handle, skinId: me.skinId, fx: me.fx, fy: me.fy, lvl: me.lvl, swayIntensity: swEf.intensity, swayExpiry: swEf.expiresAt, speedMult: spEf.multiplier, speedExpiry: spEf.expiresAt, ...combatTrack() }).catch(() => {});
             if (!alive) return;
-            ingestItemRows(await fetchAllRoomItems(sb, room));
+            ingestItemRows(itemRows);
             if (roomMetaRef.current.discoverable) recordRoomVisit(room).catch(() => {});
           } else {
             setConnected(false);
             if (alive && (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT')) {   // self-heal: rebuild the channel
               if (rejoinTimer) clearTimeout(rejoinTimer);
-              rejoinTimer = setTimeout(() => { try { sb.removeChannel(ch); } catch { /* ignore */ } connect(); }, 2000);
+              rejoinTimer = setTimeout(() => { try { sb.removeChannel(ch); } catch { /* ignore */ } connect(); }, 500);
             }
           }
         });
