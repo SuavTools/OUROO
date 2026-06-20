@@ -49,7 +49,7 @@ const shadeC = (hex: string, f: number) => { const n = parseInt(hex.slice(1), 16
 // `armLift` 0→1 rotates arms out to the sides and overhead (jumping-jack style).
 // `shoulderShrug` scales the idle arm-sway amplitude (default 1; pass higher for dramatic dance).
 // `legFold` 0→1 folds legs into a cross-legged seated pose (thighs rotate out, shins fold in).
-export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: number, h: number, af: number, armLift = 0, shoulderShrug = 1, legFold = 0) {
+export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: number, h: number, af: number, armLift = 0, shoulderShrug = 1, legFold = 0, rightArmLift = 0) {
   const s = h / 50, tone = TONES[p.tone] ?? TONES[1], sway = Math.sin(af * 0.12) * 0.6 * s * shoulderShrug;
   const broad = p.g === 1;
   const hbW = (broad ? 9 : 7.6) * s;     // torso half-width
@@ -97,12 +97,13 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
   const longSleeve = p.top === 1 || p.top === 3;   // hoodie / jacket
   for (const side of [-1, 1]) {
     const ax = side * (hbW + 1.4 * s);
-    if (armLift > 0) {
-      // Rotate the arm around the shoulder joint: negative side-factor because rotating away from body
-      // means CCW for right arm, CW for left arm (canvas +rotation = clockwise on screen).
+    // Per-arm lift: jjack raises both arms; rightArmLift raises only the weapon arm (side=1).
+    const lift = armLift > 0 ? armLift : (side === 1 ? rightArmLift : 0);
+    if (lift > 0) {
+      // Rotate around the shoulder joint: CCW for right arm, CW for left (canvas +rotation = CW).
       ctx.save();
       ctx.translate(ax, torsoTop + 1 * s);
-      ctx.rotate(-side * armLift * Math.PI * 0.85);
+      ctx.rotate(-side * lift * Math.PI * (armLift > 0 ? 0.85 : 0.75));
       ctx.fillStyle = longSleeve ? p.topC : tone; rr(ctx, -1.8 * s, 0, 3.6 * s, 11 * s, 1.8 * s); ctx.fill();
       ctx.fillStyle = tone; ctx.beginPath(); ctx.arc(0, 12 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
       ctx.restore();

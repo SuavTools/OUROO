@@ -2415,6 +2415,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const drunkBob  = activeSway > 0 ? Math.sin(framesRef.current * 0.07)  * 1.5 : 0;
       const armLift = em === 'jjack' ? Math.max(0, Math.sin(a.af * 0.1)) : 0;
       const shoulderShrug = em === 'dance' ? 4 : 1;
+      // Hoist combat state so weaponArmLift is available for drawPerson and the overlay pass below.
+      const nowT = Date.now();
+      const swinging = !!a.attackUntil && a.attackUntil > nowT;
+      const k_atk = swinging ? Math.max(0, Math.min(1, (a.attackUntil! - nowT) / 280)) : 0;
+      const weaponId = isSelf ? equippedWeaponSpec().id : a.weapon;
+      const wsp = weaponId ? weaponOf(weaponId) : null;
+      // Right arm rotates upward when swinging a melee weapon (person avatars only).
+      const weaponArmLift = (pi && swinging && wsp && wsp.id !== 'fists' && wsp.style === 'melee') ? k_atk : 0;
       if (em === 'levitate') {
         ctx.save(); ctx.globalAlpha = 0.5 + Math.sin(a.af * 0.08) * 0.2;
         ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.lineWidth = 1.5;
@@ -2446,25 +2454,34 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         ctx.restore();
         ctx.shadowColor = col; ctx.shadowBlur = isSelf ? 22 : 12;   // restore body glow
       }
-      if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold);
+      if (pi) drawPerson(ctx, pi, 42, 56, a.af, armLift, shoulderShrug, legFold, weaponArmLift);
       else if (a.icon) drawIconSpec(ctx, a.icon, 46, a.af);
       else { const sk = skinById(a.skinId); drawSkinShape(ctx, sk.shape, sk.color, 38, 50, a.af); }
       ctx.restore();
       // ---- combat overlays (screen space) ----
-      const nowT = Date.now();
-      const swinging = !!a.attackUntil && a.attackUntil > nowT;
+      // nowT / swinging / k_atk / weaponId / wsp were hoisted above for weaponArmLift.
       const handY = sy - 26 + bob;
-      const weaponId = isSelf ? equippedWeaponSpec().id : a.weapon;
-      if (weaponId && weaponId !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; pops on a swing — only visible in combat rooms
-        const wsp = weaponOf(weaponId);
+      // For person avatars with a lifted weapon arm, track the rotated hand in canvas space.
+      let weapHandX = sx + 15, weapHandY = handY;
+      if (pi && weaponArmLift > 0) {
+        const s_dp = 56 / 50;
+        const armTheta = -weaponArmLift * Math.PI * 0.75;   // CCW rotation, same angle used in drawPerson
+        const shoulderX = (sx + sway) + ((pi.g === 1 ? 9 : 7.6) + 1.4) * s_dp;
+        const shoulderY = (sy - 30 + bob) + (-7 + 1) * s_dp;
+        weapHandX = shoulderX + 12 * s_dp * Math.sin(armTheta);
+        weapHandY = shoulderY + 12 * s_dp * Math.cos(armTheta);
+      }
+      if (wsp && wsp.id !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; pops on a swing — only visible in combat rooms
+        const swingRot = swinging
+          ? (wsp.style === 'melee' ? (Math.PI - 0.5) - weaponArmLift * Math.PI * 0.75 : Math.PI - 0.5)
+          : Math.PI + 0.35;
         ctx.save(); ctx.font = `700 ${swinging ? 30 : 22}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.translate(sx + 15, handY); ctx.rotate(swinging ? Math.PI - 0.5 : Math.PI + 0.35);
+        ctx.translate(weapHandX, weapHandY); ctx.rotate(swingRot);
         ctx.fillText(wsp.emoji, 0, 0); ctx.restore();
       }
       if (swinging) {   // a quick white slash arc
-        const k = Math.max(0, Math.min(1, (a.attackUntil! - nowT) / 280));
-        ctx.save(); ctx.globalAlpha = 0.7 * k; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8;
-        ctx.beginPath(); ctx.arc(sx + 14, handY, 20, -0.9, 0.7); ctx.stroke(); ctx.restore();
+        ctx.save(); ctx.globalAlpha = 0.7 * k_atk; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8;
+        ctx.beginPath(); ctx.arc(weapHandX, weapHandY, 20, -0.9, 0.7); ctx.stroke(); ctx.restore();
       }
       if (a.hitUntil && a.hitUntil > nowT) {   // red flash when struck
         const k = (a.hitUntil - nowT) / 220;
