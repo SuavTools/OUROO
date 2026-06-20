@@ -3399,9 +3399,6 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">{roomMeta.combat ? '⚔ Combat' : '⚔ Hostiles'}</span>
-              <span className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60 leading-none">Press F to attack</span>
-            </div>
-            <div className="flex items-center gap-2">
               <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
               {equippedWeaponSpec().id === 'pistol' && (
                 <span className="text-[10px] tabular-nums font-bold text-white/70">🔋{wallet.items['pistol_ammo'] ?? 0}</span>
@@ -3411,6 +3408,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               </span>
               <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
             </div>
+            <span className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60 leading-none">Press F to attack</span>
           </div>
         )}
         {/* Arena pot — your escrowed stake + winnings, with a cash-out button. */}
