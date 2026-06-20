@@ -109,6 +109,15 @@ export const ITEMS: Item[] = [
     price: 2200,
     emoji: '🪄',
   },
+  {
+    id: 'pistol',
+    name: 'Pistol',
+    description: 'A compact firearm — shoot targets up to three tiles away.',
+    useType: 'permanent',
+    effect: { type: 'weapon', damage: 20, range: 3, cooldownMs: 700, style: 'magic' },
+    price: 1800,
+    emoji: '🔫',
+  },
   // ---- combat: shields ----
   {
     id: 'iron_guard',
