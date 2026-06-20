@@ -1097,6 +1097,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (now - lastAttackRef.current < wp.cooldownMs) return;  // weapon still on cooldown
     lastAttackRef.current = now;
     me.attackUntil = now + 280;                               // the swing animates even on a whiff
+    channelRef.current?.send({ type: 'broadcast', event: 'swing', payload: { id: me.id, wp: wp.id } });
     musicRef.current?.punch();
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
     if (pvp) remotesRef.current.forEach((r, rid) => {
@@ -2161,6 +2162,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           const pl = payload as Record<string, unknown>; const id = String(pl.id ?? ''); if (!id || id === me.id) return;
           const r = remotesRef.current.get(id); if (!r) return;
           r.hp = Number(pl.hp); r.maxHp = Number(pl.maxHp) || MAX_HP; r.absorb = Number(pl.absorb) || 0; r.hpStamp = Date.now(); if (pl.wp != null) r.weapon = String(pl.wp);
+        })
+        .on('broadcast', { event: 'swing' }, ({ payload }) => {
+          const pl = payload as Record<string, unknown>;
+          const id = String(pl.id ?? ''); const a = remotesRef.current.get(id);
+          if (a) { a.attackUntil = Date.now() + 280; if (pl.wp != null) a.weapon = String(pl.wp); }
         })
         .on('broadcast', { event: 'attack' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>;
