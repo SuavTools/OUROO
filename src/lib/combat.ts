@@ -25,7 +25,7 @@ export type WeaponSpec = { id: string; name: string; emoji: string; damage: numb
 export type ShieldSpec = { id: string; name: string; emoji: string; defense: number };  // defense = fraction reduced, 0..0.9
 
 // Fists — the free default everyone swings with when no weapon is equipped.
-export const FISTS: WeaponSpec = { id: 'fists', name: 'Fists', emoji: '🤜', damage: 8, range: 1, cooldownMs: 700, style: 'melee' };
+export const FISTS: WeaponSpec = { id: 'fists', name: 'Fists', emoji: '🤜', damage: 8, range: 1, cooldownMs: 500, style: 'melee' };
 
 // Resolve a weapon id to its spec (unknown / null → fists).
 export function weaponOf(id: string | null | undefined): WeaponSpec {
