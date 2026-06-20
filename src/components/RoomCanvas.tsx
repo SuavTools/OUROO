@@ -3399,11 +3399,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <div className="mt-2 flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <span className="text-[9px] uppercase tracking-[0.25em] text-brandRed font-bold border border-brandRed/40 bg-black/60 px-1.5 py-0.5">{roomMeta.combat ? '⚔ Combat' : '⚔ Hostiles'}</span>
-              <button
-                onPointerDown={(e) => { e.preventDefault(); swingWeaponRef.current?.(); }}
-                title="Hit everyone in reach (or press F)"
-                className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60 hover:text-white leading-none select-none bg-transparent border-none p-0 cursor-pointer"
-              >Press F to attack</button>
+              <span className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60 leading-none">Press F to attack</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-base leading-none">{equippedWeaponSpec().emoji}</span>
