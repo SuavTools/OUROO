@@ -1420,6 +1420,23 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     writeArena({ slug: def.slug, stake: amt, balance: amt });
     setStakePrompt(false); setStakeInput('');
     flashHint(`Staked ${CURRENCY_SYMBOL}${amt.toLocaleString('pt-PT')} — fight to double it ⚔`);
+    // Spawn as far from other players as possible.
+    const others = [...remotesRef.current.values()];
+    if (others.length > 0) {
+      const S = solidRef.current, surf = surfRef.current;
+      let bestKey = -1, bestDist = -1;
+      for (let i = 0; i < GRID * GRID; i++) {
+        if (S[i] || !surf[i]?.length) continue;
+        const tx = i % GRID, ty = (i / GRID) | 0;
+        let minDist = Infinity;
+        for (const o of others) { const d = (o.fx - tx) ** 2 + (o.fy - ty) ** 2; if (d < minDist) minDist = d; }
+        if (minDist > bestDist) { bestDist = minDist; bestKey = i; }
+      }
+      if (bestKey >= 0) {
+        const me = selfRef.current, bx = bestKey % GRID, by = (bestKey / GRID) | 0;
+        me.fx = bx; me.fy = by; me.tx = bx; me.ty = by; me.path = [];
+      }
+    }
   };
   const declineStake = () => { setStakePrompt(false); switchRoom(roomOf('town')); };   // didn't bet → leave the arena
   // Follow the onboarding step into its room — each tutorial step has its own solo room; 'town'/'done'
