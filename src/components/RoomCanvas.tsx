@@ -535,7 +535,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const lastAttackRef = useRef(0);             // weapon-cooldown gate
   const swingWeaponRef = useRef<() => void>(() => {});   // F key / punch button → radius swing
   const dmgFxRef = useRef<{ fx: number; fy: number; z: number; text: string; color: string; life: number }[]>([]);   // floating damage numbers (grid-anchored)
-  const projRef = useRef<{ fx0: number; fy0: number; z0: number; fx1: number; fy1: number; z1: number; life: number; max: number; color: string }[]>([]);   // magic bolts in flight
+  const projRef = useRef<{ fx0: number; fy0: number; z0: number; fx1: number; fy1: number; z1: number; life: number; max: number; color: string; style?: string }[]>([]);   // projectiles in flight
   const broadcastHPRef = useRef<() => void>(() => {});
   const [myOwnerId, setMyOwnerId] = useState('');
   const ownerIdRef = useRef('');
@@ -1105,7 +1105,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (wp.style === 'magic') {
         projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 18, max: 18, color: '#b98cff' });
       } else if (wp.style === 'gun') {
-        projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 18, max: 18, color: '#ffd700' });
+        projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
       }
     });
   };
@@ -2765,13 +2765,22 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const n of npcsRef.current) drawAvatarLabel(n, false);
       for (const r of remotesRef.current.values()) drawAvatarLabel(r, false);
       drawAvatarLabel(selfRef.current, true);   // your own name on top of the pile
-      // Magic bolts in flight (interpolate start→target by elapsed fraction).
+      // Projectiles in flight (interpolate start→target by elapsed fraction).
       for (const p of projRef.current) {
         const f = 1 - p.life / p.max;
         const gx = p.fx0 + (p.fx1 - p.fx0) * f, gy = p.fy0 + (p.fy1 - p.fy0) * f, gz = p.z0 + (p.z1 - p.z0) * f;
         const { sx, sy } = iso(gx, gy, gz);
-        ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 12;
-        ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        if (p.style === 'gun') {
+          // Thin tracer line: draw from a short tail behind to the bullet tip.
+          const tailF = Math.max(0, f - 0.2);
+          const tx = p.fx0 + (p.fx1 - p.fx0) * tailF, ty = p.fy0 + (p.fy1 - p.fy0) * tailF, tz = p.z0 + (p.z1 - p.z0) * tailF;
+          const { sx: tsx, sy: tsy } = iso(tx, ty, tz);
+          ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 5; ctx.lineWidth = 1.5; ctx.lineCap = 'butt';
+          ctx.beginPath(); ctx.moveTo(tsx, tsy); ctx.lineTo(sx, sy); ctx.stroke(); ctx.restore();
+        } else {
+          ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        }
       }
       // Floating damage numbers.
       for (const d of dmgFxRef.current) {
