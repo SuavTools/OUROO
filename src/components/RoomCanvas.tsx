@@ -1114,14 +1114,17 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: r.fx, fy1: r.fy, z1: r.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
       }
     });
-    // Hazardous NPCs — fought per-player, entirely local. Closest-in-reach takes the hit.
+    // Hazardous NPCs — fought per-player, entirely local. Same reach rule as PvP (tileDist ≤ wp.range:
+    // fists touch, weapons reach), but measured to the NPC's LIVE tile (fx/fy) since it's locally
+    // simulated — using its lagging path-target would whiff on an NPC that's visually adjacent.
     for (const n of npcsRef.current) {
       const nid = n.nid; if (!nid || !n.hz || n.defeated || n.peaceful || n.hp == null) continue;
-      if (tileDist(mgx, mgy, clampTile(n.tx), clampTile(n.ty)) > wp.range) continue;
+      if (tileDist(mgx, mgy, clampTile(n.fx), clampTile(n.fy)) > wp.range) continue;
       n.hp = Math.max(0, n.hp - wp.damage); npcHpRef.current.set(nid, n.hp);
       n.hitUntil = now + 220;
       spawnDmg(n.fx, n.fy, n.z, wp.damage, '#ffd84a');
       if (wp.style === 'magic') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 18, max: 18, color: '#b98cff' });
+      else if (wp.style === 'gun') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
       if (n.hp <= 0) defeatNpc(n);
     }
   };
