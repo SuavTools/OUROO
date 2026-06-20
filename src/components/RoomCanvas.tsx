@@ -2598,7 +2598,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       let weapHandX = sx + 15, weapHandY = handY;
       if (pi && weaponArmLift > 0) {
         const s_dp = 56 / 50;
-        const armTheta = +weaponArmLift * Math.PI * 0.5;   // CW rotation, same angle used in drawPerson
+        const armTheta = -weaponArmLift * Math.PI * 0.5;   // CCW rotation, same angle used in drawPerson
         const shoulderX = (sx + sway) + ((pi.g === 1 ? 9 : 7.6) + 1.4) * s_dp;
         const shoulderY = (sy - 30 + bob) + (-7 + 1) * s_dp;
         weapHandX = shoulderX + 12 * s_dp * Math.sin(armTheta);

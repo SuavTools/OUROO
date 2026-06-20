@@ -103,7 +103,7 @@ export function drawPerson(ctx: CanvasRenderingContext2D, p: PersonSpec, w: numb
       // Rotate around the shoulder joint: CCW for right arm, CW for left (canvas +rotation = CW).
       ctx.save();
       ctx.translate(ax, torsoTop + 1 * s);
-      ctx.rotate((armLift > 0 ? -side : side) * lift * Math.PI * (armLift > 0 ? 0.85 : 0.5));
+      ctx.rotate(-side * lift * Math.PI * (armLift > 0 ? 0.85 : 0.5));
       ctx.fillStyle = longSleeve ? p.topC : tone; rr(ctx, -1.8 * s, 0, 3.6 * s, 11 * s, 1.8 * s); ctx.fill();
       ctx.fillStyle = tone; ctx.beginPath(); ctx.arc(0, 12 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
