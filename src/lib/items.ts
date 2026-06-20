@@ -96,7 +96,7 @@ export const ITEMS: Item[] = [
     name: 'Sword',
     description: 'Heavy swings, serious damage. The honest way to end an alley scrap.',
     useType: 'permanent',
-    effect: { type: 'weapon', damage: 28, range: 1, cooldownMs: 850, style: 'melee' },
+    effect: { type: 'weapon', damage: 40, range: 1, cooldownMs: 850, style: 'melee' },
     price: 1500,
     emoji: '🗡️',
   },
