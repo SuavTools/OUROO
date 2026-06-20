@@ -200,15 +200,15 @@ export const NpcEditor: React.FC<{
 
         {appMode === 'creature' ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-4">
+            <div className="flex items-start gap-4">
               <div className="w-24 h-28 bg-black/50 border border-white/10 flex items-center justify-center shrink-0">
                 <SkinPreview skin={{ id: '_c', name: '', shape: creatureShape, color: creatureColor, unlock: { type: 'default' } }} accent={creatureAccent} size={104} />
               </div>
-              <div className="grid grid-cols-3 gap-1.5 flex-1">
+              <div className="grid grid-cols-4 gap-1.5 flex-1 max-h-44 overflow-y-auto pr-1">
                 {CREATURE_SHAPES.map(c => (
                   <button key={c.shape} onClick={() => setCreatureShape(c.shape)} title={c.name}
                     className={`aspect-square flex items-center justify-center border rounded-md transition-colors ${creatureShape === c.shape ? 'border-[#ffb84d] bg-[#ffb84d]/15' : 'border-white/12 bg-white/[0.03] hover:border-white/40'}`}>
-                    <SkinPreview skin={{ id: c.shape, name: c.name, shape: c.shape, color: creatureColor, unlock: { type: 'default' } }} accent={creatureAccent} size={42} />
+                    <SkinPreview skin={{ id: c.shape, name: c.name, shape: c.shape, color: creatureColor, unlock: { type: 'default' } }} accent={creatureAccent} size={40} />
                   </button>
                 ))}
               </div>
