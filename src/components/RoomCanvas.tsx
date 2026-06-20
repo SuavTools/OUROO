@@ -89,6 +89,10 @@ const ARENA_VAULT: RoomDef = { slug: 'arena-vault',     name: 'The Vault',     a
 // The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
 // Town is the social hub, the Woods are the wild edge, the arenas are tiered staked PvP.
 const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS, ARENA_PIT, ARENA_COL, ARENA_VAULT];
+// Bet-band presets, reused by the perms-panel "make this room an arena" toggle (max 0 = no ceiling).
+const ARENA_TIERS: { label: string; min: number; max: number }[] = [
+  { label: 'Pit', min: 10, max: 250 }, { label: 'Colosseum', min: 250, max: 5000 }, { label: 'Vault', min: 5000, max: 0 },
+];
 const TUT_BY_SLUG: Record<string, RoomDef> = Object.fromEntries(Object.values(TUT_ROOMS).map(r => [r.slug, r]));
 const roomOf = (slug: string) => TUT_BY_SLUG[slug] ?? ROOMS.find(r => r.slug === slug) ?? TOWN;
 const isTutRoom = (slug: string) => slug.startsWith('t_');
@@ -536,12 +540,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [permsHandle, setPermsHandle] = useState('');
   const [permsCombat, setPermsCombat] = useState(false);   // PvP toggle (mod-gated) in the perms modal
   const [permsDiscoverable, setPermsDiscoverable] = useState(false);   // discoverable toggle in perms modal
+  const [permsArena, setPermsArena] = useState(false);     // staked-arena toggle (mod-gated) + its bet band
+  const [permsArenaMin, setPermsArenaMin] = useState('10');
+  const [permsArenaMax, setPermsArenaMax] = useState('0');   // 0 = no ceiling
   // ---- combat / hp ----
   const [selfHp, setSelfHp] = useState<{ hp: number; max: number; absorb: number }>(() => ({ hp: MAX_HP, max: MAX_HP, absorb: 0 }));
   const [huntable, setHuntable] = useState(false);   // a fightable hazardous NPC is present → show combat HUD/punch even outside PvP rooms
   const huntableRef = useRef(false);
   // ---- staked arena (betting PvP) ---- escrow lives in a ref + localStorage so a refresh mid-fight is safe.
   const arenaRef = useRef<{ slug: string; stake: number; balance: number } | null>(null);
+  const arenaMarkerRef = useRef<string | null>(null);   // room_items id of the `arena:` marker flagging the current room
   const [arenaBal, setArenaBal] = useState<number | null>(null);   // HUD mirror of escrow balance (null = not staked)
   const [stakePrompt, setStakePrompt] = useState(false);
   const [stakeInput, setStakeInput] = useState('');
@@ -1406,7 +1414,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (roomMeta.arena && !arenaRef.current && !tutorial) { setStakeInput(''); setStakePrompt(true); }
     else setStakePrompt(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room]);
+  }, [room, roomMeta.arena]);
   const confirmStake = () => {
     const def = roomMetaRef.current; const { min, max } = arenaBand(def);
     const amt = Math.floor(Number(stakeInput) || 0);
@@ -1509,7 +1517,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (room === r.slug) switchRoom(roomOf('town'));
     refreshRoomLists();
   };
-  const openPerms = (r: RoomRow) => { setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); setPermsCombat(r.combat_enabled ?? false); setPermsDiscoverable(r.discoverable ?? false); };
+  const openPerms = (r: RoomRow) => {
+    setPermsRoom(r); setPermsAll(r.build_all); setPermsPublic(r.public); setPermsList(r.rights ?? []); setPermsHandle(''); setPermsCombat(r.combat_enabled ?? false); setPermsDiscoverable(r.discoverable ?? false);
+    setPermsArena(false); setPermsArenaMin('10'); setPermsArenaMax('0');   // load arena flag from its room_items marker (no DB column)
+    supabase?.from('room_items').select('kind').eq('room', r.slug).like('kind', 'arena:%').limit(1).then(({ data }) => {
+      const k = (data?.[0] as { kind?: string } | undefined)?.kind; if (!k) return;
+      const p = k.split(':'); setPermsArena(true); setPermsArenaMin(String(Math.max(1, Number(p[1]) || 10))); setPermsArenaMax(String(Math.max(0, Number(p[2]) || 0)));
+    }, () => {});
+  };
   const addPermHandle = () => {
     const h = permsHandle.trim(); if (!h) return;
     if (!permsList.some(x => x.toLowerCase() === h.toLowerCase())) setPermsList(l => [...l, h]);
@@ -1518,14 +1533,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const savePerms = async () => {
     if (!permsRoom) return;
     const list = Array.from(new Set(permsList.map(h => h.trim()).filter(Boolean)));
-    const ok = await updateRoomPerms(permsRoom.slug, permsAll, list, permsCombat, permsDiscoverable);
+    const slug = permsRoom.slug;
+    const aMin = Math.max(1, Math.floor(Number(permsArenaMin) || 10));
+    const aMax = Math.max(0, Math.floor(Number(permsArenaMax) || 0));
+    if (permsArena && aMax > 0 && aMin > aMax) { flashHint('Arena: min bet must be ≤ max'); return; }
+    const combatFinal = permsCombat || permsArena;   // an arena is always a combat zone
+    const ok = await updateRoomPerms(slug, permsAll, list, combatFinal, permsDiscoverable);
     if (!ok) { flashHint('Failed to save permissions'); return; }
-    if (permsPublic !== permsRoom.public) await setRoomPublic(permsRoom.slug, permsPublic);   // flip public ↔ invite-only
+    if (permsPublic !== permsRoom.public) await setRoomPublic(slug, permsPublic);   // flip public ↔ invite-only
+    // Arena flag lives as a room_items marker (no DB column): clear any existing, then write the band if on.
+    try {
+      await supabase?.from('room_items').delete().eq('room', slug).like('kind', 'arena:%');
+      if (permsArena) { const id = (crypto?.randomUUID?.() ?? `arena_${Date.now()}_${Math.floor(Math.random() * 1e9)}`); await supabase?.from('room_items').insert({ id, room: slug, kind: `arena:${aMin}:${aMax}`, x: 0, y: 0, created_by: deviceRef.current }); }
+    } catch { /* ignore */ }
     // Reflect immediately in local lists + the live room if it's the one open.
-    setMyRooms(rs => rs.map(r => r.slug === permsRoom.slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic, combat_enabled: permsCombat, discoverable: permsDiscoverable } : r));
-    if (room === permsRoom.slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list, combat: permsCombat, discoverable: permsDiscoverable }));
+    setMyRooms(rs => rs.map(r => r.slug === slug ? { ...r, build_all: permsAll, rights: list, public: permsPublic, combat_enabled: combatFinal, discoverable: permsDiscoverable } : r));
+    if (room === slug) setRoomMeta(m => ({ ...m, buildAll: permsAll, rights: list, combat: combatFinal, discoverable: permsDiscoverable, arena: permsArena, arenaMin: permsArena ? aMin : undefined, arenaMax: permsArena ? aMax : undefined }));
     refreshRoomLists();   // public flag changed → refresh the public-room list (portal picker + browser)
-    setPermsRoom(null); flashHint('Permissions saved ✓');
+    setPermsRoom(null); flashHint(permsArena ? 'Saved — room is now a staked arena ⚔' : 'Permissions saved ✓');
   };
 
   // recompute the heightmap (walkable height + solid mask) from items
@@ -1573,7 +1598,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Split loaded room_items rows into furni (→ itemsRef) and tile-material overrides (`mat:<n>` → maps).
   const ingestItemRows = (rows: { id: string; kind: string; x: number; y: number; created_by?: string | null }[]) => {
-    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; npcHpRef.current.clear(); bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null; setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]);
+    matOverrideRef.current.clear(); matIdRef.current.clear(); delCuratedRef.current.clear(); loreRef.current = []; placedNpcsRef.current = []; npcHpRef.current.clear(); arenaMarkerRef.current = null; bgRef.current = 'auto'; bgIdRef.current = null; machineOverrideRef.current = null; nearShopRef.current = null; setSTriggerMode(false); setSTriggerShopId(null); setSTriggerTiles([]);
     const items: Item[] = [];
     for (const d of rows) {
       const raw = String(d.kind);
@@ -1582,6 +1607,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (raw.startsWith('npc:')) { const nd = decodeNpc(raw); if (nd) placedNpcsRef.current.push({ id: String(d.id), gx: Number(d.x), gy: Number(d.y), data: nd }); continue; }   // admin-placed NPC
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
       if (raw.startsWith('bg:')) { const a = raw.slice(3) as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; bgIdRef.current = String(d.id); } continue; }
+      if (raw.startsWith('arena:')) { const p = raw.split(':'); const min = Math.max(1, Number(p[1]) || 10), max = Math.max(0, Number(p[2]) || 0); arenaMarkerRef.current = String(d.id); setRoomMeta(prev => ({ ...prev, arena: true, arenaMin: min, arenaMax: max })); continue; }   // mod-flagged staked arena
       if (raw.startsWith('reward:')) { const p = raw.split(':'); const mode = (p[1] === 'enter' ? 'enter' : 'tile') as LoreMode; loreRef.current.push({ id: String(d.id), mode, style: 'reward', gx: Number(d.x), gy: Number(d.y), text: '', crystals: Number(p[2]) || 0, skinId: safeDecode(p[3] || '') }); continue; }
       if (raw.startsWith('lore:') || raw.startsWith('seq:')) { const style: LoreStyle = raw.startsWith('seq:') ? 'glitch' : 'oracle'; const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = safeDecode(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', style, gx: Number(d.x), gy: Number(d.y), text }); continue; }
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
@@ -4073,6 +4099,29 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 <span className="text-sm text-white">⚔ Combat zone<br /><span className="text-[11px] text-white/45">Players can attack &amp; loot each other here (5% of Cristais + items on a knockout). Mods only.</span></span>
               </label>
             )}
+            {isMod && (<>
+              <label className="flex items-center gap-3 p-3 border border-[#ffd23a]/30 cursor-pointer hover:border-[#ffd23a]/55 mt-2">
+                <input type="checkbox" checked={permsArena} onChange={e => { setPermsArena(e.target.checked); if (e.target.checked) setPermsCombat(true); }} className="accent-[#ffd23a] w-4 h-4" />
+                <span className="text-sm text-white">{CURRENCY_SYMBOL} Staked arena<br /><span className="text-[11px] text-white/45">Players bet to enter; a kill pays the smaller of the two bets (cap 2×), death loses the stake. Forces combat on. Mods only.</span></span>
+              </label>
+              {permsArena && (
+                <div className="p-3 border border-[#ffd23a]/20 -mt-2 space-y-2.5">
+                  <div className="flex gap-1.5">
+                    {ARENA_TIERS.map(t => {
+                      const on = Math.floor(Number(permsArenaMin) || 0) === t.min && Math.floor(Number(permsArenaMax) || 0) === t.max;
+                      return (<button key={t.label} onClick={() => { setPermsArenaMin(String(t.min)); setPermsArenaMax(String(t.max)); }}
+                        className={`flex-1 text-[10px] uppercase tracking-wide py-1.5 border transition-colors ${on ? 'border-[#ffd23a] bg-[#ffd23a]/15 text-white' : 'border-white/12 text-white/55 hover:border-white/30'}`}>{t.label}</button>);
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <label className="flex-1 space-y-1"><span className="text-[10px] uppercase tracking-[0.2em] text-white/40">Min bet</span>
+                      <input value={permsArenaMin} onChange={e => setPermsArenaMin(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full bg-white/5 border border-white/15 text-white px-2 py-1.5 text-sm tabular-nums outline-none focus:border-[#ffd23a]" /></label>
+                    <label className="flex-1 space-y-1"><span className="text-[10px] uppercase tracking-[0.2em] text-white/40">Max bet (0 = ∞)</span>
+                      <input value={permsArenaMax} onChange={e => setPermsArenaMax(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" className="w-full bg-white/5 border border-white/15 text-white px-2 py-1.5 text-sm tabular-nums outline-none focus:border-[#ffd23a]" /></label>
+                  </div>
+                </div>
+              )}
+            </>)}
             <label className="flex items-center gap-3 p-3 border border-[#cc44ff]/30 cursor-pointer hover:border-[#cc44ff]/55 mt-2">
               <input type="checkbox" checked={permsDiscoverable} onChange={e => setPermsDiscoverable(e.target.checked)} className="accent-[#cc44ff] w-4 h-4" />
               <span className="text-sm text-white">✦ Discoverable<br /><span className="text-[11px] text-white/45">Hidden from the community browser until a player physically enters the room (via portal or invite code).</span></span>
