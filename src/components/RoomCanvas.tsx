@@ -2612,6 +2612,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           : Math.PI + 0.35;
         ctx.save(); ctx.font = `700 ${swinging ? 30 : 22}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.translate(weapHandX, weapHandY); ctx.rotate(swingRot);
+        if (wsp.style === 'gun') ctx.scale(1, -1);
         ctx.fillText(wsp.emoji, 0, 0); ctx.restore();
       }
       if (swinging) {   // a quick white slash arc
