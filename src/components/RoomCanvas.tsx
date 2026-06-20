@@ -17,7 +17,7 @@ import { CATS, FURNI, defOf, furniPrice, sitHeight, isRotatable, isFurniFree } f
 import { type IconSpec, drawIconSpec, iconPrimaryColor } from '@/lib/icons';
 import { drawPerson, parsePerson, personPrimaryColor } from '@/lib/person';
 import { resolveAppearance } from '@/lib/catalog';
-import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
+import { buyFurni, furniCount, consumeFurni, returnFurni, grantFurni, spend, refreshWalletFromCloud, useWallet, CURRENCY_SYMBOL, addBalance, getBalance, buyItem, grantItem, itemCount, takeItem } from '@/lib/wallet';
 import { ITEMS, itemById, getSpeedMultiplier, getSwayIntensity, getSwayEffect, getSpeedEffect, getFlyActive } from '@/lib/items';
 import {
   getHP, equippedWeaponSpec, equippedShieldSpec, weaponOf, applyDamage, respawnHP,
@@ -60,7 +60,7 @@ const wrapBubble = (text: string): string[] => {
 // import can't insert unbounded rows. Place as much as you like.
 const MAX_ITEMS = 100000;
 
-type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean; discoverable?: boolean };
+type RoomDef = { slug: string; name: string; accent: string; floor: string; locked?: boolean; owner?: string; buildAll?: boolean; rights?: string[]; plan?: string; day?: boolean; veranda?: boolean; outdoor?: boolean; combat?: boolean; arena?: boolean; discoverable?: boolean };
 // Who may drop/take furni in a room: a mod always; in a PERSONAL room also the owner, an open
 // ("build_all") room, or a granted handle. Official/public rooms are MODS ONLY.
 const canBuildIn = (def: RoomDef, ownerId: string, handle: string, mod: boolean): boolean => {
@@ -80,9 +80,12 @@ const TUT_ROOMS: Record<string, RoomDef> = {
 const TOWN: RoomDef   = { slug: 'town',   name: 'Town',      accent: '#00cfff', floor: '#161628', plan: 'mega',   outdoor: true };
 const ARCADE: RoomDef = { slug: 'arcade', name: 'Arcade',    accent: '#ffd23a', floor: '#16121f', plan: 'enorme' };
 const WOODS: RoomDef  = { slug: 'woods',  name: 'The Woods', accent: '#4fd96b', floor: '#16271a', plan: 'grove',  day: true, outdoor: true };
+// Staked PvP: bet on entry, win the smaller of the two bets per kill (cap 2× your stake), lose your
+// stake to your killer and get ejected. Combat + arena both on.
+const ARENA: RoomDef  = { slug: 'arena',  name: 'The Colosseum', accent: '#ff4e3e', floor: '#1a0e0e', plan: 'salao', combat: true, arena: true };
 // The menu's destinations (the tutorial rooms are start-only, never listed): Arcade holds the games,
-// Town is the social hub, the Woods are the wild edge.
-const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS];
+// Town is the social hub, the Woods are the wild edge, the Colosseum is staked PvP.
+const ROOMS: RoomDef[] = [TOWN, ARCADE, WOODS, ARENA];
 const TUT_BY_SLUG: Record<string, RoomDef> = Object.fromEntries(Object.values(TUT_ROOMS).map(r => [r.slug, r]));
 const roomOf = (slug: string) => TUT_BY_SLUG[slug] ?? ROOMS.find(r => r.slug === slug) ?? TOWN;
 const isTutRoom = (slug: string) => slug.startsWith('t_');
@@ -534,6 +537,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [selfHp, setSelfHp] = useState<{ hp: number; max: number; absorb: number }>(() => ({ hp: MAX_HP, max: MAX_HP, absorb: 0 }));
   const [huntable, setHuntable] = useState(false);   // a fightable hazardous NPC is present → show combat HUD/punch even outside PvP rooms
   const huntableRef = useRef(false);
+  // ---- staked arena (betting PvP) ---- escrow lives in a ref + localStorage so a refresh mid-fight is safe.
+  const arenaRef = useRef<{ slug: string; stake: number; balance: number } | null>(null);
+  const [arenaBal, setArenaBal] = useState<number | null>(null);   // HUD mirror of escrow balance (null = not staked)
+  const [stakePrompt, setStakePrompt] = useState(false);
+  const [stakeInput, setStakeInput] = useState('');
   const [koUntil, setKoUntil] = useState(0);   // self knockout: WASTED overlay + respawn countdown
   const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
   const koUntilRef = useRef(0);
@@ -955,6 +963,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [hint, setHint] = useState('');
   const flashHint = (t: string) => { setHint(t); setTimeout(() => setHint(''), 1900); };
 
+  // ---- staked arena escrow ---- (client-side, like the rest of the economy; server authority is a later pass)
+  const ARENA_KEY = 'ouroo_arena';
+  const writeArena = (e: { slug: string; stake: number; balance: number } | null) => {
+    arenaRef.current = e; setArenaBal(e ? e.balance : null);
+    try { e ? localStorage.setItem(ARENA_KEY, JSON.stringify(e)) : localStorage.removeItem(ARENA_KEY); } catch { /* ignore */ }
+  };
+  const setArenaBalance = (balance: number) => { const e = arenaRef.current; if (e) writeArena({ ...e, balance }); };
+  // Bank the current escrow back into the wallet and clear it (cash out / eject / leave).
+  const cashOutArena = () => { const e = arenaRef.current; if (!e) return 0; if (e.balance > 0) addBalance(e.balance); writeArena(null); return e.balance; };
+  // On load: if there's a dangling escrow, keep it if we reloaded inside that arena, else bank it back (crash/refresh safety).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ARENA_KEY); if (!raw) return;
+      const e = JSON.parse(raw) as { slug: string; stake: number; balance: number };
+      if (!e || typeof e.balance !== 'number') return;
+      if (e.slug === room) { arenaRef.current = e; setArenaBal(e.balance); }
+      else { if (e.balance > 0) addBalance(e.balance); localStorage.removeItem(ARENA_KEY); }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Player-to-player interaction system ──
   const [interactPrompt, setInteractPrompt] = useState<InteractPeer | null>(null);
   const [interactRequest, setInteractRequest] = useState<InteractPeer | null>(null);
@@ -1078,9 +1107,24 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     broadcastHP();
     if (res.dead) {
       const killer = String(pl.from ?? '');
+      channelRef.current?.send({ type: 'broadcast', event: 'ko', payload: { id: me.id, by: killer } });
+      // ── Arena death: hand the killer the bounty (smaller of the two bets), bank the remainder, get ejected.
+      //    Never the normal wallet loot here — only the escrowed stake is ever at risk in an arena. ──
+      if (roomMetaRef.current.arena) {
+        if (arenaRef.current) {
+          const killerStake = Math.max(0, Number(pl.stake) || 0);
+          const bounty = Math.min(killerStake, arenaRef.current.balance);
+          setArenaBalance(arenaRef.current.balance - bounty);   // killer takes the bounty; the rest is yours to bank
+          if (bounty > 0) channelRef.current?.send({ type: 'broadcast', event: 'loot', payload: { from: me.id, to: killer, crystals: bounty, arena: true } });
+          flashHint(bounty > 0 ? `Killed — lost ${CURRENCY_SYMBOL}${bounty.toLocaleString('pt-PT')}, banking the rest ✦` : 'Killed — ejected');
+        }
+        respawnHP(); setSelfHp(getHP());   // heal for next time
+        switchRoom(roomOf('town'));   // ejected; switchRoom banks any remaining escrow
+        return;
+      }
+      // ── Normal PvP: drop 5% of your wallet to the killer. ──
       const loot = computeLoot();
       dropLoot(loot);
-      channelRef.current?.send({ type: 'broadcast', event: 'ko', payload: { id: me.id, by: killer } });
       if (!lootIsEmpty(loot)) channelRef.current?.send({ type: 'broadcast', event: 'loot', payload: { from: me.id, to: killer, crystals: loot.crystals, items: loot.items } });
       respawnSelf();
     }
@@ -1092,6 +1136,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const me = selfRef.current;
     const pvp = roomMetaRef.current.combat;
     if (!pvp && !huntableRef.current) return;                 // nothing to swing at here
+    if (roomMetaRef.current.arena && !arenaRef.current) return;   // must place a bet to fight in the arena
     if (koUntilRef.current > Date.now()) return;              // can't swing while knocked out
     const wp = equippedWeaponSpec();
     const now = Date.now();
@@ -1105,7 +1150,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (pvp) remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
       if (tileDist(mgx, mgy, clampTile(r.tx), clampTile(r.ty)) > wp.range) return;   // out of reach
-      channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style } });
+      channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style, stake: arenaRef.current?.stake ?? 0 } });
       // Optimistic local prediction: drop their bar + flash NOW instead of after the hp round-trip.
       // The victim is authoritative — their 'hp' broadcast reconciles this a moment later.
       if (r.hp != null) r.hp = Math.max(0, r.hp - wp.damage);
@@ -1338,6 +1383,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const switchRoom = (def: RoomDef) => {
     setShowRooms(false); if (def.slug === room) return;
+    // Leaving an arena always banks the escrow (manual cash-out or post-eject remainder).
+    if (roomMetaRef.current.arena && arenaRef.current) { const banked = cashOutArena(); if (banked > 0) flashHint(`Cashed out ${CURRENCY_SYMBOL}${banked.toLocaleString('pt-PT')} ✦`); }
     // Eagerly announce departure so others drop the avatar immediately — don't wait for the effect cleanup.
     try { const me = selfRef.current; channelRef.current?.send({ type: 'broadcast', event: 'leave', payload: { id: me.id } }); channelRef.current?.untrack(); } catch { /* ignore */ }
     closeInteract(false);
@@ -1348,6 +1395,25 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     setRoomMeta(def); setRoom(def.slug);
   };
   const switchRoomRef = useRef(switchRoom); useEffect(() => { switchRoomRef.current = switchRoom; });   // latest switchRoom for the animation loop
+
+  // ---- arena staking ----
+  const ARENA_MIN_STAKE = 10;
+  // Entering an arena (and not already staked) → ask for a bet. Leaving / already-staked → no prompt.
+  useEffect(() => {
+    if (roomMeta.arena && !arenaRef.current && !tutorial) { setStakeInput(''); setStakePrompt(true); }
+    else setStakePrompt(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+  const confirmStake = () => {
+    const amt = Math.floor(Number(stakeInput) || 0);
+    if (amt < ARENA_MIN_STAKE) { flashHint(`Minimum bet ${CURRENCY_SYMBOL}${ARENA_MIN_STAKE}`); return; }
+    if (getBalance() < amt) { flashHint('Not enough Cristais'); return; }
+    spend(amt);
+    writeArena({ slug: roomMetaRef.current.slug, stake: amt, balance: amt });
+    setStakePrompt(false); setStakeInput('');
+    flashHint(`Staked ${CURRENCY_SYMBOL}${amt.toLocaleString('pt-PT')} — fight to double it ⚔`);
+  };
+  const declineStake = () => { setStakePrompt(false); switchRoom(roomOf('town')); };   // didn't bet → leave the arena
   // Follow the onboarding step into its room — each tutorial step has its own solo room; 'town'/'done'
   // land in Town. (The fade/transition that motivates the move is played before the step is advanced.)
   useEffect(() => {
@@ -2201,6 +2267,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         })
         .on('broadcast', { event: 'loot' }, ({ payload }) => {
           const pl = payload as Record<string, unknown>; if (String(pl.to ?? '') !== me.id) return;
+          // Arena bounty → credit my escrow pot (capped at 2× my stake), not my wallet. I bank it on cash-out.
+          if (pl.arena) {
+            const e = arenaRef.current; if (!e) return;
+            const bounty = Math.max(0, Number(pl.crystals) || 0);
+            const newBal = Math.min(e.stake * 2, e.balance + bounty);
+            const gained = newBal - e.balance; setArenaBalance(newBal);
+            const fromH = remotesRef.current.get(String(pl.from ?? ''))?.handle ?? 'them';
+            flashHint(gained > 0 ? `Bounty +${CURRENCY_SYMBOL}${gained.toLocaleString('pt-PT')} from ${fromH} — pot ${CURRENCY_SYMBOL}${newBal.toLocaleString('pt-PT')}` : `Maxed out — cash out!`);
+            return;
+          }
           const loot: Loot = { crystals: Number(pl.crystals) || 0, items: (pl.items && typeof pl.items === 'object') ? pl.items as Record<string, number> : {} };
           if (lootIsEmpty(loot)) return;
           grantLoot(loot);
@@ -3269,6 +3345,19 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             </div>
           </div>
         )}
+        {/* Arena pot — your escrowed stake + winnings, with a cash-out button. */}
+        {roomMeta.arena && arenaBal != null && arenaRef.current && (() => {
+          const cap = arenaRef.current.stake * 2, maxed = arenaBal >= cap;
+          return (
+            <div className="mt-2 flex items-center gap-2 pointer-events-auto">
+              <span className="text-[9px] uppercase tracking-[0.25em] text-[#ffd23a] font-bold border border-[#ffd23a]/40 bg-black/60 px-1.5 py-0.5">{CURRENCY_SYMBOL} Pot</span>
+              <span className={`text-sm tabular-nums font-bold ${maxed ? 'text-[#1ED760]' : 'text-white'}`}>{CURRENCY_SYMBOL}{arenaBal.toLocaleString('pt-PT')}</span>
+              <span className="text-[10px] text-white/40">/ {CURRENCY_SYMBOL}{cap.toLocaleString('pt-PT')}{maxed ? ' · maxed!' : ''}</span>
+              <button onClick={() => switchRoom(roomOf('town'))} title="Bank your pot and leave"
+                className="ml-1 text-[10px] uppercase tracking-widest border border-[#1ED760]/50 text-[#1ED760] bg-black/60 px-2 py-1 hover:bg-[#1ED760] hover:text-black active:scale-90 transition-all">Cash out ▸</button>
+            </div>
+          );
+        })()}
       </div>
 
       {/* WASTED — knockout overlay with a respawn countdown. */}
@@ -4079,6 +4168,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           </div>
         </div>
       )}
+
+      {stakePrompt && (() => {
+        const bal = getBalance();
+        const amt = Math.floor(Number(stakeInput) || 0);
+        const ok = amt >= ARENA_MIN_STAKE && amt <= bal;
+        return (
+          <div className="absolute inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={declineStake}>
+            <div className="w-full max-w-xs border border-brandRed/40 bg-black p-6 text-center space-y-4" onClick={e => e.stopPropagation()}>
+              <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-brandRed">⚔ the colosseum</p>
+              <p className="text-sm text-white/70 leading-relaxed">Bet to enter. Each kill pays the <span className="text-white">smaller</span> of the two bets — double your stake and cash out, or lose it and get ejected.</p>
+              <p className="text-[11px] text-white/45">Your purse: <span className="text-white/80 tabular-nums">{CURRENCY_SYMBOL}{bal.toLocaleString('pt-PT')}</span></p>
+              <input value={stakeInput} onChange={e => setStakeInput(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" autoFocus placeholder={`bet (min ${ARENA_MIN_STAKE})`} onKeyDown={e => { if (e.key === 'Enter' && ok) confirmStake(); }}
+                className="w-full bg-white/5 border border-white/15 text-white text-center px-3 py-2.5 text-base tabular-nums font-bold outline-none focus:border-brandRed" />
+              <div className="flex gap-2">
+                <button disabled={!ok} onClick={confirmStake} className={`flex-1 font-bold uppercase text-xs tracking-widest py-3 transition-colors ${ok ? 'bg-brandRed text-black hover:bg-white active:scale-95' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>Bet {amt > 0 ? `${CURRENCY_SYMBOL}${amt.toLocaleString('pt-PT')} ` : ''}▸</button>
+                <button onClick={declineStake} className="px-4 border border-white/20 text-white/50 hover:text-white text-xs uppercase tracking-widest active:scale-95">Leave</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {machinePrompt && (
         <div className="absolute inset-0 z-[65] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setMachinePrompt(null)}>
