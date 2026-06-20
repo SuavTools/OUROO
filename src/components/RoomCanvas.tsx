@@ -2608,21 +2608,21 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       // ---- combat overlays (screen space) ----
       // nowT / swinging / k_atk / weaponId / wsp were hoisted above for weaponArmLift.
       const handY = sy - 26 + bob;
-      // For person avatars with a lifted weapon arm, track the rotated hand in canvas space.
-      let weapHandX = sx + 15, weapHandY = handY;
-      if (pi && weaponArmLift > 0) {
+      // Weapon position always tracks the arm's hand endpoint (person avatars) so it stays glued to the arm.
+      let weapHandX: number, weapHandY: number;
+      if (pi) {
         const s_dp = 56 / 50;
-        const armTheta = -weaponArmLift * Math.PI * 0.5;   // CCW rotation, same angle used in drawPerson
+        const armTheta = -weaponArmLift * Math.PI * 0.5;
         const shoulderX = (sx + sway) + ((pi.g === 1 ? 9 : 7.6) + 1.4) * s_dp;
         const shoulderY = (sy - 30 + bob) + (-7 + 1) * s_dp;
         weapHandX = shoulderX + 12 * s_dp * Math.sin(armTheta);
         weapHandY = shoulderY + 12 * s_dp * Math.cos(armTheta);
+      } else {
+        weapHandX = sx + 15; weapHandY = handY;
       }
       if (wsp && wsp.id !== 'fists' && themeRef.current.combat) {   // held weapon by the hand; only visible in combat rooms
-        // Weapon is glued to the hand — rotates with the arm (same CCW angle) from its rest orientation.
-        const weapRot = Math.PI + 0.35 - weaponArmLift * Math.PI * 0.5;
         ctx.save(); ctx.font = `700 ${swinging ? 30 : 22}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.translate(weapHandX, weapHandY); ctx.rotate(weapRot);
+        ctx.translate(weapHandX, weapHandY); ctx.rotate(Math.PI + 0.35);
         if (wsp.style === 'gun') ctx.scale(1, -1);
         ctx.fillText(wsp.emoji, 0, 0); ctx.restore();
       }
