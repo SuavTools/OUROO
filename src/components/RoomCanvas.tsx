@@ -551,6 +551,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [koUntil, setKoUntil] = useState(0);   // self knockout: WASTED overlay + respawn countdown
   const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
   const koUntilRef = useRef(0);
+  const [arenaCountdown, setArenaCountdown] = useState<number | null>(null);
+  const arenaCountdownRef = useRef<number | null>(null);   // ref mirror so animation loop can read it
   const lastAttackRef = useRef(0);             // weapon-cooldown gate
   const swingWeaponRef = useRef<() => void>(() => {});   // F key / punch button → radius swing
   const dmgFxRef = useRef<{ fx: number; fy: number; z: number; text: string; color: string; life: number }[]>([]);   // floating damage numbers (grid-anchored)
@@ -570,6 +572,20 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const iv = setInterval(() => { if (Date.now() >= koUntil) setKoUntil(0); else setKoTick(t => t + 1); }, 200);
     return () => clearInterval(iv);
   }, [koUntil]);
+  // Tick the arena entry countdown; player is untracked (invisible to others) until it clears.
+  useEffect(() => {
+    if (arenaCountdown === null || arenaCountdown <= 0) return;
+    const t = setTimeout(() => {
+      const next = arenaCountdown - 1;
+      if (next <= 0) {
+        arenaCountdownRef.current = null; setArenaCountdown(null);
+        broadcastHPRef.current();   // reappear in presence at spawn position
+      } else {
+        setArenaCountdown(next);
+      }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [arenaCountdown]);
   // In a combat room, refresh the HUD periodically so passive regen shows on your own bar.
   useEffect(() => {
     if (!roomMeta.combat) return;
@@ -1105,6 +1121,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (String(pl.to ?? '') !== me.id) return;            // only the target processes it
     if (!roomMetaRef.current.combat) return;              // safety: ignore outside PvP rooms
     if (koUntilRef.current > Date.now()) return;          // already down — invulnerable while respawning
+    if (arenaCountdownRef.current !== null) return;       // invulnerable during entry countdown
     const wp = weaponOf(String(pl.wp ?? 'fists'));
     const res = applyDamage(wp, equippedShieldSpec());
     setSelfHp({ hp: res.hp, max: res.max, absorb: res.absorb });
@@ -1144,6 +1161,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!pvp && !huntableRef.current) return;                 // nothing to swing at here
     if (roomMetaRef.current.arena && !arenaRef.current) return;   // must place a bet to fight in the arena
     if (koUntilRef.current > Date.now()) return;              // can't swing while knocked out
+    if (arenaCountdownRef.current !== null) return;           // can't swing during entry countdown
     const wp = equippedWeaponSpec();
     const now = Date.now();
     if (now - lastAttackRef.current < wp.cooldownMs) return;  // weapon still on cooldown
@@ -1242,6 +1260,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const h = n.hz; if (!h || !h.contactDamage) return;
     const me = selfRef.current;
     if (koUntilRef.current > Date.now()) return;
+    if (arenaCountdownRef.current !== null) return;
     const synthetic: WeaponSpec = { id: 'npc', name: n.handle, emoji: '⚔', damage: h.contactDamage, range: 1, cooldownMs: h.attackCooldownMs, style: 'melee' };
     const res = applyDamage(synthetic, equippedShieldSpec());
     setSelfHp({ hp: res.hp, max: res.max, absorb: res.absorb });
@@ -1437,6 +1456,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         me.fx = bx; me.fy = by; me.tx = bx; me.ty = by; me.path = [];
       }
     }
+    // Disappear from others' presence for the countdown window; reappear when it ends.
+    channelRef.current?.untrack();
+    arenaCountdownRef.current = 3; setArenaCountdown(3);
   };
   const declineStake = () => { setStakePrompt(false); switchRoom(roomOf('town')); };   // didn't bet → leave the arena
   // Follow the onboarding step into its room — each tutorial step has its own solo room; 'town'/'done'
@@ -2389,6 +2411,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (dmgFxRef.current.length) dmgFxRef.current = dmgFxRef.current.filter(d => { d.life--; d.z += 0.012; return d.life > 0; });
       if (projRef.current.length) projRef.current = projRef.current.filter(p => { p.life--; return p.life > 0; });
       if (koUntilRef.current > Date.now()) me.path = [];   // stay down (no walking) while knocked out
+      if (arenaCountdownRef.current !== null) me.path = [];   // frozen during entry countdown
       let moving = false;
       if (++speedCheckRef.current >= 30) {
         speedCheckRef.current = 0; speedMultRef.current = getSpeedMultiplier(); swayIntensityRef.current = getSwayIntensity();
@@ -2413,7 +2436,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       me.z += (targetZ - me.z) * 0.25;
       if (me.bubbleLife > 0) me.bubbleLife--;
       const ch = channelRef.current;
-      if (ch && joinedRef.current) {   // only emit while actually joined — never REST-fallback flood a dead channel
+      if (ch && joinedRef.current && arenaCountdownRef.current === null) {   // only emit while actually joined — never REST-fallback flood a dead channel
         const posPayload = () => ({ id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: equippedWeaponSpec().id, fly: flyRef.current ? 1 : 0 });
         if (moving && ++posAccum.current >= (roomMetaRef.current.combat ? 2 : 5)) { posAccum.current = 0; heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }
         if (wasMovingRef.current && !moving) { heartbeatAccum.current = 0; ch.send({ type: 'broadcast', event: 'pos', payload: posPayload() }); }   // final position; no mid-session re-track (that bounced the channel)
@@ -3142,7 +3165,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   const onPointerDown = (e: React.PointerEvent) => {
     setEmoteOpen(false);
-    if (koUntilRef.current > Date.now()) return;   // knocked out — no input until you respawn
+    if (koUntilRef.current > Date.now() || arenaCountdownRef.current !== null) return;   // knocked out or in entry countdown
     const { gx, gy } = evtTile(e);
     if (planLvl(gx, gy) < 0) return;   // clicked off the room footprint / a void tile
     // COMBAT — in a PvP room there's no tap-targeting: you walk with taps (to get in reach) and swing
@@ -3408,6 +3431,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <div className="absolute inset-0 z-[68] flex flex-col items-center justify-center bg-brandRed/10 backdrop-blur-[2px] pointer-events-none">
           <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>You got cooked.</p>
           <p className="text-white/70 text-sm mt-2 uppercase tracking-[0.3em]">Back up in {Math.max(1, Math.ceil((koUntil - Date.now()) / 1000))}s</p>
+        </div>
+      )}
+
+      {/* Arena entry countdown — player is invisible to others and frozen until this clears. */}
+      {arenaCountdown !== null && (
+        <div className="absolute inset-0 z-[69] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm pointer-events-none select-none">
+          <p className="font-helvetica font-black tabular-nums leading-none" style={{ fontSize: '14rem', color: roomMeta.accent, textShadow: `0 0 80px ${roomMeta.accent}` }}>{arenaCountdown}</p>
+          <p className="text-white/55 text-xs uppercase tracking-[0.45em] mt-6">Get ready</p>
         </div>
       )}
 
