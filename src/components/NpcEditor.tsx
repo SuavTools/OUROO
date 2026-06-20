@@ -34,6 +34,7 @@ export type KillTrigger =
 //   'farmable'  → respawns after respawnMs; loot drops every kill (onKill still one-shot).
 export type HazardSpec = {
   maxHp: number;
+  armor?: number;                 // % of incoming damage it shrugs off (0..90), like a worn shield
   contactDamage: number;          // damage it deals when it auto-swings at you (0 = punching bag)
   attackCooldownMs: number;       // how often it can hit you
   loot: { crystals?: number; items?: Record<string, number> };
@@ -70,6 +71,7 @@ export function sanitizeHazard(o: unknown): HazardSpec | undefined {
   }
   return {
     maxHp: num(h.maxHp, 80, 1, 9999),
+    armor: num(h.armor, 0, 0, 90),
     contactDamage: num(h.contactDamage, 8, 0, 999),
     attackCooldownMs: num(h.attackCooldownMs, 1200, 200, 60000),
     loot: { crystals: num((h.loot as Record<string, unknown>)?.crystals, 0, 0, 1_000_000), items },
@@ -79,6 +81,24 @@ export function sanitizeHazard(o: unknown): HazardSpec | undefined {
     deadLines: Array.isArray(h.deadLines) ? (h.deadLines as unknown[]).map(s => String(s).slice(0, 120)).slice(0, 8) : undefined,
   };
 }
+
+// Shared field bits — defined at MODULE scope (not inside NpcEditor) so their component identity is
+// stable across renders. Declaring them inline would remount their <input> on every keystroke, which
+// kicks focus out of the box after one character.
+const Row: React.FC<{ label: string; children: ReactNode }> = ({ label, children }) => (
+  <div className="space-y-1"><p className="text-[10px] uppercase tracking-[0.2em] text-white/40">{label}</p>{children}</div>
+);
+const NumField: React.FC<{ label: string; val: number; set: (n: number) => void; min: number; max: number; step?: number; suffix?: string }> = ({ label, val, set, min, max, step = 1, suffix }) => (
+  <label className="flex-1 space-y-1">
+    <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">{label}</span>
+    <span className="flex items-center gap-1">
+      <input type="number" value={val} min={min} max={max} step={step}
+        onChange={e => set(Math.min(max, Math.max(min, Math.round(Number(e.target.value) || 0))))}
+        className="w-full bg-white/5 border border-white/15 text-white px-2 py-1.5 text-sm outline-none focus:border-[#ff5d5d]" />
+      {suffix && <span className="text-[10px] text-white/30">{suffix}</span>}
+    </span>
+  </label>
+);
 
 export const NpcEditor: React.FC<{
   open: boolean;
@@ -99,6 +119,7 @@ export const NpcEditor: React.FC<{
   const ih = initial?.h;
   const [hazard, setHazard] = useState(!!ih);
   const [maxHp, setMaxHp] = useState(ih?.maxHp ?? 80);
+  const [armor, setArmor] = useState(ih?.armor ?? 0);
   const [contactDamage, setContactDamage] = useState(ih?.contactDamage ?? 8);
   const [cooldownMs, setCooldownMs] = useState(ih?.attackCooldownMs ?? 1200);
   const [lootCrystals, setLootCrystals] = useState(ih?.loot.crystals ?? 25);
@@ -124,10 +145,6 @@ export const NpcEditor: React.FC<{
       <button key={c} onClick={() => on(c)} title={c} className={`w-5 h-5 rounded-full border ${val === c ? 'border-white scale-110' : 'border-white/20'}`} style={{ background: c }} />
     ))}</div>
   );
-  const Row = ({ label, children }: { label: string; children: ReactNode }) => (
-    <div className="space-y-1"><p className="text-[10px] uppercase tracking-[0.2em] text-white/40">{label}</p>{children}</div>
-  );
-
   const splitLines = (t: string) => t.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 8).map(s => s.slice(0, 120));
   const setLootQty = (id: string, q: number) => setLootItems(m => {
     const next = { ...m }; if (q <= 0) delete next[id]; else next[id] = Math.min(99, q); return next;
@@ -145,7 +162,7 @@ export const NpcEditor: React.FC<{
       else if (trigKind === 'skin' && v) onKill = { kind: 'skin', skinId: v.slice(0, 60) };
       else if (trigKind === 'portal' && v) onKill = { kind: 'portal', flag: v.slice(0, 60) };
       h = sanitizeHazard({
-        maxHp, contactDamage, attackCooldownMs: cooldownMs,
+        maxHp, armor, contactDamage, attackCooldownMs: cooldownMs,
         loot: { crystals: lootCrystals, items: lootItems },
         policy, respawnMs: respawnMin * 60000, onKill,
         deadLines: policy === 'once' ? splitLines(deadLinesText) : undefined,
@@ -153,18 +170,6 @@ export const NpcEditor: React.FC<{
     }
     onPlace({ n: name.trim().slice(0, 24) || 'NPC', a, l, ...(h ? { h } : {}) });
   };
-
-  const NumField = ({ label, val, set, min, max, step = 1, suffix }: { label: string; val: number; set: (n: number) => void; min: number; max: number; step?: number; suffix?: string }) => (
-    <label className="flex-1 space-y-1">
-      <span className="text-[10px] uppercase tracking-[0.2em] text-white/40">{label}</span>
-      <span className="flex items-center gap-1">
-        <input type="number" value={val} min={min} max={max} step={step}
-          onChange={e => set(Math.min(max, Math.max(min, Math.round(Number(e.target.value) || 0))))}
-          className="w-full bg-white/5 border border-white/15 text-white px-2 py-1.5 text-sm outline-none focus:border-[#ff5d5d]" />
-        {suffix && <span className="text-[10px] text-white/30">{suffix}</span>}
-      </span>
-    </label>
-  );
 
   return (
     <div className="absolute inset-0 z-[70] bg-black/85 backdrop-blur-sm flex justify-center overflow-y-auto px-4 py-8" onClick={onClose}>
@@ -253,10 +258,13 @@ export const NpcEditor: React.FC<{
             <div className="px-3 pb-3 space-y-3 border-t border-[#ff5d5d]/20 pt-3">
               <div className="flex gap-2">
                 <NumField label="Health" val={maxHp} set={setMaxHp} min={1} max={9999} />
+                <NumField label="Armour" val={armor} set={setArmor} min={0} max={90} step={5} suffix="%" />
+              </div>
+              <div className="flex gap-2">
                 <NumField label="Its damage" val={contactDamage} set={setContactDamage} min={0} max={999} />
                 <NumField label="Hit speed" val={cooldownMs} set={setCooldownMs} min={200} max={60000} step={100} suffix="ms" />
               </div>
-              <p className="text-[10px] text-white/30 -mt-1">Its damage 0 = a punching bag that never hits back.</p>
+              <p className="text-[10px] text-white/30 -mt-1">Armour % cuts every hit it takes (like a worn shield). Its damage 0 = a punching bag that never hits back.</p>
 
               <Row label="Reward — Cristais">
                 <input type="number" value={lootCrystals} min={0} max={1000000}

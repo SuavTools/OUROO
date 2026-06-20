@@ -1121,9 +1121,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     for (const n of npcsRef.current) {
       const nid = n.nid; if (!nid || !n.hz || n.defeated || n.peaceful || n.hp == null) continue;
       if (tileDist(mgx, mgy, clampTile(n.fx), clampTile(n.fy)) > wp.range) continue;
-      n.hp = Math.max(0, n.hp - wp.damage); npcHpRef.current.set(nid, n.hp);
+      const armor = n.hz.armor ?? 0;
+      const dmg = armor > 0 ? Math.max(1, Math.round(wp.damage * (1 - armor / 100))) : wp.damage;   // armour mitigates like a worn shield
+      n.hp = Math.max(0, n.hp - dmg); npcHpRef.current.set(nid, n.hp);
       n.hitUntil = now + 220;
-      spawnDmg(n.fx, n.fy, n.z, wp.damage, '#ffd84a');
+      spawnDmg(n.fx, n.fy, n.z, dmg, '#ffd84a');
       if (wp.style === 'magic') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 18, max: 18, color: '#b98cff' });
       else if (wp.style === 'gun') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
       if (n.hp <= 0) defeatNpc(n);
