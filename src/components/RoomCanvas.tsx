@@ -3408,7 +3408,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               </span>
               <span className="text-[11px] tabular-nums font-bold text-white/85">{Math.round(selfHp.hp)}{selfHp.absorb > 0 ? <span className="text-[#7fd0ff]"> +{Math.round(selfHp.absorb)}</span> : null}</span>
             </div>
-            <p className="hidden sm:block mt-1 text-[11px] font-bold font-mono uppercase tracking-wider text-white/60">Press F to attack</p>
+            <div className="mt-3" />
+            <p className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60">Press F to attack</p>
           </>
         )}
         {/* Arena pot — your escrowed stake + winnings, with a cash-out button. */}
