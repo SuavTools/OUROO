@@ -233,9 +233,9 @@ export function InventoryModal({ open, onClose, onEquip, onItemUsed, title = 'In
         {tab === 'person' && (() => {
           const isWorn = selected === encodePerson(person);
           const Chips = (opts: string[], val: number, on: (i: number) => void) => (
-            <div className="flex flex-wrap gap-1">{opts.map((o, i) => (
-              <button key={o} onClick={() => on(i)} className={`text-[10px] uppercase tracking-wide px-2 py-1 border transition-colors ${val === i ? 'border-white text-white bg-white/10' : 'border-white/15 text-white/55 hover:text-white/80'}`}>{o}</button>
-            ))}</div>
+            <div className="flex flex-wrap gap-1">{opts.map((o, i) => o ? (
+              <button key={i} onClick={() => on(i)} className={`text-[10px] uppercase tracking-wide px-2 py-1 border transition-colors ${val === i ? 'border-white text-white bg-white/10' : 'border-white/15 text-white/55 hover:text-white/80'}`}>{o}</button>
+            ) : null)}</div>
           );
           const Swatches = (cols: string[], val: string, on: (c: string) => void) => (
             <div className="flex flex-wrap gap-1">{cols.map(c => (
