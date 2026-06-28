@@ -3289,7 +3289,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       let hitMachine: Machine | null = null;
       for (const m of ms) { if (m.gx === gx && m.gy === gy) { hitMachine = override ? { gx, gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
       if (!hitMachine) { const it = itemsRef.current.find(i => i.kind === 'arcade' && i.gameId && !(i.gameRules?.duel && isDuelReady(i.gameId)) && i.gx === gx && i.gy === gy); if (it) hitMachine = { gx, gy, games: [gameById(it.gameId!)], rules: it.gameRules }; }
-      if (hitMachine && nearMachineRef.current !== 'launched') { musicRef.current?.chime(); nearMachineRef.current = `${gx},${gy}`; setMachinePrompt(hitMachine); return; }
+      if (hitMachine && nearMachineRef.current !== 'launched') {
+        const dest = solidRef.current[key(gx, gy)] ? nearestUnobscuredTile(gx, gy) : { gx, gy };
+        if (dest) { const fp = findPath(clampTile(me.fx), clampTile(me.fy), me.lvl, dest.gx, dest.gy); if (fp && fp.length) me.path = fp; }
+        musicRef.current?.chime(); nearMachineRef.current = `${gx},${gy}`; setMachinePrompt(hitMachine); return;
+      }
     }
     // Tapping a retrocab or pacman cabinet routes the player to the tile directly in front of it.
     const cab = [...itemsRef.current, ...decorRef.current].find(it => (it.kind === 'retrocab' || it.kind === 'pacman') && it.gx === gx && it.gy === gy);
