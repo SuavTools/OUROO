@@ -464,6 +464,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     return;
   }
   if (shape === 'cow') {
+    ctx.save(); ctx.translate(0, -h * 0.44);
     const W = w * 2.2, H = h * 2, sway = Math.sin(af * 0.1) * H * 0.02;
     ctx.shadowBlur = 0;
     ctx.strokeStyle = shade(color, -0.2); ctx.lineWidth = Math.max(2, W * 0.045); ctx.lineCap = 'round';
@@ -485,7 +486,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     ctx.strokeStyle = shade(color, -0.14); ctx.lineWidth = Math.max(3, W * 0.08); ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-W * 0.22, H * 0.22); ctx.lineTo(-W * 0.2, H * 0.44); ctx.moveTo(W * 0.14, H * 0.22); ctx.lineTo(W * 0.12, H * 0.44); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-W * 0.32, H * 0.22); ctx.lineTo(-W * 0.3, H * 0.44); ctx.moveTo(W * 0.24, H * 0.22); ctx.lineTo(W * 0.22, H * 0.44); ctx.stroke();   // legs
-    return;
+    ctx.restore(); return;
   }
   if (shape === 'mech') {
     const W = w, H = h, bob = Math.sin(af * 0.12) * H * 0.015;
