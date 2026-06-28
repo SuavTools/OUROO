@@ -4,7 +4,8 @@
 export type SkinShape = 'diamond' | 'chariot' | 'unicorn' | 'nave' | 'star' | 'heart' | 'shark' | 'crocbomber' | 'ballerina'
   // creatures — used by hazardous NPCs (animals / robots / mythical), recolourable via `creature:` ids
   | 'dragon' | 'wolf' | 'spider' | 'snake' | 'bat' | 'slime' | 'ghost' | 'robot' | 'drone'
-  | 'demon' | 'golem' | 'kraken' | 'eyeball' | 'mushroom' | 'crab' | 'scorpion' | 'beetle' | 'mech' | 'ufo';
+  | 'demon' | 'golem' | 'kraken' | 'eyeball' | 'mushroom' | 'crab' | 'scorpion' | 'beetle' | 'mech' | 'ufo'
+  | 'rat' | 'pigeon' | 'cat' | 'dog' | 'cow';
 export type Skin = {
   id: string;
   name: string;
@@ -67,6 +68,8 @@ export const CREATURE_SHAPES: { shape: SkinShape; name: string }[] = [
   { shape: 'wolf', name: 'Wolf' }, { shape: 'bat', name: 'Bat' }, { shape: 'spider', name: 'Spider' },
   { shape: 'snake', name: 'Snake' }, { shape: 'crab', name: 'Crab' }, { shape: 'scorpion', name: 'Scorpion' },
   { shape: 'beetle', name: 'Beetle' },
+  { shape: 'rat', name: 'Rat' }, { shape: 'pigeon', name: 'Pigeon' }, { shape: 'cat', name: 'Cat' },
+  { shape: 'dog', name: 'Dog' }, { shape: 'cow', name: 'Cow' },
   // mechanical
   { shape: 'robot', name: 'Robot' }, { shape: 'drone', name: 'Drone' }, { shape: 'mech', name: 'Mech' },
   { shape: 'ufo', name: 'UFO' },
@@ -375,6 +378,111 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     ctx.fillStyle = accent; ctx.shadowBlur = 12; ctx.beginPath(); ctx.ellipse(0, -H * 0.24, W * 0.14, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();   // head
     ctx.beginPath(); ctx.moveTo(0, -H * 0.3); ctx.quadraticCurveTo(W * 0.05, -H * 0.52, -W * 0.05, -H * 0.56); ctx.quadraticCurveTo(W * 0.03, -H * 0.48, W * 0.0, -H * 0.32); ctx.closePath(); ctx.fill();   // horn
     ctx.shadowBlur = 0; for (const [dx, dy] of [[-W * 0.16, H * 0.0], [W * 0.16, H * 0.0], [-W * 0.12, H * 0.18], [W * 0.12, H * 0.18]]) { ctx.beginPath(); ctx.arc(dx, dy, W * 0.03, 0, 7); ctx.fill(); }   // shell dots
+    return;
+  }
+  // ── urban animals — flat naturalistic style (no glow), facing right ──
+  if (shape === 'rat') {
+    const W = w * 1.05, H = h, bob = Math.sin(af * 0.24) * H * 0.04, gait = Math.sin(af * 0.3);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = shade(color, -0.18); ctx.lineWidth = Math.max(1.5, W * 0.03); ctx.lineCap = 'round';
+    const tsw = Math.sin(af * 0.18) * W * 0.07;
+    ctx.beginPath(); ctx.moveTo(-W * 0.25, H * 0.1); ctx.quadraticCurveTo(-W * 0.55, H * 0.18 + tsw, -W * 0.72, -H * 0.1 + tsw); ctx.stroke();   // tail
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.08, W * 0.3, H * 0.16, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.fillStyle = shade(color, 0.28); ctx.beginPath(); ctx.ellipse(W * 0.06, H * 0.12, W * 0.16, H * 0.08, 0, 0, Math.PI * 2); ctx.fill();   // pale belly
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(W * 0.36, bob, W * 0.15, H * 0.13, 0, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.fillStyle = shade(color, -0.1); ctx.beginPath(); ctx.moveTo(W * 0.48, H * 0.04 + bob); ctx.lineTo(W * 0.68, H * 0.08 + bob); ctx.lineTo(W * 0.5, H * 0.13 + bob); ctx.closePath(); ctx.fill();   // pointed snout
+    ctx.fillStyle = shade(color, 0.08); ctx.beginPath(); ctx.arc(W * 0.26, -H * 0.1 + bob, W * 0.09, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(W * 0.4, -H * 0.11 + bob, W * 0.075, 0, Math.PI * 2); ctx.fill();   // ears
+    ctx.fillStyle = 'rgba(255,155,155,0.55)'; ctx.beginPath(); ctx.arc(W * 0.26, -H * 0.1 + bob, W * 0.05, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(W * 0.4, -H * 0.11 + bob, W * 0.042, 0, Math.PI * 2); ctx.fill();   // pink inner ear
+    ctx.strokeStyle = shade(color, -0.14); ctx.lineWidth = Math.max(2, W * 0.06); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.12, H * 0.21); ctx.lineTo(-W * 0.1, H * 0.36 + gait * H * 0.05); ctx.moveTo(W * 0.08, H * 0.21); ctx.lineTo(W * 0.06, H * 0.36 - gait * H * 0.05); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-W * 0.22, H * 0.21); ctx.lineTo(-W * 0.2, H * 0.36 - gait * H * 0.05); ctx.moveTo(W * 0.18, H * 0.21); ctx.lineTo(W * 0.16, H * 0.36 + gait * H * 0.05); ctx.stroke();   // legs
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(W * 0.48, -H * 0.02 + bob, W * 0.028, 0, Math.PI * 2); ctx.fill();   // eye
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.49, -H * 0.03 + bob, W * 0.011, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#cc5566'; ctx.beginPath(); ctx.arc(W * 0.66, H * 0.06 + bob, W * 0.022, 0, Math.PI * 2); ctx.fill();   // pink nose
+    return;
+  }
+  if (shape === 'pigeon') {
+    const W = w, H = h, bob = Math.sin(af * 0.18) * H * 0.05;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = shade(color, -0.22); ctx.beginPath(); ctx.moveTo(-W * 0.28, H * 0.1); ctx.lineTo(-W * 0.58, H * 0.16); ctx.lineTo(-W * 0.5, -H * 0.04); ctx.closePath(); ctx.fill();   // tail fan
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.08, W * 0.34, H * 0.18, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.fillStyle = shade(color, 0.2); ctx.beginPath(); ctx.ellipse(-W * 0.04, H * 0.02, W * 0.18, H * 0.09, -0.2, 0, Math.PI * 2); ctx.fill();   // wing sheen
+    ctx.fillStyle = 'rgba(120,190,255,0.3)'; ctx.beginPath(); ctx.ellipse(W * 0.18, H * 0.06, W * 0.07, H * 0.06, 0, 0, Math.PI * 2); ctx.fill();   // iridescent throat
+    ctx.fillStyle = shade(color, 0.1); ctx.beginPath(); ctx.arc(W * 0.32, -H * 0.08 + bob, W * 0.14, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.fillStyle = '#b89030'; ctx.beginPath(); ctx.moveTo(W * 0.44, -H * 0.07 + bob); ctx.lineTo(W * 0.62, -H * 0.04 + bob); ctx.lineTo(W * 0.44, H * 0.0 + bob); ctx.closePath(); ctx.fill();   // beak
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(W * 0.4, -H * 0.12 + bob, W * 0.028, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.41, -H * 0.13 + bob, W * 0.011, 0, Math.PI * 2); ctx.fill();   // eye + glint
+    ctx.strokeStyle = '#b89030'; ctx.lineWidth = Math.max(1.5, W * 0.04); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(W * 0.06, H * 0.24); ctx.lineTo(W * 0.08, H * 0.4); ctx.lineTo(W * 0.2, H * 0.42); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-W * 0.08, H * 0.24); ctx.lineTo(-W * 0.06, H * 0.4); ctx.lineTo(-W * 0.18, H * 0.42); ctx.stroke();   // legs
+    return;
+  }
+  if (shape === 'cat') {
+    const W = w, H = h, tw = Math.sin(af * 0.16) * W * 0.08;
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = shade(color, -0.16); ctx.lineWidth = Math.max(2, W * 0.05); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.28, H * 0.12); ctx.quadraticCurveTo(-W * 0.54, -H * 0.06 + tw, -W * 0.38, -H * 0.38 + tw); ctx.stroke();   // curved tail
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.08, W * 0.32, H * 0.2, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.fillStyle = shade(color, 0.3); ctx.beginPath(); ctx.ellipse(W * 0.04, H * 0.14, W * 0.16, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();   // belly
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(W * 0.34, -H * 0.06, W * 0.18, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.beginPath(); ctx.moveTo(W * 0.2, -H * 0.18); ctx.lineTo(W * 0.13, -H * 0.38); ctx.lineTo(W * 0.3, -H * 0.2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(W * 0.38, -H * 0.2); ctx.lineTo(W * 0.36, -H * 0.42); ctx.lineTo(W * 0.5, -H * 0.22); ctx.closePath(); ctx.fill();   // pointed ears
+    ctx.fillStyle = 'rgba(255,155,155,0.42)'; ctx.beginPath(); ctx.moveTo(W * 0.22, -H * 0.2); ctx.lineTo(W * 0.16, -H * 0.34); ctx.lineTo(W * 0.29, -H * 0.21); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(W * 0.39, -H * 0.22); ctx.lineTo(W * 0.37, -H * 0.37); ctx.lineTo(W * 0.48, -H * 0.24); ctx.closePath(); ctx.fill();   // pink inner ear
+    ctx.fillStyle = shade(color, 0.22); ctx.beginPath(); ctx.ellipse(W * 0.48, -H * 0.02, W * 0.1, H * 0.07, 0, 0, Math.PI * 2); ctx.fill();   // muzzle pad
+    ctx.fillStyle = '#cc5577'; ctx.beginPath(); ctx.arc(W * 0.5, -H * 0.04, W * 0.022, 0, Math.PI * 2); ctx.fill();   // nose
+    ctx.fillStyle = '#1a2a1a'; ctx.beginPath(); ctx.ellipse(W * 0.3, -H * 0.1, W * 0.04, W * 0.03, 0, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.ellipse(W * 0.44, -H * 0.1, W * 0.04, W * 0.03, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.31, -H * 0.11, W * 0.013, 0, Math.PI * 2); ctx.fill();   // eyes + glint
+    ctx.strokeStyle = shade(color, 0.5); ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(W * 0.46, -H * 0.0); ctx.lineTo(W * 0.72, -H * 0.03); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W * 0.46, -H * 0.04); ctx.lineTo(W * 0.72, -H * 0.04); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W * 0.46, -H * 0.08); ctx.lineTo(W * 0.72, -H * 0.05); ctx.stroke();   // whiskers
+    ctx.strokeStyle = shade(color, -0.12); ctx.lineWidth = Math.max(2, W * 0.055); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.12, H * 0.24); ctx.lineTo(-W * 0.1, H * 0.4); ctx.moveTo(W * 0.08, H * 0.24); ctx.lineTo(W * 0.06, H * 0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-W * 0.22, H * 0.24); ctx.lineTo(-W * 0.2, H * 0.4); ctx.moveTo(W * 0.18, H * 0.24); ctx.lineTo(W * 0.16, H * 0.4); ctx.stroke();   // legs
+    return;
+  }
+  if (shape === 'dog') {
+    const W = w * 1.05, H = h, tw = Math.max(0, Math.sin(af * 0.32)) * H * 0.18;
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = color; ctx.lineWidth = Math.max(2.5, W * 0.065); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.28, H * 0.06); ctx.quadraticCurveTo(-W * 0.5, -H * 0.1, -W * 0.46, -H * 0.28 - tw); ctx.stroke();   // wagging tail
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.1, W * 0.36, H * 0.2, 0, 0, Math.PI * 2); ctx.fill();   // body
+    ctx.fillStyle = shade(color, 0.28); ctx.beginPath(); ctx.ellipse(W * 0.04, H * 0.16, W * 0.18, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();   // belly
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(W * 0.36, -H * 0.04, W * 0.2, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.fillStyle = shade(color, -0.18); ctx.beginPath(); ctx.ellipse(W * 0.23, H * 0.02, W * 0.1, H * 0.15, 0.3, 0, Math.PI * 2); ctx.fill();   // floppy ear
+    ctx.fillStyle = shade(color, -0.1); ctx.beginPath(); ctx.moveTo(W * 0.38, -H * 0.2); ctx.lineTo(W * 0.32, -H * 0.4); ctx.lineTo(W * 0.52, -H * 0.22); ctx.closePath(); ctx.fill();   // upright ear
+    ctx.fillStyle = shade(color, 0.18); ctx.beginPath(); ctx.ellipse(W * 0.52, -H * 0.02, W * 0.14, H * 0.08, 0, 0, Math.PI * 2); ctx.fill();   // snout
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(W * 0.56, -H * 0.04, W * 0.04, 0, Math.PI * 2); ctx.fill();   // nose
+    ctx.fillStyle = '#2a1a0a'; ctx.beginPath(); ctx.arc(W * 0.34, -H * 0.1, W * 0.04, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(W * 0.46, -H * 0.1, W * 0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.35, -H * 0.11, W * 0.015, 0, Math.PI * 2); ctx.fill();   // eyes + glint
+    ctx.strokeStyle = shade(color, -0.14); ctx.lineWidth = Math.max(2.5, W * 0.07); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.14, H * 0.26); ctx.lineTo(-W * 0.12, H * 0.42); ctx.moveTo(W * 0.1, H * 0.26); ctx.lineTo(W * 0.08, H * 0.42); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-W * 0.24, H * 0.26); ctx.lineTo(-W * 0.22, H * 0.42); ctx.moveTo(W * 0.2, H * 0.26); ctx.lineTo(W * 0.18, H * 0.42); ctx.stroke();   // legs
+    return;
+  }
+  if (shape === 'cow') {
+    const W = w * 1.1, H = h, sway = Math.sin(af * 0.1) * H * 0.02;
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = shade(color, -0.2); ctx.lineWidth = Math.max(2, W * 0.045); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.36, H * 0.0); ctx.quadraticCurveTo(-W * 0.56, H * 0.18, -W * 0.5, H * 0.34 + sway); ctx.stroke();
+    ctx.fillStyle = shade(color, -0.2); ctx.beginPath(); ctx.ellipse(-W * 0.5, H * 0.34 + sway, W * 0.04, W * 0.07, 0, 0, Math.PI * 2); ctx.fill();   // tail + tuft
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.04, W * 0.44, H * 0.22, 0, 0, Math.PI * 2); ctx.fill();   // large body
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.ellipse(-W * 0.14, -H * 0.04, W * 0.14, H * 0.09, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(W * 0.18, H * 0.1, W * 0.1, H * 0.07, 0.5, 0, Math.PI * 2); ctx.fill();   // spots (accent)
+    ctx.fillStyle = 'rgba(255,195,185,0.8)'; ctx.beginPath(); ctx.ellipse(W * 0.1, H * 0.25, W * 0.12, H * 0.06, 0, 0, Math.PI * 2); ctx.fill();   // udder
+    ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(W * 0.48, -H * 0.06 + sway, W * 0.2, H * 0.16, 0, 0, Math.PI * 2); ctx.fill();   // head
+    ctx.fillStyle = shade(color, -0.1); ctx.beginPath(); ctx.ellipse(W * 0.34, -H * 0.04 + sway, W * 0.07, H * 0.12, 0.5, 0, Math.PI * 2); ctx.fill();   // drooping ear
+    ctx.strokeStyle = '#c8a030'; ctx.lineWidth = Math.max(2, W * 0.04); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(W * 0.4, -H * 0.17 + sway); ctx.quadraticCurveTo(W * 0.34, -H * 0.36 + sway, W * 0.42, -H * 0.38 + sway); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W * 0.54, -H * 0.17 + sway); ctx.quadraticCurveTo(W * 0.6, -H * 0.36 + sway, W * 0.52, -H * 0.38 + sway); ctx.stroke();   // horns
+    ctx.fillStyle = 'rgba(255,185,175,0.8)'; ctx.beginPath(); ctx.ellipse(W * 0.64, -H * 0.04 + sway, W * 0.1, H * 0.07, 0, 0, Math.PI * 2); ctx.fill();   // pink nose
+    ctx.fillStyle = '#553333'; ctx.beginPath(); ctx.arc(W * 0.61, -H * 0.04 + sway, W * 0.026, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(W * 0.68, -H * 0.04 + sway, W * 0.026, 0, Math.PI * 2); ctx.fill();   // nostrils
+    ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(W * 0.5, -H * 0.12 + sway, W * 0.038, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.51, -H * 0.13 + sway, W * 0.014, 0, Math.PI * 2); ctx.fill();   // eye
+    ctx.strokeStyle = shade(color, -0.14); ctx.lineWidth = Math.max(3, W * 0.08); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-W * 0.22, H * 0.22); ctx.lineTo(-W * 0.2, H * 0.44); ctx.moveTo(W * 0.14, H * 0.22); ctx.lineTo(W * 0.12, H * 0.44); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-W * 0.32, H * 0.22); ctx.lineTo(-W * 0.3, H * 0.44); ctx.moveTo(W * 0.24, H * 0.22); ctx.lineTo(W * 0.22, H * 0.44); ctx.stroke();   // legs
     return;
   }
   if (shape === 'mech') {
