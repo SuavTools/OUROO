@@ -2502,22 +2502,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           if (me.emote) { me.emote = null; me.emoteAf = 0; setCurrentEmote(null); if (ch && joinedRef.current) ch.send({ type: 'broadcast', event: 'emote', payload: { id: me.id, em: null } }); }
         }
       }
-      // ARCADE MACHINES — pop the game picker when the player steps onto a tile adjacent to the cabinet.
-      // Rising edge → opens once per approach; re-arms when you step away.
-      {
-        const override = machineOverrideRef.current;   // a set-game event retargets every hardcoded cabinet in the room
-        const ms = MACHINES[roomMetaRef.current.slug] ?? [];
-        const px = clampTile(me.fx), py = clampTile(me.fy);
-        const adjTo = (gx: number, gy: number) => Math.max(Math.abs(px - gx), Math.abs(py - gy)) === 1;
-        let near: Machine | null = null;
-        for (const m of ms) { if (adjTo(m.gx, m.gy)) { near = override ? { gx: m.gx, gy: m.gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
-        // admin-placed play-triggers (hydrated as `arcade` items carrying a gameId) — each is its own
-        // machine. Duel-flagged duel-ready triggers are handled by the duel-cabinet block below, not here.
-        if (!near) for (const it of itemsRef.current) { if (it.kind === 'arcade' && it.gameId && !(it.gameRules?.duel && isDuelReady(it.gameId)) && adjTo(it.gx, it.gy)) { near = { gx: it.gx, gy: it.gy, games: [gameById(it.gameId)], rules: it.gameRules }; break; } }
-        const nearKey = near ? `${near.gx},${near.gy}` : null;
-        if (near && nearKey !== nearMachineRef.current) { musicRef.current?.chime(); setMachinePrompt(near); }
-        nearMachineRef.current = nearKey;
-      }
+      // ARCADE MACHINES — game picker now opens on tile click (see onPointerDown); clear proximity state.
+      { if (nearMachineRef.current !== 'launched' && nearMachineRef.current !== 'origin') nearMachineRef.current = null; }
       // SHOPS — open the shop modal when the player steps adjacent to a shop trigger
       {
         const px = clampTile(me.fx), py = clampTile(me.fy);
@@ -3296,6 +3282,15 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     }
     // Portals aren't tapped — you WALK onto them (see the movement loop). Tapping a portal tile just paths you there.
     const me = selfRef.current;
+    // Clicking a game cabinet or play-trigger tile opens the picker immediately.
+    if (!tutorial && !decorOpen) {
+      const override = machineOverrideRef.current;
+      const ms = MACHINES[roomMetaRef.current.slug] ?? [];
+      let hitMachine: Machine | null = null;
+      for (const m of ms) { if (m.gx === gx && m.gy === gy) { hitMachine = override ? { gx, gy, games: [gameById(override.gameId)], rules: override.rules } : m; break; } }
+      if (!hitMachine) { const it = itemsRef.current.find(i => i.kind === 'arcade' && i.gameId && !(i.gameRules?.duel && isDuelReady(i.gameId)) && i.gx === gx && i.gy === gy); if (it) hitMachine = { gx, gy, games: [gameById(it.gameId!)], rules: it.gameRules }; }
+      if (hitMachine && nearMachineRef.current !== 'launched') { musicRef.current?.chime(); nearMachineRef.current = `${gx},${gy}`; setMachinePrompt(hitMachine); return; }
+    }
     // Tapping a retrocab or pacman cabinet routes the player to the tile directly in front of it.
     const cab = [...itemsRef.current, ...decorRef.current].find(it => (it.kind === 'retrocab' || it.kind === 'pacman') && it.gx === gx && it.gy === gy);
     if (cab) {
