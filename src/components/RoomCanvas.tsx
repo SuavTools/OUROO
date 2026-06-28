@@ -552,6 +552,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [koMsg, setKoMsg] = useState('');      // optional message shown in the KO overlay (e.g. crystal loss)
   const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
   const koUntilRef = useRef(0);
+  const [npcTargetPrompt, setNpcTargetPrompt] = useState<{ nid: string; handle: string } | null>(null);
+  const [npcTarget, setNpcTarget] = useState<{ nid: string; handle: string } | null>(null);
+  const npcTargetRef = useRef<{ nid: string; handle: string } | null>(null);
   const [arenaCountdown, setArenaCountdown] = useState<number | null>(null);
   const arenaCountdownRef = useRef<number | null>(null);   // ref mirror so animation loop can read it
   const lastAttackRef = useRef(0);             // weapon-cooldown gate
@@ -1180,7 +1183,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
     // Flush a fresh position first so all observers have an accurate snapshot at hit-time.
     channelRef.current?.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: wp.id } });
-    if (pvp) remotesRef.current.forEach((r, rid) => {
+    if (pvp && !npcTargetRef.current) remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
       if (tileDist(mgx, mgy, clampTile(r.tx), clampTile(r.ty)) > wp.range) return;   // out of reach
       channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style, stake: arenaRef.current?.stake ?? 0 } });
@@ -1200,6 +1203,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // simulated — using its lagging path-target would whiff on an NPC that's visually adjacent.
     for (const n of npcsRef.current) {
       const nid = n.nid; if (!nid || !n.hz || n.defeated || n.peaceful || n.hp == null) continue;
+      if (npcTargetRef.current && npcTargetRef.current.nid !== nid) continue;   // targeting mode: only strike the chosen NPC
       if (tileDist(mgx, mgy, clampTile(n.fx), clampTile(n.fy)) > wp.range) continue;
       const armor = n.hz.armor ?? 0;
       const dmg = armor > 0 ? Math.max(1, Math.round(wp.damage * (1 - armor / 100))) : wp.damage;   // armour mitigates like a worn shield
@@ -1256,6 +1260,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     saveNpcDefeat(nid, true, downUntil);
     npcHpRef.current.delete(nid);
     n.hp = 0; n.defeated = true; n.respawnAt = perma ? Infinity : downUntil; n.path = [];
+    if (npcTargetRef.current?.nid === nid) { npcTargetRef.current = null; setNpcTarget(null); }
     musicRef.current?.chime();
     // death puff
     for (let i = 0; i < 8; i++) { if (dmgFxRef.current.length < 24) dmgFxRef.current.push({ fx: n.fx, fy: n.fy, z: n.z + Math.random() * 0.6, text: '✦', color: '#ffd84a', life: 30 + (i * 2) }); }
@@ -1423,6 +1428,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // Eagerly announce departure so others drop the avatar immediately — don't wait for the effect cleanup.
     try { const me = selfRef.current; channelRef.current?.send({ type: 'broadcast', event: 'leave', payload: { id: me.id } }); channelRef.current?.untrack(); } catch { /* ignore */ }
     closeInteract(false);
+    npcTargetRef.current = null; setNpcTarget(null); setNpcTargetPrompt(null);
     const sp = planSpawn(planById(def.plan));
     const me = selfRef.current; me.fx = sp.gx; me.fy = sp.gy; me.tx = sp.gx; me.ty = sp.gy; me.z = sp.lvl; me.lvl = sp.lvl; me.path = []; me.bubble = ''; me.bubbleLife = 0;
     remotesRef.current.clear(); itemsRef.current = []; setMyCount(0); setPlacingKind(null); setRemoveMode(false); setRotateMode(false); setPlaceElev(0); setDecorOpen(false);
@@ -3235,7 +3241,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!tutorial && !decorOpen && !interactSession && !interactWaiting && !interactPrompt && !npcInteract) {
       for (const npc of npcsRef.current) {
         if (Math.round(npc.fx) === gx && Math.round(npc.fy) === gy) {
-          if (npc.hz && !npc.peaceful && !npc.defeated) { walkAdjacentTo(gx, gy); flashHint(`${npc.handle} is hostile — press F to attack`); return; }   // fight it, don't chat it
+          if (npc.hz && !npc.peaceful && !npc.defeated) {
+            walkAdjacentTo(gx, gy);
+            if (roomMetaRef.current.combat) { setNpcTargetPrompt({ nid: npc.nid ?? npc.handle, handle: npc.handle }); }
+            else { flashHint(`${npc.handle} is hostile — press F to attack`); }
+            return;
+          }
           setNpcInteract({ handle: npc.handle, nid: npc.nid ?? npc.handle, mode: 'prompt' });
           walkAdjacentTo(gx, gy);
           return;
@@ -3418,6 +3429,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             </div>
             <div style={{ height: 12 }} />
             <p className="hidden sm:block text-[11px] font-bold font-mono uppercase tracking-wider text-white/60">Press F to attack</p>
+            {npcTarget && roomMeta.combat && (
+              <div className="mt-1.5 flex items-center gap-1.5 pointer-events-auto">
+                <span className="text-[10px] uppercase tracking-widest text-brandRed font-bold">⚔ {npcTarget.handle}</span>
+                <button onClick={() => { npcTargetRef.current = null; setNpcTarget(null); }} className="text-white/35 hover:text-white text-xs leading-none">✕</button>
+              </div>
+            )}
           </>
         )}
         {/* Arena pot — your escrowed stake + winnings, with a cash-out button. */}
@@ -3441,6 +3458,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
           <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>You got cooked.</p>
           <p className="text-white/70 text-sm mt-2 uppercase tracking-[0.3em]">Back up in {Math.max(1, Math.ceil((koUntil - Date.now()) / 1000))}s</p>
           {koMsg && <p className="text-brandYellow text-sm mt-3 uppercase tracking-[0.25em]">{koMsg}</p>}
+        </div>
+      )}
+
+      {/* NPC target prompt — left side popup in combat rooms when clicking a hostile NPC */}
+      {npcTargetPrompt && (
+        <div className="absolute left-4 top-1/2 -translate-y-1/2 z-[80] pointer-events-auto w-52 bg-black/90 border border-brandRed/40 shadow-2xl p-5">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-brandRed/70 mb-1">Target</p>
+          <p className="font-mono font-bold text-white text-base mb-4">{npcTargetPrompt.handle}</p>
+          <div className="flex gap-2">
+            <button onClick={() => { npcTargetRef.current = npcTargetPrompt; setNpcTarget(npcTargetPrompt); setNpcTargetPrompt(null); }} className="flex-1 bg-brandRed text-white font-bold uppercase text-[11px] tracking-widest py-2.5 hover:bg-white hover:text-black transition-colors active:scale-95">Yes</button>
+            <button onClick={() => setNpcTargetPrompt(null)} className="flex-1 border border-white/20 text-white/50 hover:text-white text-[11px] uppercase tracking-widest py-2.5 active:scale-95">No</button>
+          </div>
         </div>
       )}
 
