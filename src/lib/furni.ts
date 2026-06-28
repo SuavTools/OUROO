@@ -40,8 +40,9 @@ export const CATS: FurniCat[] = [
   { id: 'luzes',    name: 'Lights' },
   { id: 'electro',  name: 'Electronics' },
   { id: 'deco',     name: 'Decoration' },
-  { id: 'urban',    name: 'Urban' },
-  { id: 'junkyard', name: 'Junkyard' },
+  { id: 'urban',     name: 'Urban' },
+  { id: 'junkyard',  name: 'Junkyard' },
+  { id: 'buildings', name: 'Buildings' },
 ];
 
 // Per-item Cristais price for premium collections (0 / absent = free basic furni).
@@ -379,6 +380,8 @@ export const FURNI: FurniDef[] = [
   { kind: 'forklift',     name: 'Forklift',                     emoji: '🏗️', cat: 'junkyard', color: '#e8b820', h: 2, walk: false, foot: 1,   special: 'forklift',   span: [4, 2] },
   { kind: 'rusty_car',    name: 'Old Rusty Car',                emoji: '🚗', cat: 'junkyard', color: '#8a4a2e', h: 2, walk: false, foot: 1,   special: 'rustycar',   span: [2, 4] },
   { kind: 'hazard_sign',  name: 'Hazard Sign',                  emoji: '⚠️', cat: 'junkyard', color: '#f0c800', h: 2, walk: false, foot: 0.4, special: 'hazardsign' },
+  // ── Buildings (SVG sprite sheet) ──────────────────────────────────────────
+  { kind: 'bld_house', name: 'House', emoji: '🏠', cat: 'buildings', color: '#e8bfad', h: 3, walk: false, foot: 1 },
 ];
 
 export const FMAP: Record<string, FurniDef> = Object.fromEntries(FURNI.map(f => [f.kind, f]));

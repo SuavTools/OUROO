@@ -5,7 +5,7 @@
 // `accent` = the room accent colour; `t` = frame counter for the few animated pieces.
 
 import { defOf } from './furni';
-import { hasSvg, drawSvgFurni } from './furniSvg';
+import { hasSvg, drawSvgFurni, hasSvgUrl, drawSvgUrlFurni } from './furniSvg';
 import { hasPng, drawPngFurni } from './furniPng';
 
 export const TILE_W = 64, TILE_H = 32, TW = TILE_W / 2, TH = TILE_H / 2, STACK_H = 26;
@@ -3616,6 +3616,9 @@ export function drawFurniSprite(ctx: CanvasRenderingContext2D, kind: string, sx:
     let cx = sx, cy = sy; const [esw, esh] = effSpan(kind, dir);
     if (esw !== 1 || esh !== 1) { const ocx = (esw - 1) / 2, ocy = (esh - 1) / 2; cx += (ocx - ocy) * TW; cy += (ocx + ocy) * TH; }
     if (drawPngFurni(ctx, kind, cx, cy)) return;   // fall through to procedural only until the image loads
+  }
+  if (hasSvgUrl(kind)) {
+    if (drawSvgUrlFurni(ctx, kind, sx, sy)) return;  // fall through until image loads
   }
   if (hasSvg(kind)) {
     let cx = sx, cy = sy; const [esw, esh] = effSpan(kind, dir);

@@ -119,6 +119,13 @@ export function drawCatIcon(ctx: CanvasRenderingContext2D, cat: string, S: numbe
       ctx.beginPath(); ctx.moveTo(-u * 0.55, -u * 0.42); ctx.lineTo(u * 0.55, -u * 0.42); ctx.moveTo(-u * 0.28, -u * 0.42); ctx.lineTo(-u * 0.28, -u * 0.6); ctx.lineTo(u * 0.28, -u * 0.6); ctx.lineTo(u * 0.28, -u * 0.42); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(-u * 0.42, -u * 0.42); ctx.lineTo(-u * 0.32, u * 0.64); ctx.lineTo(u * 0.32, u * 0.64); ctx.lineTo(u * 0.42, -u * 0.42); ctx.stroke(); break;
     }
+    case 'buildings': {  // isometric building — outline
+      diamond(-u * 0.38, u * 0.46, u * 0.28); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-u * 0.46, -u * 0.1); ctx.lineTo(-u * 0.46, u * 0.66); ctx.lineTo(0, u * 0.94); ctx.lineTo(0, u * 0.18); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(u * 0.46, -u * 0.1); ctx.lineTo(u * 0.46, u * 0.66); ctx.lineTo(0, u * 0.94); ctx.lineTo(0, u * 0.18); ctx.closePath(); ctx.stroke();
+      ctx.strokeRect(-u * 0.36, u * 0.14, u * 0.2, u * 0.22);
+      break;
+    }
     default: diamond(0, u * 0.7, u * 0.5); ctx.stroke();
   }
   ctx.restore();

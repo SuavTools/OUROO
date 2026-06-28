@@ -25,3 +25,27 @@ export const drawSvgFurni = (ctx: CanvasRenderingContext2D, kind: string, sx: nu
   ctx.drawImage(img, sx - def.ax, sy - def.ay, def.w, def.h);
   return true;
 };
+
+// ── URL-based SVG sprites (files in /public/furni/*.svg) ──────────────────────
+export type SvgUrlDef = { w: number; h: number; ax: number; ay: number };
+
+export const SVG_URL_FURNI: Record<string, SvgUrlDef> = {
+  bld_house: { w: 259, h: 257, ax: 130, ay: 249 },
+};
+
+export const hasSvgUrl = (kind: string): boolean => kind in SVG_URL_FURNI;
+
+const urlImgCache = new Map<string, HTMLImageElement>();
+const getUrlImg = (kind: string): HTMLImageElement | null => {
+  if (typeof Image === 'undefined') return null;
+  let img = urlImgCache.get(kind);
+  if (!img) { img = new Image(); img.src = `/furni/${kind}.svg`; urlImgCache.set(kind, img); }
+  return img;
+};
+
+export const drawSvgUrlFurni = (ctx: CanvasRenderingContext2D, kind: string, sx: number, sy: number): boolean => {
+  const def = SVG_URL_FURNI[kind]; const img = getUrlImg(kind);
+  if (!def || !img || !img.complete || !img.naturalWidth) return false;
+  ctx.drawImage(img, sx - def.ax, sy - def.ay, def.w, def.h);
+  return true;
+};
