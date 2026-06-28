@@ -13,7 +13,7 @@ import { getWallet, getBalance, spend, addBalance, takeItem, grantItem, itemCoun
 // ---- balance knobs ----
 export const MAX_HP = 100;
 export const RESPAWN_HP = MAX_HP;          // hp you come back with after a knockout
-export const KO_MS = 2500;                 // how long you're down (movement-locked) on death
+export const KO_MS = 5000;                 // how long you're down (movement-locked) on death
 const REGEN_DELAY_MS = 10_000;             // no passive regen for 10s after taking a hit
 const REGEN_TICK_MS = 5_000;               // then…
 const REGEN_PER_TICK = 5;                  // …+5 hp every 5s out of combat
