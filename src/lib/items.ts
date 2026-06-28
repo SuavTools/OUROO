@@ -46,7 +46,7 @@ export const ITEMS: Item[] = [
     useType: 'single',
     effect: { type: 'sway', intensity: 3, durationMs: 8 * 60 * 1000 },
     extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 8 * 60 * 1000 }],
-    price: 100,
+    price: 10,
     emoji: '🍺',
   },
   {
@@ -56,7 +56,7 @@ export const ITEMS: Item[] = [
     useType: 'single',
     effect: { type: 'sway', intensity: 5, durationMs: 12 * 60 * 1000 },
     extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 12 * 60 * 1000 }],
-    price: 150,
+    price: 12,
     emoji: '🍷',
   },
   {
@@ -66,7 +66,7 @@ export const ITEMS: Item[] = [
     useType: 'single',
     effect: { type: 'sway', intensity: 10, durationMs: 3 * 60 * 1000 },
     extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 3 * 60 * 1000 }],
-    price: 250,
+    price: 15,
     emoji: '🥃',
   },
   {
@@ -76,7 +76,7 @@ export const ITEMS: Item[] = [
     useType: 'single',
     effect: { type: 'sway', intensity: 7, durationMs: 20 * 60 * 1000 },
     extraEffects: [{ type: 'fist_boost', multiplier: 2, durationMs: 20 * 60 * 1000 }],
-    price: 300,
+    price: 20,
     emoji: '🍹',
   },
   {
