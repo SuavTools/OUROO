@@ -1257,7 +1257,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
 
   // NPC auto-swings at me (contact damage). Reuses MY victim-side damage path so my shield/absorb/
-  // respawn all apply. Being killed by an NPC costs no loot (there's no recipient).
+  // respawn all apply. Dying to an NPC costs the same 5% crystal share as a PvP death (no items —
+  // there is no recipient to claim them).
   const npcAttackPlayer = (n: typeof npcsRef.current[number]) => {
     const h = n.hz; if (!h || !h.contactDamage) return;
     const me = selfRef.current;
@@ -1269,7 +1270,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     me.hitUntil = Date.now() + 220; n.attackUntil = Date.now() + 280;
     spawnDmg(me.fx, me.fy, me.z, res.taken, '#ff5a5a');
     if (roomMetaRef.current.combat) broadcastHP();             // let other players see my bar drop (PvP rooms)
-    if (res.dead) respawnSelf();
+    if (res.dead) { const loot = computeLoot(); if (loot.crystals > 0) spend(loot.crystals); respawnSelf(); }
   };
 
   // Recompute whether any fightable hazardous NPC is present (drives the combat HUD outside PvP rooms).
