@@ -2578,7 +2578,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const extraX = r.tx + (r.vx ?? 0) * extrap, extraY = r.ty + (r.vy ?? 0) * extrap;
         const ddx = extraX - r.fx, ddy = extraY - r.fy;
         if (ddx * ddx + ddy * ddy > 2.25) { r.fx = extraX; r.fy = extraY; } else { r.fx += ddx * 0.3; r.fy += ddy * 0.3; }
-        r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(extraX - r.fx, extraY - r.fy) > 0.02 ? 1 : 0.3; if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--;
+        r.z += (r.lvl - r.z) * 0.28; r.af += Math.hypot(extraX - r.fx, extraY - r.fy) > 0.02 ? 1 : (r.emote ? 1 : 0.3); if (r.emote) r.emoteAf = (r.emoteAf ?? 0) + 1; if (r.bubbleLife > 0) r.bubbleLife--;
       }
       // Stale detection: avatars that haven't sent a pos in >12 s are treated as gone.
       // The 5-second heartbeat pos means connected users always have a fresh rxAt; only
