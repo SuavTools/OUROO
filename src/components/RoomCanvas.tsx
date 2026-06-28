@@ -1139,6 +1139,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     setSelfHp({ hp: res.hp, max: res.max, absorb: res.absorb });
     me.hitUntil = Date.now() + 220;
     spawnDmg(me.fx, me.fy, me.z, res.taken, '#ff5a5a');
+    if (pl.kb && !res.dead) {
+      const ax = Number(pl.ax ?? me.fx), ay = Number(pl.ay ?? me.fy);
+      const dx = me.fx - ax, dy = me.fy - ay, len = Math.hypot(dx, dy) || 1;
+      const nx = clampTile(Math.round(me.fx + dx / len)), ny = clampTile(Math.round(me.fy + dy / len));
+      me.fx = nx; me.fy = ny; me.tx = nx; me.ty = ny; me.path = [];
+    }
     broadcastHP();
     if (res.dead) {
       const killer = String(pl.from ?? '');
@@ -1191,10 +1197,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     const mgx = clampTile(me.fx), mgy = clampTile(me.fy);
     // Flush a fresh position first so all observers have an accurate snapshot at hit-time.
     channelRef.current?.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: +me.fx.toFixed(2), fy: +me.fy.toFixed(2), lvl: me.lvl, wp: wp.id } });
+    const spiritKnockback = wp.id === 'fists' && getSwayIntensity() >= 10;
     if (pvp && !npcTargetRef.current) remotesRef.current.forEach((r, rid) => {
       if (r.koUntil && r.koUntil > now) return;               // skip players already down
       if (tileDist(mgx, mgy, clampTile(r.tx), clampTile(r.ty)) > wp.range) return;   // out of reach
-      channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style, stake: arenaRef.current?.stake ?? 0 } });
+      channelRef.current?.send({ type: 'broadcast', event: 'attack', payload: { from: me.id, to: rid, wp: wp.id, style: wp.style, stake: arenaRef.current?.stake ?? 0, ...(spiritKnockback ? { kb: 1, ax: me.fx, ay: me.fy } : {}) } });
       // Optimistic local prediction: drop their bar + flash NOW instead of after the hp round-trip.
       // The victim is authoritative — their 'hp' broadcast reconciles this a moment later.
       if (r.hp != null) r.hp = Math.max(0, r.hp - wp.damage);
