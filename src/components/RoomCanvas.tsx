@@ -468,7 +468,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number; bodyScale?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; lineQueue?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number; bodyScale?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
   const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
   const npcHpRef = useRef<Map<string, number>>(new Map());   // mid-fight NPC hp by nid — survives rebuildNpcs so a concurrent placement doesn't heal a boss
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
@@ -1923,7 +1923,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Rebuild the live NPC roster = curated cast + admin-placed NPCs (called on room load + on add/remove).
   const rebuildNpcs = () => {
     const slug = roomMetaRef.current.slug;
-    const curated = (CURATED_NPCS[slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, hx: n.gx, hy: n.gy, roam: n.roam, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
+    const curated = (CURATED_NPCS[slug] ?? []).map(n => ({ handle: n.handle, skinId: n.skinId, icon: null, fx: n.gx, fy: n.gy, tx: n.gx, ty: n.gy, z: n.lvl ?? 0, lvl: n.lvl ?? 0, bubble: '', bubbleLife: 0, af: 0, lines: n.lines, lineQueue: [] as string[], hx: n.gx, hy: n.gy, roam: n.roam, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: n.beats, hints: n.hints, hintIdx: 0, nid: n.id ?? n.handle, near: false, cool: 0 }));
     const placed = placedNpcsRef.current.map(p => {
       const lvl = Math.max(0, planLvl(p.gx, p.gy));
       const h = p.data.h;
@@ -1938,7 +1938,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       }
       const lines = (peaceful && h?.deadLines?.length) ? h.deadLines : p.data.l;
       const bodyScale = Math.min(5, Math.max(1, p.data.sz ?? 1));
-      return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines, hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0, hz: h, defeated, peaceful, hp, maxHp: h?.maxHp, lastNpcAtk: 0, respawnAt, bodyScale };
+      return { id: p.id, handle: p.data.n, skinId: p.data.a, icon: null, fx: p.gx, fy: p.gy, tx: p.gx, ty: p.gy, z: lvl, lvl, bubble: '', bubbleLife: 0, af: 0, lines, lineQueue: [] as string[], hx: p.gx, hy: p.gy, roam: 4, path: [] as { gx: number; gy: number; z: number }[], wanderCool: Math.floor(Math.random() * 841), beats: [] as string[], hints: [] as string[], hintIdx: 0, nid: p.id, near: false, cool: 0, hz: h, defeated, peaceful, hp, maxHp: h?.maxHp, lastNpcAtk: 0, respawnAt, bodyScale };
     });
     npcsRef.current = [...curated, ...placed];
     rebuildHuntable();
@@ -2647,7 +2647,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             let p = 0; try { p = Number(localStorage.getItem(k) || 0); } catch { /* ignore */ }
             if (p < n.beats.length) { n.bubble = n.beats[p]; try { localStorage.setItem(k, String(p + 1)); } catch { /* ignore */ } said = true; }
           }
-          if (!said && n.lines && n.lines.length) { const pool = n.lines.length > 1 ? n.lines.filter(l => l !== n.lastLine) : n.lines; const picked = pool[Math.floor(Math.random() * pool.length)]; n.bubble = picked; n.lastLine = picked; said = true; }
+          if (!said && n.lines && n.lines.length) { if (!n.lineQueue || !n.lineQueue.length) { n.lineQueue = [...n.lines].sort(() => Math.random() - 0.5); } n.bubble = n.lineQueue.shift()!; said = true; }
           if (said) { n.bubbleLife = 240; n.cool = 540 + Math.floor(Math.random() * 121); }
         }
         n.near = near;
