@@ -2673,7 +2673,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // Furni sprites are drawn by the shared renderer in @/lib/furniRender (drawFurniSprite).
 
     // Avatar BODY (shadow + skin) — drawn in the depth-sorted pass so it occludes / is occluded correctly.
-    const drawAvatarBody = (a: Avatar, isSelf: boolean) => {
+    const drawAvatarBody = (a: Avatar, isSelf: boolean, isNpc = false) => {
       const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;   // sink + ripple when standing in a pool
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
       // Floor indicators (shadow + glow) snap to the actual surface level so they don't lerp through
@@ -2689,7 +2689,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const sy_ground = flying ? iso(a.fx, a.fy, planBase).sy + wade : sy_floor;
       if (wade) { ctx.save(); ctx.strokeStyle = hexA('#bff2ff', 0.7); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(sx, sy_floor, 15 + Math.sin(framesRef.current * 0.12) * 2, 7, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
       ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 18 * bodyScale, 8 * bodyScale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 12 * bodyScale, 5 * bodyScale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      if (!isNpc) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 14; ctx.beginPath(); ctx.ellipse(sx, sy_ground, 12 * bodyScale, 5 * bodyScale, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
       const em = a.emote ?? null;
       let bob: number, sway = 0, spin = 0, legFold = 0;
       if (em === 'dance') {
@@ -3097,7 +3097,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         return s;
       };
-      for (const n of npcsRef.current) { const nn = n; ents.push({ s: avatarS(nn.fx, nn.fy, nn.lvl, 0.005), draw: () => drawAvatarBody(nn, false) }); }
+      for (const n of npcsRef.current) { const nn = n; ents.push({ s: avatarS(nn.fx, nn.fy, nn.lvl, 0.005), draw: () => drawAvatarBody(nn, false, true) }); }
       ents.push({ s: avatarS(selfRef.current.fx, selfRef.current.fy, selfRef.current.lvl, 0.01), draw: () => drawAvatarBody(selfRef.current, true) });
       for (const r of remotesRef.current.values()) { const rr = r; ents.push({ s: avatarS(rr.fx, rr.fy, rr.lvl, 0.01), draw: () => drawAvatarBody(rr, false) }); }
       ents.sort((a, b) => a.s - b.s); for (const e of ents) e.draw();
