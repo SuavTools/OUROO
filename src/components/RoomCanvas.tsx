@@ -2624,10 +2624,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               }
               n.af += 1; if ((n.wanderCool ?? 0) > 0) n.wanderCool--;
             }
-            if (n.bubbleLife > 0) n.bubbleLife--;
-            if (n.cool && n.cool > 0) n.cool--;
-            n.near = distP < 2.4;
-            continue;   // skip normal wander/speech while in combat
+            // fall through — bubbleLife, cool, near, and speech handled by the shared path below
           }
         }
         if (n.roam && n.hx != null && n.hy != null) {
