@@ -549,6 +549,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [stakePrompt, setStakePrompt] = useState(false);
   const [stakeInput, setStakeInput] = useState('');
   const [koUntil, setKoUntil] = useState(0);   // self knockout: WASTED overlay + respawn countdown
+  const [koMsg, setKoMsg] = useState('');      // optional message shown in the KO overlay (e.g. crystal loss)
   const [, setKoTick] = useState(0);           // forces re-render so the countdown ticks while down
   const koUntilRef = useRef(0);
   const [arenaCountdown, setArenaCountdown] = useState<number | null>(null);
@@ -569,7 +570,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   // Tick the WASTED respawn countdown while knocked out.
   useEffect(() => {
     if (koUntil <= Date.now()) return;
-    const iv = setInterval(() => { if (Date.now() >= koUntil) setKoUntil(0); else setKoTick(t => t + 1); }, 200);
+    const iv = setInterval(() => { if (Date.now() >= koUntil) { setKoUntil(0); setKoMsg(''); } else setKoTick(t => t + 1); }, 200);
     return () => clearInterval(iv);
   }, [koUntil]);
   // Tick the arena entry countdown; player is untracked (invisible to others) until it clears.
@@ -1270,7 +1271,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     me.hitUntil = Date.now() + 220; n.attackUntil = Date.now() + 280;
     spawnDmg(me.fx, me.fy, me.z, res.taken, '#ff5a5a');
     if (roomMetaRef.current.combat) broadcastHP();             // let other players see my bar drop (PvP rooms)
-    if (res.dead) { const loot = computeLoot(); if (loot.crystals > 0) spend(loot.crystals); respawnSelf(); }
+    if (res.dead) { const loot = computeLoot(); if (loot.crystals > 0) { spend(loot.crystals); setKoMsg(`Lost ${CURRENCY_SYMBOL}${loot.crystals.toLocaleString('pt-PT')} ✦`); } respawnSelf(); }
   };
 
   // Recompute whether any fightable hazardous NPC is present (drives the combat HUD outside PvP rooms).
@@ -3433,6 +3434,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <div className="absolute inset-0 z-[68] flex flex-col items-center justify-center bg-brandRed/10 backdrop-blur-[2px] pointer-events-none">
           <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>You got cooked.</p>
           <p className="text-white/70 text-sm mt-2 uppercase tracking-[0.3em]">Back up in {Math.max(1, Math.ceil((koUntil - Date.now()) / 1000))}s</p>
+          {koMsg && <p className="text-brandRed/80 text-xs mt-3 uppercase tracking-[0.25em]">{koMsg}</p>}
         </div>
       )}
 
