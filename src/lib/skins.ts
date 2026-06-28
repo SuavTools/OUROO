@@ -382,6 +382,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
   }
   // ── urban animals — flat naturalistic style (no glow), facing right ──
   if (shape === 'rat') {
+    ctx.save(); ctx.translate(0, h * 0.18);
     const W = w * 0.525, H = h * 0.5, bob = Math.sin(af * 0.24) * H * 0.04, gait = Math.sin(af * 0.3);
     ctx.shadowBlur = 0;
     ctx.strokeStyle = shade(color, -0.18); ctx.lineWidth = Math.max(1.5, W * 0.03); ctx.lineCap = 'round';
@@ -399,9 +400,10 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(W * 0.48, -H * 0.02 + bob, W * 0.028, 0, Math.PI * 2); ctx.fill();   // eye
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(W * 0.49, -H * 0.03 + bob, W * 0.011, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#cc5566'; ctx.beginPath(); ctx.arc(W * 0.66, H * 0.06 + bob, W * 0.022, 0, Math.PI * 2); ctx.fill();   // pink nose
-    return;
+    ctx.restore(); return;
   }
   if (shape === 'pigeon') {
+    ctx.save(); ctx.translate(0, h * 0.21);
     const W = w * 0.5, H = h * 0.5, bob = Math.sin(af * 0.18) * H * 0.05;
     ctx.shadowBlur = 0;
     ctx.fillStyle = shade(color, -0.22); ctx.beginPath(); ctx.moveTo(-W * 0.28, H * 0.1); ctx.lineTo(-W * 0.58, H * 0.16); ctx.lineTo(-W * 0.5, -H * 0.04); ctx.closePath(); ctx.fill();   // tail fan
@@ -415,7 +417,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     ctx.strokeStyle = '#b89030'; ctx.lineWidth = Math.max(1.5, W * 0.04); ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(W * 0.06, H * 0.24); ctx.lineTo(W * 0.08, H * 0.4); ctx.lineTo(W * 0.2, H * 0.42); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-W * 0.08, H * 0.24); ctx.lineTo(-W * 0.06, H * 0.4); ctx.lineTo(-W * 0.18, H * 0.42); ctx.stroke();   // legs
-    return;
+    ctx.restore(); return;
   }
   if (shape === 'cat') {
     const W = w, H = h, tw = Math.sin(af * 0.16) * W * 0.08;
