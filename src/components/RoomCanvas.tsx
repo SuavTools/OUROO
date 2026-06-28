@@ -1224,6 +1224,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const armor = n.hz.armor ?? 0;
       const dmg = armor > 0 ? Math.max(1, Math.round(wp.damage * (1 - armor / 100))) : wp.damage;   // armour mitigates like a worn shield
       n.hp = Math.max(0, n.hp - dmg); npcHpRef.current.set(nid, n.hp);
+      channelRef.current?.send({ type: 'broadcast', event: 'npc_hp', payload: { nid, hp: n.hp } });
       n.hitUntil = now + 220;
       if (spiritKnockback && n.hp > 0) {
         const dx = n.fx - me.fx, dy = n.fy - me.fy, len = Math.hypot(dx, dy) || 1;
@@ -2243,6 +2244,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'npcdel' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== id); rebuildNpcs(); } })
         .on('broadcast', { event: 'npcupdate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const nd = decodeNpc(String(pl?.kind ?? '')); const existing = placedNpcsRef.current.find(p => p.id === id); if (existing && nd) { existing.data = nd; rebuildNpcs(); } })
         .on('broadcast', { event: 'npc_kb' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const nid = String(pl?.nid ?? ''); const fx = Number(pl?.fx); const fy = Number(pl?.fy); if (!nid || isNaN(fx) || isNaN(fy)) return; const n = npcsRef.current.find(x => x.nid === nid); if (n) { n.fx = fx; n.fy = fy; n.tx = fx; n.ty = fy; n.path = []; } })
+        .on('broadcast', { event: 'npc_hp' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const nid = String(pl?.nid ?? ''); const hp = Number(pl?.hp); if (!nid || isNaN(hp)) return; const n = npcsRef.current.find(x => x.nid === nid); if (n && n.hp != null && hp < n.hp) { n.hp = hp; npcHpRef.current.set(nid, hp); } })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
@@ -2630,23 +2632,35 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         }
         // a downed hazardous NPC lies still (no wander/speech) until it respawns
         if (n.hz && n.defeated && !n.peaceful) { if (n.bubbleLife > 0) n.bubbleLife--; n.path = []; n.near = false; continue; }
-        // ── hazardous NPC aggro: a live, hostile NPC chases the player and auto-swings in melee reach ──
+        // ── hazardous NPC aggro: a live, hostile NPC chases the nearest player and auto-swings in melee reach ──
+        // Chase target is the closest non-KO'd player (local OR remote). All clients have the same remote
+        // positions via 'pos' broadcasts, so they independently converge on the same chase target — giving
+        // every observer a consistent view of the NPC without any extra coordination.
         if (n.hz && !n.peaceful && !n.defeated && n.hp != null && n.hz.contactDamage > 0) {
-          const distP = Math.hypot(n.fx - sf.fx, n.fy - sf.fy);
-          if (distP <= 7) {   // wakes up within 7 tiles
+          const nowKo = Date.now();
+          let chaseTarget: { fx: number; fy: number } = sf;
+          let chaseDist = Math.hypot(n.fx - sf.fx, n.fy - sf.fy);
+          for (const r of remotesRef.current.values()) {
+            if (r.koUntil && r.koUntil > nowKo) continue;
+            const d = Math.hypot(n.fx - r.fx, n.fy - r.fy);
+            if (d < chaseDist) { chaseTarget = r; chaseDist = d; }
+          }
+          const distP = chaseDist;
+          const distSelf = Math.hypot(n.fx - sf.fx, n.fy - sf.fy);
+          if (distP <= 7) {   // wakes up within 7 tiles of nearest player
             const now = Date.now();
-            if (distP <= 1.5) {   // in reach → hold position and swing on cooldown
+            if (distP <= 1.5) {   // nearest player in reach → hold; only swing when LOCAL player is also in reach
               n.path = []; n.af += 0.6;
-              if (now - (n.lastNpcAtk ?? 0) >= n.hz.attackCooldownMs) { n.lastNpcAtk = now; npcAttackPlayer(n); }
-            } else {   // chase: repath toward the player's tile a few times a second
+              if (distSelf <= 1.5 && now - (n.lastNpcAtk ?? 0) >= n.hz.attackCooldownMs) { n.lastNpcAtk = now; npcAttackPlayer(n); }
+            } else {   // chase: repath toward nearest player's tile a few times a second
               if (!n.path.length || (n.wanderCool ?? 0) <= 0) {
-                const p = findPath(clampTile(n.fx), clampTile(n.fy), n.lvl, clampTile(sf.fx), clampTile(sf.fy), false);
+                const p = findPath(clampTile(n.fx), clampTile(n.fy), n.lvl, clampTile(chaseTarget.fx), clampTile(chaseTarget.fy), false);
                 n.path = p && p.length ? p.slice(0, 6) : []; n.wanderCool = 18;
               }
               if (n.path.length) {
                 const wp = n.path[0]; const dx = wp.gx - n.fx, dy = wp.gy - n.fy, d = Math.hypot(dx, dy);
                 if (d < 0.12) { n.fx = wp.gx; n.fy = wp.gy; n.z = wp.z; n.lvl = wp.z; n.tx = wp.gx; n.ty = wp.gy; n.path.shift(); }
-                else { const s = Math.min(WALK * 0.7, d); n.fx += dx / d * s; n.fy += dy / d * s; }   // a touch slower than you, so you can kite
+                else { const s = Math.min(WALK * 0.7, d); n.fx += dx / d * s; n.fy += dy / d * s; }
               }
               n.af += 1; if ((n.wanderCool ?? 0) > 0) n.wanderCool--;
             }
