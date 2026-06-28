@@ -161,7 +161,7 @@ export const ITEMS: Item[] = [
     description: 'A quick bite. Restores 25 health.',
     useType: 'single',
     effect: { type: 'heal', hp: 25 },
-    price: 120,
+    price: 20,
     emoji: '🍔',
   },
   {
@@ -170,7 +170,7 @@ export const ITEMS: Item[] = [
     description: 'Proper patch-up. Restores 60 health.',
     useType: 'single',
     effect: { type: 'heal', hp: 60 },
-    price: 350,
+    price: 100,
     emoji: '💊',
   },
 ];
