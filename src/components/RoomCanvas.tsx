@@ -311,12 +311,16 @@ const decodeShopItems = (s: string): string[] => s ? s.split(',').map(safeDecode
 //   mode 'tile'  → spoken when a player walks close to the marker's tile (re-fires per approach).
 type LoreMode = 'enter' | 'tile';
 type LoreStyle = 'oracle' | 'glitch' | 'reward';   // spoken card / full-screen terminal takeover / a payout
-type LoreMarker = { id: string; mode: LoreMode; style: LoreStyle; gx: number; gy: number; text: string; crystals?: number; skinId?: string; near?: boolean };
+type LoreMarker = { id: string; mode: LoreMode; style: LoreStyle; gx: number; gy: number; text: string; crystals?: number; skinId?: string; items?: Record<string, number>; furni?: Record<string, number>; near?: boolean };
 // oracle markers persist as `lore:<mode>:<text>`, glitch as `seq:<mode>:<text>`, rewards as
 // `reward:<mode>:<crystals>:<skinId>` (skinId may be empty). All fire once per player for on-enter;
 // reward tile markers also fire once per player (claimed), text ones re-fire on each approach.
 const encodeMarker = (style: LoreStyle, mode: LoreMode, text: string) => `${style === 'glitch' ? 'seq' : 'lore'}:${mode}:${encodeURIComponent(text)}`;
-const encodeReward = (mode: LoreMode, crystals: number, skinId: string) => `reward:${mode}:${Math.max(0, Math.floor(crystals) || 0)}:${encodeURIComponent(skinId || '')}`;
+const encodeReward = (mode: LoreMode, crystals: number, skinId: string, items: Record<string, number> = {}, furni: Record<string, number> = {}) => {
+  const base = `reward:${mode}:${Math.max(0, Math.floor(crystals) || 0)}:${encodeURIComponent(skinId || '')}`;
+  const hi = Object.keys(items).length > 0, hf = Object.keys(furni).length > 0;
+  return (hi || hf) ? `${base}:${encodeURIComponent(JSON.stringify(hi ? items : {}))}:${encodeURIComponent(JSON.stringify(hf ? furni : {}))}` : base;
+};
 // ROOM ATMOSPHERE — an admin-chosen backdrop layer, persisted as a `bg:<id>` row. 'auto' = the room's
 // built-in day/night. The rest override it for storytelling (sunny, rainy, Matrix-style code rain, a
 // glitched-out signal). The atmosphere paints the sky/void BEHIND the isometric room.
@@ -653,7 +657,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [placeLore, setPlaceLore] = useState(false);     // armed to drop a tile marker on the next tap
   const [loreCard, setLoreCard] = useState<string | null>(null);   // the Oracle lore currently being spoken
   const [glitchSeq, setGlitchSeq] = useState<string | null>(null); // the full-screen glitch/terminal takeover
-  const [rewardReveal, setRewardReveal] = useState<{ crystals: number; skinId: string } | null>(null);   // screen-takeover reward celebration
+  const [rewardReveal, setRewardReveal] = useState<{ crystals: number; skinId: string; items: Record<string, number>; furni: Record<string, number> } | null>(null);   // screen-takeover reward celebration
   const [bgAtmo, setBgAtmo] = useState<Atmo>('auto');   // current room atmosphere (mirrors bgRef, for the editor)
   const [inObscured, setInObscured] = useState(false);  // true while the player is inside an obscured (hidden) area
   const inObscuredRef = useRef(false);                   // shadow ref so the animation loop can gate setState
@@ -678,7 +682,11 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [mkStyle, setMkStyle] = useState<LoreStyle>('oracle'); // editor: presentation of the marker
   const [mkCrystals, setMkCrystals] = useState(100);           // editor: reward crystal amount
   const [mkSkin, setMkSkin] = useState('');                    // editor: reward skin to unlock ('' = none)
-  const pendingLoreRef = useRef<{ text: string; style: LoreStyle; crystals: number; skinId: string }>({ text: '', style: 'oracle', crystals: 0, skinId: '' });   // marker waiting to drop on a tap
+  const [mkItems, setMkItems] = useState<Record<string, number>>({});   // editor: reward items { itemId → qty }
+  const [mkFurni, setMkFurni] = useState<Record<string, number>>({});   // editor: reward furni { kind → qty }
+  const [mkItemPick, setMkItemPick] = useState('');            // editor: item picker selection
+  const [mkFurniPick, setMkFurniPick] = useState('');          // editor: furni picker selection
+  const pendingLoreRef = useRef<{ text: string; style: LoreStyle; crystals: number; skinId: string; items: Record<string, number>; furni: Record<string, number> }>({ text: '', style: 'oracle', crystals: 0, skinId: '', items: {}, furni: {} });   // marker waiting to drop on a tap
   const [, setLoreVer] = useState(0);   // bump to re-render the editor list after loreRef mutations
   const [placeDir, setPlaceDir] = useState(0);
   const placeDirRef = useRef(0);
@@ -1635,12 +1643,14 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       surf[k].sort((a, b) => a - b);
     }
   };
-  // Pay out a reward marker: crystals to the wallet + (if set) unlock a skin on the account.
+  // Pay out a reward marker: crystals + skin + items + furni.
   const claimReward = (mk: LoreMarker) => {
     if (mk.crystals && mk.crystals > 0) addBalance(mk.crystals);
-    if (mk.skinId) grantSkin(mk.skinId);   // signed-in only; degrades silently otherwise
+    if (mk.skinId) grantSkin(mk.skinId);
+    if (mk.items) for (const [id, q] of Object.entries(mk.items)) for (let i = 0; i < q; i++) grantItem(id);
+    if (mk.furni) for (const [kind, q] of Object.entries(mk.furni)) grantFurni(kind, q);
     musicRef.current?.chime();
-    setRewardReveal({ crystals: mk.crystals || 0, skinId: mk.skinId || '' });   // screen-takeover celebration
+    setRewardReveal({ crystals: mk.crystals || 0, skinId: mk.skinId || '', items: mk.items || {}, furni: mk.furni || {} });
   };
   // Present/claim a marker by style (caller handles once-per-player gating where relevant).
   const fireMarker = (mk: LoreMarker) => {
@@ -1659,7 +1669,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       if (raw.startsWith('del:')) { delCuratedRef.current.add(raw.slice(4)); continue; }   // tombstone: a removed curated piece
       if (raw.startsWith('bg:')) { const a = raw.slice(3) as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; bgIdRef.current = String(d.id); } continue; }
       if (raw.startsWith('arena:')) { const p = raw.split(':'); const min = Math.max(1, Number(p[1]) || 10), max = Math.max(0, Number(p[2]) || 0); arenaMarkerRef.current = String(d.id); setRoomMeta(prev => ({ ...prev, arena: true, arenaMin: min, arenaMax: max })); continue; }   // mod-flagged staked arena
-      if (raw.startsWith('reward:')) { const p = raw.split(':'); const mode = (p[1] === 'enter' ? 'enter' : 'tile') as LoreMode; loreRef.current.push({ id: String(d.id), mode, style: 'reward', gx: Number(d.x), gy: Number(d.y), text: '', crystals: Number(p[2]) || 0, skinId: safeDecode(p[3] || '') }); continue; }
+      if (raw.startsWith('reward:')) { const p = raw.split(':'); const mode = (p[1] === 'enter' ? 'enter' : 'tile') as LoreMode; let ritems: Record<string, number> = {}, rfurni: Record<string, number> = {}; try { if (p[4]) ritems = JSON.parse(safeDecode(p[4])) || {}; } catch { /* ignore */ } try { if (p[5]) rfurni = JSON.parse(safeDecode(p[5])) || {}; } catch { /* ignore */ } loreRef.current.push({ id: String(d.id), mode, style: 'reward', gx: Number(d.x), gy: Number(d.y), text: '', crystals: Number(p[2]) || 0, skinId: safeDecode(p[3] || ''), items: ritems, furni: rfurni }); continue; }
       if (raw.startsWith('lore:') || raw.startsWith('seq:')) { const style: LoreStyle = raw.startsWith('seq:') ? 'glitch' : 'oracle'; const i1 = raw.indexOf(':'), i2 = raw.indexOf(':', i1 + 1); const mode = raw.slice(i1 + 1, i2) as LoreMode; const text = safeDecode(raw.slice(i2 + 1)); loreRef.current.push({ id: String(d.id), mode: mode === 'enter' ? 'enter' : 'tile', style, gx: Number(d.x), gy: Number(d.y), text }); continue; }
       items.push(hydrateItem(raw, String(d.id), Number(d.x), Number(d.y), String(d.created_by ?? '')));
     }
@@ -2079,30 +2089,30 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     loreRef.current = loreRef.current.filter(l => l.id !== id); setLoreVer(v => v + 1);
     supabase?.from('room_items').delete().eq('id', id).then(undefined, () => {});
   };
-  const kindFor = (style: LoreStyle, mode: LoreMode, text: string) => style === 'reward' ? encodeReward(mode, mkCrystals, mkSkin) : encodeMarker(style, mode, text);
+  const kindFor = (style: LoreStyle, mode: LoreMode, text: string) => style === 'reward' ? encodeReward(mode, mkCrystals, mkSkin, mkItems, mkFurni) : encodeMarker(style, mode, text);
   const saveMarker = () => {
     const reward = mkStyle === 'reward';
     const text = loreText.trim(); if (!reward && !text) { flashHint('Write something first'); return; }
-    if (reward && !(mkCrystals > 0) && !mkSkin) { flashHint('Set crystals or a skin'); return; }
+    if (reward && !(mkCrystals > 0) && !mkSkin && Object.keys(mkItems).length === 0 && Object.keys(mkFurni).length === 0) { flashHint('Set at least one reward'); return; }
     if (loreEditId) {   // edit an existing marker in place (keep its mode + tile; allow style/value change)
-      const m = loreRef.current.find(l => l.id === loreEditId); if (m) { m.text = text; m.style = mkStyle; m.crystals = mkCrystals; m.skinId = mkSkin; supabase?.from('room_items').update({ kind: kindFor(mkStyle, m.mode, text) }).eq('id', m.id).then(undefined, () => {}); }
+      const m = loreRef.current.find(l => l.id === loreEditId); if (m) { m.text = text; m.style = mkStyle; m.crystals = mkCrystals; m.skinId = mkSkin; m.items = mkItems; m.furni = mkFurni; supabase?.from('room_items').update({ kind: kindFor(mkStyle, m.mode, text) }).eq('id', m.id).then(undefined, () => {}); }
       setLoreEditId(null); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker updated ✦'); return;
     }
     if (mkMode === 'enter') {   // on-enter marker — saved immediately (tile ignored)
-      const id = newId('lore'); loreRef.current.push({ id, mode: 'enter', style: mkStyle, gx: 0, gy: 0, text, crystals: mkCrystals, skinId: mkSkin });
+      const id = newId('lore'); loreRef.current.push({ id, mode: 'enter', style: mkStyle, gx: 0, gy: 0, text, crystals: mkCrystals, skinId: mkSkin, items: mkItems, furni: mkFurni });
       supabase?.from('room_items').insert({ id, room, kind: kindFor(mkStyle, 'enter', text), x: 0, y: 0, created_by: deviceRef.current }).then(undefined, () => {});
       setLoreText(''); setLoreVer(v => v + 1); flashHint('On-enter marker saved ✦'); return;
     }
-    pendingLoreRef.current = { text, style: mkStyle, crystals: mkCrystals, skinId: mkSkin }; setPlaceLore(true); setLoreEditor(false); flashHint('Tap a tile to drop the marker ✎');
+    pendingLoreRef.current = { text, style: mkStyle, crystals: mkCrystals, skinId: mkSkin, items: mkItems, furni: mkFurni }; setPlaceLore(true); setLoreEditor(false); flashHint('Tap a tile to drop the marker ✎');
   };
   const placeTileLoreAt = (gx: number, gy: number) => {
-    const { text, style, crystals, skinId } = pendingLoreRef.current; if (style !== 'reward' && !text) { setPlaceLore(false); return; }
-    const id = newId('lore'); loreRef.current.push({ id, mode: 'tile', style, gx, gy, text, crystals, skinId });
-    const kind = style === 'reward' ? encodeReward('tile', crystals, skinId) : encodeMarker(style, 'tile', text);
+    const { text, style, crystals, skinId, items, furni } = pendingLoreRef.current; if (style !== 'reward' && !text) { setPlaceLore(false); return; }
+    const id = newId('lore'); loreRef.current.push({ id, mode: 'tile', style, gx, gy, text, crystals, skinId, items, furni });
+    const kind = style === 'reward' ? encodeReward('tile', crystals, skinId, items, furni) : encodeMarker(style, 'tile', text);
     supabase?.from('room_items').insert({ id, room, kind, x: gx, y: gy, created_by: deviceRef.current }).then(undefined, () => {});
-    pendingLoreRef.current = { text: '', style: 'oracle', crystals: 0, skinId: '' }; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker placed ✎');
+    pendingLoreRef.current = { text: '', style: 'oracle', crystals: 0, skinId: '', items: {}, furni: {} }; setPlaceLore(false); setLoreText(''); setLoreVer(v => v + 1); flashHint('Marker placed ✎');
   };
-  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setMkCrystals(100); setMkSkin(''); setLoreEditor(true); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); };
+  const openLoreEditor = () => { setLoreText(''); setLoreEditId(null); setMkMode('enter'); setMkStyle('oracle'); setMkCrystals(100); setMkSkin(''); setMkItems({}); setMkFurni({}); setMkItemPick(''); setMkFurniPick(''); setLoreEditor(true); setPlacingKind(null); setGamesMode(false); setShopsMode(false); setRemoveMode(false); setRotateMode(false); setTileMode(false); setAtmoMode(false); setBuildMode(false); setPlacingPrefab(null); };
   // Set the room's atmosphere (backdrop layer). 'auto' clears the override; otherwise upsert a `bg:` row.
   const setAtmosphere = (a: Atmo) => {
     bgRef.current = a; setBgAtmo(a);
@@ -4636,8 +4646,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {markers.map(l => (
                 <div key={l.id} className="flex items-center gap-2 border border-white/12 bg-white/[0.03] px-3 py-2">
                   <span className={`shrink-0 text-[9px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded ${l.style === 'glitch' ? 'bg-[#cc44ff]/20 text-[#cc44ff]' : l.style === 'reward' ? 'bg-brandYellow/20 text-brandYellow' : 'bg-[#00cfff]/15 text-[#00cfff]'}`}>{l.mode === 'enter' ? 'enter' : `${l.gx},${l.gy}`}</span>
-                  <span className="flex-1 min-w-0 text-[12px] text-white/70 truncate">{l.style === 'reward' ? `✦ ${l.crystals || 0}${l.skinId ? ` · ${skinById(l.skinId).name}` : ''}` : l.text}</span>
-                  <button onClick={() => { setLoreText(l.text); setLoreEditId(l.id); setMkStyle(l.style); setMkMode(l.mode); setMkCrystals(l.crystals || 0); setMkSkin(l.skinId || ''); }} className="text-[#00cfff]/70 hover:text-[#00cfff] text-[11px] uppercase tracking-widest">edit</button>
+                  <span className="flex-1 min-w-0 text-[12px] text-white/70 truncate">{l.style === 'reward' ? [l.crystals ? `✦ ${l.crystals}` : '', l.skinId ? skinById(l.skinId).name : '', ...Object.entries(l.items || {}).map(([id, q]) => `${itemById(id)?.emoji ?? ''} ×${q}`), ...Object.entries(l.furni || {}).map(([k, q]) => `${FURNI.find(f => f.kind === k)?.emoji ?? k} ×${q}`)].filter(Boolean).join(' · ') || '—' : l.text}</span>
+                  <button onClick={() => { setLoreText(l.text); setLoreEditId(l.id); setMkStyle(l.style); setMkMode(l.mode); setMkCrystals(l.crystals || 0); setMkSkin(l.skinId || ''); setMkItems(l.items || {}); setMkFurni(l.furni || {}); setMkItemPick(''); setMkFurniPick(''); }} className="text-[#00cfff]/70 hover:text-[#00cfff] text-[11px] uppercase tracking-widest">edit</button>
                   <button onClick={() => removeLore(l.id)} title="Remove" className="text-white/30 hover:text-brandRed text-lg leading-none">✕</button>
                 </div>
               ))}
@@ -4665,17 +4675,65 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                 </div>
               </div>
               {mkStyle === 'reward' ? (
-                <div className="flex gap-2">
-                  <div className="w-28">
-                    <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Crystals ✦</p>
-                    <input type="number" min={0} value={mkCrystals} onChange={e => setMkCrystals(Math.max(0, parseInt(e.target.value) || 0))} className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-brandYellow tabular-nums" />
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <div className="w-28">
+                      <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Crystals ✦</p>
+                      <input type="number" min={0} value={mkCrystals} onChange={e => setMkCrystals(Math.max(0, parseInt(e.target.value) || 0))} className="w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm outline-none focus:border-brandYellow tabular-nums" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Unlock skin</p>
+                      <select value={mkSkin} onChange={e => setMkSkin(e.target.value)} className="w-full bg-white/5 border border-white/15 text-white px-2 py-2 text-sm outline-none focus:border-brandYellow">
+                        <option value="">— none —</option>
+                        {SKINS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Unlock skin</p>
-                    <select value={mkSkin} onChange={e => setMkSkin(e.target.value)} className="w-full bg-white/5 border border-white/15 text-white px-2 py-2 text-sm outline-none focus:border-brandYellow">
-                      <option value="">— none —</option>
-                      {SKINS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                  {/* Items */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Items</p>
+                    <div className="flex gap-1.5">
+                      <select value={mkItemPick} onChange={e => setMkItemPick(e.target.value)} className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-2 py-1.5 text-[12px] outline-none focus:border-brandYellow">
+                        <option value="">— pick item —</option>
+                        {ITEMS.map(it => <option key={it.id} value={it.id}>{it.emoji} {it.name}</option>)}
+                      </select>
+                      <button onClick={() => { if (!mkItemPick) return; setMkItems(prev => ({ ...prev, [mkItemPick]: (prev[mkItemPick] || 0) + 1 })); }} className="px-2.5 py-1.5 bg-white/10 text-white text-[11px] border border-white/20 hover:bg-white/20 active:scale-95">+1</button>
+                    </div>
+                    {Object.keys(mkItems).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {Object.entries(mkItems).map(([id, q]) => { const it = itemById(id); return (
+                          <span key={id} className="flex items-center gap-1 bg-white/8 border border-white/15 px-2 py-0.5 text-[11px] text-white">
+                            {it?.emoji} {it?.name} ×{q}
+                            <button onClick={() => setMkItems(prev => { const n = { ...prev }; if (n[id] > 1) n[id]--; else delete n[id]; return n; })} className="text-white/40 hover:text-brandRed ml-1 leading-none">✕</button>
+                          </span>
+                        ); })}
+                      </div>
+                    )}
+                  </div>
+                  {/* Furniture */}
+                  <div>
+                    <p className="text-[9px] uppercase tracking-widest text-white/35 mb-1">Furniture</p>
+                    <div className="flex gap-1.5">
+                      <select value={mkFurniPick} onChange={e => setMkFurniPick(e.target.value)} className="flex-1 min-w-0 bg-white/5 border border-white/15 text-white px-2 py-1.5 text-[12px] outline-none focus:border-brandYellow">
+                        <option value="">— pick furniture —</option>
+                        {CATS.map(cat => (
+                          <optgroup key={cat.id} label={cat.name}>
+                            {FURNI.filter(f => f.cat === cat.id).map(f => <option key={f.kind} value={f.kind}>{f.emoji} {f.name}</option>)}
+                          </optgroup>
+                        ))}
+                      </select>
+                      <button onClick={() => { if (!mkFurniPick) return; setMkFurni(prev => ({ ...prev, [mkFurniPick]: (prev[mkFurniPick] || 0) + 1 })); }} className="px-2.5 py-1.5 bg-white/10 text-white text-[11px] border border-white/20 hover:bg-white/20 active:scale-95">+1</button>
+                    </div>
+                    {Object.keys(mkFurni).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {Object.entries(mkFurni).map(([kind, q]) => { const f = FURNI.find(x => x.kind === kind); return (
+                          <span key={kind} className="flex items-center gap-1 bg-white/8 border border-white/15 px-2 py-0.5 text-[11px] text-white">
+                            {f?.emoji} {f?.name} ×{q}
+                            <button onClick={() => setMkFurni(prev => { const n = { ...prev }; if (n[kind] > 1) n[kind]--; else delete n[kind]; return n; })} className="text-white/40 hover:text-brandRed ml-1 leading-none">✕</button>
+                          </span>
+                        ); })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -4724,7 +4782,27 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
             )}
 
             {rewardReveal.crystals > 0 && (
-              <p className="font-mono font-bold text-3xl sm:text-4xl text-brandYellow mb-6" style={{ textShadow: '0 0 18px rgba(255,210,60,0.55)' }}>✦ +{rewardReveal.crystals.toLocaleString('pt-PT')}</p>
+              <p className="font-mono font-bold text-3xl sm:text-4xl text-brandYellow mb-4" style={{ textShadow: '0 0 18px rgba(255,210,60,0.55)' }}>✦ +{rewardReveal.crystals.toLocaleString('pt-PT')}</p>
+            )}
+            {Object.keys(rewardReveal.items || {}).length > 0 && (
+              <div className="flex flex-wrap justify-center gap-2 mb-4">
+                {Object.entries(rewardReveal.items).map(([id, q]) => { const it = itemById(id); return (
+                  <div key={id} className="flex items-center gap-1.5 bg-white/8 border border-white/20 px-3 py-1.5 text-white text-sm">
+                    <span className="text-xl">{it?.emoji}</span>
+                    <span>{it?.name ?? id}{q > 1 ? ` ×${q}` : ''}</span>
+                  </div>
+                ); })}
+              </div>
+            )}
+            {Object.keys(rewardReveal.furni || {}).length > 0 && (
+              <div className="flex flex-wrap justify-center gap-2 mb-4">
+                {Object.entries(rewardReveal.furni).map(([kind, q]) => { const f = FURNI.find(x => x.kind === kind); return (
+                  <div key={kind} className="flex items-center gap-1.5 bg-white/8 border border-white/20 px-3 py-1.5 text-white text-sm">
+                    <span className="text-xl">{f?.emoji ?? '🪑'}</span>
+                    <span>{f?.name ?? kind}{q > 1 ? ` ×${q}` : ''}</span>
+                  </div>
+                ); })}
+              </div>
             )}
 
             <button onClick={() => setRewardReveal(null)} className="bg-brandYellow text-black font-bold uppercase tracking-[0.3em] text-sm px-10 py-3.5 hover:bg-white transition-colors active:scale-95">Claim ▸</button>
