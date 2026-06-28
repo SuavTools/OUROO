@@ -1150,6 +1150,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const loot = computeLoot();
       dropLoot(loot);
       if (!lootIsEmpty(loot)) channelRef.current?.send({ type: 'broadcast', event: 'loot', payload: { from: me.id, to: killer, crystals: loot.crystals, items: loot.items } });
+      if (!lootIsEmpty(loot)) {
+        const parts: string[] = [];
+        if (loot.crystals > 0) parts.push(`${CURRENCY_SYMBOL}${loot.crystals.toLocaleString('pt-PT')}`);
+        for (const [id, q] of Object.entries(loot.items)) { const it = itemById(id); parts.push(`${it?.emoji ?? ''} ${it?.name ?? id}${q > 1 ? ` ×${q}` : ''}`.trim()); }
+        setKoMsg(`Lost ${parts.join(', ')} ✦`);
+      }
       respawnSelf();
     }
   };
