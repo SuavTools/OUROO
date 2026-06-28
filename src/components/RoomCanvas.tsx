@@ -1144,6 +1144,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       const dx = me.fx - ax, dy = me.fy - ay, len = Math.hypot(dx, dy) || 1;
       const nx = clampTile(Math.round(me.fx + dx / len)), ny = clampTile(Math.round(me.fy + dy / len));
       me.fx = nx; me.fy = ny; me.tx = nx; me.ty = ny; me.path = [];
+      channelRef.current?.send({ type: 'broadcast', event: 'pos', payload: { id: me.id, h: me.handle, s: me.skinId, icon: me.icon ?? undefined, fx: nx, fy: ny, lvl: me.lvl, wp: equippedWeaponSpec().id } });
     }
     broadcastHP();
     if (res.dead) {
