@@ -3440,7 +3440,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         <div className="absolute inset-0 z-[68] flex flex-col items-center justify-center bg-brandRed/10 backdrop-blur-[2px] pointer-events-none">
           <p className="font-helvetica font-black text-5xl text-brandRed tracking-tight" style={{ textShadow: '0 2px 24px rgba(0,0,0,0.8)' }}>You got cooked.</p>
           <p className="text-white/70 text-sm mt-2 uppercase tracking-[0.3em]">Back up in {Math.max(1, Math.ceil((koUntil - Date.now()) / 1000))}s</p>
-          {koMsg && <p className="text-brandRed/80 text-xs mt-3 uppercase tracking-[0.25em]">{koMsg}</p>}
+          {koMsg && <p className="text-brandYellow text-sm mt-3 uppercase tracking-[0.25em]">{koMsg}</p>}
         </div>
       )}
 
