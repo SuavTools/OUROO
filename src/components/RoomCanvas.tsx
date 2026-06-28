@@ -1229,6 +1229,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         const dx = n.fx - me.fx, dy = n.fy - me.fy, len = Math.hypot(dx, dy) || 1;
         n.fx = clampTile(Math.round(n.fx + dx / len)); n.fy = clampTile(Math.round(n.fy + dy / len));
         n.tx = n.fx; n.ty = n.fy; n.path = [];
+        channelRef.current?.send({ type: 'broadcast', event: 'npc_kb', payload: { nid, fx: n.fx, fy: n.fy } });
       }
       spawnDmg(n.fx, n.fy, n.z, dmg, '#ffd84a');
       if (wp.style === 'magic') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 18, max: 18, color: '#b98cff' });
@@ -2241,6 +2242,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         .on('broadcast', { event: 'npc' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); if (!id || placedNpcsRef.current.some(p => p.id === id)) return; const nd = decodeNpc(String(pl.kind)); if (nd) { placedNpcsRef.current.push({ id, gx: Number(pl.x), gy: Number(pl.y), data: nd }); rebuildNpcs(); } })
         .on('broadcast', { event: 'npcdel' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); if (id) { placedNpcsRef.current = placedNpcsRef.current.filter(p => p.id !== id); rebuildNpcs(); } })
         .on('broadcast', { event: 'npcupdate' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const id = String(pl?.id ?? ''); const nd = decodeNpc(String(pl?.kind ?? '')); const existing = placedNpcsRef.current.find(p => p.id === id); if (existing && nd) { existing.data = nd; rebuildNpcs(); } })
+        .on('broadcast', { event: 'npc_kb' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const nid = String(pl?.nid ?? ''); const fx = Number(pl?.fx); const fy = Number(pl?.fy); if (!nid || isNaN(fx) || isNaN(fy)) return; const n = npcsRef.current.find(x => x.nid === nid); if (n) { n.fx = fx; n.fy = fy; n.tx = fx; n.ty = fy; n.path = []; } })
         .on('broadcast', { event: 'unplace' }, ({ payload }) => { const id = String((payload as Record<string, unknown>)?.id ?? ''); itemsRef.current = itemsRef.current.filter(i => i.id !== id); rebuildHeight(); })
         .on('broadcast', { event: 'mat' }, ({ payload }) => { const pl = payload as Record<string, unknown>; const k = key(Number(pl.x), Number(pl.y)); const n = Number(pl.n); if (n < 0) matOverrideRef.current.delete(k); else matOverrideRef.current.set(k, n); })   // live tile-paint
         .on('broadcast', { event: 'bg' }, ({ payload }) => { const a = String((payload as Record<string, unknown>)?.a ?? 'auto') as Atmo; if (ATMOS.some(x => x.id === a)) { bgRef.current = a; setBgAtmo(a); } })   // live atmosphere change
