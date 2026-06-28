@@ -174,7 +174,7 @@ export const NpcEditor: React.FC<{
         deadLines: policy === 'once' ? splitLines(deadLinesText) : undefined,
       });
     }
-    onPlace({ n: name.trim().slice(0, 24) || 'NPC', a, l, ...(h ? { h } : {}), ...(size !== 1 ? { sz: size } : {}) });
+    onPlace({ n: name.trim().slice(0, 24), a, l, ...(h ? { h } : {}), ...(size !== 1 ? { sz: size } : {}) });
   };
 
   return (

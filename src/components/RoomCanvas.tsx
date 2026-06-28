@@ -1252,8 +1252,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       for (const [id, q] of Object.entries(h.loot.items ?? {})) for (let i = 0; i < q; i++) grantItem(id);
       if (h.onKill) fireKillTrigger(nid, h.onKill, n.handle);
       const bits = [h.loot.crystals ? `${h.loot.crystals} ${CURRENCY_SYMBOL}` : '', ...Object.entries(h.loot.items ?? {}).map(([id, q]) => `${itemById(id)?.name ?? id}${q > 1 ? `×${q}` : ''}`)].filter(Boolean);
-      flashHint(bits.length ? `Defeated ${n.handle} — looted ${bits.join(', ')}` : `Defeated ${n.handle}`);
-    } else flashHint(`Defeated ${n.handle} again`);
+      const nname = n.handle || 'NPC';
+      flashHint(bits.length ? `Defeated ${nname} — looted ${bits.join(', ')}` : `Defeated ${nname}`);
+    } else flashHint(`Defeated ${n.handle || 'NPC'} again`);
     // schedule the respawn: 'once' → permanent peace (-1); others come back and stay a threat.
     const perma = h.policy === 'once';
     const downUntil = perma ? -1 : Date.now() + (h.policy === 'farmable' ? (h.respawnMs ?? 600_000) : NOREFARM_RESPAWN_MS);
@@ -2817,6 +2818,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     // Avatar NAME LABEL + chat BUBBLE — drawn in a separate pass AFTER everything, so a tall piece of
     // furniture in front can never hide who someone is or what they just said.
     const drawAvatarLabel = (a: Avatar, isSelf: boolean) => {
+      if (!a.handle) return;
       const wade = isWater(clampTile(a.fx), clampTile(a.fy)) ? 6 : 0;
       const p = iso(a.fx, a.fy, a.z); const sx = p.sx, sy = p.sy + wade;
       const col = a.skinId && a.skinId.startsWith('person:') ? personPrimaryColor(parsePerson(a.skinId)) : a.skinId && isCreatureId(a.skinId) ? parseCreature(a.skinId).color : a.icon ? iconPrimaryColor(a.icon) : skinById(a.skinId).color;
