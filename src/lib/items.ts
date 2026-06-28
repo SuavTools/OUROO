@@ -36,7 +36,7 @@ export const ITEMS: Item[] = [
     description: 'A strong cup that sharpens your stride.',
     useType: 'single',
     effect: { type: 'speed', multiplier: 1.25, durationMs: 10 * 60 * 1000 },
-    price: 200,
+    price: 8,
     emoji: '☕',
   },
   {
