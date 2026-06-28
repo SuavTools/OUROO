@@ -2592,6 +2592,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       { const nowMs = performance.now(); let pruned = false;
         for (const [id, r] of remotesRef.current) { if (r.rxAt && nowMs - r.rxAt > 12_000) { remotesRef.current.delete(id); pruned = true; } }
         if (pruned) setPopulation(remotesRef.current.size + 1); }
+      // If every player in the room is knocked out, hazard NPCs reset to full HP.
+      { const nowKo = Date.now(); const allKo = koUntilRef.current > nowKo && [...remotesRef.current.values()].every(r => r.koUntil && r.koUntil > nowKo);
+        if (allKo) { for (const n of npcsRef.current) { if (n.hz && !n.defeated && !n.peaceful && n.hp != null && n.hz.maxHp && n.hp < n.hz.maxHp) { n.hp = n.hz.maxHp; if (n.nid) npcHpRef.current.set(n.nid, n.hz.maxHp); } } } }
       const sf = selfRef.current;
       for (const n of npcsRef.current) {   // pathfinding wander + speech for NPCs
         // ── respawn: a downed (non-'once') hazardous NPC comes back to full hp once its timer elapses ──
