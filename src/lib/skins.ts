@@ -382,7 +382,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
   }
   // ── urban animals — flat naturalistic style (no glow), facing right ──
   if (shape === 'rat') {
-    const W = w * 1.05, H = h, bob = Math.sin(af * 0.24) * H * 0.04, gait = Math.sin(af * 0.3);
+    const W = w * 0.525, H = h * 0.5, bob = Math.sin(af * 0.24) * H * 0.04, gait = Math.sin(af * 0.3);
     ctx.shadowBlur = 0;
     ctx.strokeStyle = shade(color, -0.18); ctx.lineWidth = Math.max(1.5, W * 0.03); ctx.lineCap = 'round';
     const tsw = Math.sin(af * 0.18) * W * 0.07;
@@ -402,7 +402,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     return;
   }
   if (shape === 'pigeon') {
-    const W = w, H = h, bob = Math.sin(af * 0.18) * H * 0.05;
+    const W = w * 0.5, H = h * 0.5, bob = Math.sin(af * 0.18) * H * 0.05;
     ctx.shadowBlur = 0;
     ctx.fillStyle = shade(color, -0.22); ctx.beginPath(); ctx.moveTo(-W * 0.28, H * 0.1); ctx.lineTo(-W * 0.58, H * 0.16); ctx.lineTo(-W * 0.5, -H * 0.04); ctx.closePath(); ctx.fill();   // tail fan
     ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(0, H * 0.08, W * 0.34, H * 0.18, 0, 0, Math.PI * 2); ctx.fill();   // body
@@ -462,7 +462,7 @@ export function drawSkinShape(ctx: CanvasRenderingContext2D, shape: SkinShape, c
     return;
   }
   if (shape === 'cow') {
-    const W = w * 1.1, H = h, sway = Math.sin(af * 0.1) * H * 0.02;
+    const W = w * 2.2, H = h * 2, sway = Math.sin(af * 0.1) * H * 0.02;
     ctx.shadowBlur = 0;
     ctx.strokeStyle = shade(color, -0.2); ctx.lineWidth = Math.max(2, W * 0.045); ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-W * 0.36, H * 0.0); ctx.quadraticCurveTo(-W * 0.56, H * 0.18, -W * 0.5, H * 0.34 + sway); ctx.stroke();
