@@ -31,6 +31,9 @@
 // the '>' / '<' stair cells (a quick lift up/down a storey). A single-grid level (just `rows`) is one
 // flat floor, so old realms keep working untouched.
 
+import { supabase } from '../supabase';
+import { ownerId } from '../rooms';
+
 export type Palette = {
   ceil: [number, number, number];   // ceiling colour (top of the world)
   floor: [number, number, number];  // default floor colour
@@ -511,6 +514,49 @@ export function newLevelId(): string {
 // doesn't form a solid ceiling — the designer carves platforms/walls into it.
 export const blankAirRows = (w: number, h: number): string[] =>
   Array.from({ length: h }, () => AIR.repeat(w));
+
+// ── Shared realms (Supabase `realms` table) ──────────────────────────────────────────────────────
+// localStorage is the local-first cache; the DB is what makes a realm visible to OTHER players. The
+// designer pushes here on save, and entering a portal fetches by id when it isn't cached locally.
+// Everything degrades to localStorage-only if the env/table is missing (supabase === null).
+
+// Push a realm to the shared store so a portal pointing at it works for everyone (not just the author).
+export async function saveRealmRemote(level: Level3D): Promise<boolean> {
+  saveLevel(level);                                   // always keep the fast local copy
+  if (!supabase) return false;
+  let author: string | undefined;
+  try { author = await ownerId(); } catch { /* anon */ }
+  const { error } = await supabase.from('realms').upsert(
+    { id: level.id, name: level.name, data: level, author, updated_at: new Date().toISOString() },
+    { onConflict: 'id' },
+  );
+  return !error;
+}
+
+// Fetch a realm by id from the shared store (used when a player walks a portal to a realm they didn't
+// build, so it isn't in their localStorage). Caches it locally on success for instant revisits.
+export async function getRealmRemote(id: string): Promise<Level3D | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.from('realms').select('data').eq('id', id).limit(1).maybeSingle();
+  const lvl = (data?.data as Level3D | undefined) ?? null;
+  if (lvl) { try { saveLevel(lvl); } catch { /* quota */ } }
+  return lvl;
+}
+
+// All shared realms (most recent first) — for the designer's library, merged with builtins + local.
+export async function fetchRealmsRemote(): Promise<Level3D[]> {
+  if (!supabase) return [];
+  const { data } = await supabase.from('realms').select('data').order('updated_at', { ascending: false }).limit(120);
+  return (data ?? []).map((r: { data: Level3D }) => r.data).filter(Boolean);
+}
+
+// Remove a realm from the shared store (and the local cache).
+export async function deleteRealmRemote(id: string): Promise<boolean> {
+  deleteLevel(id);
+  if (!supabase) return false;
+  const { error } = await supabase.from('realms').delete().eq('id', id);
+  return !error;
+}
 
 export function blankLevel(w = 12, h = 12): Level3D {
   const rows: string[] = [];

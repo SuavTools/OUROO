@@ -7,7 +7,8 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  type Level3D, type Floor3D, ATMOS, SKIES, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId, blankAirRows, isAir, AIR,
+  type Level3D, type Floor3D, ATMOS, SKIES, listLevels, getLevel, blankLevel, isBuiltin, newLevelId, blankAirRows, isAir, AIR,
+  saveRealmRemote, fetchRealmsRemote, deleteRealmRemote,
 } from '@/lib/raycast/levels';
 import { RaycastCanvas } from './RaycastCanvas';
 import { NpcEditor, type NpcData } from './NpcEditor';
@@ -112,6 +113,8 @@ export const RaycastDesigner: React.FC<{
   const [npcCell, setNpcCell] = useState<{ x: number; y: number } | null>(null);   // open the builder for this cell
   const [rectMode, setRectMode] = useState(false);   // drag a rectangle and fill it in one stroke
   const [rect, setRect] = useState<{ ax: number; ay: number; bx: number; by: number } | null>(null);   // live rect drag
+  const [libRealms, setLibRealms] = useState<Level3D[]>(() => listLevels());   // builtins + local; merged with shared on open
+  const [libLoading, setLibLoading] = useState(false);
   const painting = useRef(false);
 
   const floors = level.floors ?? [{ rows: level.rows, heights: level.heights, npcs: level.npcs }];
@@ -245,22 +248,34 @@ export const RaycastDesigner: React.FC<{
     // Builtins are read-only — fork to a fresh id so the original demo stays intact.
     let toSave = collapse(level);
     if (builtin) { toSave = { ...toSave, id: newLevelId(), name: level.name + ' (copy)' }; setLevel(toFloors(toSave)); }
-    saveLevel(toSave);
     setSaved(true);
+    void saveRealmRemote(toSave);   // shared store (also writes the local cache) → portal works for everyone
+  };
+
+  // Open the library and merge in realms shared by other players (builtins + local first, then shared).
+  const openLibrary = async () => {
+    setLibrary(true); setLibLoading(true);
+    const remote = await fetchRealmsRemote().catch(() => [] as Level3D[]);
+    const byId = new Map<string, Level3D>();
+    for (const l of listLevels()) byId.set(l.id, l);
+    for (const l of remote) if (!isBuiltin(l.id)) byId.set(l.id, l);
+    setLibRealms([...byId.values()]);
+    setLibLoading(false);
   };
 
   const startNew = () => { setLevel(toFloors(blankLevel())); setFloorIdx(0); setSaved(false); setLibrary(false); };
-  const load = (id: string) => { const l = getLevel(id); if (l) { setLevel(toFloors(l)); setFloorIdx(0); setSaved(true); setLibrary(false); } };
-  const remove = (id: string) => { deleteLevel(id); if (id === level.id) startNew(); };
+  const load = (id: string) => { const l = libRealms.find(x => x.id === id) ?? getLevel(id); if (l) { setLevel(toFloors(l)); setFloorIdx(0); setSaved(true); setLibrary(false); } };
+  const remove = (id: string) => { void deleteRealmRemote(id); setLibRealms(rs => rs.filter(r => r.id !== id)); if (id === level.id) startNew(); };
 
   const allRows = floors.flatMap(f => f.rows);
   const hasSpawn = allRows.some(r => r.includes('S'));   // spawn can live on any storey
   const hasExit = allRows.some(r => r.includes('E'));
 
-  // Done → save the realm (so a portal can reference it) and hand its id back to the room.
-  const finish = () => {
+  // Done → save the realm to the SHARED store (so a portal can reference it from any account) and hand
+  // its id back to the room. Awaits the upsert so the realm exists server-side before a portal arms it.
+  const finish = async () => {
     const out = collapse(level);
-    if (hasSpawn && !builtin) { saveLevel(out); onExit?.(out.id); }
+    if (hasSpawn && !builtin) { await saveRealmRemote(out); onExit?.(out.id); }
     else onExit?.(builtin ? level.id : undefined);
   };
 
@@ -288,7 +303,7 @@ export const RaycastDesigner: React.FC<{
           placeholder="Realm name"
         />
         <div className="flex-1" />
-        <button onClick={() => setLibrary(v => !v)} className="text-[11px] font-mono uppercase tracking-wider border border-white/20 px-3 py-1.5 hover:border-white/50">Library</button>
+        <button onClick={() => (library ? setLibrary(false) : openLibrary())} className="text-[11px] font-mono uppercase tracking-wider border border-white/20 px-3 py-1.5 hover:border-white/50">Library</button>
         <button onClick={startNew} className="text-[11px] font-mono uppercase tracking-wider border border-white/20 px-3 py-1.5 hover:border-white/50">New</button>
         <button onClick={finish} className="text-[11px] font-mono uppercase tracking-wider text-brandYellow border border-brandYellow px-3 py-1.5 hover:bg-brandYellow hover:text-black">Done → portal</button>
       </div>
@@ -442,8 +457,8 @@ export const RaycastDesigner: React.FC<{
       {library && (
         <div className="absolute inset-0 z-40 bg-black/85 flex items-center justify-center p-6" onClick={() => setLibrary(false)}>
           <div className="w-full max-w-md border border-[#1ee0ff]/40 bg-black p-5 space-y-3 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#1ee0ff]">Realm library</p>
-            {listLevels().map(l => (
+            <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-[#1ee0ff]">Realm library {libLoading && <span className="text-white/30 normal-case tracking-normal">· syncing…</span>}</p>
+            {libRealms.map(l => (
               <div key={l.id} className="flex items-center gap-2 border border-white/15 px-3 py-2">
                 <button onClick={() => load(l.id)} className="flex-1 text-left text-sm font-mono hover:text-[#1ee0ff]">
                   {l.name} <span className="text-white/30 text-[10px]">{isBuiltin(l.id) ? 'demo' : l.rows[0].length + '×' + l.rows.length}</span>

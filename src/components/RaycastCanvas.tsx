@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS,
+  STAIR_UP, STAIR_DOWN, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -44,7 +44,22 @@ export const RaycastCanvas: React.FC<{
   onReward?: (n: number) => void; // crystals grabbed → economy hook (optional)
 }> = ({ levelId, level: levelProp, isMobileStage = false, onExit, onReward }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const level = levelProp ?? (levelId ? getLevel(levelId) : null);
+
+  // Resolve the realm. A live designer level wins; otherwise load by id — builtin/local-cache first
+  // (instant, synchronous), then the SHARED store. That last step is the fix for "works for me, not my
+  // mate": a realm an admin built lives in the DB, so a portal to it now loads on any account/device.
+  const [level, setLevelState] = useState<Level3D | null>(() => levelProp ?? (levelId ? getLevel(levelId) : null));
+  const [loadingRealm, setLoadingRealm] = useState(false);
+  useEffect(() => {
+    if (levelProp) { setLevelState(levelProp); return; }
+    if (!levelId) { setLevelState(null); return; }
+    const local = getLevel(levelId);
+    if (local) { setLevelState(local); setLoadingRealm(false); return; }   // builtin or already cached
+    setLevelState(null); setLoadingRealm(true);
+    let cancelled = false;
+    getRealmRemote(levelId).then(r => { if (!cancelled) { setLevelState(r); setLoadingRealm(false); } }).catch(() => { if (!cancelled) setLoadingRealm(false); });
+    return () => { cancelled = true; };
+  }, [levelId, levelProp]);
 
   // HUD mirror (kept tiny — only what the React overlay needs)
   const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false, breath: 100, submerged: false });
@@ -1517,8 +1532,10 @@ export const RaycastCanvas: React.FC<{
   if (!level) {
     return (
       <div className="relative w-full h-full flex flex-col items-center justify-center bg-black text-center gap-4">
-        <p className="font-mono text-sm text-white/60">That realm has collapsed — no level data.</p>
-        <button onClick={() => onExit?.()} className="border border-white/20 text-white/70 text-xs uppercase tracking-widest px-5 py-2.5 hover:bg-white hover:text-black transition-colors">Back</button>
+        {loadingRealm
+          ? <p className="font-mono text-sm text-[#1ee0ff]/80 animate-pulse">summoning realm…</p>
+          : <p className="font-mono text-sm text-white/60">That realm has collapsed — no level data.</p>}
+        {!loadingRealm && <button onClick={() => onExit?.()} className="border border-white/20 text-white/70 text-xs uppercase tracking-widest px-5 py-2.5 hover:bg-white hover:text-black transition-colors">Back</button>}
       </div>
     );
   }
