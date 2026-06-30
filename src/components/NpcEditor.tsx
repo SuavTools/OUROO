@@ -43,6 +43,7 @@ export type HazardSpec = {
   onKill?: KillTrigger;
   deadLines?: string[];           // dialogue after defeat (policy 'once')
   provoked?: boolean;             // stays neutral until any NPC in the room is attacked, then goes aggressive
+  passive?: boolean;              // never chases or attacks — takes damage and drops loot but won't fight back
 };
 
 // Clamp/validate an untrusted hazard blob from storage or the network. Returns undefined for a
@@ -81,6 +82,7 @@ export function sanitizeHazard(o: unknown): HazardSpec | undefined {
     onKill,
     deadLines: Array.isArray(h.deadLines) ? (h.deadLines as unknown[]).map(s => String(s).slice(0, 120)).slice(0, 8) : undefined,
     ...(h.provoked ? { provoked: true } : {}),
+    ...(h.passive ? { passive: true } : {}),
   };
 }
 
@@ -140,6 +142,7 @@ export const NpcEditor: React.FC<{
     ih?.onKill ? ('text' in ih.onKill ? ih.onKill.text : 'skinId' in ih.onKill ? ih.onKill.skinId : ih.onKill.flag) : ''
   );
   const [provokedMode, setProvokedMode] = useState(!!ih?.provoked);
+  const [passiveMode, setPassiveMode] = useState(!!ih?.passive);
 
   if (!open) return null;
   const setP = (patch: Partial<PersonSpec>) => setPerson(p => ({ ...p, ...patch }));
@@ -176,6 +179,7 @@ export const NpcEditor: React.FC<{
         policy, respawnMs: respawnMin * 60000, onKill,
         deadLines: policy === 'once' ? splitLines(deadLinesText) : undefined,
         ...(provokedMode ? { provoked: true } : {}),
+        ...(passiveMode ? { passive: true } : {}),
       });
     }
     onPlace({ n: name.trim().slice(0, 24), a, l, ...(h ? { h } : {}), ...(size !== 1 ? { sz: size } : {}) });
@@ -312,6 +316,17 @@ export const NpcEditor: React.FC<{
                   <span className="text-[10px] text-white/35 ml-2">— stays neutral until another NPC in the room is attacked</span>
                 </span>
                 <span className={`w-9 h-5 rounded-full border flex items-center px-0.5 transition-colors shrink-0 ml-3 ${provokedMode ? 'bg-[#ff5d5d] border-[#ff5d5d] justify-end' : 'bg-white/5 border-white/20 justify-start'}`}>
+                  <span className="w-4 h-4 rounded-full bg-white" />
+                </span>
+              </button>
+
+              <button onClick={() => setPassiveMode(p => !p)}
+                className="w-full flex items-center justify-between px-3 py-2 border border-white/10 bg-white/[0.03] hover:border-white/20 transition-colors">
+                <span className="text-left">
+                  <span className="text-[11px] uppercase tracking-widest text-white/70 font-bold">Passive</span>
+                  <span className="text-[10px] text-white/35 ml-2">— never fights back; takes damage and drops loot but won't chase or attack</span>
+                </span>
+                <span className={`w-9 h-5 rounded-full border flex items-center px-0.5 transition-colors shrink-0 ml-3 ${passiveMode ? 'bg-[#ff5d5d] border-[#ff5d5d] justify-end' : 'bg-white/5 border-white/20 justify-start'}`}>
                   <span className="w-4 h-4 rounded-full bg-white" />
                 </span>
               </button>

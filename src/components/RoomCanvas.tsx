@@ -2654,7 +2654,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         // Chase target is the closest non-KO'd player (local OR remote). All clients have the same remote
         // positions via 'pos' broadcasts, so they independently converge on the same chase target — giving
         // every observer a consistent view of the NPC without any extra coordination.
-        if (n.hz && !n.peaceful && !n.defeated && n.hp != null && n.hz.contactDamage > 0 && (!n.hz.provoked || n.provoked)) {
+        if (n.hz && !n.peaceful && !n.defeated && n.hp != null && n.hz.contactDamage > 0 && !n.hz.passive && (!n.hz.provoked || n.provoked)) {
           const nowKo = Date.now();
           let chaseTarget: { fx: number; fy: number } = sf;
           let chaseDist = Math.hypot(n.fx - sf.fx, n.fy - sf.fy);
