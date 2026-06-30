@@ -156,6 +156,15 @@ export const ITEMS: Item[] = [
   },
   // ---- combat: heals (always bought, consumed on use) ----
   {
+    id: 'steak',
+    name: 'Steak',
+    description: 'A juicy cut. Restores 15 health.',
+    useType: 'single',
+    effect: { type: 'heal', hp: 15 },
+    price: 10,
+    emoji: '🥩',
+  },
+  {
     id: 'food',
     name: 'Food',
     description: 'A quick bite. Restores 25 health.',
