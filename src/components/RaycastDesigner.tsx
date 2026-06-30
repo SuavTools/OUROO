@@ -5,7 +5,7 @@
 // and test-play instantly in the real raycaster. Saved realms appear in the room's portal maker, so a
 // mod can drop a portal whose destination is `r3d:<id>` and summon the world they just built.
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   type Level3D, type Floor3D, ATMOS, SKIES, listLevels, getLevel, blankLevel, isBuiltin, newLevelId, blankAirRows, isAir, AIR,
   saveRealmRemote, fetchRealmsRemote, deleteRealmRemote,
@@ -41,6 +41,105 @@ const BRUSHES: Brush[] = [
   { ch: 'S', label: 'Spawn', color: '#ffd400' },
 ];
 const colorOf = (ch: string) => BRUSHES.find(b => b.ch === ch)?.color ?? '#26242f';
+
+// Cell classification for the side elevation: walls are solid one-storey columns; pits/air are gaps;
+// everything else is a thin walkable slab sitting at the floor's height.
+const isWallCh = (c: string) => /[#1-4]/.test(c);
+const isGapCh = (c: string) => isAir(c) || c === '~';
+
+// ── SIDE ELEVATION (cross-section) ────────────────────────────────────────────────────────────────
+// A read-only canvas that slices the realm vertically so you can SEE the stack: storeys at their true
+// heights, walls as blocks, walkable slabs as thin shelves, air/pits as gaps. The slice follows the
+// cell you hover in the top-down grid. Click a storey here to jump to editing it.
+const SE_SL = 3;          // height-levels per storey (matches STOREY_LEVELS in the raycaster)
+const SE_SLAB = 0.55;     // drawn thickness of a walkable slab, in height-levels
+const SideElevation: React.FC<{
+  floors: Floor3D[]; axis: 'front' | 'side'; slice: number; editIdx: number; w: number; h: number;
+  onPick?: (k: number) => void;
+}> = ({ floors, axis, slice, editIdx, w, h, onPick }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const geom = useRef({ padY: 0, plotH: 1, maxTop: 1, nF: 1 });
+
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    const nF = floors.length;
+    const nCells = axis === 'front' ? w : h;
+    const at = (k: number, i: number): [string, number] => {
+      const f = floors[k]; if (!f) return [' ', 0];
+      const row = axis === 'front' ? f.rows[slice] : f.rows[i];
+      const ch = (axis === 'front' ? row?.[i] : row?.[slice]) ?? ' ';
+      const hsrc = axis === 'front' ? f.heights?.[slice]?.[i] : f.heights?.[i]?.[slice];
+      const hd = hsrc && /[0-9]/.test(hsrc) ? +hsrc : 0;
+      return [ch, hd];
+    };
+
+    const draw = () => {
+      const DPR = window.devicePixelRatio || 1;
+      const cssW = cv.clientWidth || 1, cssH = cv.clientHeight || 1;
+      cv.width = Math.round(cssW * DPR); cv.height = Math.round(cssH * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      let maxTop = nF * SE_SL;
+      for (let k = 0; k < nF; k++) for (let i = 0; i < nCells; i++) {
+        const [ch, hd] = at(k, i); const base = k * SE_SL;
+        if (isWallCh(ch)) maxTop = Math.max(maxTop, base + SE_SL);
+        else if (!isGapCh(ch)) maxTop = Math.max(maxTop, base + hd + SE_SLAB);
+      }
+      maxTop += 0.5;
+
+      const padX = 16, padY = 5;
+      const plotW = cssW - padX - 5, plotH = cssH - 2 * padY;
+      geom.current = { padY, plotH, maxTop, nF };
+      const cw = plotW / nCells;
+      const Y = (lvl: number) => padY + plotH - (lvl / maxTop) * plotH;
+      const X = (i: number) => padX + i * cw;
+
+      // editing-storey highlight band + per-storey ground lines and index labels
+      ctx.fillStyle = 'rgba(30,224,255,0.06)';
+      ctx.fillRect(padX, Y((editIdx + 1) * SE_SL), plotW, Y(editIdx * SE_SL) - Y((editIdx + 1) * SE_SL));
+      ctx.font = '8px ui-monospace, monospace'; ctx.textBaseline = 'middle';
+      for (let k = 0; k <= nF; k++) {
+        const y = Y(k * SE_SL);
+        ctx.strokeStyle = k === editIdx ? 'rgba(30,224,255,0.4)' : 'rgba(255,255,255,0.07)';
+        ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padX, y); ctx.lineTo(cssW - 5, y); ctx.stroke();
+        if (k < nF) { ctx.fillStyle = k === editIdx ? '#1ee0ff' : 'rgba(255,255,255,0.3)'; ctx.textAlign = 'right'; ctx.fillText(String(k), padX - 3, Y(k * SE_SL + SE_SL / 2)); }
+      }
+
+      // the stack, storey by storey
+      for (let k = 0; k < nF; k++) {
+        const base = k * SE_SL;
+        for (let i = 0; i < nCells; i++) {
+          const [ch, hd] = at(k, i); const x = X(i);
+          if (isWallCh(ch)) {
+            const yT = Y(base + SE_SL), yB = Y(base);
+            ctx.fillStyle = colorOf(ch); ctx.fillRect(x + 0.5, yT, Math.max(1, cw - 1), yB - yT);
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.5; ctx.strokeRect(x + 0.5, yT, Math.max(1, cw - 1), yB - yT);
+          } else if (!isGapCh(ch)) {
+            const yT = Y(base + hd + SE_SLAB), yB = Y(base + hd);
+            ctx.fillStyle = colorOf(ch); ctx.fillRect(x + 0.5, yT, Math.max(1, cw - 1), Math.max(1.5, yB - yT));
+            const m = ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'C' ? '◆' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'L' ? '' : '';
+            if (m && cw > 5) { ctx.fillStyle = ch === 'S' ? '#ffd400' : ch === 'E' ? '#1ee0ff' : ch === 'C' ? '#9beaff' : '#fff'; ctx.font = `${Math.min(cw, 12)}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText(m, x + cw / 2, yT - 1); ctx.textBaseline = 'middle'; ctx.font = '8px ui-monospace, monospace'; }
+          }
+        }
+      }
+    };
+
+    draw();
+    const ro = new ResizeObserver(draw); ro.observe(cv);
+    return () => ro.disconnect();
+  }, [floors, axis, slice, editIdx, w, h]);
+
+  const click = (e: React.MouseEvent) => {
+    const cv = ref.current; if (!cv || !onPick) return;
+    const r = cv.getBoundingClientRect();
+    const { padY, plotH, maxTop, nF } = geom.current;
+    const lvl = (1 - (e.clientY - r.top - padY) / plotH) * maxTop;
+    onPick(Math.max(0, Math.min(nF - 1, Math.floor(lvl / SE_SL))));
+  };
+  return <canvas ref={ref} onClick={click} className="w-full h-full block cursor-pointer" />;
+};
 
 // Resize a rows[] grid, preserving overlap; new cells are walls on the edge, floor inside.
 function resizeRows(rows: string[], w: number, h: number): string[] {
@@ -116,6 +215,9 @@ export const RaycastDesigner: React.FC<{
   const [libRealms, setLibRealms] = useState<Level3D[]>(() => listLevels());   // builtins + local; merged with shared on open
   const [libLoading, setLibLoading] = useState(false);
   const painting = useRef(false);
+  const [sideOpen, setSideOpen] = useState(!isMobileStage);   // cross-section / elevation panel
+  const [sideAxis, setSideAxis] = useState<'front' | 'side'>('front');
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);   // which cell the slice tracks
 
   const floors = level.floors ?? [{ rows: level.rows, heights: level.heights, npcs: level.npcs }];
   const fIdx = Math.max(0, Math.min(floorIdx, floors.length - 1));
@@ -124,6 +226,8 @@ export const RaycastDesigner: React.FC<{
 
   const rows = cur.rows;
   const w = rows[0]?.length ?? 0, h = rows.length;
+  // The slice the side elevation shows: hovered row (front view) or column (side view), else the middle.
+  const slice = sideAxis === 'front' ? Math.min(h - 1, hover?.y ?? Math.floor(h / 2)) : Math.min(w - 1, hover?.x ?? Math.floor(w / 2));
   const builtin = isBuiltin(level.id);
   const spawnFi = Math.max(0, floors.findIndex(f => f.rows.some(r => r.includes('S'))));   // the ground = the spawn storey
   const floorRel = fIdx - spawnFi;
@@ -408,7 +512,8 @@ export const RaycastDesigner: React.FC<{
           </div>
         </div>
 
-        {/* Grid */}
+        {/* Canvas column: top-down paint grid + side elevation */}
+        <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-auto p-4 flex items-start justify-center"
           onPointerUp={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
           onPointerLeave={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
@@ -423,15 +528,16 @@ export const RaycastDesigner: React.FC<{
                 const belowCh = fIdx > 0 ? floors[fIdx - 1]?.rows[y]?.[x] : undefined;   // what's directly under this cell
                 const ghost = air && belowCh && !isAir(belowCh);                          // show through-floor so overhangs line up
                 const inRect = !!rect && x >= Math.min(rect.ax, rect.bx) && x <= Math.max(rect.ax, rect.bx) && y >= Math.min(rect.ay, rect.by) && y <= Math.max(rect.ay, rect.by);
+                const onSlice = sideOpen && (sideAxis === 'front' ? y === slice : x === slice);   // the line the cross-section is cutting
                 return (
                   <button
                     key={`${x}-${y}`}
                     onPointerDown={() => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
-                    onPointerEnter={() => { if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
+                    onPointerEnter={() => { setHover({ x, y }); if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
                     className="flex items-center justify-center relative"
                     style={{
                       width: cellPx, height: cellPx, background: colorOf(ch),
-                      outline: inRect ? '1px solid rgba(30,224,255,0.9)' : '1px solid rgba(255,255,255,0.05)',
+                      outline: inRect ? '1px solid rgba(30,224,255,0.9)' : onSlice ? '1px solid rgba(155,234,255,0.55)' : '1px solid rgba(255,255,255,0.05)',
                       backgroundImage: air ? 'repeating-linear-gradient(45deg,rgba(255,255,255,0.04) 0 2px,transparent 2px 5px)' : undefined,
                       fontSize: cellPx * 0.5, lineHeight: 1,
                       boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
@@ -446,6 +552,35 @@ export const RaycastDesigner: React.FC<{
               })
             )}
           </div>
+        </div>
+
+        {/* Side elevation — a vertical cross-section so you can see the stack while you build */}
+        {sideOpen ? (
+          <div className="shrink-0 border-t border-white/10 bg-[#070710]">
+            <div className="flex items-center gap-2 px-3 py-1.5">
+              <span className="font-mono text-[9px] uppercase tracking-widest text-white/40">◧ Cross-section</span>
+              <div className="flex gap-1">
+                {(['front', 'side'] as const).map(a => (
+                  <button key={a} onClick={() => setSideAxis(a)}
+                    className={`text-[9px] font-mono px-2 py-0.5 border transition-colors ${sideAxis === a ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/55 hover:border-white/40'}`}>
+                    {a === 'front' ? 'Front (W↔E)' : 'Side (N↔S)'}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[9px] font-mono text-white/30">{sideAxis === 'front' ? `row ${slice}` : `col ${slice}`} · hover grid to slice · click a storey to edit it</span>
+              <div className="flex-1" />
+              <button onClick={() => setSideOpen(false)} className="text-[9px] font-mono text-white/40 border border-white/15 px-2 py-0.5 hover:border-white/40">hide</button>
+            </div>
+            <div className="h-44 px-2 pb-2">
+              <SideElevation floors={floors} axis={sideAxis} slice={slice} editIdx={fIdx} w={w} h={h} onPick={setFloorIdx} />
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setSideOpen(true)}
+            className="shrink-0 border-t border-white/10 bg-[#070710] py-1.5 text-[9px] font-mono uppercase tracking-widest text-white/40 hover:text-[#1ee0ff]">
+            ◧ Show cross-section
+          </button>
+        )}
         </div>
       </div>
 

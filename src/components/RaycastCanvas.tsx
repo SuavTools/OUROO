@@ -146,12 +146,17 @@ export const RaycastCanvas: React.FC<{
     const grids = floors.map(f => f.rows);
     const baseZ = (k: number) => k * STOREY_H;        // floor height of layer k
     const cellL = (k: number, x: number, y: number) => (k < 0 || k >= nLayers) ? '#' : cellAt(grids[k], x, y);
+    // Per-cell terrain height ALSO applies inside a stacked realm: the Raise/Lower tool lifts a walkable
+    // slab within its storey (capped so it never pokes into the floor above). This is what lets raised
+    // terrain and storeys coexist instead of being one-or-the-other.
+    const hLvl = (k: number, x: number, y: number) => { const ch = floors[k]?.heights?.[y]?.[x]; return ch && ch >= '0' && ch <= '9' ? ch.charCodeAt(0) - 48 : 0; };
+    const slabZ = (k: number, x: number, y: number) => baseZ(k) + Math.min(hLvl(k, x, y) * STEP_UNIT, STOREY_H - 0.05);
     const isSolidProp = (ch: string) => ch === 'T' || ch === 'r' || ch === 'l';
     const bodyBlocks = (ch: string) => isWall(ch) || isSolidProp(ch);      // fills its whole storey → blocks your body
     // every standable surface in a column: wall roofs (base+STOREY_H) and thin slab tops (base).
     const standTops = (x: number, y: number): number[] => {
       const t: number[] = [];
-      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(baseZ(k)); }
+      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); }
       return t;
     };
     // highest surface at or just under `feet` — the ground you rest on (−∞ = nothing → you're falling).
@@ -168,7 +173,8 @@ export const RaycastCanvas: React.FC<{
       let lo = Infinity; for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (b >= head - 0.001 && b < lo) lo = b; } return lo;
     };
     // which layer's surface you're standing on (for hazard/pickup/exit effects under your feet).
-    const layerAt = (z: number) => Math.max(0, Math.min(nLayers - 1, Math.round(z / STOREY_H)));
+    // floor() not round() so raised terrain (a slab lifted within its storey) still reads as its own layer.
+    const layerAt = (z: number) => Math.max(0, Math.min(nLayers - 1, Math.floor(z / STOREY_H + 0.001)));
 
     // Pull crystals/exit/props, stalkers and NPCs from EVERY layer — they all render at once (you see
     // the crystal on the floor above through a hole), each tagged with its layer k for its height.
@@ -217,6 +223,7 @@ export const RaycastCanvas: React.FC<{
     let viewZ = pz;                                                  // eye height eased toward pz (smooth steps)
     let pitch = 0;                                                   // look up/down (screen px)
     let jz = 0, vz = 0, grounded = true;                            // jump: hop height, velocity, on-ground
+    let groundZ = pz;                                               // height of the surface you last stood on (for fall damage)
     let atkCd = 0, atkAnim = 0;                                      // weapon cooldown + swing animation
     let breath = 100, submerged = false;                            // swimming: air left, are you under water
     let hp = MAX_HP;
@@ -1159,15 +1166,28 @@ export const RaycastCanvas: React.FC<{
         bob += sp;
       }
 
-      // gravity + landing (real Z)
+      // gravity + landing (real Z), with graduated fall damage. A 1-block drop is safe (you hop down
+      // freely), ~2 blocks slices your HP, ~3 blocks is lethal. `groundZ` = the surface you stepped off,
+      // so a jump can't inflate the fall and climbing UP never hurts.
       const cx = Math.floor(px), cy = Math.floor(py);
+      const wasGrounded = grounded;
       vz -= GRAV;
       pz += vz;
       if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
       const support = supportAt(cx, cy, pz);
-      if (support > -Infinity && pz <= support) { pz = support; vz = 0; grounded = true; }
-      else grounded = false;
-      if (support === -Infinity && pz < -0.8) { hp = 0; respawn = 70; beep(180, 0.5, 'sawtooth', 0.06); }   // fell into the void
+      const fallDamage = (drop: number): boolean => {            // drop in world height → true if it killed you
+        const blocks = Math.round(drop / STOREY_H);
+        if (blocks >= 3) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.07); return true; }
+        if (blocks >= 2) { hp -= 50; shake = 4; beep(120, 0.22, 'sawtooth', 0.06); if (hp <= 0) { hp = 0; respawn = 70; return true; } }
+        return false;
+      };
+      if (support > -Infinity && pz <= support) {
+        if (!wasGrounded && vz < 0) fallDamage(groundZ - support);   // just touched down — charge for the drop
+        pz = support; vz = 0; grounded = true; groundZ = support;
+      } else grounded = false;
+      if (support === -Infinity && pz < -0.8) {                       // fell off the map — damage by how far, then reset
+        if (!fallDamage(groundZ - pz)) { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = baseZ(spawnFloor); vz = 0; grounded = true; groundZ = pz; shake = Math.min(4, shake + 2); beep(200, 0.18, 'sine', 0.05); }
+      }
       // smooth the eye for stair lifts/landings, but keep jumps crisp
       if (grounded) viewZ += (pz - viewZ) * 0.4; else viewZ = pz;
 
@@ -1314,7 +1334,7 @@ export const RaycastCanvas: React.FC<{
               if (zt < eye) drawHoriz(x, c, zt, dEnter, dExit, rdx, rdy, true);   // walk on its roof
               if (zb > eye) drawUnder(x, c, zb, dEnter, dExit, rdx, rdy);          // its underside (rare)
             } else {
-              const z = baseZ(k);
+              const z = slabZ(k, mapX, mapY);                                      // raised terrain lifts the slab
               if (z < eye) drawHoriz(x, c, z, dEnter, dExit, rdx, rdy, false);     // floor seen from above
               else if (z > eye) drawUnder(x, c, z, dEnter, dExit, rdx, rdy);       // overhang underside above you
             }
