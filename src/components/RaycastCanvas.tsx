@@ -31,7 +31,7 @@ const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.
 const EYE_BASE = 0.5;              // eye height above the floor you stand on
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 
-type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree'; key?: string };
+type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' | 'bush' | 'flower' | 'rock' | 'lamp'; key?: string };
 
 export const RaycastCanvas: React.FC<{
   levelId?: string;
@@ -105,6 +105,10 @@ export const RaycastCanvas: React.FC<{
           if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
           else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
           else if (c === 'T') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree' });
+          else if (c === 'b') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'bush' });
+          else if (c === 'f') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'flower' });
+          else if (c === 'r') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'rock' });
+          else if (c === 'l') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'lamp' });
           else if (c === TUNNEL_CHAR) tunnels.push({ x: x + 0.5, y: y + 0.5 });
           else if (c === MONSTER_CHAR) enemies.push({ x: x + 0.5, y: y + 0.5, hx: x + 0.5, hy: y + 0.5, chasing: false, wx: x + 0.5, wy: y + 0.5, wt: 0, hit: 0, hp: 3, flash: 0 });
         }
@@ -296,7 +300,7 @@ export const RaycastCanvas: React.FC<{
       for (const [sx, sy] of pts) {
         const cx = Math.floor(sx), cy = Math.floor(sy);
         const c = cellAt(rows, cx, cy);
-        if (isWall(c) || c === 'T') return true;          // trees are solid trunks
+        if (isWall(c) || c === 'T' || c === 'r' || c === 'l') return true;   // trees, rocks, lamp posts are solid
         if (heightMap && tooTall(cx, cy, base)) return true;
       }
       return false;
@@ -594,9 +598,14 @@ export const RaycastCanvas: React.FC<{
           } else if (c === STAIR_DOWN) {                  // stairs down — a dark recessed shaft
             const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28;
             fr = 40 * st; fg = 44 * st; fb = 60 * st; emissive = true;
-          } else if (c === 'g') {                         // grass
+          } else if (c === 'g' || c === 'b' || c === 'f') {  // grass (also under bushes/flowers)
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88;
             fr = 46 * chk; fg = 120 * chk; fb = 48 * chk;
+          } else if (c === 'p') {                          // pavement — light stone tiles with grout
+            const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy);
+            const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1;
+            const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9;
+            fr = 150 * chk * grout; fg = 150 * chk * grout; fb = 162 * chk * grout;
           } else {                                        // normal floor with a faint checker
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.86;
             fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk;
@@ -690,7 +699,8 @@ export const RaycastCanvas: React.FC<{
                 else if (curCh === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; fr = 180 * st; fg = 200 * st; fb = 150 * st; emis = true; }
                 else if (curCh === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; fr = 40 * st; fg = 44 * st; fb = 60 * st; emis = true; }
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
-                else if (curCh === 'g') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
+                else if (curCh === 'g' || curCh === 'b' || curCh === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
+                else if (curCh === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; fr = 150 * chk * grout; fg = 150 * chk * grout; fb = 162 * chk * grout; }
                 else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.94; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
                 let r: number, g: number, bl: number;
                 if (emis) { r = fr; g = fg; bl = fb; } else { [r, g, bl] = fogMix(fr, fg, fb, fogTd(d)); const lf = lightAt(d); r *= lf; g *= lf; bl *= lf; }
@@ -772,12 +782,15 @@ export const RaycastCanvas: React.FC<{
         const eyeH2 = heightMap ? pz + EYE_BASE + jz : 0.5;
         const groundY = horizon + ((eyeH2 - zfS) * H) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * H) / camY) : 0;
-        const sz = kind === 'tree' ? Math.floor(sizeBase * 1.4) : kind === 'exit' ? sizeBase : Math.floor(sizeBase * 0.55);
+        const szMul = kind === 'tree' ? 1.4 : kind === 'lamp' ? 1.1 : kind === 'rock' ? 0.72 : kind === 'bush' ? 0.62 : kind === 'flower' ? 0.42 : kind === 'exit' ? 1 : 0.55;
+        const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * szMul);
         const half = sz >> 1;
-        // trees stand ON the ground; crystals float; the exit gate sits at the horizon
-        const vCenter = kind === 'tree' ? Math.round(groundY) - half
+        const isGround = kind === 'tree' || kind === 'bush' || kind === 'flower' || kind === 'rock' || kind === 'lamp';
+        // ground props stand ON the floor; crystals float; the exit gate sits at the horizon
+        const vCenter = isGround ? Math.round(groundY) - half
           : (kind === 'exit' ? horizon : horizon + Math.floor(sizeBase * 0.18) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04)) + hShift;
-        const lfTree = kind === 'tree' ? lightAt(camY) : 1;
+        const lfTree = isGround ? lightAt(camY) : 1;
+        const hue = (Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5;   // flower colour variety by tile
         const sx0 = Math.max(0, screenX - half), sx1 = Math.min(W, screenX + half);
         const sy0 = Math.max(0, vCenter - half), sy1 = Math.min(H, vCenter + (kind === 'exit' ? half : 0) + 1);
         const fogT = 1 - 1 / (1 + camY * camY * 0.012);
@@ -793,6 +806,22 @@ export const RaycastCanvas: React.FC<{
             } else if (kind === 'tree') {                 // trunk + leafy canopy (lantern-lit, not emissive)
               if (v > 0.12 && Math.abs(u) < 0.07) { on = true; lit = true; r = 96; g = 64; b = 36; }                    // trunk
               else { const cu = u, cv = v + 0.18; const dd = Math.sqrt(cu * cu + cv * cv * 1.1); if (dd < 0.4) { on = true; lit = true; const sh = 0.7 + 0.3 * Math.sin(u * 9 + v * 9 + tick * 0.05); r = 28 * sh; g = (95 + 40 * (1 - dd / 0.4)) * sh; b = 38 * sh; } }   // canopy
+            } else if (kind === 'bush') {                 // low rounded shrub
+              const cu = u, cv = v - 0.16; const dd = Math.sqrt(cu * cu * 1.15 + cv * cv);
+              if (dd < 0.42) { on = true; lit = true; const sh = 0.7 + 0.3 * Math.sin(u * 12 + v * 10 + tick * 0.04); r = 30 * sh; g = (88 + 46 * (1 - dd / 0.42)) * sh; b = 44 * sh; }
+            } else if (kind === 'flower') {               // slender stem + a coloured bloom
+              if (Math.abs(u) < 0.04 && v > -0.04) { on = true; lit = true; r = 40; g = 112; b = 52; }                  // stem
+              else { const cu = u, cv = v + 0.28; const dd = Math.sqrt(cu * cu + cv * cv);
+                if (dd < 0.2) { on = true; lit = true;
+                  if (dd < 0.06) { r = 250; g = 220; b = 70; }                                                          // golden centre
+                  else { const P = [[235, 80, 90], [235, 150, 60], [210, 90, 220], [90, 150, 240], [240, 240, 250]][hue]; r = P[0]; g = P[1]; b = P[2]; } } }
+            } else if (kind === 'rock') {                 // grey boulder
+              const cu = u, cv = v - 0.2; const dd = Math.sqrt(cu * cu + cv * cv * 1.3);
+              if (dd < 0.44) { on = true; lit = true; const sh = 0.55 + 0.45 * (1 - dd / 0.44) + 0.07 * Math.sin(u * 16); const g0 = 120 * sh; r = g0; g = g0 + 4; b = g0 + 14; }
+            } else if (kind === 'lamp') {                 // post + glowing lantern (the orb lights itself)
+              if (Math.abs(u) < 0.05 && v > -0.18) { on = true; lit = true; r = 52; g = 50; b = 60; }                   // post
+              else { const cu = u, cv = v + 0.34; const dd = Math.sqrt(cu * cu + cv * cv);
+                if (dd < 0.17) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.12); r = 255 * gl; g = 222 * gl; b = 120 * gl; } }   // emissive orb
             } else {                                       // exit — bright cyan archway/beam
               if (Math.abs(u) < 0.34 && v > -0.5) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.2 + y * 0.3); r = 60 * gl; g = 230 * gl; b = 255 * gl; }
             }

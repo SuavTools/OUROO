@@ -21,8 +21,13 @@ const BRUSHES: Brush[] = [
   { ch: '4', label: 'Gold', color: '#a08c46' },
   { ch: '.', label: 'Floor', color: '#26242f' },
   { ch: 'g', label: 'Grass', color: '#2e7830' },
+  { ch: 'p', label: 'Pavement', color: '#969aa6' },
   { ch: 'w', label: 'Water', color: '#1a5aaa' },
   { ch: 'T', label: 'Tree', color: '#1e6b2e' },
+  { ch: 'b', label: 'Bush', color: '#3c8a40' },
+  { ch: 'f', label: 'Flower', color: '#e6557a' },
+  { ch: 'r', label: 'Rock', color: '#8a8a92' },
+  { ch: 'l', label: 'Lamp', color: '#ffd27a' },
   { ch: 'L', label: 'Lava', color: '#ff5a1e' },
   { ch: '~', label: 'Pit', color: '#050308' },
   { ch: 'C', label: 'Crystal', color: '#9beaff' },
@@ -375,7 +380,7 @@ export const RaycastDesigner: React.FC<{
                       boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
                     }}
                   >
-                    {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'O' ? '◎' : ch === '>' ? '▲' : ch === '<' ? '▼' : ''}
+                    {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'b' ? '♧' : ch === 'f' ? '✿' : ch === 'r' ? '●' : ch === 'l' ? '☀' : ch === 'O' ? '◎' : ch === '>' ? '▲' : ch === '<' ? '▼' : ''}
                     {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
                   </button>
                 );

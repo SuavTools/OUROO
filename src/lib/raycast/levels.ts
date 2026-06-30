@@ -7,6 +7,9 @@
 // Cell chars:
 //   '#' '1' '2' '3' '4'  walls (texture variants — block movement)
 //   '.' ' '              floor (walkable)
+//   'g' 'w' 'p'          floors: grass · water (swim/drown) · pavement (stone tiles)
+//   'T' 'b' 'r' 'l'      props: tree & rock & lamp post are SOLID; lamp's orb glows. (billboards)
+//   'f'                  flower (walkable decoration; bloom colour varies by tile)
 //   'L'                  lava  (walkable, but drains HP while you stand in it)
 //   '~'                  pit   (walkable onto — you fall and die)
 //   'C'                  crystal pickup (walkable; grab for a small reward)
@@ -335,6 +338,11 @@ const GLADE: Level3D = (() => {
   for (let y = 4; y <= 7; y++) for (let x = 6; x <= 10; x++) set(x, y, 'w');     // pond
   ([[2, 2], [13, 2], [3, 9], [12, 9], [7, 2], [11, 10], [2, 6], [13, 6]] as [number, number][]).forEach(([x, y]) => set(x, y, 'T'));
   ([[2, 4], [13, 4], [8, 10]] as [number, number][]).forEach(([x, y]) => set(x, y, 'C'));
+  ([[4, 2], [10, 2], [3, 7], [12, 8], [5, 10]] as [number, number][]).forEach(([x, y]) => set(x, y, 'b'));            // bushes
+  ([[2, 3], [11, 2], [14, 4], [3, 5], [12, 5], [9, 10], [4, 9]] as [number, number][]).forEach(([x, y]) => set(x, y, 'f'));  // flowers
+  set(8, 3, 'r');                                                                                                   // a boulder
+  set(13, 10, 'l'); set(2, 10, 'l');                                                                                // lamp posts
+  ([[3, 3], [4, 3], [3, 4], [4, 4]] as [number, number][]).forEach(([x, y]) => set(x, y, 'p'));                     // a paved patio
   set(1, 1, 'S'); set(14, 10, 'E');
   return { id: 'glade', name: 'The Glade', spawnDir: 0, sky: 'day', music: 'chill' as Mood, rows: g };
 })();
