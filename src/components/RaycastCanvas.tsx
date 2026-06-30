@@ -165,7 +165,11 @@ export const RaycastCanvas: React.FC<{
     };
     // does a solid block occupy the body span [zLo,zHi] at this column? (walls + tree/rock/lamp)
     const bodyHit = (x: number, y: number, zLo: number, zHi: number): boolean => {
-      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }
+      for (let k = 0; k < nLayers; k++) {
+        const c = cellL(k, x, y);
+        if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }                       // walls/props: solid full storey
+        else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > b + 0.02 && zHi > b && zLo < top) return true; }   // raised terrain is a SOLID hill up to its lifted top (no vacuum below)
+      }
       return false;
     };
     // lowest block underside above `head` (head-bonk while jumping); +∞ = open sky above.
@@ -1176,9 +1180,11 @@ export const RaycastCanvas: React.FC<{
       if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
       const support = supportAt(cx, cy, pz);
       const fallDamage = (drop: number): boolean => {            // drop in world height → true if it killed you
-        const blocks = Math.round(drop / STOREY_H);
-        if (blocks >= 3) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.07); return true; }
-        if (blocks >= 2) { hp -= 50; shake = 4; beep(120, 0.22, 'sawtooth', 0.06); if (hp <= 0) { hp = 0; respawn = 70; return true; } }
+        const storeys = drop / STOREY_H;                         // Minecraft-style: a one-wall drop is free
+        if (storeys < 1.6) return false;                         // ≤ ~1.5 storeys: hop down, no harm
+        hp -= Math.round((storeys - 1.5) * 34);                  // ~2 storeys: a scratch · ~3: hurts · ~4.5: lethal
+        shake = Math.min(4, shake + 2); beep(120, 0.2, 'sawtooth', 0.06);
+        if (hp <= 0) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.07); return true; }
         return false;
       };
       if (support > -Infinity && pz <= support) {
@@ -1335,8 +1341,16 @@ export const RaycastCanvas: React.FC<{
               if (zb > eye) drawUnder(x, c, zb, dEnter, dExit, rdx, rdy);          // its underside (rare)
             } else {
               const z = slabZ(k, mapX, mapY);                                      // raised terrain lifts the slab
-              if (z < eye) drawHoriz(x, c, z, dEnter, dExit, rdx, rdy, false);     // floor seen from above
-              else if (z > eye) drawUnder(x, c, z, dEnter, dExit, rdx, rdy);       // overhang underside above you
+              const zb = baseZ(k);
+              if (z > zb + 0.02) {                                                 // SOLID cliff face — raised ground is a filled hill, not a floating shelf
+                const fTopF = projF(z, dEnter), fBotF = projF(zb, dEnter);
+                const y0 = Math.max(0, Math.floor(fTopF)), y1 = Math.min(H, Math.ceil(fBotF));
+                const [cr0, cg0, cb0] = floorColor(c, px + dEnter * rdx, py + dEnter * rdy);
+                const sd = (entrySide === 1 ? 0.6 : 0.82) * lightAt(dEnter), ftf = fogTd(dEnter);
+                for (let y = y0; y < y1; y++) { if (dEnter >= depth[y * W + x]) continue; const [r, g, bl] = fogMix(cr0 * sd, cg0 * sd, cb0 * sd, ftf); const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter; }
+              }
+              if (z < eye) drawHoriz(x, c, z, dEnter, dExit, rdx, rdy, false);     // top of the raised ground (walk on it)
+              else if (z > eye) drawUnder(x, c, z, dEnter, dExit, rdx, rdy);       // underside, if it's above your eye
             }
           }
           if (sideX < sideY) { sideX += ddx; mapX += stepX; entrySide = 0; } else { sideY += ddy; mapY += stepY; entrySide = 1; }

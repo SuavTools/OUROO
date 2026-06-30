@@ -117,7 +117,9 @@ const SideElevation: React.FC<{
             ctx.fillStyle = colorOf(ch); ctx.fillRect(x + 0.5, yT, Math.max(1, cw - 1), yB - yT);
             ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.5; ctx.strokeRect(x + 0.5, yT, Math.max(1, cw - 1), yB - yT);
           } else if (!isGapCh(ch)) {
-            const yT = Y(base + hd + SE_SLAB), yB = Y(base + hd);
+            // raised terrain is a SOLID pillar from the storey floor up to its lifted top (matches the game);
+            // a flat tile (hd 0) is just a thin walkable shelf.
+            const yT = Y(base + hd + SE_SLAB), yB = Y(hd > 0 ? base : base + hd);
             ctx.fillStyle = colorOf(ch); ctx.fillRect(x + 0.5, yT, Math.max(1, cw - 1), Math.max(1.5, yB - yT));
             const m = ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'C' ? '◆' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'L' ? '' : '';
             if (m && cw > 5) { ctx.fillStyle = ch === 'S' ? '#ffd400' : ch === 'E' ? '#1ee0ff' : ch === 'C' ? '#9beaff' : '#fff'; ctx.font = `${Math.min(cw, 12)}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText(m, x + cw / 2, yT - 1); ctx.textBaseline = 'middle'; ctx.font = '8px ui-monospace, monospace'; }
