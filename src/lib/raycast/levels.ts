@@ -283,7 +283,24 @@ const SPRAWL: Level3D = (() => {
   return { id: 'sprawl', name: 'The Sprawl', spawnDir: 0, atmo: 'candle', sky: 'night', music: 'spooky' as Mood, rows: g, heights: h };
 })();
 
-export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL];
+// THE GLADE — an outdoor grass clearing under a day sky: a pond to swim across (don't linger or you
+// drown), scattered trees, crystals. Shows grass/water/trees + the breath mechanic.
+const GLADE: Level3D = (() => {
+  const W = 16, H = 12, g: string[] = [];
+  for (let y = 0; y < H; y++) {
+    let row = '';
+    for (let x = 0; x < W; x++) row += (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? '#' : 'g';
+    g.push(row);
+  }
+  const set = (x: number, y: number, ch: string) => { g[y] = g[y].substring(0, x) + ch + g[y].substring(x + 1); };
+  for (let y = 4; y <= 7; y++) for (let x = 6; x <= 10; x++) set(x, y, 'w');     // pond
+  ([[2, 2], [13, 2], [3, 9], [12, 9], [7, 2], [11, 10], [2, 6], [13, 6]] as [number, number][]).forEach(([x, y]) => set(x, y, 'T'));
+  ([[2, 4], [13, 4], [8, 10]] as [number, number][]).forEach(([x, y]) => set(x, y, 'C'));
+  set(1, 1, 'S'); set(14, 10, 'E');
+  return { id: 'glade', name: 'The Glade', spawnDir: 0, sky: 'day', music: 'chill' as Mood, rows: g };
+})();
+
+export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL, GLADE];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';

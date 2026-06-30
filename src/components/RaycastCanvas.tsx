@@ -30,7 +30,7 @@ const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.
 const EYE_BASE = 0.5;              // eye height above the floor you stand on
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 
-type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' };
+type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' };
 
 export const RaycastCanvas: React.FC<{
   levelId?: string;
@@ -44,7 +44,7 @@ export const RaycastCanvas: React.FC<{
   const level = levelProp ?? (levelId ? getLevel(levelId) : null);
 
   // HUD mirror (kept tiny — only what the React overlay needs)
-  const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false });
+  const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false, breath: 100, submerged: false });
   const onExitRef = useRef(onExit); useEffect(() => { onExitRef.current = onExit; });
   const onRewardRef = useRef(onReward); useEffect(() => { onRewardRef.current = onReward; });
   const attackFnRef = useRef<(() => void) | null>(null);   // mobile FIRE button → the in-effect attack
@@ -80,6 +80,7 @@ export const RaycastCanvas: React.FC<{
         const c = rows[y][x];
         if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal' });
         else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
+        else if (c === 'T') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree' });
       }
     const totalCrystals = sprites.filter(s => s.kind === 'crystal').length;
     const grabbed = new Set<number>();   // indices of crystals already collected
@@ -115,6 +116,7 @@ export const RaycastCanvas: React.FC<{
     let pitch = 0;                                                   // look up/down (screen px)
     let jz = 0, vz = 0, grounded = true;                            // jump: hop height, velocity, on-ground
     let atkCd = 0, atkAnim = 0;                                      // weapon cooldown + swing animation
+    let breath = 100, submerged = false;                            // swimming: air left, are you under water
     let hp = MAX_HP;
     let respawn = 0;            // >0 = dead, counting down a fade before respawn
     let exited = false;
@@ -274,7 +276,8 @@ export const RaycastCanvas: React.FC<{
       const pts: [number, number][] = [[x - RADIUS, y], [x + RADIUS, y], [x, y - RADIUS], [x, y + RADIUS]];
       for (const [sx, sy] of pts) {
         const cx = Math.floor(sx), cy = Math.floor(sy);
-        if (isWall(cellAt(rows, cx, cy))) return true;
+        const c = cellAt(rows, cx, cy);
+        if (isWall(c) || c === 'T') return true;          // trees are solid trunks
         if (heightMap && tooTall(cx, cy, base)) return true;
       }
       return false;
@@ -285,14 +288,14 @@ export const RaycastCanvas: React.FC<{
       if (!blocked(px, ny, base)) py = ny;
     };
 
-    const doRespawn = () => { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; pitch = 0; hp = MAX_HP; respawn = 0; };
+    const doRespawn = () => { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; };
 
-    let hudHp = -1, hudCry = -1, hudDead = false;
+    let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1;
     const pushHud = () => {
-      const c = grabbed.size;
-      if (hp !== hudHp || c !== hudCry || (respawn > 0) !== hudDead) {
-        hudHp = hp; hudCry = c; hudDead = respawn > 0;
-        setHud({ hp: Math.max(0, Math.round(hp)), crystals: c, total: totalCrystals, dead: respawn > 0, exited });
+      const c = grabbed.size, br = Math.round(breath);
+      if (hp !== hudHp || c !== hudCry || (respawn > 0) !== hudDead || br !== hudBr) {
+        hudHp = hp; hudCry = c; hudDead = respawn > 0; hudBr = br;
+        setHud({ hp: Math.max(0, Math.round(hp)), crystals: c, total: totalCrystals, dead: respawn > 0, exited, breath: br, submerged });
       }
     };
 
@@ -352,6 +355,16 @@ export const RaycastCanvas: React.FC<{
         if (hp <= 0) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.06); }
       }
       if (shake > 0) shake *= 0.85;
+
+      // swimming — water saps your air; surface (any non-water tile) to breathe, or you drown
+      submerged = here === 'w';
+      if (submerged) {
+        breath -= 0.38;
+        if (tick % 50 === 0) beep(420, 0.12, 'sine', 0.025);            // bubble
+        if (breath <= 0) { breath = 0; hp -= 0.7; if (tick % 10 === 0) beep(120, 0.2, 'sawtooth', 0.05); if (hp <= 0) { hp = 0; respawn = 70; } }
+      } else if (breath < 100) {
+        breath = Math.min(100, breath + 2.2);                           // gulp air back fast on the surface
+      }
 
       // crystal pickups
       for (let i = 0; i < sprites.length; i++) {
@@ -525,11 +538,17 @@ export const RaycastCanvas: React.FC<{
           if (c === 'L') {                               // lava — glowing, shimmering
             const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25);
             fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emissive = true;
+          } else if (c === 'w') {                         // water — animated blue ripples
+            const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12);
+            fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emissive = true;
           } else if (c === '~') {                         // pit — near-black void
             fr = 4; fg = 3; fb = 8; emissive = true;
           } else if (c === 'E') {                         // exit — cyan pad
             const sh = 0.7 + 0.3 * Math.sin(tick * 0.18);
             fr = 30; fg = 200 * sh; fb = 230 * sh; emissive = true;
+          } else if (c === 'g') {                         // grass
+            const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88;
+            fr = 46 * chk; fg = 120 * chk; fb = 48 * chk;
           } else {                                        // normal floor with a faint checker
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.86;
             fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk;
@@ -617,8 +636,10 @@ export const RaycastCanvas: React.FC<{
                 const fx = px + d * rdx, fy = py + d * rdy;
                 let fr: number, fg: number, fb: number, emis = false;
                 if (curCh === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emis = true; }
+                else if (curCh === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emis = true; }
                 else if (curCh === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); fr = 30; fg = 200 * sh; fb = 230 * sh; emis = true; }
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
+                else if (curCh === 'g') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
                 else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.94; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
                 let r: number, g: number, bl: number;
                 if (emis) { r = fr; g = fg; bl = fb; } else { [r, g, bl] = fogMix(fr, fg, fb, fogTd(d)); const lf = lightAt(d); r *= lf; g *= lf; bl *= lf; }
@@ -696,12 +717,16 @@ export const RaycastCanvas: React.FC<{
         const camX = invDet * (sin * relX - cos * relY);
         const screenX = Math.floor((W / 2) * (1 + camX / camY));
         const sizeBase = Math.abs(Math.floor(H / camY));
-        const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * 0.55);
-        // raise the sprite to sit on its platform when the realm has height (no-op for flat realms)
         const zfS = heightMap ? floorLvl(Math.floor(s.x), Math.floor(s.y)) * STEP_UNIT : 0;
+        const eyeH2 = heightMap ? pz + EYE_BASE + jz : 0.5;
+        const groundY = horizon + ((eyeH2 - zfS) * H) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * H) / camY) : 0;
-        const vCenter = (kind === 'exit' ? horizon : horizon + Math.floor(sizeBase * 0.18) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04)) + hShift;
+        const sz = kind === 'tree' ? Math.floor(sizeBase * 1.4) : kind === 'exit' ? sizeBase : Math.floor(sizeBase * 0.55);
         const half = sz >> 1;
+        // trees stand ON the ground; crystals float; the exit gate sits at the horizon
+        const vCenter = kind === 'tree' ? Math.round(groundY) - half
+          : (kind === 'exit' ? horizon : horizon + Math.floor(sizeBase * 0.18) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04)) + hShift;
+        const lfTree = kind === 'tree' ? lightAt(camY) : 1;
         const sx0 = Math.max(0, screenX - half), sx1 = Math.min(W, screenX + half);
         const sy0 = Math.max(0, vCenter - half), sy1 = Math.min(H, vCenter + (kind === 'exit' ? half : 0) + 1);
         const fogT = 1 - 1 / (1 + camY * camY * 0.012);
@@ -709,15 +734,19 @@ export const RaycastCanvas: React.FC<{
           const u = (x - (screenX - half)) / sz - 0.5;   // -0.5..0.5 across sprite
           for (let y = sy0; y < sy1; y++) {
             if (camY >= depth[y * W + x]) continue;       // per-pixel depth → steps/walls occlude it
-            const v = (y - (vCenter - half)) / sz - 0.5;
-            let on = false, r = 0, g = 0, b = 0;
+            const v = (y - (vCenter - half)) / sz - 0.5;  // -0.5 top .. 0.5 bottom
+            let on = false, r = 0, g = 0, b = 0, lit = false;
             if (kind === 'crystal') {                     // glowing diamond
               const dd = Math.abs(u) + Math.abs(v);
               if (dd < 0.42) { on = true; const gl = 1 - dd / 0.42; r = 120 + 135 * gl; g = 230; b = 255; }
+            } else if (kind === 'tree') {                 // trunk + leafy canopy (lantern-lit, not emissive)
+              if (v > 0.12 && Math.abs(u) < 0.07) { on = true; lit = true; r = 96; g = 64; b = 36; }                    // trunk
+              else { const cu = u, cv = v + 0.18; const dd = Math.sqrt(cu * cu + cv * cv * 1.1); if (dd < 0.4) { on = true; lit = true; const sh = 0.7 + 0.3 * Math.sin(u * 9 + v * 9 + tick * 0.05); r = 28 * sh; g = (95 + 40 * (1 - dd / 0.4)) * sh; b = 38 * sh; } }   // canopy
             } else {                                       // exit — bright cyan archway/beam
               if (Math.abs(u) < 0.34 && v > -0.5) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.2 + y * 0.3); r = 60 * gl; g = 230 * gl; b = 255 * gl; }
             }
             if (!on) continue;
+            if (lit) { r *= lfTree; g *= lfTree; b *= lfTree; }
             const [rr, gg, bb] = fogMix(r, g, b, fogT * 0.6);
             const o = (y * W + x) * 4;
             data[o] = rr; data[o + 1] = gg; data[o + 2] = bb; data[o + 3] = 255;
@@ -800,7 +829,23 @@ export const RaycastCanvas: React.FC<{
           const drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
           renderAppearance(nn.a, tick * 0.5);
           ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
-          if (nn.n) { const fs = Math.max(9, Math.round(figScreen * 0.12)); ctx.font = `${fs}px monospace`; ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(nn.n, scrX * S + 1, groundY * S - figScreen + 1); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(nn.n, scrX * S, groundY * S - figScreen); }
+          const headY = groundY * S - figScreen;
+          if (nn.n) { const fs = Math.max(9, Math.round(figScreen * 0.12)); ctx.font = `${fs}px monospace`; ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(nn.n, scrX * S + 1, headY + 1); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(nn.n, scrX * S, headY); }
+          // speech — when you're close, the NPC talks (cycles its lines)
+          const dist = Math.hypot(relX, relY);
+          if (nn.lines && nn.lines.length && dist < 2.6) {
+            const line = nn.lines[Math.floor(tick / 200) % nn.lines.length];
+            if (line) {
+              const fs = Math.max(11, Math.round(canvas.height * 0.018));
+              ctx.font = `${fs}px monospace`; ctx.textAlign = 'center';
+              const tw = ctx.measureText(line).width, padX = 10, bw = tw + padX * 2, bh = fs + 12;
+              const bxc = scrX * S, byc = headY - (nn.n ? fs + 8 : 6) - bh;
+              ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.rect(bxc - bw / 2, byc, bw, bh); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(bxc - 5, byc + bh); ctx.lineTo(bxc + 5, byc + bh); ctx.lineTo(bxc, byc + bh + 7); ctx.closePath(); ctx.fill();   // tail
+              ctx.fillStyle = '#fff'; ctx.fillText(line, bxc, byc + fs + 2);
+            }
+          }
         }
         ctx.textAlign = 'left'; ctx.imageSmoothingEnabled = false;
       }
@@ -826,6 +871,11 @@ export const RaycastCanvas: React.FC<{
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
       if (exited) { ctx.fillStyle = 'rgba(40,220,255,0.25)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      // underwater — blue murk that deepens as your air runs out
+      if (submerged) {
+        ctx.fillStyle = `rgba(20,80,150,${0.28 + 0.4 * (1 - breath / 100)})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
 
       // Minimap (top-left)
       drawMinimap();
@@ -946,6 +996,14 @@ export const RaycastCanvas: React.FC<{
           <span className="font-mono text-[10px] text-white/70">{hud.hp}</span>
         </div>
         {hud.total > 0 && <div className="font-mono text-[11px] text-[#9beaff]">◆ {hud.crystals}/{hud.total}</div>}
+        {(hud.submerged || hud.breath < 100) && (
+          <div className="flex items-center gap-2">
+            <div className="w-28 h-2.5 border border-[#4fb3ff]/50 bg-black/60">
+              <div className="h-full bg-gradient-to-r from-[#1e6fff] to-[#7fe3ff] transition-all" style={{ width: `${hud.breath}%` }} />
+            </div>
+            <span className="font-mono text-[10px] text-[#9beaff]">⧗ air</span>
+          </div>
+        )}
       </div>
 
       {/* Mute / ambience toggle */}
