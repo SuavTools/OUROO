@@ -153,22 +153,21 @@ export const RaycastCanvas: React.FC<{
     const slabZ = (k: number, x: number, y: number) => baseZ(k) + Math.min(hLvl(k, x, y) * STEP_UNIT, STOREY_H - 0.05);
     const isSolidProp = (ch: string) => ch === 'T' || ch === 'r' || ch === 'l';
     const bodyBlocks = (ch: string) => isWall(ch) || isSolidProp(ch);      // fills its whole storey → blocks your body
-    // every standable surface in a column: wall roofs (base+STOREY_H) and thin slab tops (base).
+    const STEP_UP = STEP_UNIT + 0.02;                 // you auto-step up a ledge this tall; taller needs a jump
+    // every standable surface in a column: wall roofs (base+STOREY_H) and thin slab tops (base + raise).
     const standTops = (x: number, y: number): number[] => {
       const t: number[] = [];
       for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); }
       return t;
     };
-    // highest surface at or just under `feet` — the ground you rest on (−∞ = nothing → you're falling).
-    const supportAt = (x: number, y: number, feet: number): number => {
-      let best = -Infinity; for (const t of standTops(x, y)) if (t <= feet + 0.06 && t > best) best = t; return best;
-    };
-    // does a solid block occupy the body span [zLo,zHi] at this column? (walls + tree/rock/lamp)
-    const bodyHit = (x: number, y: number, zLo: number, zHi: number): boolean => {
+    // movement collision that allows STEPPING: walls/props always block the body; raised terrain only
+    // blocks the part that's more than one step above your feet, so 1-level terrain forms walkable ramps.
+    const solidFor = (x: number, y: number, feet: number): boolean => {
+      const zLo = feet + 0.12, zHi = feet + 0.7;
       for (let k = 0; k < nLayers; k++) {
         const c = cellL(k, x, y);
         if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }                       // walls/props: solid full storey
-        else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > b + 0.02 && zHi > b && zLo < top) return true; }   // raised terrain is a SOLID hill up to its lifted top (no vacuum below)
+        else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > feet + STEP_UP && zHi > b && zLo < top) return true; }   // raised terrain: a SOLID hill you can't step straight up
       }
       return false;
     };
@@ -1159,10 +1158,9 @@ export const RaycastCanvas: React.FC<{
       if (fwd) { nx += cos * fwd * sp; ny += sin * fwd * sp; }
       if (strafe) { nx += -sin * strafe * sp; ny += cos * strafe * sp; }
       if (nx !== px || ny !== py) {
-        const zLo = pz + 0.12, zHi = pz + 0.7;
         const free = (x: number, y: number) => {
           const pts: [number, number][] = [[x - RADIUS, y], [x + RADIUS, y], [x, y - RADIUS], [x, y + RADIUS]];
-          for (const [sx, sy] of pts) if (bodyHit(Math.floor(sx), Math.floor(sy), zLo, zHi)) return false;
+          for (const [sx, sy] of pts) if (solidFor(Math.floor(sx), Math.floor(sy), pz)) return false;
           return true;
         };
         if (free(nx, py)) px = nx;
@@ -1170,28 +1168,34 @@ export const RaycastCanvas: React.FC<{
         bob += sp;
       }
 
-      // gravity + landing (real Z), with graduated fall damage. A 1-block drop is safe (you hop down
-      // freely), ~2 blocks slices your HP, ~3 blocks is lethal. `groundZ` = the surface you stepped off,
-      // so a jump can't inflate the fall and climbing UP never hurts.
+      // gravity, stepping & landing (real Z) — Minecraft-style. You auto-step UP a one-level ledge (so
+      // raised terrain becomes walkable ramps), must JUMP a full wall to climb it, and take graduated
+      // fall damage coming down. `groundZ` = the surface you left, so jumps never inflate a fall.
       const cx = Math.floor(px), cy = Math.floor(py);
-      const wasGrounded = grounded;
-      vz -= GRAV;
-      pz += vz;
-      if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
-      const support = supportAt(cx, cy, pz);
+      const tops = standTops(cx, cy);
+      const highestUnder = (feet: number, tol: number) => { let s = -Infinity; for (const t of tops) if (t <= feet + tol && t > s) s = t; return s; };
       const fallDamage = (drop: number): boolean => {            // drop in world height → true if it killed you
-        const storeys = drop / STOREY_H;                         // Minecraft-style: a one-wall drop is free
-        if (storeys < 1.6) return false;                         // ≤ ~1.5 storeys: hop down, no harm
+        const storeys = drop / STOREY_H;                         // a one-wall (one-storey) drop is free
+        if (storeys < 1.6) return false;
         hp -= Math.round((storeys - 1.5) * 34);                  // ~2 storeys: a scratch · ~3: hurts · ~4.5: lethal
         shake = Math.min(4, shake + 2); beep(120, 0.2, 'sawtooth', 0.06);
         if (hp <= 0) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.07); return true; }
         return false;
       };
-      if (support > -Infinity && pz <= support) {
-        if (!wasGrounded && vz < 0) fallDamage(groundZ - support);   // just touched down — charge for the drop
-        pz = support; vz = 0; grounded = true; groundZ = support;
-      } else grounded = false;
-      if (support === -Infinity && pz < -0.8) {                       // fell off the map — damage by how far, then reset
+      if (grounded && vz <= 0) {
+        // walking: stick to the ground, auto-stepping up/down a ledge no taller than one level
+        const s = highestUnder(pz, STEP_UP);
+        if (s > -Infinity && s >= pz - STEP_UP) { pz = s; groundZ = s; }
+        else { grounded = false; vz -= GRAV; pz += vz; }            // walked off a ledge taller than a step → fall
+      } else {
+        // airborne: integrate gravity, bonk on ceilings, land on the first surface you reach
+        vz -= GRAV; pz += vz;
+        if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
+        const s = highestUnder(pz, 0.06);
+        if (s > -Infinity && pz <= s) { if (vz < 0) fallDamage(groundZ - s); pz = s; vz = 0; grounded = true; groundZ = s; }
+        else grounded = false;
+      }
+      if (!grounded && tops.length === 0 && pz < -0.8) {           // genuine void (a column of pure air) → reset, scaled by the fall
         if (!fallDamage(groundZ - pz)) { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = baseZ(spawnFloor); vz = 0; grounded = true; groundZ = pz; shake = Math.min(4, shake + 2); beep(200, 0.18, 'sine', 0.05); }
       }
       // smooth the eye for stair lifts/landings, but keep jumps crisp
