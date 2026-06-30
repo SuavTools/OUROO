@@ -375,7 +375,7 @@ export const RaycastCanvas: React.FC<{
     };
 
     // ── Stalker AI ──────────────────────────────────────────────────────────────────────────────
-    const SIGHT = 8, E_WANDER = 0.012, E_CHASE = 0.03, E_DMG = 0.9;
+    const SIGHT = 4.5, LOSE = 7.5, E_WANDER = 0.012, E_CHASE = 0.038, E_DMG = 0.9;   // close to notice, slower than a running player → you can run & hide
     const eBlocked = (x: number, y: number) =>
       isWall(cellAt(rows, Math.floor(x), Math.floor(y))) || cellAt(rows, Math.floor(x), Math.floor(y)) === '~';
     const lineClear = (x0: number, y0: number, x1: number, y1: number) => {
@@ -394,7 +394,7 @@ export const RaycastCanvas: React.FC<{
         const dx = px - e.x, dy = py - e.y;
         const dist = Math.hypot(dx, dy);
         const sees = dist < SIGHT && lineClear(e.x, e.y, px, py);
-        if (sees) e.chasing = true; else if (dist > SIGHT * 1.6) e.chasing = false;
+        if (sees) e.chasing = true; else if (dist > LOSE) e.chasing = false;   // give up if you break line of sight and get far
 
         let tx: number, ty: number, sp: number;
         if (e.chasing) { tx = px; ty = py; sp = E_CHASE; }
@@ -712,7 +712,7 @@ export const RaycastCanvas: React.FC<{
       for (const { e } of eorder) {
         const relX = e.x - px, relY = e.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);
-        if (camY <= 0.15) continue;
+        if (camY <= 0.05) continue;
         const camX = invDet * (sin * relX - cos * relY);
         const screenX = (W / 2) * (1 + camX / camY);
         const sizeBase = Math.abs(H / camY);
@@ -729,7 +729,7 @@ export const RaycastCanvas: React.FC<{
         for (let x = sx0; x < sx1; x++) {
           const u = (x - screenX) / figW + sway;          // -0.5..0.5 across the figure
           for (let y = sy0; y < sy1; y++) {
-            if (camY >= depth[y * W + x]) continue;        // occluded by walls/steps
+            if (camY > depth[y * W + x] + 0.35) continue;  // occluded only by geometry clearly IN FRONT (bias stops the floor it stands on from culling it up close)
             const v = (y - top) / figH;                    // 0 head .. 1 feet
             const bodyW = v < 0.16 ? 0.22 : v < 0.62 ? 0.5 : Math.max(0.04, 0.5 - (v - 0.62) * 0.9);
             const au = Math.abs(u);

@@ -128,6 +128,7 @@ export default function Home() {
   // R3D — first-person 3D realms reached through `r3d:<id>` portals, built in the Realm Forge.
   const [level3dId, setLevel3dId] = useState<string | null>(null);
   const [designerId, setDesignerId] = useState<string | undefined>(undefined);
+  const [pendingPortal3D, setPendingPortal3D] = useState<string | undefined>(undefined);
   const enter3D = (id: string) => { setLevel3dId(id); setView('room3d'); };
   const open3DDesigner = (id?: string) => { setDesignerId(id); setView('designer3d'); };
 
@@ -210,7 +211,7 @@ export default function Home() {
   if (view === 'designer3d') {
     return (
       <main className="relative w-screen h-[100dvh] bg-[#0a0a12] overflow-hidden touch-none">
-        <RaycastDesigner initialId={designerId} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />
+        <RaycastDesigner initialId={designerId} isMobileStage={stage.mobile} onExit={(id) => { if (id) setPendingPortal3D(id); setView('lobby'); }} />
       </main>
     );
   }
@@ -218,7 +219,7 @@ export default function Home() {
   if (view === 'lobby') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onLaunchGame={launchGame} onEnter3D={enter3D} onOpen3DDesigner={open3DDesigner} onboarding={onboard} gamePlayed={gamePlayed} onSetStep={setStep} />
+        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onLaunchGame={launchGame} onEnter3D={enter3D} onOpen3DDesigner={open3DDesigner} initialPortal3D={pendingPortal3D} onPortal3DConsumed={() => setPendingPortal3D(undefined)} onboarding={onboard} gamePlayed={gamePlayed} onSetStep={setStep} />
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
       </main>
     );

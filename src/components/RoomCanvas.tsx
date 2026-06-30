@@ -457,8 +457,8 @@ const parseIcon = (v: unknown): IconSpec | null => {
 };
 
 type OnboardStep = 'oracle' | 'arcade' | 'terminal' | 'character' | 'yourroom' | 'town' | 'done';
-export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string, mods?: GameRules) => void; onEnter3D?: (levelId: string) => void; onOpen3DDesigner?: (id?: string) => void; onboarding?: OnboardStep; gamePlayed?: boolean; onSetStep?: (s: OnboardStep) => void }> = ({
-  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onEnter3D, onOpen3DDesigner, onboarding = 'done', gamePlayed = false, onSetStep,
+export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string, mods?: GameRules) => void; onEnter3D?: (levelId: string) => void; onOpen3DDesigner?: (id?: string) => void; initialPortal3D?: string; onPortal3DConsumed?: () => void; onboarding?: OnboardStep; gamePlayed?: boolean; onSetStep?: (s: OnboardStep) => void }> = ({
+  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onEnter3D, onOpen3DDesigner, initialPortal3D, onPortal3DConsumed, onboarding = 'done', gamePlayed = false, onSetStep,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -972,6 +972,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     supabase?.from('room_items').update({ kind: newKind }).eq('id', portalEditing).then(undefined, () => {});
     setPortalEditing(null); setPortalMaker(false); flashHint('Portal updated ✦');
   };
+  // Coming back from the Realm Forge → re-open the portal maker pre-armed with the realm you just built,
+  // so you can immediately drop its portal (the page unmounts this component while the Forge is open).
+  useEffect(() => {
+    if (!initialPortal3D) return;
+    setDecorOpen(true); setPortalMode(null); setPortalEditing(null);
+    setPmDest('r3d'); setPm3dLevel(initialPortal3D); setPmAccess(''); setPmHidden(false); setPmMessage('');
+    setPortalMaker(true);
+    onPortal3DConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Ambient room music — the SUAV signal (generated, royalty-free; see lib/roomMusic). Off persists per device.
   const musicRef = useRef<RoomMusic | null>(null);
   const [musicOff, setMusicOff] = useState<boolean>(() => { try { return localStorage.getItem('ouroo_music_off') === '1'; } catch { return false; } });

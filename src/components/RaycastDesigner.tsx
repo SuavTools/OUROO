@@ -73,7 +73,7 @@ function bumpHeight(rows: string[], heights: string[] | undefined, x: number, y:
 export const RaycastDesigner: React.FC<{
   initialId?: string;
   isMobileStage?: boolean;
-  onExit?: () => void;
+  onExit?: (levelId?: string) => void;   // passes the realm id back so the room can arm a portal to it
 }> = ({ initialId, isMobileStage = false, onExit }) => {
   const [level, setLevel] = useState<Level3D>(() => (initialId && getLevel(initialId)) || blankLevel());
   const [brush, setBrush] = useState('#');
@@ -122,6 +122,12 @@ export const RaycastDesigner: React.FC<{
   const hasSpawn = rows.some(r => r.includes('S'));
   const hasExit = rows.some(r => r.includes('E'));
 
+  // Done → save the realm (so a portal can reference it) and hand its id back to the room.
+  const finish = () => {
+    if (hasSpawn && !builtin) { saveLevel(level); onExit?.(level.id); }
+    else onExit?.(builtin ? level.id : undefined);
+  };
+
   if (testing) {
     return (
       <div className="relative w-full h-full">
@@ -148,7 +154,7 @@ export const RaycastDesigner: React.FC<{
         <div className="flex-1" />
         <button onClick={() => setLibrary(v => !v)} className="text-[11px] font-mono uppercase tracking-wider border border-white/20 px-3 py-1.5 hover:border-white/50">Library</button>
         <button onClick={startNew} className="text-[11px] font-mono uppercase tracking-wider border border-white/20 px-3 py-1.5 hover:border-white/50">New</button>
-        <button onClick={() => onExit?.()} className="text-[11px] font-mono uppercase tracking-wider text-brandYellow border border-brandYellow px-3 py-1.5 hover:bg-brandYellow hover:text-black">Done</button>
+        <button onClick={finish} className="text-[11px] font-mono uppercase tracking-wider text-brandYellow border border-brandYellow px-3 py-1.5 hover:bg-brandYellow hover:text-black">Done → portal</button>
       </div>
 
       <div className="flex-1 flex min-h-0">
