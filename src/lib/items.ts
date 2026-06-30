@@ -99,6 +99,15 @@ export const ITEMS: Item[] = [
     emoji: '🔪',
   },
   {
+    id: 'pitchfork',
+    name: 'Pitchfork',
+    description: 'Crude but long. Jabs foes two tiles away — further than any blade.',
+    useType: 'permanent',
+    effect: { type: 'weapon', damage: 28, range: 2, cooldownMs: 900, style: 'melee' },
+    price: 1100,
+    emoji: '🔱',
+  },
+  {
     id: 'sword',
     name: 'Sword',
     description: 'Heavy swings, serious damage. The honest way to end an alley scrap.',
