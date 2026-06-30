@@ -11,7 +11,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  type Level3D, paletteOf, lightingOf, cellAt, isWall, findSpawn, getLevel,
+  type Level3D, paletteOf, lightingOf, cellAt, isWall, findSpawn, getLevel, heightAt, hasHeightMap,
 } from '@/lib/raycast/levels';
 
 const STEP = 1000 / 60;            // fixed sim tick
@@ -22,6 +22,9 @@ const TURN = 0.045;                // radians per tick (keyboard/stick turn)
 const RADIUS = 0.22;               // player collision radius (tiles)
 const LAVA_DPS = 0.55;             // HP drained per tick standing in lava
 const MAX_HP = 100;
+const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
+const EYE_BASE = 0.5;              // eye height above the floor you stand on
+const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 
 type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' };
 
@@ -51,6 +54,11 @@ export const RaycastCanvas: React.FC<{
     const pal = paletteOf(level);
     const lighting = lightingOf(level);   // lantern darkness (horror) or null for a flatly-lit world
     const spawn = findSpawn(rows);
+    const heightMap = hasHeightMap(level);                 // does this realm use verticality?
+    const floorLvl = (x: number, y: number) => heightAt(level, x, y);
+    let maxLvl = 0;
+    if (heightMap) for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
+    const CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform
 
     // Collect sprites (crystals + exit gate) and count grabbables.
     const sprites: Sprite[] = [];
@@ -66,6 +74,8 @@ export const RaycastCanvas: React.FC<{
     // ── Player state ──────────────────────────────────────────────────────────────────────────
     let px = spawn.x, py = spawn.y;
     let dir = ((level.spawnDir ?? 0) * Math.PI) / 180;
+    let pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT;   // eased standing height
+    let pitch = 0;                                                   // look up/down (screen px)
     let hp = MAX_HP;
     let respawn = 0;            // >0 = dead, counting down a fade before respawn
     let exited = false;
@@ -125,7 +135,11 @@ export const RaycastCanvas: React.FC<{
 
     // Mouse-look via pointer lock (desktop)
     const onClick = () => { if (!isMobileStage && document.pointerLockElement !== canvas) canvas.requestPointerLock?.(); };
-    const onMouseMove = (e: MouseEvent) => { if (document.pointerLockElement === canvas) dir += e.movementX * 0.0022; };
+    const onMouseMove = (e: MouseEvent) => {
+      if (document.pointerLockElement !== canvas) return;
+      dir += e.movementX * 0.0022;
+      pitch = Math.max(-RES_H * 0.55, Math.min(RES_H * 0.55, pitch - e.movementY * 0.5));   // look up/down
+    };
     canvas.addEventListener('click', onClick);
     window.addEventListener('mousemove', onMouseMove);
 
@@ -153,18 +167,26 @@ export const RaycastCanvas: React.FC<{
       window.addEventListener('pointercancel', tu);
     }
 
-    // ── Collision: try to move to (nx,ny); slide along walls; never enter a wall cell ───────────
-    const blocked = (x: number, y: number) =>
-      isWall(cellAt(rows, Math.floor(x - RADIUS), Math.floor(y))) ||
-      isWall(cellAt(rows, Math.floor(x + RADIUS), Math.floor(y))) ||
-      isWall(cellAt(rows, Math.floor(x), Math.floor(y - RADIUS))) ||
-      isWall(cellAt(rows, Math.floor(x), Math.floor(y + RADIUS)));
+    // ── Collision: try to move to (nx,ny); slide along walls; never enter a wall cell. A floor more
+    // than one level above where you stand is too tall to climb (acts like a wall); dropping down any
+    // amount is fine (you step/fall down). `base` = the level you're currently standing on.
+    const tooTall = (cx: number, cy: number, base: number) => floorLvl(cx, cy) - base > 1;
+    const blocked = (x: number, y: number, base: number) => {
+      const pts: [number, number][] = [[x - RADIUS, y], [x + RADIUS, y], [x, y - RADIUS], [x, y + RADIUS]];
+      for (const [sx, sy] of pts) {
+        const cx = Math.floor(sx), cy = Math.floor(sy);
+        if (isWall(cellAt(rows, cx, cy))) return true;
+        if (heightMap && tooTall(cx, cy, base)) return true;
+      }
+      return false;
+    };
     const tryMove = (nx: number, ny: number) => {
-      if (!blocked(nx, py)) px = nx;
-      if (!blocked(px, ny)) py = ny;
+      const base = floorLvl(Math.floor(px), Math.floor(py));
+      if (!blocked(nx, py, base)) px = nx;
+      if (!blocked(px, ny, base)) py = ny;
     };
 
-    const doRespawn = () => { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; hp = MAX_HP; respawn = 0; };
+    const doRespawn = () => { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; pitch = 0; hp = MAX_HP; respawn = 0; };
 
     let hudHp = -1, hudCry = -1, hudDead = false;
     const pushHud = () => {
@@ -209,6 +231,10 @@ export const RaycastCanvas: React.FC<{
         bob += sp;
       }
 
+      // ease eye-height toward the floor you're standing on (so steps feel smooth, not teleporty)
+      const standZ = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT;
+      pz += (standZ - pz) * 0.25;
+
       // standing-tile effects
       const cx = Math.floor(px), cy = Math.floor(py);
       const here = cellAt(rows, cx, cy);
@@ -243,7 +269,7 @@ export const RaycastCanvas: React.FC<{
       const cos = Math.cos(dir), sin = Math.sin(dir);
       const planeLen = (W / H) * 0.5;          // square pixels on any aspect
       const planeX = -sin * planeLen, planeY = cos * planeLen;
-      const horizon = H >> 1;
+      const horizon = (H >> 1) + Math.round(pitch);   // pitch = look up/down
       const fog = pal.fog;
 
       const fogMix = (r: number, g: number, b: number, t: number): [number, number, number] => {
@@ -262,6 +288,7 @@ export const RaycastCanvas: React.FC<{
         return (f < lighting.ambient ? lighting.ambient : f) * flick;
       };
 
+      if (!heightMap) {
       // 1) Floor + ceiling cast (per pixel). Left/right edge rays bound the row.
       const rdx0 = cos - planeX, rdy0 = sin - planeY;   // leftmost ray
       const rdx1 = cos + planeX, rdy1 = sin + planeY;   // rightmost ray
@@ -344,6 +371,106 @@ export const RaycastCanvas: React.FC<{
           data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
         }
       }
+      } else {
+        // ── Multi-height renderer ──────────────────────────────────────────────────────────────────
+        // Per column, march cells near→far. For each cell draw its floor at its OWN height, the flat
+        // ceiling, and a vertical riser wherever the floor steps up/down. A free window [yCeil, yFloor)
+        // shrinks as we go, so nearer geometry occludes farther — the trick that makes height read.
+        const eye = pz + EYE_BASE;
+        const projF = (z: number, d: number) => horizon + ((eye - z) * H) / d;
+        const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
+        for (let x = 0; x < W; x++) {
+          const camX = (2 * x) / W - 1;
+          const rdx = cos + planeX * camX, rdy = sin + planeY * camX;
+          let mapX = Math.floor(px), mapY = Math.floor(py);
+          const ddx = Math.abs(1 / rdx), ddy = Math.abs(1 / rdy);
+          let sideX: number, sideY: number, stepX: number, stepY: number;
+          if (rdx < 0) { stepX = -1; sideX = (px - mapX) * ddx; } else { stepX = 1; sideX = (mapX + 1 - px) * ddx; }
+          if (rdy < 0) { stepY = -1; sideY = (py - mapY) * ddy; } else { stepY = 1; sideY = (mapY + 1 - py) * ddy; }
+          let curCh = cellAt(rows, mapX, mapY);
+          let curZ = floorLvl(mapX, mapY) * STEP_UNIT;
+          let dEnter = 0.0001, yFloor = H, yCeil = 0;
+          zbuf[x] = 1e9;
+          for (let guard = 0; guard < 96 && yFloor > yCeil; guard++) {
+            let side: number, dExit: number;
+            if (sideX < sideY) { dExit = sideX; sideX += ddx; mapX += stepX; side = 0; }
+            else { dExit = sideY; sideY += ddy; mapY += stepY; side = 1; }
+            if (dExit < dEnter + 0.0001) dExit = dEnter + 0.0001;
+
+            // floor of the current cell over [dEnter, dExit] (only visible when below your eye)
+            if (curZ < eye) {
+              const a = Math.max(yCeil, Math.ceil(projF(curZ, dExit)));
+              const b = Math.min(yFloor, Math.floor(projF(curZ, dEnter)));
+              for (let y = a; y < b; y++) {
+                const pp = y - horizon; if (pp <= 0) continue;
+                const d = ((eye - curZ) * H) / pp;
+                const fx = px + d * rdx, fy = py + d * rdy;
+                let fr: number, fg: number, fb: number, emis = false;
+                if (curCh === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emis = true; }
+                else if (curCh === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); fr = 30; fg = 200 * sh; fb = 230 * sh; emis = true; }
+                else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
+                else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.86; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
+                let r: number, g: number, bl: number;
+                if (emis) { r = fr; g = fg; bl = fb; } else { [r, g, bl] = fogMix(fr, fg, fb, fogTd(d)); const lf = lightAt(d); r *= lf; g *= lf; bl *= lf; }
+                const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
+              }
+              yFloor = Math.min(yFloor, a);
+            }
+
+            // flat ceiling over [dEnter, dExit] (only visible above the horizon)
+            {
+              const ct = Math.max(yCeil, Math.ceil(projF(CEIL_Z, dEnter)));
+              const cb = Math.min(yFloor, Math.floor(projF(CEIL_Z, dExit)));
+              for (let y = ct; y < cb; y++) {
+                const pp = y - horizon; if (pp >= 0) continue;
+                const d = ((eye - CEIL_Z) * H) / pp;
+                const lf = lightAt(d);
+                const [cr, cg, cbl] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7);
+                const o = (y * W + x) * 4; data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cbl * lf; data[o + 3] = 255;
+              }
+              yCeil = Math.max(yCeil, cb);
+            }
+
+            const nextCh = cellAt(rows, mapX, mapY);
+            if (isWall(nextCh)) {                                   // full wall → close the column
+              const base = pal.wall[nextCh] ?? pal.wall['#'];
+              const sd = (side === 1 ? 0.7 : 1) * lightAt(dExit);
+              const ft = fogTd(dExit);
+              const wTopF = projF(CEIL_Z, dExit), wBotF = projF(curZ, dExit);
+              const span = Math.max(1, wBotF - wTopF);
+              const wxv = side === 0 ? py + dExit * rdy : px + dExit * rdx;
+              const wxf = wxv - Math.floor(wxv);
+              const wt = Math.max(yCeil, Math.ceil(wTopF)), wb = Math.min(yFloor, Math.floor(wBotF));
+              for (let y = wt; y < wb; y++) {
+                const ty = (y - wTopF) / span;
+                const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
+                const mortar = (ty * 6) % 1 < 0.09 || (((wxf + off) % 1) * 3) % 1 < 0.06 ? 0.55 : 1;
+                const shade = sd * mortar * (0.8 + 0.2 * (1 - ty));
+                const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
+                const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
+              }
+              zbuf[x] = dExit;
+              break;
+            }
+            const nZ = floorLvl(mapX, mapY) * STEP_UNIT;
+            if (nZ !== curZ) {                                      // step up/down → vertical riser
+              const zHi = Math.max(curZ, nZ), zLo = Math.min(curZ, nZ);
+              const sd = (side === 1 ? 0.72 : 0.9) * lightAt(dExit);
+              const ft = fogTd(dExit);
+              const base = pal.wall['#'];
+              const ra = Math.max(yCeil, Math.ceil(projF(zHi, dExit)));
+              const rb = Math.min(yFloor, Math.floor(projF(zLo, dExit)));
+              const [r, g, bl] = fogMix(base[0] * sd, base[1] * sd, base[2] * sd, ft);
+              for (let y = ra; y < rb; y++) { const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; }
+              yFloor = Math.min(yFloor, ra);
+              curZ = nZ;
+            }
+            curCh = nextCh;
+            dEnter = dExit;
+            if (dExit > 48) break;
+          }
+        }
+      }
 
       // 3) Sprites (crystals + exit gate) — billboard, depth-tested per column against zbuf.
       // Canonical raycaster inverse camera matrix (Lodev): dir=(cos,sin), plane=(planeX,planeY).
@@ -360,7 +487,10 @@ export const RaycastCanvas: React.FC<{
         const screenX = Math.floor((W / 2) * (1 + camX / camY));
         const sizeBase = Math.abs(Math.floor(H / camY));
         const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * 0.55);
-        const vCenter = kind === 'exit' ? horizon : horizon + Math.floor(sizeBase * 0.18) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04);
+        // raise the sprite to sit on its platform when the realm has height (no-op for flat realms)
+        const zfS = heightMap ? floorLvl(Math.floor(s.x), Math.floor(s.y)) * STEP_UNIT : 0;
+        const hShift = heightMap ? Math.round(((pz - zfS) * H) / camY) : 0;
+        const vCenter = (kind === 'exit' ? horizon : horizon + Math.floor(sizeBase * 0.18) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04)) + hShift;
         const half = sz >> 1;
         const sx0 = Math.max(0, screenX - half), sx1 = Math.min(W, screenX + half);
         const sy0 = Math.max(0, vCenter - half), sy1 = Math.min(H, vCenter + (kind === 'exit' ? half : 0) + 1);

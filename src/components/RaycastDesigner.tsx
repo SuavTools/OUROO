@@ -52,6 +52,23 @@ function setCell(rows: string[], x: number, y: number, ch: string): string[] {
   return out;
 }
 
+// Height map helpers — a parallel grid of digits ('0'–'9'), lazily created and kept the size of rows.
+function normHeights(rows: string[], heights?: string[]): string[] {
+  return rows.map((r, y) => {
+    const src = heights?.[y] ?? '';
+    let out = '';
+    for (let x = 0; x < r.length; x++) out += src[x] && /[0-9]/.test(src[x]) ? src[x] : '0';
+    return out;
+  });
+}
+function bumpHeight(rows: string[], heights: string[] | undefined, x: number, y: number, delta: number): string[] {
+  const h = normHeights(rows, heights);
+  const cur = h[y].charCodeAt(x) - 48;
+  const next = Math.max(0, Math.min(9, cur + delta));
+  h[y] = h[y].substring(0, x) + String(next) + h[y].substring(x + 1);
+  return h;
+}
+
 export const RaycastDesigner: React.FC<{
   initialId?: string;
   isMobileStage?: boolean;
@@ -69,13 +86,23 @@ export const RaycastDesigner: React.FC<{
   const builtin = isBuiltin(level.id);
 
   const paint = useCallback((x: number, y: number) => {
-    setLevel(l => ({ ...l, rows: setCell(l.rows, x, y, brush) }));
+    setLevel(l => {
+      if (brush === 'H+' || brush === 'H-') {
+        // can't raise a wall cell — heights are for floors you walk on
+        if (/[#1-9]/.test(l.rows[y]?.[x] ?? '#')) return l;
+        return { ...l, heights: bumpHeight(l.rows, l.heights, x, y, brush === 'H+' ? 1 : -1) };
+      }
+      return { ...l, rows: setCell(l.rows, x, y, brush) };
+    });
     setSaved(false);
   }, [brush]);
 
   const doResize = (nw: number, nh: number) => {
     const cw = Math.max(4, Math.min(40, nw)), ch = Math.max(4, Math.min(40, nh));
-    setLevel(l => ({ ...l, rows: resizeRows(l.rows, cw, ch) }));
+    setLevel(l => {
+      const rows = resizeRows(l.rows, cw, ch);
+      return { ...l, rows, heights: l.heights ? normHeights(rows, l.heights) : undefined };
+    });
     setSaved(false);
   };
 
@@ -137,6 +164,16 @@ export const RaycastDesigner: React.FC<{
             ))}
           </div>
 
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Height <span className="text-white/25 normal-case tracking-normal">(steps · climb 1)</span></p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {([['H+', '▲ Raise'], ['H-', '▼ Lower']] as [string, string][]).map(([ch, label]) => (
+              <button key={ch} onClick={() => setBrush(ch)}
+                className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === ch ? 'border-[#ffd400] bg-[#ffd400]/10 text-[#ffd400]' : 'border-white/15 hover:border-white/40'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Atmosphere</p>
           <div className="flex flex-wrap gap-1">
             {Object.entries(ATMOS).map(([key, a]) => (
@@ -181,19 +218,23 @@ export const RaycastDesigner: React.FC<{
             {rows.flatMap((row, y) =>
               Array.from({ length: w }, (_, x) => {
                 const ch = row[x] || '.';
+                const hd = level.heights?.[y]?.[x];
+                const raised = hd && hd !== '0';
                 return (
                   <button
                     key={`${x}-${y}`}
                     onPointerDown={() => { painting.current = true; paint(x, y); }}
                     onPointerEnter={() => { if (painting.current) paint(x, y); }}
-                    className="flex items-center justify-center"
+                    className="flex items-center justify-center relative"
                     style={{
                       width: cellPx, height: cellPx, background: colorOf(ch),
                       outline: '1px solid rgba(255,255,255,0.05)',
                       fontSize: cellPx * 0.5, lineHeight: 1,
+                      boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
                     }}
                   >
                     {ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ''}
+                    {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
                   </button>
                 );
               })

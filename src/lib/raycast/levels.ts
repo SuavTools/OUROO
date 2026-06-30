@@ -27,8 +27,20 @@ export type Level3D = {
   spawnDir?: number;       // facing in degrees (0 = +X / east), default 0
   atmo?: string;           // atmosphere preset key (see ATMOS) — sets palette + lighting mood
   palette?: Partial<Palette>;   // per-level overrides on top of the atmosphere
+  heights?: string[];      // OPTIONAL per-cell floor level ('0'–'9'), same dims as rows. Absent/all-'0'
+                           // = flat (classic renderer). Steps of 1 level are climbable; bigger = a wall.
   author?: string;
 };
+
+// Floor level (0–9) of an open cell — 0 when no height map. Walls ignore this.
+export const heightAt = (level: Pick<Level3D, 'heights'>, x: number, y: number): number => {
+  const h = level.heights; if (!h) return 0;
+  const row = h[y]; const c = row && row[x];
+  const n = c ? c.charCodeAt(0) - 48 : 0;
+  return n >= 1 && n <= 9 ? n : 0;
+};
+export const hasHeightMap = (level: Pick<Level3D, 'heights'>): boolean =>
+  !!level.heights && level.heights.some(r => /[1-9]/.test(r));
 
 // Lighting model. radius>0 = a "lantern" world: brightness falls to `ambient` past `radius` tiles, so
 // everything beyond your light is swallowed by black (Amnesia/Slender dread). flicker animates it.
@@ -183,7 +195,28 @@ const HOLLOW: Level3D = {
   ],
 };
 
-export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW];
+// THE ASCENT — a stepped pyramid: climb the rings (each one level higher) to the exit at the summit.
+// Shows off verticality — steps, looking down off the edge, crystals on the mid-tiers.
+const ASCENT: Level3D = (() => {
+  const n = 11, rows: string[] = [], heights: string[] = [];
+  for (let y = 0; y < n; y++) {
+    let r = '', h = '';
+    for (let x = 0; x < n; x++) {
+      const ring = Math.min(x, y, n - 1 - x, n - 1 - y);
+      if (ring === 0) { r += '#'; h += '0'; continue; }
+      const lvl = Math.min(ring - 1, 3);
+      let ch = '.';
+      if (x === 5 && y === 5) ch = 'E';                       // summit exit
+      else if (x === 1 && y === 1) ch = 'S';                  // start in a low corner
+      else if ((x === 5 && y === 1) || (x === 1 && y === 5) || (x === 9 && y === 5)) ch = 'C';
+      r += ch; h += String(lvl);
+    }
+    rows.push(r); heights.push(h);
+  }
+  return { id: 'ascent', name: 'The Ascent', spawnDir: 0, atmo: 'dungeon', rows, heights };
+})();
+
+export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';
