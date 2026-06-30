@@ -7,7 +7,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  type Level3D, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId,
+  type Level3D, ATMOS, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId,
 } from '@/lib/raycast/levels';
 import { RaycastCanvas } from './RaycastCanvas';
 
@@ -133,6 +133,16 @@ export const RaycastDesigner: React.FC<{
                 className={`flex items-center gap-1.5 px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === b.ch ? 'border-[#1ee0ff] bg-[#1ee0ff]/10' : 'border-white/15 hover:border-white/40'}`}>
                 <span className="w-3 h-3 border border-white/30" style={{ background: b.color }} />
                 {b.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Atmosphere</p>
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(ATMOS).map(([key, a]) => (
+              <button key={key} onClick={() => { setLevel(l => ({ ...l, atmo: key })); setSaved(false); }}
+                className={`text-[9px] font-mono px-2 py-1 border transition-colors ${(level.atmo ?? 'dungeon') === key ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>
+                {a.light ? '☾ ' : ''}{a.label}
               </button>
             ))}
           </div>

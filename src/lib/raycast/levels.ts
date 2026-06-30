@@ -25,9 +25,14 @@ export type Level3D = {
   name: string;
   rows: string[];          // grid; row index = world Y (north→south), col index = world X (west→east)
   spawnDir?: number;       // facing in degrees (0 = +X / east), default 0
-  palette?: Partial<Palette>;
+  atmo?: string;           // atmosphere preset key (see ATMOS) — sets palette + lighting mood
+  palette?: Partial<Palette>;   // per-level overrides on top of the atmosphere
   author?: string;
 };
+
+// Lighting model. radius>0 = a "lantern" world: brightness falls to `ambient` past `radius` tiles, so
+// everything beyond your light is swallowed by black (Amnesia/Slender dread). flicker animates it.
+export type Lighting = { radius: number; ambient: number; flicker: number };
 
 export const WALL_CHARS = new Set(['#', '1', '2', '3', '4']);
 export const isWall = (ch: string) => WALL_CHARS.has(ch);
@@ -45,14 +50,32 @@ export const DEFAULT_PALETTE: Palette = {
   },
 };
 
+// ── Atmosphere presets ───────────────────────────────────────────────────────────────────────────
+// Each sets a palette mood and (optionally) a lantern light. The designer exposes these as one click;
+// a level may still override individual palette colours on top.
+export const ATMOS: Record<string, { label: string; palette: Partial<Palette>; light?: Lighting }> = {
+  dungeon:  { label: 'Dungeon',  palette: { ceil: [14, 14, 26], floor: [38, 36, 54], fog: [8, 8, 16] } },
+  hell:     { label: 'Hell',     palette: { ceil: [30, 6, 4], floor: [40, 14, 8], fog: [40, 6, 2], wall: { '#': [150, 70, 60] } } },
+  fog:      { label: 'Fog',      palette: { ceil: [60, 64, 70], floor: [54, 56, 60], fog: [120, 124, 130] } },
+  neon:     { label: 'Neon',     palette: { ceil: [4, 8, 16], floor: [10, 16, 24], fog: [2, 6, 14] } },
+  // Horror lanterns — most of the world is pitch black; you see only a small ring around you.
+  blackout: { label: 'Blackout', palette: { ceil: [2, 2, 4], floor: [16, 14, 18], fog: [0, 0, 0] }, light: { radius: 4.5, ambient: 0.04, flicker: 0 } },
+  candle:   { label: 'Candle',   palette: { ceil: [10, 6, 4], floor: [30, 22, 16], fog: [0, 0, 0], wall: { '#': [120, 96, 70] } }, light: { radius: 5.5, ambient: 0.05, flicker: 0.18 } },
+};
+
 export function paletteOf(level: Level3D): Palette {
-  const p = level.palette ?? {};
+  const atmo = (level.atmo && ATMOS[level.atmo]?.palette) || {};
+  const p = { ...atmo, ...(level.palette ?? {}) };   // level overrides win over the atmosphere
   return {
     ceil: p.ceil ?? DEFAULT_PALETTE.ceil,
     floor: p.floor ?? DEFAULT_PALETTE.floor,
     fog: p.fog ?? DEFAULT_PALETTE.fog,
-    wall: { ...DEFAULT_PALETTE.wall, ...(p.wall ?? {}) },
+    wall: { ...DEFAULT_PALETTE.wall, ...(atmo.wall ?? {}), ...(level.palette?.wall ?? {}) },
   };
+}
+
+export function lightingOf(level: Level3D): Lighting | null {
+  return (level.atmo && ATMOS[level.atmo]?.light) || null;
 }
 
 // Grid helpers — cells beyond the row strings read as solid wall, so the world is always enclosed.
@@ -131,7 +154,36 @@ const NEONGRID: Level3D = {
   },
 };
 
-export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID];
+// THE HOLLOW — a pitch-black maze lit only by your candle. Crystals glow as beacons in the dark; find
+// your way to the exit before the dark gets to you. Slender/Amnesia in lo-fi.
+const HOLLOW: Level3D = {
+  id: 'hollow',
+  name: 'The Hollow',
+  spawnDir: 0,
+  atmo: 'candle',
+  rows: [
+    '##################',
+    '#S...#.....#....C#',
+    '###.#.###.#.####.#',
+    '#...#...#.#....#.#',
+    '#.#####.#.###.#.##',
+    '#.#...#.#...#.#..#',
+    '#.#.#.#.###.#.##.#',
+    '#...#...#C#.#..#.#',
+    '###.###.#.#.##.#.#',
+    '#C..#...#.#..#..C#',
+    '#.###.###.##.###.#',
+    '#.#...#....#...#.#',
+    '#.#.###.##.###.#.#',
+    '#...#...##...#...#',
+    '###.#.######.###.#',
+    '#...#....E.....#.#',
+    '#.############.#.#',
+    '##################',
+  ],
+};
+
+export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';

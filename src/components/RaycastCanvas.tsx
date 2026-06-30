@@ -11,7 +11,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  type Level3D, paletteOf, cellAt, isWall, findSpawn, getLevel,
+  type Level3D, paletteOf, lightingOf, cellAt, isWall, findSpawn, getLevel,
 } from '@/lib/raycast/levels';
 
 const STEP = 1000 / 60;            // fixed sim tick
@@ -49,6 +49,7 @@ export const RaycastCanvas: React.FC<{
 
     const rows = level.rows;
     const pal = paletteOf(level);
+    const lighting = lightingOf(level);   // lantern darkness (horror) or null for a flatly-lit world
     const spawn = findSpawn(rows);
 
     // Collect sprites (crystals + exit gate) and count grabbables.
@@ -250,6 +251,17 @@ export const RaycastCanvas: React.FC<{
         return [r + (fog[0] - r) * t, g + (fog[1] - g) * t, b + (fog[2] - b) * t];
       };
 
+      // Lantern light: 1 near you, falling to `ambient` past `radius`; flickers if asked. The black
+      // beyond your light is what makes the horror atmospheres terrifying. 1 (no darkening) otherwise.
+      const flick = lighting && lighting.flicker
+        ? 1 - lighting.flicker * (0.5 + 0.5 * Math.sin(tick * 0.7) * Math.sin(tick * 0.21 + 1.3))
+        : 1;
+      const lightAt = (dist: number): number => {
+        if (!lighting) return 1;
+        const f = 1 - dist / lighting.radius;
+        return (f < lighting.ambient ? lighting.ambient : f) * flick;
+      };
+
       // 1) Floor + ceiling cast (per pixel). Left/right edge rays bound the row.
       const rdx0 = cos - planeX, rdy0 = sin - planeY;   // leftmost ray
       const rdx1 = cos + planeX, rdy1 = sin + planeY;   // rightmost ray
@@ -261,32 +273,35 @@ export const RaycastCanvas: React.FC<{
         let fx = px + rowDist * rdx0;
         let fy = py + rowDist * rdy0;
         const fogT = 1 - 1 / (1 + rowDist * rowDist * 0.012);
+        const lf = lightAt(rowDist);
         const floorRow = y * W * 4;
         const ceilRow = (H - y - 1) * W * 4;
         for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
           const c = cellAt(rows, Math.floor(fx), Math.floor(fy));
-          // floor colour by tile
-          let fr: number, fg: number, fb: number;
+          // floor colour by tile. Lava and the exit pad are EMISSIVE — they light themselves, so the
+          // lantern darkness doesn't dim them (they read as beacons in a blackout).
+          let fr: number, fg: number, fb: number, emissive = false;
           if (c === 'L') {                               // lava — glowing, shimmering
             const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25);
-            fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh;
+            fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emissive = true;
           } else if (c === '~') {                         // pit — near-black void
-            fr = 4; fg = 3; fb = 8;
+            fr = 4; fg = 3; fb = 8; emissive = true;
           } else if (c === 'E') {                         // exit — cyan pad
             const sh = 0.7 + 0.3 * Math.sin(tick * 0.18);
-            fr = 30; fg = 200 * sh; fb = 230 * sh;
+            fr = 30; fg = 200 * sh; fb = 230 * sh; emissive = true;
           } else {                                        // normal floor with a faint checker
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.86;
             fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk;
           }
           const isVoid = c === '~';
-          const [r, g, b] = isVoid ? [fr, fg, fb] : fogMix(fr, fg, fb, fogT);
+          let [r, g, b] = isVoid ? [fr, fg, fb] : fogMix(fr, fg, fb, fogT);
+          if (!emissive) { r *= lf; g *= lf; b *= lf; }
           let o = floorRow + x * 4;
           data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
-          // ceiling (mirror) — palette ceil with light fog
+          // ceiling (mirror) — palette ceil with light fog, dimmed by the lantern
           const [cr, cg, cb] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogT * 0.7);
           o = ceilRow + x * 4;
-          data[o] = cr; data[o + 1] = cg; data[o + 2] = cb; data[o + 3] = 255;
+          data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cb * lf; data[o + 3] = 255;
         }
       }
 
@@ -314,7 +329,7 @@ export const RaycastCanvas: React.FC<{
         // texture X (where the ray hit along the wall face)
         const wallX = (side === 0 ? py + perp * rdy : px + perp * rdx) % 1;
         const base = pal.wall[hitCh] ?? pal.wall['#'];
-        const sideDark = side === 1 ? 0.7 : 1;           // N/S faces darker for depth
+        const sideDark = (side === 1 ? 0.7 : 1) * lightAt(perp);   // N/S faces darker + lantern falloff
         const fogT = 1 - 1 / (1 + perp * perp * 0.012);
         for (let y = top; y < bot; y++) {
           const ty = (y - drawStart) / lineH;            // 0..1 down the wall
