@@ -7,7 +7,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  type Level3D, ATMOS, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId,
+  type Level3D, ATMOS, SKIES, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId,
 } from '@/lib/raycast/levels';
 import { RaycastCanvas } from './RaycastCanvas';
 
@@ -22,6 +22,7 @@ const BRUSHES: Brush[] = [
   { ch: 'L', label: 'Lava', color: '#ff5a1e' },
   { ch: '~', label: 'Pit', color: '#050308' },
   { ch: 'C', label: 'Crystal', color: '#9beaff' },
+  { ch: 'M', label: 'Stalker', color: '#b03030' },
   { ch: 'E', label: 'Exit', color: '#1ee0ff' },
   { ch: 'S', label: 'Spawn', color: '#ffd400' },
 ];
@@ -184,6 +185,23 @@ export const RaycastDesigner: React.FC<{
             ))}
           </div>
 
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Sky</p>
+          <div className="flex flex-wrap gap-1">
+            <button onClick={() => { setLevel(l => ({ ...l, sky: undefined })); setSaved(false); }}
+              className={`text-[9px] font-mono px-2 py-1 border transition-colors ${!level.sky ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>Roof</button>
+            {Object.entries(SKIES).map(([key, s]) => (
+              <button key={key} onClick={() => { setLevel(l => ({ ...l, sky: key })); setSaved(false); }}
+                className={`text-[9px] font-mono px-2 py-1 border transition-colors ${level.sky === key ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          <label className="flex items-center gap-2 text-[10px] font-mono text-white/70 mt-2 cursor-pointer">
+            <input type="checkbox" checked={!!level.combat} onChange={e => { setLevel(l => ({ ...l, combat: e.target.checked })); setSaved(false); }} className="accent-brandRed" />
+            ⚔ Combat (else run-and-hide)
+          </label>
+
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Size</p>
           <div className="flex items-center gap-1.5 text-[11px] font-mono">
             <button onClick={() => doResize(w - 1, h)} className="w-7 h-7 border border-white/20 hover:border-white/50">–</button>
@@ -233,7 +251,7 @@ export const RaycastDesigner: React.FC<{
                       boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
                     }}
                   >
-                    {ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ''}
+                    {ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ''}
                     {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
                   </button>
                 );
