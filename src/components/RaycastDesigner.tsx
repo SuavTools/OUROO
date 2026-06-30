@@ -10,6 +10,7 @@ import {
   type Level3D, ATMOS, SKIES, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId,
 } from '@/lib/raycast/levels';
 import { RaycastCanvas } from './RaycastCanvas';
+import { NpcEditor, type NpcData } from './NpcEditor';
 
 type Brush = { ch: string; label: string; color: string };
 const BRUSHES: Brush[] = [
@@ -80,23 +81,40 @@ export const RaycastDesigner: React.FC<{
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [library, setLibrary] = useState(false);
+  const [npcCell, setNpcCell] = useState<{ x: number; y: number } | null>(null);   // open the builder for this cell
   const painting = useRef(false);
+  const npcAt = (x: number, y: number) => (level.npcs ?? []).find(n => n.x === x && n.y === y);
 
   const rows = level.rows;
   const w = rows[0]?.length ?? 0, h = rows.length;
   const builtin = isBuiltin(level.id);
 
   const paint = useCallback((x: number, y: number) => {
+    if (brush === 'NPC') { setNpcCell({ x, y }); return; }   // open the character builder for this tile
     setLevel(l => {
       if (brush === 'H+' || brush === 'H-') {
         // can't raise a wall cell — heights are for floors you walk on
         if (/[#1-9]/.test(l.rows[y]?.[x] ?? '#')) return l;
         return { ...l, heights: bumpHeight(l.rows, l.heights, x, y, brush === 'H+' ? 1 : -1) };
       }
-      return { ...l, rows: setCell(l.rows, x, y, brush) };
+      // painting a cell also clears any NPC sitting on it
+      const npcs = (l.npcs ?? []).filter(n => !(n.x === x && n.y === y));
+      return { ...l, rows: setCell(l.rows, x, y, brush), npcs: npcs.length ? npcs : undefined };
     });
     setSaved(false);
   }, [brush]);
+
+  // Character builder placed/updated a character → store it at the chosen tile.
+  const placeNpc = (d: NpcData) => {
+    if (!npcCell) return;
+    const { x, y } = npcCell;
+    setLevel(l => {
+      const npcs = (l.npcs ?? []).filter(n => !(n.x === x && n.y === y));
+      npcs.push({ x, y, a: d.a, n: d.n || undefined, sz: d.sz, lines: d.l?.length ? d.l : undefined });
+      return { ...l, npcs };
+    });
+    setNpcCell(null); setSaved(false);
+  };
 
   const doResize = (nw: number, nh: number) => {
     const cw = Math.max(4, Math.min(40, nw)), ch = Math.max(4, Math.min(40, nh));
@@ -170,6 +188,11 @@ export const RaycastDesigner: React.FC<{
               </button>
             ))}
           </div>
+
+          <button onClick={() => setBrush('NPC')}
+            className={`mt-1 px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === 'NPC' ? 'border-[#1ED760] bg-[#1ED760]/10 text-[#1ED760]' : 'border-white/15 hover:border-white/40'}`}>
+            ☻ NPC dropper <span className="text-white/30 normal-case">(character builder)</span>
+          </button>
 
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Height <span className="text-white/25 normal-case tracking-normal">(steps · climb 1)</span></p>
           <div className="grid grid-cols-2 gap-1.5">
@@ -257,7 +280,7 @@ export const RaycastDesigner: React.FC<{
                       boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
                     }}
                   >
-                    {ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ''}
+                    {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ''}
                     {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
                   </button>
                 );
@@ -266,6 +289,10 @@ export const RaycastDesigner: React.FC<{
           </div>
         </div>
       </div>
+
+      {/* Character builder (same one the rooms use) — drops the character at the chosen tile */}
+      <NpcEditor open={!!npcCell} initial={npcCell ? (npcAt(npcCell.x, npcCell.y) ? { n: npcAt(npcCell.x, npcCell.y)!.n ?? '', a: npcAt(npcCell.x, npcCell.y)!.a, l: npcAt(npcCell.x, npcCell.y)!.lines ?? [], sz: npcAt(npcCell.x, npcCell.y)!.sz } : null) : null}
+        onPlace={placeNpc} onClose={() => setNpcCell(null)} />
 
       {/* Library drawer */}
       {library && (

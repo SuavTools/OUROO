@@ -29,6 +29,7 @@ export type Level3D = {
   sky?: string;            // sky preset key (see SKIES) — gradient + weather instead of a flat ceiling
   music?: Mood;            // override the ambience mood (else derived from atmo/sky)
   combat?: boolean;        // can you fight back? false = a run-and-hide world (no weapon, just survive)
+  npcs?: Npc3D[];          // friendly/scripted NPC characters dropped into the realm
   palette?: Partial<Palette>;   // per-level overrides on top of the atmosphere
   heights?: string[];      // OPTIONAL per-cell floor level ('0'–'9'), same dims as rows. Absent/all-'0'
                            // = flat (classic renderer). Steps of 1 level are climbable; bigger = a wall.
@@ -37,6 +38,10 @@ export type Level3D = {
 
 // 'M' cells spawn a HAZARD NPC (a stalker that hunts you). It's walkable floor otherwise.
 export const MONSTER_CHAR = 'M';
+
+// Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
+// `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.
+export type Npc3D = { x: number; y: number; a: string; n?: string; sz?: number; lines?: string[] };
 
 // Floor level (0–9) of an open cell — 0 when no height map. Walls ignore this.
 export const heightAt = (level: Pick<Level3D, 'heights'>, x: number, y: number): number => {

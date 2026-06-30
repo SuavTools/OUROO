@@ -13,6 +13,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, findSpawn, getLevel, heightAt, hasHeightMap, MONSTER_CHAR,
 } from '@/lib/raycast/levels';
+import { resolveAppearance } from '@/lib/catalog';
+import { drawPerson } from '@/lib/person';
+import { drawSkinShape, skinById, isCreatureId, parseCreature } from '@/lib/skins';
+import { drawIconSpec } from '@/lib/icons';
 
 const STEP = 1000 / 60;            // fixed sim tick
 const RES_H = 240;                 // internal vertical resolution (RES_W tracks aspect for square pixels)
@@ -81,6 +85,22 @@ export const RaycastCanvas: React.FC<{
     const grabbed = new Set<number>();   // indices of crystals already collected
 
     // Hazard NPCs — stalkers that wander near home until they see you, then hunt. Spawned from 'M' cells.
+    // Friendly NPCs (your character-builder characters) dropped into the realm — billboarded.
+    const npcs = level.npcs ?? [];
+    const npcBuf = document.createElement('canvas'); npcBuf.width = 96; npcBuf.height = 128;
+    const npcCtx = npcBuf.getContext('2d') as CanvasRenderingContext2D;
+    const renderAppearance = (a: string, af: number) => {
+      npcCtx.clearRect(0, 0, npcBuf.width, npcBuf.height);
+      npcCtx.save();
+      npcCtx.translate(npcBuf.width / 2, npcBuf.height * 0.56);   // origin ~ mid-body; feet land near the bottom
+      const app = resolveAppearance(a);
+      if (app.kind === 'person') drawPerson(npcCtx, app.person, 64, 86, af);
+      else if (app.kind === 'icon' && app.spec) drawIconSpec(npcCtx, app.spec, 72, af);
+      else if (isCreatureId(a)) { const cr = parseCreature(a); drawSkinShape(npcCtx, cr.shape, cr.color, 60, 78, af, cr.accent); }
+      else { const sk = skinById(app.kind === 'skin' ? app.id : 'diamond-gold'); drawSkinShape(npcCtx, sk.shape, sk.color, 60, 78, af); }
+      npcCtx.restore();
+    };
+
     type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number };
     const enemies: Enemy[] = [];
     for (let y = 0; y < rows.length; y++)
@@ -756,6 +776,34 @@ export const RaycastCanvas: React.FC<{
       const sy = shake > 0.2 ? (((tick * 13) % 3) - 1) * shake : 0;
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(buf, sx, sy, canvas.width, canvas.height);
+
+      // NPC billboards (your character-builder characters) — full-res overlay, feet on their floor,
+      // coarsely occluded by walls via a centre depth sample. Drawn smooth (they're detailed sprites).
+      if (npcs.length) {
+        const S = canvas.height / H;
+        const invDet = 1 / (planeX * sin - cos * planeY);
+        const eyeH = heightMap ? pz + EYE_BASE + jz : 0.5;
+        const ord = npcs.map((nn) => ({ nn, d: (nn.x + 0.5 - px) ** 2 + (nn.y + 0.5 - py) ** 2 })).sort((a, b) => b.d - a.d);
+        ctx.imageSmoothingEnabled = true; ctx.textAlign = 'center';
+        for (const { nn } of ord) {
+          const relX = nn.x + 0.5 - px, relY = nn.y + 0.5 - py;
+          const camY = invDet * (-planeY * relX + planeX * relY);
+          if (camY <= 0.3) continue;
+          const camX = invDet * (sin * relX - cos * relY);
+          const scrX = (W / 2) * (1 + camX / camY);
+          const zfN = heightMap ? floorLvl(nn.x, nn.y) * STEP_UNIT : 0;
+          const groundY = horizon + ((eyeH - zfN) * H) / camY;
+          const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX)));
+          const by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (H / camY) * 0.4)));
+          if (camY > depth[by * W + bx] + 0.3) continue;   // torso behind a wall → hide
+          const figScreen = (H / camY) * 0.82 * (nn.sz ?? 1) * S;
+          const drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
+          renderAppearance(nn.a, tick * 0.5);
+          ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
+          if (nn.n) { const fs = Math.max(9, Math.round(figScreen * 0.12)); ctx.font = `${fs}px monospace`; ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(nn.n, scrX * S + 1, groundY * S - figScreen + 1); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(nn.n, scrX * S, groundY * S - figScreen); }
+        }
+        ctx.textAlign = 'left'; ctx.imageSmoothingEnabled = false;
+      }
 
       if (skyFx) drawWeather(skyFx);
 
