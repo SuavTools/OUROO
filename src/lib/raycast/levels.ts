@@ -12,8 +12,15 @@
 //   'C'                  crystal pickup (walkable; grab for a small reward)
 //   'O'                  tunnel (walkable; step on to warp to the NEXT tunnel cell — two make an A↔B
 //                        pair, three+ form a loop you cycle through in reading order)
+//   '>'                  stairs UP   (walkable; step on to climb to the storey above, same x,y)
+//   '<'                  stairs DOWN (walkable; step on to descend to the storey below, same x,y)
 //   'E'                  exit  (walkable; step on it to return to the flat room)
-//   'S'                  spawn (walkable; where you appear — exactly one)
+//   'S'                  spawn (walkable; where you appear — exactly one across the whole realm)
+//
+// MULTI-STOREY: a realm may be a STACK of floors (`floors[]`, ordered bottom→top). Each floor is its
+// own grid you can walk on top of and stand inside — no solid towers, and you can dig basements below
+// the ground floor. Move between storeys with the '>' / '<' stair cells. A single-grid level (just
+// `rows`) is treated as one floor, so old realms keep working.
 
 export type Palette = {
   ceil: [number, number, number];   // ceiling colour (top of the world)
@@ -22,10 +29,16 @@ export type Palette = {
   wall: Record<string, [number, number, number]>;  // base colour per wall char
 };
 
+// One storey of a multi-floor realm: its own walkable grid (+ optional per-cell terrain heights and
+// placed NPCs). Floors stack bottom→top; you cross between them via '>' / '<' stair cells.
+export type Floor3D = { rows: string[]; heights?: string[]; npcs?: Npc3D[] };
+
 export type Level3D = {
   id: string;
   name: string;
   rows: string[];          // grid; row index = world Y (north→south), col index = world X (west→east)
+  floors?: Floor3D[];      // OPTIONAL storey stack, ordered bottom→top. Present = multi-floor realm;
+                           // absent = single floor built from rows/heights/npcs (back-compat).
   spawnDir?: number;       // facing in degrees (0 = +X / east), default 0
   atmo?: string;           // atmosphere preset key (see ATMOS) — sets palette + lighting mood
   sky?: string;            // sky preset key (see SKIES) — gradient + weather instead of a flat ceiling
@@ -43,6 +56,10 @@ export const MONSTER_CHAR = 'M';
 
 // 'O' cells are tunnels: stepping onto one warps you to the next tunnel cell (reading order, wrapping).
 export const TUNNEL_CHAR = 'O';
+
+// Inter-storey stairs: step on '>' to climb a floor, '<' to descend — you land at the same x,y.
+export const STAIR_UP = '>';
+export const STAIR_DOWN = '<';
 
 // Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
 // `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.
@@ -142,6 +159,23 @@ export const cellAt = (rows: string[], x: number, y: number): string => {
   if (x < 0 || x >= row.length) return '#';
   return row[x] || '#';
 };
+
+// The storey stack of a realm: explicit floors[] if multi-storey, else a single floor from rows.
+export const floorsOf = (level: Level3D): Floor3D[] =>
+  level.floors && level.floors.length
+    ? level.floors
+    : [{ rows: level.rows, heights: level.heights, npcs: level.npcs }];
+
+// Which floor (and tile) holds the one spawn 'S'. Falls back to floor 0's open cell.
+export function findSpawnFloor(floors: Floor3D[]): { fi: number; x: number; y: number } {
+  for (let fi = 0; fi < floors.length; fi++)
+    for (let y = 0; y < floors[fi].rows.length; y++) {
+      const x = floors[fi].rows[y].indexOf('S');
+      if (x >= 0) return { fi, x: x + 0.5, y: y + 0.5 };
+    }
+  const s = findSpawn(floors[0].rows);
+  return { fi: 0, x: s.x, y: s.y };
+}
 
 export function findSpawn(rows: string[]): { x: number; y: number } {
   for (let y = 0; y < rows.length; y++) {
@@ -305,7 +339,64 @@ const GLADE: Level3D = (() => {
   return { id: 'glade', name: 'The Glade', spawnDir: 0, sky: 'day', music: 'chill' as Mood, rows: g };
 })();
 
-export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL, GLADE];
+// THE SUNKEN SPIRE — a MULTI-STOREY demo: a lava-lit basement, a ground hall where you spawn, and a
+// rooftop with the exit. Storeys are stacked grids connected by aligned stairs ('>' up / '<' down):
+//   basement '>' (9,2)  ↔  ground '<' (9,2)        ground '>' (2,9)  ↔  roof '<' (2,9)
+// No solid towers — you walk on top of one floor and stand inside the next. Grab crystals on every
+// level, climb to the roof, then take the Exit.
+const SPIRE_BASEMENT = [
+  '############',
+  '#C........C#',
+  '#........>.#',   // '>' (9,2) climbs to the ground hall
+  '#.LLLL.....#',
+  '#..........#',
+  '#...C..C...#',
+  '#..........#',
+  '#.LLLL.LLL.#',
+  '#..........#',
+  '#C........C#',
+  '#..........#',
+  '############',
+];
+const SPIRE_GROUND = [
+  '############',
+  '#S........C#',   // spawn here — this storey is "Ground"
+  '#........<.#',   // '<' (9,2) descends to the basement
+  '#..####....#',
+  '#..........#',
+  '#....##....#',
+  '#..........#',
+  '#....##....#',
+  '#..........#',
+  '#.>.......C#',   // '>' (2,9) climbs to the roof
+  '#..........#',
+  '############',
+];
+const SPIRE_ROOF = [
+  '############',
+  '#C........C#',
+  '#..........#',
+  '#..........#',
+  '#....E.....#',   // the way out, up top
+  '#..........#',
+  '#...O..O...#',   // a little tunnel pair to play with on the roof
+  '#..........#',
+  '#..........#',
+  '#.<.......C#',   // '<' (2,9) descends back to the ground hall
+  '#..........#',
+  '############',
+];
+const SPIRE: Level3D = {
+  id: 'spire',
+  name: 'The Sunken Spire',
+  spawnDir: 0,
+  atmo: 'dungeon',
+  music: 'tense' as Mood,
+  rows: SPIRE_GROUND,                       // mirror of the spawn storey (floorsOf reads `floors`)
+  floors: [{ rows: SPIRE_BASEMENT }, { rows: SPIRE_GROUND }, { rows: SPIRE_ROOF }],
+};
+
+export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL, GLADE, SPIRE];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';

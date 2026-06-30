@@ -11,7 +11,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  type Level3D, type Mood, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, findSpawn, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
+  type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
+  STAIR_UP, STAIR_DOWN, floorsOf, findSpawnFloor,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -30,7 +31,7 @@ const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.
 const EYE_BASE = 0.5;              // eye height above the floor you stand on
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 
-type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' };
+type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree'; key?: string };
 
 export const RaycastCanvas: React.FC<{
   levelId?: string;
@@ -58,7 +59,7 @@ export const RaycastCanvas: React.FC<{
     const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D;
     if (!ctx) return;
 
-    const rows = level.rows;
+    const floors = floorsOf(level);       // storey stack (one entry for a single-grid realm)
     const pal = paletteOf(level);
     const lighting = lightingOf(level);   // lantern darkness (horror) or null for a flatly-lit world
     const skyDef = skyOf(level);          // sky gradient + weather, or null for a solid ceiling
@@ -66,34 +67,52 @@ export const RaycastCanvas: React.FC<{
     const skyFx = skyDef?.fx;
     const mood: Mood = moodOf(level);     // ambience: spooky / tense / chill
     const canFight = !!level.combat;      // false = run-and-hide world (no weapon)
-    const spawn = findSpawn(rows);
-    const heightMap = hasHeightMap(level);                 // does this realm use verticality?
-    const floorLvl = (x: number, y: number) => heightAt(level, x, y);
-    let maxLvl = 0;
-    if (heightMap) for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
-    const CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform
+    const sp0 = findSpawnFloor(floors);   // the one spawn 'S' lives on exactly one storey
+    const spawnFloor = sp0.fi;
+    const spawn = { x: sp0.x, y: sp0.y };
 
-    // Collect sprites (crystals + exit gate) and count grabbables.
-    const sprites: Sprite[] = [];
-    for (let y = 0; y < rows.length; y++)
-      for (let x = 0; x < rows[y].length; x++) {
-        const c = rows[y][x];
-        if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal' });
-        else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
-        else if (c === 'T') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree' });
-      }
-    const totalCrystals = sprites.filter(s => s.kind === 'crystal').length;
-    const grabbed = new Set<number>();   // indices of crystals already collected
+    // Crystals are a whole-realm goal; remember grabbed ones by floor+tile so they stay gone across storeys.
+    const totalCrystals = floors.reduce((n, f) => n + f.rows.reduce((m, r) => m + (r.match(/C/g)?.length ?? 0), 0), 0);
+    const grabbed = new Set<string>();    // "fi:x:y" keys of crystals already collected
 
-    // Tunnels — centres of every 'O' cell in reading order. Stepping on one warps you to the next.
-    const tunnels: { x: number; y: number }[] = [];
-    for (let y = 0; y < rows.length; y++)
-      for (let x = 0; x < rows[y].length; x++)
-        if (rows[y][x] === TUNNEL_CHAR) tunnels.push({ x: x + 0.5, y: y + 0.5 });
+    type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number };
 
-    // Hazard NPCs — stalkers that wander near home until they see you, then hunt. Spawned from 'M' cells.
-    // Friendly NPCs (your character-builder characters) dropped into the realm — billboarded.
-    const npcs = level.npcs ?? [];
+    // ── Active storey (mutable — swapped when you take the stairs) ───────────────────────────────
+    let fi = spawnFloor;
+    let rows = floors[fi].rows;
+    let fHeights: string[] | undefined = floors[fi].heights;
+    let heightMap = false, maxLvl = 0, CEIL_Z = 0;     // terrain within the current floor
+    let sprites: Sprite[] = [];                        // crystals / exit / trees on this floor
+    let tunnels: { x: number; y: number }[] = [];      // 'O' warp pads on this floor
+    let npcs: Npc3D[] = [];                             // friendly billboards on this floor
+    let enemies: Enemy[] = [];                          // stalkers spawned from this floor's 'M' cells
+    const floorLvl = (x: number, y: number) => heightAt({ heights: fHeights }, x, y);
+
+    // (Re)build everything that depends on which storey you're standing on.
+    const loadFloor = (index: number) => {
+      fi = Math.max(0, Math.min(floors.length - 1, index));
+      const fl = floors[fi];
+      rows = fl.rows;
+      fHeights = fl.heights;
+      heightMap = hasHeightMap(fl);
+      maxLvl = 0;
+      if (heightMap) for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
+      CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform on this floor
+      sprites = []; tunnels = []; enemies = [];
+      for (let y = 0; y < rows.length; y++)
+        for (let x = 0; x < rows[y].length; x++) {
+          const c = rows[y][x];
+          if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
+          else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
+          else if (c === 'T') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree' });
+          else if (c === TUNNEL_CHAR) tunnels.push({ x: x + 0.5, y: y + 0.5 });
+          else if (c === MONSTER_CHAR) enemies.push({ x: x + 0.5, y: y + 0.5, hx: x + 0.5, hy: y + 0.5, chasing: false, wx: x + 0.5, wy: y + 0.5, wt: 0, hit: 0, hp: 3, flash: 0 });
+        }
+      npcs = fl.npcs ?? [];
+    };
+    loadFloor(spawnFloor);
+
+    // Friendly/hazard NPC billboard buffer + appearance renderer (shared across floors).
     const npcBuf = document.createElement('canvas'); npcBuf.width = 96; npcBuf.height = 128;
     const npcCtx = npcBuf.getContext('2d') as CanvasRenderingContext2D;
     const renderAppearance = (a: string, af: number) => {
@@ -107,13 +126,6 @@ export const RaycastCanvas: React.FC<{
       else { const sk = skinById(app.kind === 'skin' ? app.id : 'diamond-gold'); drawSkinShape(npcCtx, sk.shape, sk.color, 60, 78, af); }
       npcCtx.restore();
     };
-
-    type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number };
-    const enemies: Enemy[] = [];
-    for (let y = 0; y < rows.length; y++)
-      for (let x = 0; x < rows[y].length; x++)
-        if (rows[y][x] === MONSTER_CHAR)
-          enemies.push({ x: x + 0.5, y: y + 0.5, hx: x + 0.5, hy: y + 0.5, chasing: false, wx: x + 0.5, wy: y + 0.5, wt: 0, hit: 0, hp: 3, flash: 0 });
 
     // ── Player state ──────────────────────────────────────────────────────────────────────────
     let px = spawn.x, py = spawn.y;
@@ -295,7 +307,7 @@ export const RaycastCanvas: React.FC<{
       if (!blocked(px, ny, base)) py = ny;
     };
 
-    const doRespawn = () => { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; };
+    const doRespawn = () => { if (fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; };
 
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1;
     const pushHud = () => {
@@ -363,7 +375,17 @@ export const RaycastCanvas: React.FC<{
           shake = Math.min(4, shake + 1.2);
           beep(520, 0.1, 'sine', 0.05); beep(780, 0.12, 'sine', 0.045); beep(1180, 0.14, 'sine', 0.04);
         }
-      } else { tpLock = false; }                 // stepped off a pad → tunnels armed again
+      } else if (here === STAIR_UP || here === STAIR_DOWN) {   // stairs — change storey, land at the same x,y
+        if (!tpLock) {
+          const dest = fi + (here === STAIR_UP ? 1 : -1);
+          if (dest >= 0 && dest < floors.length) {
+            loadFloor(dest);
+            pz = floorLvl(cx, cy) * STEP_UNIT;   // ease onto the new floor's terrain
+            tpLock = true;                       // don't immediately ride the stair back
+            beep(here === STAIR_UP ? 560 : 360, 0.12, 'triangle', 0.05); beep(here === STAIR_UP ? 840 : 240, 0.14, 'triangle', 0.045);
+          }
+        }
+      } else { tpLock = false; }                 // stepped off a pad/stair → warps armed again
       if (here === '~') {                       // pit — you fall and die
         beep(180, 0.5, 'sawtooth', 0.06);
         hp = 0; respawn = 70;
@@ -385,11 +407,10 @@ export const RaycastCanvas: React.FC<{
       }
 
       // crystal pickups
-      for (let i = 0; i < sprites.length; i++) {
-        const s = sprites[i];
-        if (s.kind !== 'crystal' || grabbed.has(i)) continue;
+      for (const s of sprites) {
+        if (s.kind !== 'crystal' || !s.key || grabbed.has(s.key)) continue;
         if (Math.abs(s.x - px) < 0.45 && Math.abs(s.y - py) < 0.45) {
-          grabbed.add(i); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
+          grabbed.add(s.key); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
         }
       }
 
@@ -567,6 +588,12 @@ export const RaycastCanvas: React.FC<{
           } else if (c === TUNNEL_CHAR) {                 // tunnel — swirling violet warp pad
             const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3);
             fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emissive = true;
+          } else if (c === STAIR_UP) {                    // stairs up — bright banded steps
+            const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7;
+            fr = 180 * st; fg = 200 * st; fb = 150 * st; emissive = true;
+          } else if (c === STAIR_DOWN) {                  // stairs down — a dark recessed shaft
+            const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28;
+            fr = 40 * st; fg = 44 * st; fb = 60 * st; emissive = true;
           } else if (c === 'g') {                         // grass
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88;
             fr = 46 * chk; fg = 120 * chk; fb = 48 * chk;
@@ -660,6 +687,8 @@ export const RaycastCanvas: React.FC<{
                 else if (curCh === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emis = true; }
                 else if (curCh === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); fr = 30; fg = 200 * sh; fb = 230 * sh; emis = true; }
                 else if (curCh === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emis = true; }
+                else if (curCh === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; fr = 180 * st; fg = 200 * st; fb = 150 * st; emis = true; }
+                else if (curCh === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; fr = 40 * st; fg = 44 * st; fb = 60 * st; emis = true; }
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
                 else if (curCh === 'g') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
                 else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.94; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
@@ -730,7 +759,7 @@ export const RaycastCanvas: React.FC<{
       const invDet = 1 / (planeX * sin - cos * planeY);
       const order = sprites
         .map((s, i) => ({ s, i, d: (s.x - px) ** 2 + (s.y - py) ** 2 }))
-        .filter(o => !(o.s.kind === 'crystal' && grabbed.has(o.i)))
+        .filter(o => !(o.s.kind === 'crystal' && o.s.key && grabbed.has(o.s.key)))
         .sort((a, b) => b.d - a.d);
       for (const { s, kind } of order.map(o => ({ s: o.s, kind: o.s.kind }))) {
         const relX = s.x - px, relY = s.y - py;
@@ -918,6 +947,8 @@ export const RaycastCanvas: React.FC<{
           else if (c === '~') ctx.fillStyle = '#000';
           else if (c === 'E') ctx.fillStyle = '#1ee0ff';
           else if (c === TUNNEL_CHAR) ctx.fillStyle = '#b35cff';
+          else if (c === STAIR_UP) ctx.fillStyle = '#9be07a';
+          else if (c === STAIR_DOWN) ctx.fillStyle = '#3a4a66';
           else continue;
           ctx.fillRect(pad + x * cell, pad + y * cell, cell, cell);
         }
@@ -934,6 +965,14 @@ export const RaycastCanvas: React.FC<{
       ctx.moveTo(pad + px * cell, pad + py * cell);
       ctx.lineTo(pad + px * cell + Math.cos(dir) * 6, pad + py * cell + Math.sin(dir) * 6);
       ctx.stroke();
+      // storey indicator (only for multi-floor realms): which floor you're on, relative to the ground
+      if (floors.length > 1) {
+        const rel = fi - spawnFloor;
+        const label = rel === 0 ? 'GROUND' : rel > 0 ? `FLOOR +${rel}` : `BASEMENT ${rel}`;
+        ctx.globalAlpha = 1; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(pad - 2, pad + mh + 4, mw + 4, 12);
+        ctx.fillStyle = '#ffd400'; ctx.fillText(label, pad + 2, pad + mh + 13);
+      }
       ctx.restore();
     };
 
