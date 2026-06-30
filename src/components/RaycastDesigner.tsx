@@ -7,7 +7,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  type Level3D, type Floor3D, ATMOS, SKIES, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId,
+  type Level3D, type Floor3D, ATMOS, SKIES, listLevels, saveLevel, deleteLevel, getLevel, blankLevel, isBuiltin, newLevelId, blankAirRows, isAir, AIR,
 } from '@/lib/raycast/levels';
 import { RaycastCanvas } from './RaycastCanvas';
 import { NpcEditor, type NpcData } from './NpcEditor';
@@ -20,6 +20,7 @@ const BRUSHES: Brush[] = [
   { ch: '3', label: 'Moss', color: '#28dcb4' },
   { ch: '4', label: 'Gold', color: '#a08c46' },
   { ch: '.', label: 'Floor', color: '#26242f' },
+  { ch: AIR, label: 'Air / Erase', color: '#0a0a14' },
   { ch: 'g', label: 'Grass', color: '#2e7830' },
   { ch: 'p', label: 'Pavement', color: '#969aa6' },
   { ch: 'w', label: 'Water', color: '#1a5aaa' },
@@ -109,6 +110,8 @@ export const RaycastDesigner: React.FC<{
   const [library, setLibrary] = useState(false);
   const [floorIdx, setFloorIdx] = useState(0);   // which storey you're editing
   const [npcCell, setNpcCell] = useState<{ x: number; y: number } | null>(null);   // open the builder for this cell
+  const [rectMode, setRectMode] = useState(false);   // drag a rectangle and fill it in one stroke
+  const [rect, setRect] = useState<{ ax: number; ay: number; bx: number; by: number } | null>(null);   // live rect drag
   const painting = useRef(false);
 
   const floors = level.floors ?? [{ rows: level.rows, heights: level.heights, npcs: level.npcs }];
@@ -163,6 +166,32 @@ export const RaycastDesigner: React.FC<{
     });
   }, [brush, fIdx]);   // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Rectangle stroke — paint/erase a whole box of cells (or bump a box of heights) in one go, so
+  // building floors, walls and big air openings is fast. Uses whatever brush is selected.
+  const paintRect = (ax: number, ay: number, bx: number, by: number) => {
+    if (brush === 'NPC') return;
+    if (brush === 'S') { paint(bx, by); return; }   // spawn is unique — just drop it at the end cell
+    const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+    if (brush === 'H+' || brush === 'H-') {
+      setActiveFloor(f => {
+        const hh = normHeights(f.rows, f.heights);
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+          if (/[#1-9]/.test(f.rows[y]?.[x] ?? '#')) continue;
+          const next = Math.max(0, Math.min(9, hh[y].charCodeAt(x) - 48 + (brush === 'H+' ? 1 : -1)));
+          hh[y] = hh[y].substring(0, x) + String(next) + hh[y].substring(x + 1);
+        }
+        return { ...f, heights: hh };
+      });
+      return;
+    }
+    setActiveFloor(f => {
+      const rws = [...f.rows];
+      for (let y = y0; y <= y1; y++) { let r = rws[y]; for (let x = x0; x <= x1; x++) r = r.substring(0, x) + brush + r.substring(x + 1); rws[y] = r; }
+      const npcs = (f.npcs ?? []).filter(n => !(n.x >= x0 && n.x <= x1 && n.y >= y0 && n.y <= y1));
+      return { ...f, rows: rws, npcs: npcs.length ? npcs : undefined };
+    });
+  };
+
   // Character builder placed/updated a character → store it on the active storey at the chosen tile.
   const placeNpc = (d: NpcData) => {
     if (!npcCell) return;
@@ -191,7 +220,10 @@ export const RaycastDesigner: React.FC<{
   const addFloor = (where: 'above' | 'below') => {
     setLevel(l => {
       const fs = [...(l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }])];
-      const nf: Floor3D = { rows: blankFloorRows(fs[0].rows[0].length, fs[0].rows.length) };
+      const fw = fs[0].rows[0].length, fh = fs[0].rows.length;
+      // A floor ADDED ABOVE starts as open AIR — you carve platforms/walls into the sky so it doesn't
+      // become a solid lid over the level. A BASEMENT starts as a real enclosed room to walk into.
+      const nf: Floor3D = { rows: where === 'above' ? blankAirRows(fw, fh) : blankFloorRows(fw, fh) };
       if (where === 'above') { fs.push(nf); setFloorIdx(fs.length - 1); }
       else { fs.unshift(nf); setFloorIdx(0); }   // new basement slots in at the bottom
       return { ...l, floors: fs, rows: fs[0].rows };
@@ -280,6 +312,11 @@ export const RaycastDesigner: React.FC<{
             ☻ NPC dropper <span className="text-white/30 normal-case">(character builder)</span>
           </button>
 
+          <button onClick={() => setRectMode(v => !v)}
+            className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${rectMode ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 hover:border-white/40'}`}>
+            ▭ Rectangle fill <span className="text-white/30 normal-case">{rectMode ? '(drag a box)' : '(off)'}</span>
+          </button>
+
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Height <span className="text-white/25 normal-case tracking-normal">(steps · climb 1)</span></p>
           <div className="grid grid-cols-2 gap-1.5">
             {([['H+', '▲ Raise'], ['H-', '▼ Lower']] as [string, string][]).map(([ch, label]) => (
@@ -329,7 +366,7 @@ export const RaycastDesigner: React.FC<{
             <button onClick={() => doResize(w, h + 1)} className="w-7 h-7 border border-white/20 hover:border-white/50">+</button>
           </div>
 
-          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Storeys <span className="text-white/25 normal-case tracking-normal">(stairs ↑/↓ connect)</span></p>
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Storeys <span className="text-white/25 normal-case tracking-normal">(2+ = walk under · jump up · air = see through)</span></p>
           <div className="flex items-center gap-1 text-[11px] font-mono">
             <button onClick={() => setFloorIdx(Math.min(floors.length - 1, fIdx + 1))} disabled={fIdx >= floors.length - 1}
               className="w-7 h-7 border border-white/20 hover:border-white/50 disabled:opacity-30">▲</button>
@@ -358,8 +395,8 @@ export const RaycastDesigner: React.FC<{
 
         {/* Grid */}
         <div className="flex-1 overflow-auto p-4 flex items-start justify-center"
-          onPointerUp={() => { painting.current = false; }}
-          onPointerLeave={() => { painting.current = false; }}>
+          onPointerUp={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
+          onPointerLeave={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
           <div className="inline-grid border border-white/10"
             style={{ gridTemplateColumns: `repeat(${w}, ${cellPx}px)` }}>
             {rows.flatMap((row, y) =>
@@ -367,19 +404,26 @@ export const RaycastDesigner: React.FC<{
                 const ch = row[x] || '.';
                 const hd = cur.heights?.[y]?.[x];
                 const raised = hd && hd !== '0';
+                const air = isAir(ch);
+                const belowCh = fIdx > 0 ? floors[fIdx - 1]?.rows[y]?.[x] : undefined;   // what's directly under this cell
+                const ghost = air && belowCh && !isAir(belowCh);                          // show through-floor so overhangs line up
+                const inRect = !!rect && x >= Math.min(rect.ax, rect.bx) && x <= Math.max(rect.ax, rect.bx) && y >= Math.min(rect.ay, rect.by) && y <= Math.max(rect.ay, rect.by);
                 return (
                   <button
                     key={`${x}-${y}`}
-                    onPointerDown={() => { painting.current = true; paint(x, y); }}
-                    onPointerEnter={() => { if (painting.current) paint(x, y); }}
+                    onPointerDown={() => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
+                    onPointerEnter={() => { if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
                     className="flex items-center justify-center relative"
                     style={{
                       width: cellPx, height: cellPx, background: colorOf(ch),
-                      outline: '1px solid rgba(255,255,255,0.05)',
+                      outline: inRect ? '1px solid rgba(30,224,255,0.9)' : '1px solid rgba(255,255,255,0.05)',
+                      backgroundImage: air ? 'repeating-linear-gradient(45deg,rgba(255,255,255,0.04) 0 2px,transparent 2px 5px)' : undefined,
                       fontSize: cellPx * 0.5, lineHeight: 1,
                       boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
                     }}
                   >
+                    {/* ghost of the floor below, so you can align overhangs & holes */}
+                    {ghost && <span className="absolute inset-[18%] rounded-sm" style={{ background: colorOf(belowCh!), opacity: 0.28 }} />}
                     {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'b' ? '♧' : ch === 'f' ? '✿' : ch === 'r' ? '●' : ch === 'l' ? '☀' : ch === 'O' ? '◎' : ch === '>' ? '▲' : ch === '<' ? '▼' : ''}
                     {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
                   </button>

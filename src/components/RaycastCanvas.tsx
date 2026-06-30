@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, floorsOf, findSpawnFloor,
+  STAIR_UP, STAIR_DOWN, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -30,6 +30,8 @@ const MAX_HP = 100;
 const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
 const EYE_BASE = 0.5;              // eye height above the floor you stand on
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
+const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
+const GRAV = 0.012;              // stacked realms: gravity pull per tick
 
 type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' | 'bush' | 'flower' | 'rock' | 'lamp'; key?: string };
 
@@ -49,6 +51,7 @@ export const RaycastCanvas: React.FC<{
   const onExitRef = useRef(onExit); useEffect(() => { onExitRef.current = onExit; });
   const onRewardRef = useRef(onReward); useEffect(() => { onRewardRef.current = onReward; });
   const attackFnRef = useRef<(() => void) | null>(null);   // mobile FIRE button → the in-effect attack
+  const jumpRef = useRef(false);                           // mobile JUMP button → held this tick
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false); useEffect(() => { mutedRef.current = muted; }, [muted]);
   const ambToggleRef = useRef<((m: boolean) => void) | null>(null);   // ♪ button → start/stop ambience
@@ -75,7 +78,7 @@ export const RaycastCanvas: React.FC<{
     const totalCrystals = floors.reduce((n, f) => n + f.rows.reduce((m, r) => m + (r.match(/C/g)?.length ?? 0), 0), 0);
     const grabbed = new Set<string>();    // "fi:x:y" keys of crystals already collected
 
-    type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number };
+    type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number; k?: number };
 
     // ── Active storey (mutable — swapped when you take the stairs) ───────────────────────────────
     let fi = spawnFloor;
@@ -116,6 +119,67 @@ export const RaycastCanvas: React.FC<{
     };
     loadFloor(spawnFloor);
 
+    // ── Stacked voxel world (2+ floors) ─────────────────────────────────────────────────────────
+    // When a realm has multiple floors we stop swapping a single active grid and instead treat the
+    // whole stack as ONE 3D world: every layer sits STOREY_H above the one below, walls are solid
+    // blocks a storey tall (stand on their roof), '.'/etc are thin walkable slabs (their underside is
+    // the ceiling for the layer below), and ' ' (air) is empty — you see and fall straight through it.
+    // That's what lets you walk UNDER an overhang and look DOWN a shaft to the floor below.
+    const stacked = floors.length > 1;
+    const STOREY_H = STOREY_LEVELS * STEP_UNIT;       // world height of one storey (≈ one wall tall)
+    const nLayers = floors.length;
+    const grids = floors.map(f => f.rows);
+    const baseZ = (k: number) => k * STOREY_H;        // floor height of layer k
+    const cellL = (k: number, x: number, y: number) => (k < 0 || k >= nLayers) ? '#' : cellAt(grids[k], x, y);
+    const isSolidProp = (ch: string) => ch === 'T' || ch === 'r' || ch === 'l';
+    const bodyBlocks = (ch: string) => isWall(ch) || isSolidProp(ch);      // fills its whole storey → blocks your body
+    // every standable surface in a column: wall roofs (base+STOREY_H) and thin slab tops (base).
+    const standTops = (x: number, y: number): number[] => {
+      const t: number[] = [];
+      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(baseZ(k)); }
+      return t;
+    };
+    // highest surface at or just under `feet` — the ground you rest on (−∞ = nothing → you're falling).
+    const supportAt = (x: number, y: number, feet: number): number => {
+      let best = -Infinity; for (const t of standTops(x, y)) if (t <= feet + 0.06 && t > best) best = t; return best;
+    };
+    // does a solid block occupy the body span [zLo,zHi] at this column? (walls + tree/rock/lamp)
+    const bodyHit = (x: number, y: number, zLo: number, zHi: number): boolean => {
+      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }
+      return false;
+    };
+    // lowest block underside above `head` (head-bonk while jumping); +∞ = open sky above.
+    const ceilAbove = (x: number, y: number, head: number): number => {
+      let lo = Infinity; for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (b >= head - 0.001 && b < lo) lo = b; } return lo;
+    };
+    // which layer's surface you're standing on (for hazard/pickup/exit effects under your feet).
+    const layerAt = (z: number) => Math.max(0, Math.min(nLayers - 1, Math.round(z / STOREY_H)));
+
+    // Pull crystals/exit/props, stalkers and NPCs from EVERY layer — they all render at once (you see
+    // the crystal on the floor above through a hole), each tagged with its layer k for its height.
+    type LSprite = Sprite & { k: number };
+    const allSprites: LSprite[] = [];
+    const allNpcs: (Npc3D & { k: number })[] = [];
+    if (stacked) {
+      const all: Enemy[] = [];
+      for (let k = 0; k < nLayers; k++) {
+        const g = grids[k];
+        for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
+          const c = g[y][x];
+          if (c === 'C') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${k}:${x}:${y}`, k });
+          else if (c === 'E') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit', k });
+          else if (c === 'T') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree', k });
+          else if (c === 'b') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'bush', k });
+          else if (c === 'f') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'flower', k });
+          else if (c === 'r') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'rock', k });
+          else if (c === 'l') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'lamp', k });
+          else if (c === MONSTER_CHAR) all.push({ x: x + 0.5, y: y + 0.5, hx: x + 0.5, hy: y + 0.5, chasing: false, wx: x + 0.5, wy: y + 0.5, wt: 0, hit: 0, hp: 3, flash: 0, k });
+        }
+        for (const n of (floors[k].npcs ?? [])) allNpcs.push({ ...n, k });
+      }
+      enemies = all;       // stalker AI / attacks / minimap iterate this (each enemy carries its layer)
+    }
+
     // Friendly/hazard NPC billboard buffer + appearance renderer (shared across floors).
     const npcBuf = document.createElement('canvas'); npcBuf.width = 96; npcBuf.height = 128;
     const npcCtx = npcBuf.getContext('2d') as CanvasRenderingContext2D;
@@ -134,7 +198,8 @@ export const RaycastCanvas: React.FC<{
     // ── Player state ──────────────────────────────────────────────────────────────────────────
     let px = spawn.x, py = spawn.y;
     let dir = ((level.spawnDir ?? 0) * Math.PI) / 180;
-    let pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT;   // eased standing height
+    let pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT;   // feet height (stacked) / eased standing height (flat)
+    let viewZ = pz;                                                  // eye height eased toward pz (smooth steps)
     let pitch = 0;                                                   // look up/down (screen px)
     let jz = 0, vz = 0, grounded = true;                            // jump: hop height, velocity, on-ground
     let atkCd = 0, atkAnim = 0;                                      // weapon cooldown + swing animation
@@ -311,7 +376,7 @@ export const RaycastCanvas: React.FC<{
       if (!blocked(px, ny, base)) py = ny;
     };
 
-    const doRespawn = () => { if (fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; };
+    const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; };
 
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1;
     const pushHud = () => {
@@ -452,25 +517,27 @@ export const RaycastCanvas: React.FC<{
 
     // ── Stalker AI ──────────────────────────────────────────────────────────────────────────────
     const SIGHT = 4.5, LOSE = 7.5, E_WANDER = 0.012, E_CHASE = 0.038, E_DMG = 0.9;   // close to notice, slower than a running player → you can run & hide
-    const eBlocked = (x: number, y: number) =>
-      isWall(cellAt(rows, Math.floor(x), Math.floor(y))) || cellAt(rows, Math.floor(x), Math.floor(y)) === '~';
-    const lineClear = (x0: number, y0: number, x1: number, y1: number) => {
+    const eBlocked = (g: string[], x: number, y: number) =>
+      isWall(cellAt(g, Math.floor(x), Math.floor(y))) || cellAt(g, Math.floor(x), Math.floor(y)) === '~' || isAir(cellAt(g, Math.floor(x), Math.floor(y)));   // walls, pits AND air-edges pen a stalker in
+    const lineClear = (g: string[], x0: number, y0: number, x1: number, y1: number) => {
       const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 4);
       for (let i = 1; i < steps; i++) {
         const t = i / steps;
-        if (isWall(cellAt(rows, Math.floor(x0 + (x1 - x0) * t), Math.floor(y0 + (y1 - y0) * t)))) return false;
+        if (isWall(cellAt(g, Math.floor(x0 + (x1 - x0) * t), Math.floor(y0 + (y1 - y0) * t)))) return false;
       }
       return true;
     };
     const updateEnemies = () => {
       for (const e of enemies) {
         if (e.hp <= 0) continue;
+        const g = e.k != null ? grids[e.k] : rows;     // stalkers hunt within their own storey's grid
+        const sameZ = e.k == null || Math.abs(baseZ(e.k) - pz) < 1.2;   // only menace you if you're on roughly its level
         if (e.hit > 0) e.hit--;
         if (e.flash > 0) e.flash--;
         const dx = px - e.x, dy = py - e.y;
         const dist = Math.hypot(dx, dy);
-        const sees = dist < SIGHT && lineClear(e.x, e.y, px, py);
-        if (sees) e.chasing = true; else if (dist > LOSE) e.chasing = false;   // give up if you break line of sight and get far
+        const sees = sameZ && dist < SIGHT && lineClear(g, e.x, e.y, px, py);
+        if (sees) e.chasing = true; else if (dist > LOSE || !sameZ) e.chasing = false;   // give up if you break line of sight / change floors
 
         let tx: number, ty: number, sp: number;
         if (e.chasing) { tx = px; ty = py; sp = E_CHASE; }
@@ -484,11 +551,11 @@ export const RaycastCanvas: React.FC<{
         }
         const a = Math.atan2(ty - e.y, tx - e.x);
         const nx = e.x + Math.cos(a) * sp, ny = e.y + Math.sin(a) * sp;
-        if (!eBlocked(nx, e.y)) e.x = nx;
-        if (!eBlocked(e.x, ny)) e.y = ny;
+        if (!eBlocked(g, nx, e.y)) e.x = nx;
+        if (!eBlocked(g, e.x, ny)) e.y = ny;
 
         // touch → damage (with a short cooldown so it ticks, not nukes)
-        if (dist < 0.6 && e.hit === 0 && respawn === 0) {
+        if (sameZ && dist < 0.6 && e.hit === 0 && respawn === 0) {
           hp -= E_DMG * 8; e.hit = 40; shake = 4; beep(70, 0.25, 'sawtooth', 0.07);
           if (hp <= 0) { hp = 0; respawn = 70; beep(140, 0.6, 'sawtooth', 0.07); }
         }
@@ -502,6 +569,7 @@ export const RaycastCanvas: React.FC<{
       const cos = Math.cos(dir), sin = Math.sin(dir);
       for (const e of enemies) {
         if (e.hp <= 0) continue;
+        if (e.k != null && Math.abs(baseZ(e.k) - pz) > 1.0) continue;   // can't hit a stalker a storey away
         const dx = e.x - px, dy = e.y - py, dist = Math.hypot(dx, dy);
         if (dist > 1.8 || dist < 0.001) continue;
         if ((dx * cos + dy * sin) / dist < 0.5) continue;   // must be roughly in front (~60° arc)
@@ -1032,6 +1100,388 @@ export const RaycastCanvas: React.FC<{
       }
     };
 
+    // ── Stacked sim tick (real gravity, jump, walk-under-overhangs) ───────────────────────────────
+    const clamp1 = (v: number) => v < -1 ? -1 : v > 1 ? 1 : v;
+    const updateStacked = () => {
+      tick++;
+      if (atkCd > 0) atkCd--;
+      if (atkAnim > 0) atkAnim--;
+      if (exited) return;
+      if (respawn > 0) { respawn--; if (respawn === 0) doRespawn(); return; }
+
+      // intent
+      let fwd = 0, strafe = 0, turn = 0;
+      const run = keys.has('shift');
+      if (keys.has('w') || keys.has('arrowup')) fwd += 1;
+      if (keys.has('s') || keys.has('arrowdown')) fwd -= 1;
+      if (keys.has('q')) strafe -= 1;
+      if (keys.has('e')) strafe += 1;
+      if (keys.has('a') || keys.has('arrowleft')) turn -= 1;
+      if (keys.has('d') || keys.has('arrowright')) turn += 1;
+      if (moveStick) { const dx = moveStick.x - moveStick.ox, dy = moveStick.y - moveStick.oy; fwd += clamp1(-dy / 70); strafe += clamp1(dx / 70); }
+      if (turnStick) turn += clamp1((turnStick.x - turnStick.ox) / 70);
+      dir += turn * TURN;
+
+      // jump
+      if ((keys.has(' ') || keys.has('spacebar') || jumpRef.current) && grounded) { vz = JUMP_V; grounded = false; }
+
+      // horizontal move — collide against solid blocks at BODY height only, so you pass freely under
+      // a slab/overhang above your head. Slide per-axis.
+      const sp = run ? RUN : MOVE;
+      const cos = Math.cos(dir), sin = Math.sin(dir);
+      let nx = px, ny = py;
+      if (fwd) { nx += cos * fwd * sp; ny += sin * fwd * sp; }
+      if (strafe) { nx += -sin * strafe * sp; ny += cos * strafe * sp; }
+      if (nx !== px || ny !== py) {
+        const zLo = pz + 0.12, zHi = pz + 0.7;
+        const free = (x: number, y: number) => {
+          const pts: [number, number][] = [[x - RADIUS, y], [x + RADIUS, y], [x, y - RADIUS], [x, y + RADIUS]];
+          for (const [sx, sy] of pts) if (bodyHit(Math.floor(sx), Math.floor(sy), zLo, zHi)) return false;
+          return true;
+        };
+        if (free(nx, py)) px = nx;
+        if (free(px, ny)) py = ny;
+        bob += sp;
+      }
+
+      // gravity + landing (real Z)
+      const cx = Math.floor(px), cy = Math.floor(py);
+      vz -= GRAV;
+      pz += vz;
+      if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
+      const support = supportAt(cx, cy, pz);
+      if (support > -Infinity && pz <= support) { pz = support; vz = 0; grounded = true; }
+      else grounded = false;
+      if (support === -Infinity && pz < -0.8) { hp = 0; respawn = 70; beep(180, 0.5, 'sawtooth', 0.06); }   // fell into the void
+      // smooth the eye for stair lifts/landings, but keep jumps crisp
+      if (grounded) viewZ += (pz - viewZ) * 0.4; else viewZ = pz;
+
+      // standing-tile effects on the layer under your feet
+      const pk = layerAt(pz);
+      const here = cellL(pk, cx, cy);
+      if (here === TUNNEL_CHAR) {                 // tunnel — warp to the next tunnel on this layer
+        if (!tpLock) {
+          const g = grids[pk]; const ts: { x: number; y: number }[] = [];
+          for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) if (g[y][x] === TUNNEL_CHAR) ts.push({ x: x + 0.5, y: y + 0.5 });
+          if (ts.length > 1) {
+            const idx = ts.findIndex(t => Math.floor(t.x) === cx && Math.floor(t.y) === cy);
+            const dst = ts[(idx + 1) % ts.length]; px = dst.x; py = dst.y; tpLock = true; shake = Math.min(4, shake + 1.2);
+            beep(520, 0.1, 'sine', 0.05); beep(780, 0.12, 'sine', 0.045); beep(1180, 0.14, 'sine', 0.04);
+          }
+        }
+      } else if (here === STAIR_UP || here === STAIR_DOWN) {   // stairs — a quick lift up/down one storey
+        if (!tpLock) {
+          const dest = pk + (here === STAIR_UP ? 1 : -1);
+          if (dest >= 0 && dest < nLayers) { pz = baseZ(dest); vz = 0; grounded = true; tpLock = true; beep(here === STAIR_UP ? 560 : 360, 0.12, 'triangle', 0.05); beep(here === STAIR_UP ? 840 : 240, 0.14, 'triangle', 0.045); }
+        }
+      } else { tpLock = false; }
+      if (here === '~') { beep(180, 0.5, 'sawtooth', 0.06); hp = 0; respawn = 70; }   // pit
+      else if (here === 'L') { hp -= LAVA_DPS; shake = Math.min(4, shake + 0.8); if (tick % 14 === 0) beep(90, 0.08, 'sawtooth', 0.04); if (hp <= 0) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.06); } }
+
+      // swimming
+      submerged = here === 'w';
+      if (submerged) { breath -= 0.38; if (tick % 50 === 0) beep(420, 0.12, 'sine', 0.025); if (breath <= 0) { breath = 0; hp -= 0.7; if (tick % 10 === 0) beep(120, 0.2, 'sawtooth', 0.05); if (hp <= 0) { hp = 0; respawn = 70; } } }
+      else if (breath < 100) breath = Math.min(100, breath + 2.2);
+
+      if (shake > 0) shake *= 0.85;
+
+      // crystal pickups — must be on roughly the same level as the crystal
+      for (const s of allSprites) {
+        if (s.kind !== 'crystal' || !s.key || grabbed.has(s.key)) continue;
+        if (Math.abs(s.x - px) < 0.45 && Math.abs(s.y - py) < 0.45 && Math.abs(baseZ(s.k) - pz) < 0.7) {
+          grabbed.add(s.key); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
+        }
+      }
+      if (here === 'E') { exited = true; beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+
+      updateEnemies();
+      musicStep();
+      pushHud();
+    };
+
+    // ── Stacked renderer — every layer drawn at its true height at once (overhangs, holes, depth) ──
+    const drawStacked = () => {
+      const W = RES_W, H = RES_H;
+      const cos = Math.cos(dir), sin = Math.sin(dir);
+      const planeLen = (W / H) * 0.5;
+      const planeX = -sin * planeLen, planeY = cos * planeLen;
+      const horizon = (H >> 1) + Math.round(pitch);
+      const eye = viewZ + EYE_BASE;
+      const fog = pal.fog;
+      const topZ = baseZ(nLayers - 1) + STOREY_H + CEIL_GAP;   // sky/ceiling cap above the whole stack
+
+      const fogMix = (r: number, g: number, b: number, t: number): [number, number, number] => { t = t < 0 ? 0 : t > 1 ? 1 : t; return [r + (fog[0] - r) * t, g + (fog[1] - g) * t, b + (fog[2] - b) * t]; };
+      const flick = lighting && lighting.flicker ? 1 - lighting.flicker * (0.5 + 0.5 * Math.sin(tick * 0.7) * Math.sin(tick * 0.21 + 1.3)) : 1;
+      const lightAt = (d: number) => { if (!lighting) return 1; const f = 1 - d / lighting.radius; return (f < lighting.ambient ? lighting.ambient : f) * flick; };
+      const skyColAt = (y: number): [number, number, number] => { const t = horizon <= 0 ? 1 : Math.max(0, Math.min(1, y / horizon)); return [sky![0][0] + (sky![1][0] - sky![0][0]) * t, sky![0][1] + (sky![1][1] - sky![0][1]) * t, sky![0][2] + (sky![1][2] - sky![0][2]) * t]; };
+      const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
+      const projF = (z: number, d: number) => horizon + ((eye - z) * H) / d;
+
+      // surface colour for a floor/slab cell at world (fx,fy) → [r,g,b,emissive]
+      const floorColor = (c: string, fx: number, fy: number): [number, number, number, boolean] => {
+        if (c === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); return [255 * sh, 90 * sh + 30, 20 * sh, true]; }
+        if (c === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); return [20 * sh, 90 * sh, 170 * sh, true]; }
+        if (c === '~') return [4, 3, 8, true];
+        if (c === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); return [30, 200 * sh, 230 * sh, true]; }
+        if (c === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); return [150 * sw + 40, 40 * sw, 210 * sw + 40, true]; }
+        if (c === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; return [180 * st, 200 * st, 150 * st, true]; }
+        if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
+        if (c === 'g' || c === 'b' || c === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; return [46 * chk, 120 * chk, 48 * chk, false]; }
+        if (c === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; return [150 * chk * grout, 150 * chk * grout, 162 * chk * grout, false]; }
+        const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; return [pal.floor[0] * chk, pal.floor[1] * chk, pal.floor[2] * chk, false];
+      };
+
+      depth.fill(1e9);
+      data.fill(0);
+
+      // draw a horizontal surface (floor top or block roof) at height z over the depth slice [dA,dB]
+      const drawHoriz = (x: number, c: string, z: number, dA: number, dB: number, rdx: number, rdy: number, roof: boolean) => {
+        const ya = Math.floor(projF(z, dB)), yb = Math.ceil(projF(z, dA));   // far edge → near edge
+        const y0 = Math.max(0, Math.min(ya, yb)), y1 = Math.min(H, Math.max(ya, yb));
+        for (let y = y0; y < y1; y++) {
+          const pp = y - horizon; if (pp <= 0) continue;            // floor is below the horizon
+          const d = ((eye - z) * H) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
+          if (d >= depth[y * W + x]) continue;
+          const fx = px + d * rdx, fy = py + d * rdy;
+          let R: number, G: number, B: number;
+          if (roof) { const base = pal.wall[c] ?? pal.wall['#']; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 0.92 : 0.78; const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(base[0] * chk, base[1] * chk, base[2] * chk, ft); R *= lf; G *= lf; B *= lf; }
+          else { const [r, g, b, emis] = floorColor(c, fx, fy); if (emis) { R = r; G = g; B = b; } else { const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(r, g, b, ft); R *= lf; G *= lf; B *= lf; } }
+          const o = (y * W + x) * 4; data[o] = R; data[o + 1] = G; data[o + 2] = B; data[o + 3] = 255; depth[y * W + x] = d;
+        }
+      };
+      // draw the UNDERSIDE of a slab/block above your eye over [dA,dB] — the ceiling you walk under
+      const drawUnder = (x: number, c: string, z: number, dA: number, dB: number, rdx: number, rdy: number) => {
+        const ya = Math.floor(projF(z, dA)), yb = Math.ceil(projF(z, dB));   // near edge → far edge (above horizon)
+        const y0 = Math.max(0, Math.min(ya, yb)), y1 = Math.min(H, Math.max(ya, yb));
+        for (let y = y0; y < y1; y++) {
+          const pp = y - horizon; if (pp >= 0) continue;            // underside is above the horizon
+          const d = ((eye - z) * H) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
+          if (d >= depth[y * W + x]) continue;
+          const fx = px + d * rdx, fy = py + d * rdy;
+          const [r, g, b] = floorColor(c, fx, fy); const ft = fogTd(d), lf = lightAt(d);
+          const [R, G, B] = fogMix(r * 0.45, g * 0.45, b * 0.45, ft);   // a shadowed underside
+          const o = (y * W + x) * 4; data[o] = R * lf; data[o + 1] = G * lf; data[o + 2] = B * lf; data[o + 3] = 255; depth[y * W + x] = d;
+        }
+      };
+
+      // 1) Per-column voxel march — for each cell along the ray, draw every layer's faces.
+      for (let x = 0; x < W; x++) {
+        const camX = (2 * x) / W - 1;
+        const rdx = cos + planeX * camX, rdy = sin + planeY * camX;
+        let mapX = Math.floor(px), mapY = Math.floor(py);
+        const ddx = Math.abs(1 / rdx), ddy = Math.abs(1 / rdy);
+        let sideX: number, sideY: number, stepX: number, stepY: number;
+        if (rdx < 0) { stepX = -1; sideX = (px - mapX) * ddx; } else { stepX = 1; sideX = (mapX + 1 - px) * ddx; }
+        if (rdy < 0) { stepY = -1; sideY = (py - mapY) * ddy; } else { stepY = 1; sideY = (mapY + 1 - py) * ddy; }
+        let dEnter = 0.0001, entrySide = 0;
+        for (let guard = 0; guard < 80; guard++) {
+          let dExit = sideX < sideY ? sideX : sideY;
+          if (dExit < dEnter + 0.0001) dExit = dEnter + 0.0001;
+          for (let k = 0; k < nLayers; k++) {
+            const c = cellL(k, mapX, mapY);
+            if (isAir(c)) continue;
+            if (isWall(c)) {
+              const zb = baseZ(k), zt = zb + STOREY_H;
+              // near vertical face — the wall you see/bump (depth = entry distance)
+              const wTopF = projF(zt, dEnter), wBotF = projF(zb, dEnter), span = Math.max(1, wBotF - wTopF);
+              const base = pal.wall[c] ?? pal.wall['#'];
+              const wxv = entrySide === 0 ? py + dEnter * rdy : px + dEnter * rdx, wxf = wxv - Math.floor(wxv);
+              const sd = (entrySide === 1 ? 0.7 : 1) * lightAt(dEnter), ft = fogTd(dEnter);
+              const wt = Math.max(0, Math.floor(wTopF)), wb = Math.min(H, Math.ceil(wBotF));
+              for (let y = wt; y < wb; y++) {
+                if (dEnter >= depth[y * W + x]) continue;
+                const ty = (y - wTopF) / span; const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
+                const mortar = (ty * 6) % 1 < 0.09 || (((wxf + off) % 1) * 3) % 1 < 0.06 ? 0.55 : 1;
+                const shade = sd * mortar * (0.8 + 0.2 * (1 - ty));
+                const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
+                const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter;
+              }
+              if (zt < eye) drawHoriz(x, c, zt, dEnter, dExit, rdx, rdy, true);   // walk on its roof
+              if (zb > eye) drawUnder(x, c, zb, dEnter, dExit, rdx, rdy);          // its underside (rare)
+            } else {
+              const z = baseZ(k);
+              if (z < eye) drawHoriz(x, c, z, dEnter, dExit, rdx, rdy, false);     // floor seen from above
+              else if (z > eye) drawUnder(x, c, z, dEnter, dExit, rdx, rdy);       // overhang underside above you
+            }
+          }
+          if (sideX < sideY) { sideX += ddx; mapX += stepX; entrySide = 0; } else { sideY += ddy; mapY += stepY; entrySide = 1; }
+          dEnter = dExit;
+          if (dEnter > 44) break;
+        }
+
+        // 2) Fill anything still open (sky if the realm has one, else the flat ceiling cap).
+        for (let y = 0; y < H; y++) {
+          if (depth[y * W + x] < 1e8) continue;
+          const o = (y * W + x) * 4;
+          if (sky) { const [sr, sg, sb] = skyColAt(y); data[o] = sr; data[o + 1] = sg; data[o + 2] = sb; data[o + 3] = 255; }
+          else { const pp = horizon - y; const d = pp > 0 ? ((topZ - eye) * H) / pp : 40; const lf = lightAt(d); const [cr, cg, cb] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7); data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cb * lf; data[o + 3] = 255; depth[y * W + x] = d; }
+        }
+      }
+
+      // 3) Sprites (crystals/exit/props) — billboard, anchored to their layer's slab, depth-tested.
+      const invDet = 1 / (planeX * sin - cos * planeY);
+      const order = allSprites
+        .map(s => ({ s, d: (s.x - px) ** 2 + (s.y - py) ** 2 }))
+        .filter(o => !(o.s.kind === 'crystal' && o.s.key && grabbed.has(o.s.key)))
+        .sort((a, b) => b.d - a.d);
+      for (const { s } of order) {
+        const kind = s.kind;
+        const relX = s.x - px, relY = s.y - py;
+        const camY = invDet * (-planeY * relX + planeX * relY);
+        if (camY <= 0.1) continue;
+        const camX = invDet * (sin * relX - cos * relY);
+        const screenX = Math.floor((W / 2) * (1 + camX / camY));
+        const sizeBase = Math.abs(Math.floor(H / camY));
+        const zf = baseZ(s.k);
+        const groundY = horizon + ((eye - zf) * H) / camY;        // where this layer's floor meets the sprite
+        const szMul = kind === 'tree' ? 1.4 : kind === 'lamp' ? 1.1 : kind === 'rock' ? 0.72 : kind === 'bush' ? 0.62 : kind === 'flower' ? 0.42 : kind === 'exit' ? 1 : 0.55;
+        const sz = Math.floor(sizeBase * szMul), half = sz >> 1;
+        const isGround = kind !== 'crystal';
+        const vCenter = isGround ? Math.round(groundY) - half : Math.round(groundY) - Math.floor(sizeBase * 0.5) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04);
+        const lfTree = lightAt(camY);
+        const hue = (Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5;
+        const sx0 = Math.max(0, screenX - half), sx1 = Math.min(W, screenX + half);
+        const sy0 = Math.max(0, vCenter - half), sy1 = Math.min(H, vCenter + half + 1);
+        const fogT = 1 - 1 / (1 + camY * camY * 0.012);
+        for (let x = sx0; x < sx1; x++) {
+          const u = (x - (screenX - half)) / sz - 0.5;
+          for (let y = sy0; y < sy1; y++) {
+            if (camY >= depth[y * W + x]) continue;
+            const v = (y - (vCenter - half)) / sz - 0.5;
+            let on = false, r = 0, g = 0, b = 0, lit = false;
+            if (kind === 'crystal') { const dd = Math.abs(u) + Math.abs(v); if (dd < 0.42) { on = true; const gl = 1 - dd / 0.42; r = 120 + 135 * gl; g = 230; b = 255; } }
+            else if (kind === 'tree') { if (v > 0.12 && Math.abs(u) < 0.07) { on = true; lit = true; r = 96; g = 64; b = 36; } else { const cu = u, cv = v + 0.18; const dd = Math.sqrt(cu * cu + cv * cv * 1.1); if (dd < 0.4) { on = true; lit = true; const sh = 0.7 + 0.3 * Math.sin(u * 9 + v * 9 + tick * 0.05); r = 28 * sh; g = (95 + 40 * (1 - dd / 0.4)) * sh; b = 38 * sh; } } }
+            else if (kind === 'bush') { const cu = u, cv = v - 0.16; const dd = Math.sqrt(cu * cu * 1.15 + cv * cv); if (dd < 0.42) { on = true; lit = true; const sh = 0.7 + 0.3 * Math.sin(u * 12 + v * 10 + tick * 0.04); r = 30 * sh; g = (88 + 46 * (1 - dd / 0.42)) * sh; b = 44 * sh; } }
+            else if (kind === 'flower') { if (Math.abs(u) < 0.04 && v > -0.04) { on = true; lit = true; r = 40; g = 112; b = 52; } else { const cu = u, cv = v + 0.28; const dd = Math.sqrt(cu * cu + cv * cv); if (dd < 0.2) { on = true; lit = true; if (dd < 0.06) { r = 250; g = 220; b = 70; } else { const P = [[235, 80, 90], [235, 150, 60], [210, 90, 220], [90, 150, 240], [240, 240, 250]][hue]; r = P[0]; g = P[1]; b = P[2]; } } } }
+            else if (kind === 'rock') { const cu = u, cv = v - 0.2; const dd = Math.sqrt(cu * cu + cv * cv * 1.3); if (dd < 0.44) { on = true; lit = true; const sh = 0.55 + 0.45 * (1 - dd / 0.44) + 0.07 * Math.sin(u * 16); const g0 = 120 * sh; r = g0; g = g0 + 4; b = g0 + 14; } }
+            else if (kind === 'lamp') { if (Math.abs(u) < 0.05 && v > -0.18) { on = true; lit = true; r = 52; g = 50; b = 60; } else { const cu = u, cv = v + 0.34; const dd = Math.sqrt(cu * cu + cv * cv); if (dd < 0.17) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.12); r = 255 * gl; g = 222 * gl; b = 120 * gl; } } }
+            else { if (Math.abs(u) < 0.34 && v > -0.5) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.2 + y * 0.3); r = 60 * gl; g = 230 * gl; b = 255 * gl; } }
+            if (!on) continue;
+            if (lit) { r *= lfTree; g *= lfTree; b *= lfTree; }
+            const [rr, gg, bb] = fogMix(r, g, b, fogT * 0.6);
+            const o = (y * W + x) * 4; data[o] = rr; data[o + 1] = gg; data[o + 2] = bb; data[o + 3] = 255;
+          }
+        }
+      }
+
+      // 4) Stalkers — dark billboards on their own layer, depth-tested.
+      const eorder = enemies.filter(e => e.hp > 0).map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
+      for (const { e } of eorder) {
+        const relX = e.x - px, relY = e.y - py;
+        const camY = invDet * (-planeY * relX + planeX * relY);
+        if (camY <= 0.05) continue;
+        const camX = invDet * (sin * relX - cos * relY);
+        const screenX = (W / 2) * (1 + camX / camY);
+        const sizeBase = Math.abs(H / camY);
+        const zfE = baseZ(e.k ?? 0);
+        const groundY = horizon + ((eye - zfE) * H) / camY;
+        const figH = sizeBase * 0.95, figW = sizeBase * 0.46, top = groundY - figH;
+        const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
+        const sx0 = Math.max(0, Math.floor(screenX - figW / 2)), sx1 = Math.min(W, Math.ceil(screenX + figW / 2));
+        const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
+        const fogT = 1 - 1 / (1 + camY * camY * 0.012);
+        const lf = Math.max(lightAt(camY), 0.45);
+        const eR = e.chasing ? 255 : 200, eG = e.chasing ? 30 : 120, eB = 30;
+        for (let x = sx0; x < sx1; x++) {
+          const u = (x - screenX) / figW + sway;
+          for (let y = sy0; y < sy1; y++) {
+            if (camY > depth[y * W + x] + 0.35) continue;
+            const v = (y - top) / figH;
+            const bodyW = v < 0.16 ? 0.22 : v < 0.62 ? 0.5 : Math.max(0.04, 0.5 - (v - 0.62) * 0.9);
+            const au = Math.abs(u); if (au > bodyW) continue;
+            let r: number, g: number, b: number;
+            if (v > 0.06 && v < 0.13 && Math.abs(au - 0.11) < 0.05) { r = eR; g = eG; b = eB; }
+            else if (e.flash > 0) { r = 255; g = 230; b = 230; }
+            else { const rim = Math.pow(au / Math.max(0.01, bodyW), 3); let R = 26 + 95 * rim, G = 22 + 40 * rim, B = 34 + 110 * rim; if (e.chasing) { R += 70 * rim + 14; G -= 10 * rim; } R *= lf; G *= lf; B *= lf; const m = fogMix(R, G, B, fogT * 0.45); r = m[0]; g = m[1]; b = m[2]; }
+            const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
+          }
+        }
+      }
+
+      bctx.putImageData(img, 0, 0);
+      const shx = shake > 0.2 ? (((tick * 7) % 3) - 1) * shake : 0;
+      const shy = shake > 0.2 ? (((tick * 13) % 3) - 1) * shake : 0;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(buf, shx, shy, canvas.width, canvas.height);
+
+      // 5) NPC billboards (full-res overlay) — feet on their layer's floor.
+      if (allNpcs.length) {
+        const S = canvas.height / H;
+        const ord = allNpcs.map(nn => ({ nn, d: (nn.x + 0.5 - px) ** 2 + (nn.y + 0.5 - py) ** 2 })).sort((a, b) => b.d - a.d);
+        ctx.imageSmoothingEnabled = true; ctx.textAlign = 'center';
+        for (const { nn } of ord) {
+          const relX = nn.x + 0.5 - px, relY = nn.y + 0.5 - py;
+          const camY = invDet * (-planeY * relX + planeX * relY);
+          if (camY <= 0.3) continue;
+          const camX = invDet * (sin * relX - cos * relY);
+          const scrX = (W / 2) * (1 + camX / camY);
+          const groundY = horizon + ((eye - baseZ(nn.k)) * H) / camY;
+          const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX))), by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (H / camY) * 0.4)));
+          if (camY > depth[by * W + bx] + 0.3) continue;
+          const figScreen = (H / camY) * 0.82 * (nn.sz ?? 1) * S, drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
+          renderAppearance(nn.a, tick * 0.5);
+          ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
+          const headY = groundY * S - figScreen;
+          if (nn.n) { const fs = Math.max(9, Math.round(figScreen * 0.12)); ctx.font = `${fs}px monospace`; ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillText(nn.n, scrX * S + 1, headY + 1); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillText(nn.n, scrX * S, headY); }
+          const dist = Math.hypot(relX, relY);
+          if (nn.lines && nn.lines.length && dist < 2.6) {
+            const line = nn.lines[Math.floor(tick / 200) % nn.lines.length];
+            if (line) {
+              const fs = Math.max(11, Math.round(canvas.height * 0.018)); ctx.font = `${fs}px monospace`; ctx.textAlign = 'center';
+              const tw = ctx.measureText(line).width, bw = tw + 20, bh = fs + 12, bxc = scrX * S, byc = headY - (nn.n ? fs + 8 : 6) - bh;
+              ctx.fillStyle = 'rgba(0,0,0,0.78)'; ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.rect(bxc - bw / 2, byc, bw, bh); ctx.fill(); ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(bxc - 5, byc + bh); ctx.lineTo(bxc + 5, byc + bh); ctx.lineTo(bxc, byc + bh + 7); ctx.closePath(); ctx.fill();
+              ctx.fillStyle = '#fff'; ctx.fillText(line, bxc, byc + fs + 2);
+            }
+          }
+        }
+        ctx.textAlign = 'left'; ctx.imageSmoothingEnabled = false;
+      }
+
+      if (skyFx) drawWeather(skyFx);
+      if (canFight) {
+        const cw = canvas.width, ch = canvas.height, swing = atkAnim > 0 ? atkAnim / 10 : 0;
+        ctx.save(); ctx.translate(cw * 0.70, ch - cw * 0.02 + swing * ch * 0.05); ctx.rotate(-0.45 + swing * 0.85);
+        ctx.fillStyle = '#3a2e20'; ctx.fillRect(-cw * 0.02, 0, cw * 0.04, ch * 0.12);
+        ctx.fillStyle = '#d7dde6'; ctx.fillRect(-cw * 0.013, -ch * 0.30, cw * 0.026, ch * 0.30);
+        ctx.fillStyle = '#9aa3ad'; ctx.fillRect(-cw * 0.003, -ch * 0.30, cw * 0.006, ch * 0.30); ctx.restore();
+      }
+      if (hp < 40 || respawn > 0) { const a = respawn > 0 ? Math.min(0.85, (70 - respawn) / 30) : (40 - hp) / 100; ctx.fillStyle = `rgba(120,0,0,${a})`; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      if (exited) { ctx.fillStyle = 'rgba(40,220,255,0.25)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+      if (submerged) { ctx.fillStyle = `rgba(20,80,150,${0.28 + 0.4 * (1 - breath / 100)})`; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+
+      drawMinimapStacked();
+    };
+
+    // Minimap for stacked realms — shows the layer you're standing on + a storey label.
+    const drawMinimapStacked = () => {
+      const pk = layerAt(pz), g = grids[pk], cell = 5, pad = 10;
+      const mw = g[0].length * cell, mh = g.length * cell;
+      ctx.save(); ctx.globalAlpha = 0.8; ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(pad - 2, pad - 2, mw + 4, mh + 4);
+      for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
+        const c = g[y][x];
+        if (c === '#' || c === '1' || c === '2' || c === '3' || c === '4') ctx.fillStyle = '#6a6a86';
+        else if (c === 'L') ctx.fillStyle = '#ff5a1e';
+        else if (c === '~') ctx.fillStyle = '#000';
+        else if (c === 'E') ctx.fillStyle = '#1ee0ff';
+        else if (c === TUNNEL_CHAR) ctx.fillStyle = '#b35cff';
+        else if (c === STAIR_UP) ctx.fillStyle = '#9be07a';
+        else if (c === STAIR_DOWN) ctx.fillStyle = '#3a4a66';
+        else if (isAir(c)) { continue; }
+        else continue;
+        ctx.fillRect(pad + x * cell, pad + y * cell, cell, cell);
+      }
+      for (const e of enemies) { if (e.hp <= 0 || (e.k ?? 0) !== pk) continue; ctx.fillStyle = e.chasing ? '#ff2d2d' : '#a05050'; ctx.fillRect(pad + e.x * cell - 1.5, pad + e.y * cell - 1.5, 3, 3); }
+      ctx.fillStyle = '#ffd400'; ctx.fillRect(pad + px * cell - 1.5, pad + py * cell - 1.5, 3, 3);
+      ctx.strokeStyle = '#ffd400'; ctx.beginPath(); ctx.moveTo(pad + px * cell, pad + py * cell); ctx.lineTo(pad + px * cell + Math.cos(dir) * 6, pad + py * cell + Math.sin(dir) * 6); ctx.stroke();
+      const rel = pk - spawnFloor, label = rel === 0 ? 'GROUND' : rel > 0 ? `FLOOR +${rel}` : `BASEMENT ${rel}`;
+      ctx.globalAlpha = 1; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(pad - 2, pad + mh + 4, mw + 4, 12);
+      ctx.fillStyle = '#ffd400'; ctx.fillText(label, pad + 2, pad + mh + 13);
+      ctx.restore();
+    };
+
     // ── Loop (fixed 60Hz accumulator) ───────────────────────────────────────────────────────────
     let raf = 0, last = 0, acc = 0;
     const loop = (now: number) => {
@@ -1041,8 +1491,8 @@ export const RaycastCanvas: React.FC<{
       if (dt > 250) dt = 250;
       acc += dt;
       let n = 0;
-      while (acc >= STEP && n < 5) { update(); acc -= STEP; n++; }
-      draw();
+      while (acc >= STEP && n < 5) { (stacked ? updateStacked : update)(); acc -= STEP; n++; }
+      (stacked ? drawStacked : draw)();
     };
     raf = requestAnimationFrame(loop);
 
@@ -1106,6 +1556,13 @@ export const RaycastCanvas: React.FC<{
         <button onPointerDown={(e) => { e.preventDefault(); attackFnRef.current?.(); }}
           style={{ bottom: 'max(4.5rem, env(safe-area-inset-bottom))' }}
           className="absolute right-6 z-30 w-16 h-16 rounded-full border-2 border-brandRed/70 bg-brandRed/20 text-brandRed font-mono text-xs flex items-center justify-center active:bg-brandRed/40">FIRE</button>
+      )}
+
+      {/* Mobile JUMP button — climb/hop between levels in stacked realms */}
+      {isMobileStage && (
+        <button onPointerDown={(e) => { e.preventDefault(); jumpRef.current = true; }} onPointerUp={() => { jumpRef.current = false; }} onPointerLeave={() => { jumpRef.current = false; }}
+          style={{ bottom: 'max(4.5rem, env(safe-area-inset-bottom))', right: level.combat ? '6.5rem' : '1.5rem' }}
+          className="absolute z-30 w-16 h-16 rounded-full border-2 border-[#1ee0ff]/70 bg-[#1ee0ff]/20 text-[#1ee0ff] font-mono text-xs flex items-center justify-center active:bg-[#1ee0ff]/40">JUMP</button>
       )}
 
       {/* Controls hint */}

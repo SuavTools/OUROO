@@ -8,6 +8,8 @@
 //   '#' '1' '2' '3' '4'  walls (texture variants — block movement)
 //   '.' ' '              floor (walkable)
 //   'g' 'w' 'p'          floors: grass · water (swim/drown) · pavement (stone tiles)
+//   ' '                  AIR / hole — NO floor here. In a STACKED realm you see (and fall) straight
+//                        through to the layer below; it's how overhangs & open shafts are carved.
 //   'T' 'b' 'r' 'l'      props: tree & rock & lamp post are SOLID; lamp's orb glows. (billboards)
 //   'f'                  flower (walkable decoration; bloom colour varies by tile)
 //   'L'                  lava  (walkable, but drains HP while you stand in it)
@@ -20,10 +22,14 @@
 //   'E'                  exit  (walkable; step on it to return to the flat room)
 //   'S'                  spawn (walkable; where you appear — exactly one across the whole realm)
 //
-// MULTI-STOREY: a realm may be a STACK of floors (`floors[]`, ordered bottom→top). Each floor is its
-// own grid you can walk on top of and stand inside — no solid towers, and you can dig basements below
-// the ground floor. Move between storeys with the '>' / '<' stair cells. A single-grid level (just
-// `rows`) is treated as one floor, so old realms keep working.
+// MULTI-STOREY: a realm may be a STACK of floors (`floors[]`, ordered bottom→top). When there are 2+
+// floors the realm is rendered as a TRUE VOXEL STACK (see RaycastCanvas): every layer is drawn at its
+// real height at once, so you physically walk UNDER overhangs and SEE/FALL through air holes — proper
+// Minecraft-style verticality. Each layer sits STOREY_LEVELS units above the one below; a wall cell on
+// a layer is a solid block one storey tall (stand on its top), an air cell (' ') is empty, every other
+// cell is a thin walkable slab. You move between layers by jumping/stepping (gravity is real) or via
+// the '>' / '<' stair cells (a quick lift up/down a storey). A single-grid level (just `rows`) is one
+// flat floor, so old realms keep working untouched.
 
 export type Palette = {
   ceil: [number, number, number];   // ceiling colour (top of the world)
@@ -63,6 +69,19 @@ export const TUNNEL_CHAR = 'O';
 // Inter-storey stairs: step on '>' to climb a floor, '<' to descend — you land at the same x,y.
 export const STAIR_UP = '>';
 export const STAIR_DOWN = '<';
+
+// AIR — an empty cell on a stacked layer: no floor, no block. You look (and fall) straight through it
+// to whatever's below. This is what makes overhangs/holes possible. Single-char ' ' so it reads as
+// "nothing" in storage and the designer. (Legacy flat realms have no air cells, so they're unaffected.)
+export const AIR = ' ';
+export const isAir = (ch: string) => ch === AIR;
+
+// A realm is a TRUE VOXEL STACK (overhangs, gravity, see-through holes) once it has 2+ floors.
+export const isStacked = (level: Level3D): boolean => !!(level.floors && level.floors.length > 1);
+
+// How many height-levels tall one storey is — the vertical gap between layer k and layer k+1. A wall
+// block is exactly this tall, so floors stack flush (the block top of layer k == the floor of k+1).
+export const STOREY_LEVELS = 3;
 
 // Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
 // `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.
@@ -404,7 +423,46 @@ const SPIRE: Level3D = {
   floors: [{ rows: SPIRE_BASEMENT }, { rows: SPIRE_GROUND }, { rows: SPIRE_ROOF }],
 };
 
-export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL, GLADE, SPIRE];
+// THE OVERLOOK — a TRUE-OVERHANG demo for the stacked voxel renderer. A ground courtyard you spawn
+// in, with an upper balcony (the back half of floor +1) that juts out OVER the courtyard: stand below
+// and you walk UNDER it with the balcony as your ceiling; climb the stairs (or jump) to walk out onto
+// it and look down. Grab the crystal up top, drop off the edge, and head for the Exit.
+const OVERLOOK_GROUND = [
+  '############',
+  '#S.......>.#',   // '>' (9,1) lifts you to the balcony above
+  '#..........#',
+  '#..........#',
+  '#..........#',
+  '#....C.....#',
+  '#..........#',
+  '#.........E#',
+  '#..........#',
+  '############',
+];
+const OVERLOOK_UPPER = [
+  '            ',
+  '      ...<..',   // '<' (9,1) drops back to the courtyard
+  '      ......',
+  '      ......',   // this back-half slab overhangs the courtyard below — walk under it!
+  '      ...C..',
+  '            ',   // everything below is open AIR — you see (and fall) straight through to the ground
+  '            ',
+  '            ',
+  '            ',
+  '            ',
+];
+const OVERLOOK: Level3D = {
+  id: 'overlook',
+  name: 'The Overlook',
+  spawnDir: 0,
+  atmo: 'dungeon',
+  sky: 'sunset',
+  music: 'chill' as Mood,
+  rows: OVERLOOK_GROUND,
+  floors: [{ rows: OVERLOOK_GROUND }, { rows: OVERLOOK_UPPER }],
+};
+
+export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL, GLADE, SPIRE, OVERLOOK];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';
@@ -448,6 +506,11 @@ export const isBuiltin = (id: string) => BUILTIN_LEVELS.some(l => l.id === id);
 export function newLevelId(): string {
   return 'w-' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
 }
+
+// A wide-open AIR layer (used for floors added ABOVE in the stacked builder): nothing but sky, so it
+// doesn't form a solid ceiling — the designer carves platforms/walls into it.
+export const blankAirRows = (w: number, h: number): string[] =>
+  Array.from({ length: h }, () => AIR.repeat(w));
 
 export function blankLevel(w = 12, h = 12): Level3D {
   const rows: string[] = [];
