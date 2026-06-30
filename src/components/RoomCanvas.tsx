@@ -34,6 +34,7 @@ import { drawFurniSprite, effSpan } from '@/lib/furniRender';
 import { type RoomRow, fetchRooms, fetchMyRooms, fetchDiscoveredRooms, roomByCode, roomBySlug, setRoomPublic, createRoom, deleteRoom, updateRoomPerms, recordRoomVisit } from '@/lib/rooms';
 import { type RoomPlan, ROOM_PLANS, PLAN_GRID, planById, planMask, planWaterMask, planMaterialMask, planSpawn } from '@/lib/roomPlans';
 import { RoomMusic } from '@/lib/roomMusic';
+import { listLevels as list3DLevels } from '@/lib/raycast/levels';
 import { Oracle } from '@/components/Oracle';
 import { MenuModal } from '@/components/MenuModal';
 import { GlitchSequence } from '@/components/GlitchSequence';
@@ -456,8 +457,8 @@ const parseIcon = (v: unknown): IconSpec | null => {
 };
 
 type OnboardStep = 'oracle' | 'arcade' | 'terminal' | 'character' | 'yourroom' | 'town' | 'done';
-export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string, mods?: GameRules) => void; onboarding?: OnboardStep; gamePlayed?: boolean; onSetStep?: (s: OnboardStep) => void }> = ({
-  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onboarding = 'done', gamePlayed = false, onSetStep,
+export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean; onExit?: () => void; onLaunchGame?: (id: string, mods?: GameRules) => void; onEnter3D?: (levelId: string) => void; onOpen3DDesigner?: (id?: string) => void; onboarding?: OnboardStep; gamePlayed?: boolean; onSetStep?: (s: OnboardStep) => void }> = ({
+  stageScale = 1, isMobileStage = false, onExit, onLaunchGame, onEnter3D, onOpen3DDesigner, onboarding = 'done', gamePlayed = false, onSetStep,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const outerRef = useRef<HTMLDivElement | null>(null);
@@ -742,6 +743,8 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const tutPortalArmRef = useRef(false);  // rising-edge guard for the onward tutorial door
   const onLaunchGameRef = useRef(onLaunchGame);
   useEffect(() => { onLaunchGameRef.current = onLaunchGame; }, [onLaunchGame]);
+  const onEnter3DRef = useRef(onEnter3D);
+  useEffect(() => { onEnter3DRef.current = onEnter3D; }, [onEnter3D]);
   const { user } = useUser();   // signed-in Discord user (null = guest); used by the duel-lobby wager gate
 
   // ── DUEL LOBBY (placeable cabinet) ── walk up to a Duel Cabinet → a waiting room keyed by that cabinet.
@@ -947,9 +950,13 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const [pmAccess, setPmAccess] = useState('');      // optional access code the next person must speak
   const [pmHidden, setPmHidden] = useState(false);   // disguised trigger — no visible teleporter sprite
   const [pmMessage, setPmMessage] = useState('');    // optional message shown to the player before travel
+  const [pm3dLevel, setPm3dLevel] = useState('');    // chosen 3D realm id (when pmDest==='r3d')
+  const portalDest = () =>
+    pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest === 'r3d' ? `r3d:${pm3dLevel}` : pmDest;
   const makePortal = () => {
-    const to = pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest;
+    const to = portalDest();
     if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
+    if (pmDest === 'r3d' && !pm3dLevel) { flashHint('Pick a 3D realm (or build one)'); return; }
     setPlacingKind(encodePortal(to, pmAccess.trim(), pmHidden, pmMessage.trim())); setRemoveMode(false); setRotateMode(false); setTileMode(false);
     setPortalMaker(false); flashHint(pmHidden ? 'Tap a tile to drop the hidden trigger ◌' : 'Tap a tile to drop the portal ✦');
   };
@@ -957,8 +964,9 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
     if (!portalEditing) return;
     const it = itemsRef.current.find(i => i.id === portalEditing);
     if (!it) { setPortalEditing(null); setPortalMaker(false); return; }
-    const to = pmDest === 'code' ? `code:${pmRoomCode.trim().toUpperCase()}` : pmDest;
+    const to = portalDest();
     if (pmDest === 'code' && !pmRoomCode.trim()) { flashHint('Enter the destination room code'); return; }
+    if (pmDest === 'r3d' && !pm3dLevel) { flashHint('Pick a 3D realm (or build one)'); return; }
     const newKind = encodePortal(to, pmAccess.trim(), pmHidden, pmMessage.trim());
     it.portalTo = to; it.portalCode = pmAccess.trim() || undefined; it.portalHidden = pmHidden; it.portalMessage = pmMessage.trim() || undefined;
     supabase?.from('room_items').update({ kind: newKind }).eq('id', portalEditing).then(undefined, () => {});
@@ -1546,6 +1554,16 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   };
   // Travel through a portal (curated portals pay out + show the lore modal on first visit; player portals don't).
   const travelTo = async (p: Portal) => {
+    // A 3D realm portal — hand off to the page conductor, which mounts the first-person RaycastCanvas
+    // (the flat room stays put underneath; the [EXIT] gate returns you here).
+    if (p.to.startsWith('r3d:')) {
+      const levelId = p.to.slice(4);
+      if (!levelId) { flashHint('That door leads nowhere now.'); return; }
+      musicRef.current?.portal();
+      writeOrigin();
+      onEnter3DRef.current?.(levelId);
+      return;
+    }
     const def = await resolveDest(p.to);
     if (!def) { flashHint('That door leads nowhere now.'); return; }
     musicRef.current?.portal();   // threshold-crossing shimmer
@@ -3997,10 +4015,12 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                       <div className="flex flex-col gap-1.5">
                         {itemsRef.current.filter(i => i.portalTo).map(p => {
                           const dest = p.portalTo!;
-                          const destLabel = dest.startsWith('code:') ? `code: ${dest.slice(5)}` : (ROOMS.find(r => r.slug === dest)?.name ?? dest);
+                          const destLabel = dest.startsWith('code:') ? `code: ${dest.slice(5)}` : dest.startsWith('r3d:') ? `◈ ${list3DLevels().find(l => l.id === dest.slice(4))?.name ?? dest.slice(4)}` : (ROOMS.find(r => r.slug === dest)?.name ?? dest);
                           return (
                             <button key={p.id} onClick={() => {
-                              if (dest.startsWith('code:')) { setPmDest('code'); setPmRoomCode(dest.slice(5)); } else { setPmDest(dest); setPmRoomCode(''); }
+                              if (dest.startsWith('code:')) { setPmDest('code'); setPmRoomCode(dest.slice(5)); }
+                              else if (dest.startsWith('r3d:')) { setPmDest('r3d'); setPm3dLevel(dest.slice(4)); }
+                              else { setPmDest(dest); setPmRoomCode(''); }
                               setPmAccess(p.portalCode || ''); setPmHidden(p.portalHidden || false); setPmMessage(p.portalMessage || '');
                               setPortalEditing(p.id); setPortalMode(null); setPortalMaker(true);
                             }} className="flex items-center justify-between gap-2 px-3 py-2 border border-white/15 hover:border-[#cc66ff] text-left transition-colors">
@@ -4590,6 +4610,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
                   ...ROOMS.map(r => [r.slug, r.name] as [string, string]),                 // official public rooms
                   ...personalRooms.map(r => [r.slug, r.name] as [string, string]),         // admin/community public rooms
                   ['code', 'Room code…'],
+                  ['r3d', '◈ 3D World'],                                                    // first-person raycast realm
                 ] as [string, string][]).map(([id, label]) => (
                   <button key={id} onClick={() => setPmDest(id)}
                     className={`text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 border transition-colors ${pmDest === id ? 'bg-[#cc66ff] text-black border-[#cc66ff]' : 'text-white/70 border-white/20 hover:border-[#cc66ff]/60'}`}>{label}</button>
@@ -4598,6 +4619,18 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
               {pmDest === 'code' && (
                 <input value={pmRoomCode} onChange={e => setPmRoomCode(e.target.value.toUpperCase())} maxLength={8} placeholder="ROOM CODE"
                   className="mt-2 w-full bg-white/5 border border-white/15 text-white px-3 py-2 text-sm tracking-[0.3em] font-mono outline-none focus:border-[#cc66ff]" />
+              )}
+              {pmDest === 'r3d' && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                    {list3DLevels().map(l => (
+                      <button key={l.id} onClick={() => setPm3dLevel(l.id)}
+                        className={`text-[11px] font-mono px-3 py-1.5 border transition-colors ${pm3dLevel === l.id ? 'bg-[#1ee0ff] text-black border-[#1ee0ff]' : 'text-white/70 border-white/20 hover:border-[#1ee0ff]/60'}`}>{l.name}</button>
+                    ))}
+                  </div>
+                  <button onClick={() => { setPortalMaker(false); onOpen3DDesigner?.(); }}
+                    className="w-full text-[11px] font-mono uppercase tracking-wider border border-[#1ee0ff]/50 text-[#1ee0ff] py-2 hover:bg-[#1ee0ff]/10">◢ Build a new realm…</button>
+                </div>
               )}
             </div>
             <div>

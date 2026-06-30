@@ -6,6 +6,9 @@ import { LeapCanvas } from '@/components/LeapCanvas';
 import { DuelClimbCanvas } from '@/components/DuelClimbCanvas';
 import { TankDuelCanvas } from '@/components/TankDuelCanvas';
 import { RoomCanvas } from '@/components/RoomCanvas';
+import { RaycastCanvas } from '@/components/RaycastCanvas';
+import { RaycastDesigner } from '@/components/RaycastDesigner';
+import { addBalance } from '@/lib/wallet';
 import { Leaderboard } from '@/components/Leaderboard';
 import { useUser, signInWithDiscord } from '@/lib/auth';
 import { readTicket } from '@/lib/duel';
@@ -17,7 +20,7 @@ import { ChatModal } from '@/components/ChatModal';
 import { AdminModal } from '@/components/AdminModal';
 import { OpenInBrowser } from '@/components/OpenInBrowser';
 
-type View = 'landing' | 'arcade' | 'leap' | 'duel' | 'lobby';
+type View = 'landing' | 'arcade' | 'leap' | 'duel' | 'lobby' | 'room3d' | 'designer3d';
 // Onboarding spine — a portal-chained, Oracle-guided tutorial (canon: tutorial-sequence-spec):
 //   oracle → arcade → terminal → character → yourroom → town → done.
 // page.tsx owns the persisted step + whether the tutorial game was played (that fact has to survive
@@ -122,6 +125,11 @@ export default function Home() {
     if (id === 'duel') setDuelGameId(readTicket()?.gameId ?? 'climb');
     setView(id === 'leap' ? 'leap' : id === 'duel' ? 'duel' : 'arcade');
   };
+  // R3D — first-person 3D realms reached through `r3d:<id>` portals, built in the Realm Forge.
+  const [level3dId, setLevel3dId] = useState<string | null>(null);
+  const [designerId, setDesignerId] = useState<string | undefined>(undefined);
+  const enter3D = (id: string) => { setLevel3dId(id); setView('room3d'); };
+  const open3DDesigner = (id?: string) => { setDesignerId(id); setView('designer3d'); };
 
   // ==========================================================================
   // THE ARCADE
@@ -183,10 +191,34 @@ export default function Home() {
   // ==========================================================================
   // PRAÇA — SOCIAL ROOM
   // ==========================================================================
+  // ==========================================================================
+  // R3D — first-person 3D realm (summoned by an r3d: portal)
+  // ==========================================================================
+  if (view === 'room3d') {
+    return (
+      <main className="relative w-screen h-[100dvh] bg-black overflow-hidden touch-none">
+        <RaycastCanvas levelId={level3dId ?? undefined} stageScale={stage.scale} isMobileStage={stage.mobile}
+          onExit={() => setView('lobby')} onReward={(n) => addBalance(n)} />
+        <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
+      </main>
+    );
+  }
+
+  // ==========================================================================
+  // REALM FORGE — the 3D level designer
+  // ==========================================================================
+  if (view === 'designer3d') {
+    return (
+      <main className="relative w-screen h-[100dvh] bg-[#0a0a12] overflow-hidden touch-none">
+        <RaycastDesigner initialId={designerId} isMobileStage={stage.mobile} onExit={() => setView('lobby')} />
+      </main>
+    );
+  }
+
   if (view === 'lobby') {
     return (
       <main className="relative w-screen h-[100dvh] bg-brandBlack overflow-hidden touch-none">
-        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onLaunchGame={launchGame} onboarding={onboard} gamePlayed={gamePlayed} onSetStep={setStep} />
+        <RoomCanvas stageScale={stage.scale} isMobileStage={stage.mobile} onLaunchGame={launchGame} onEnter3D={enter3D} onOpen3DDesigner={open3DDesigner} onboarding={onboard} gamePlayed={gamePlayed} onSetStep={setStep} />
         <div className="fixed top-0 inset-x-0 z-[80]"><OpenInBrowser /></div>
       </main>
     );
