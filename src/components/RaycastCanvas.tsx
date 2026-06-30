@@ -139,6 +139,24 @@ export const RaycastCanvas: React.FC<{
         o.stop(t + dur);
       } catch { /* audio blocked */ }
     };
+    // Softer voiced note (attack + release) for the melodic layer over the drone.
+    const tone = (freq: number, dur: number, type: OscillatorType = 'sine', gain = 0.05) => {
+      if (mutedRef.current) return;
+      try {
+        if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const o = actx.createOscillator(), g = actx.createGain();
+        o.type = type; o.frequency.value = freq; g.gain.value = 0;
+        o.connect(g); g.connect(actx.destination);
+        const t = actx.currentTime; o.start(t);
+        g.gain.linearRampToValueAtTime(gain, t + Math.min(0.18, dur * 0.3));
+        g.gain.linearRampToValueAtTime(0.0001, t + dur);
+        o.stop(t + dur + 0.05);
+      } catch { /* audio blocked */ }
+    };
+    // Melodic scales per mood (semitones over a root). Spooky = Phrygian dread; chill = warm pentatonic.
+    const ROOT = mood === 'tense' ? 98 : mood === 'spooky' ? 130.81 : 261.63;   // G2 / C3 / C4
+    const SCALE = mood === 'spooky' ? [0, 1, 3, 5, 7, 8] : mood === 'tense' ? [0, 3, 5, 6, 7, 10] : [0, 2, 4, 7, 9];
+    const noteHz = (semi: number) => ROOT * Math.pow(2, semi / 12);
 
     // ── Ambience — generative drone matching the level's mood (spooky/tense/chill). Starts on the
     // first user gesture (audio policy); a ♪ button mutes it. Spooky/tense get eerie stings over time.
@@ -328,9 +346,32 @@ export const RaycastCanvas: React.FC<{
       if (here === 'E') { exited = true; beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
 
       updateEnemies();
-      // eerie sting every ~8s on spooky/tense realms (over the drone)
-      if (amb && mood !== 'chill' && tick % 480 === 0) beep(mood === 'spooky' ? 300 + (tick % 5) * 50 : 140, mood === 'spooky' ? 0.6 : 0.3, 'sine', 0.03);
+      musicStep();
       pushHud();
+    };
+
+    // ── Melodic layer over the drone — evolving, not a flat pad ──────────────────────────────────
+    let musicSeq = 0;
+    const musicStep = () => {
+      if (!amb || mutedRef.current) return;
+      if (mood === 'chill') {
+        // gentle rolling arpeggio that drifts up and down the pentatonic, plus a soft bass swell
+        if (tick % 26 === 0) {
+          const n = SCALE.length, i = musicSeq % (n * 2), idx = i < n ? i : n * 2 - 1 - i;   // up then down
+          tone(noteHz(SCALE[idx] + 12), 0.9, 'sine', 0.05); musicSeq++;
+        }
+        if (tick % 208 === 0) tone(noteHz(SCALE[(musicSeq * 3) % SCALE.length]) / 2, 3.5, 'triangle', 0.045);
+      } else if (mood === 'tense') {
+        // driving pulse + a stab every other bar
+        if (tick % 18 === 0) { tone(noteHz(0) / 2, 0.14, 'square', 0.05); musicSeq++; }
+        if (tick % 144 === 72) tone(noteHz(SCALE[(musicSeq) % SCALE.length] + 12), 0.4, 'sawtooth', 0.04);
+      } else {
+        // spooky: sparse, irregular minor notes that creep in + a low tritone swell
+        const phr = tick % 168;
+        if (phr === 0) { tone(noteHz(SCALE[(musicSeq * 5) % SCALE.length] + 12), 1.6, 'sine', 0.04); musicSeq++; }
+        else if (phr === 70) tone(noteHz(SCALE[(musicSeq * 2 + 1) % SCALE.length] + 12) * 1.0, 1.1, 'sine', 0.03);
+        else if (phr === 118 && (musicSeq & 1)) tone(noteHz(6) / 2, 2.2, 'sawtooth', 0.03);   // creeping tritone
+      }
     };
 
     // ── Stalker AI ──────────────────────────────────────────────────────────────────────────────
@@ -548,8 +589,8 @@ export const RaycastCanvas: React.FC<{
 
             // floor of the current cell over [dEnter, dExit] (only visible when below your eye)
             if (curZ < eye) {
-              const a = Math.max(yCeil, Math.ceil(projF(curZ, dExit)));
-              const b = Math.min(yFloor, Math.floor(projF(curZ, dEnter)));
+              const a = Math.max(yCeil, Math.floor(projF(curZ, dExit)));      // floor/ceil rounding expands
+              const b = Math.min(yFloor, Math.ceil(projF(curZ, dEnter)));     // each strip 1px → no seams
               for (let y = a; y < b; y++) {
                 const pp = y - horizon; if (pp <= 0) continue;
                 const d = ((eye - curZ) * H) / pp;
@@ -558,7 +599,7 @@ export const RaycastCanvas: React.FC<{
                 if (curCh === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emis = true; }
                 else if (curCh === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); fr = 30; fg = 200 * sh; fb = 230 * sh; emis = true; }
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
-                else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.86; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
+                else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.94; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
                 let r: number, g: number, bl: number;
                 if (emis) { r = fr; g = fg; bl = fb; } else { [r, g, bl] = fogMix(fr, fg, fb, fogTd(d)); const lf = lightAt(d); r *= lf; g *= lf; bl *= lf; }
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
@@ -569,8 +610,8 @@ export const RaycastCanvas: React.FC<{
 
             // ceiling / sky over [dEnter, dExit] (only visible above the horizon)
             {
-              const ct = Math.max(yCeil, Math.ceil(projF(CEIL_Z, dEnter)));
-              const cb = Math.min(yFloor, Math.floor(projF(CEIL_Z, dExit)));
+              const ct = Math.max(yCeil, Math.floor(projF(CEIL_Z, dEnter)));
+              const cb = Math.min(yFloor, Math.ceil(projF(CEIL_Z, dExit)));
               for (let y = ct; y < cb; y++) {
                 const pp = y - horizon; if (pp >= 0) continue;
                 const o = (y * W + x) * 4;
@@ -589,7 +630,7 @@ export const RaycastCanvas: React.FC<{
               const span = Math.max(1, wBotF - wTopF);
               const wxv = side === 0 ? py + dExit * rdy : px + dExit * rdx;
               const wxf = wxv - Math.floor(wxv);
-              const wt = Math.max(yCeil, Math.ceil(wTopF)), wb = Math.min(yFloor, Math.floor(wBotF));
+              const wt = Math.max(yCeil, Math.floor(wTopF)), wb = Math.min(yFloor, Math.ceil(wBotF));
               for (let y = wt; y < wb; y++) {
                 const ty = (y - wTopF) / span;
                 const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
@@ -604,11 +645,11 @@ export const RaycastCanvas: React.FC<{
             const nZ = floorLvl(mapX, mapY) * STEP_UNIT;
             if (nZ !== curZ) {                                      // step up/down → vertical riser
               const zHi = Math.max(curZ, nZ), zLo = Math.min(curZ, nZ);
-              const sd = (side === 1 ? 0.72 : 0.9) * lightAt(dExit);
+              const sd = (side === 1 ? 0.5 : 0.62) * lightAt(dExit);
               const ft = fogTd(dExit);
-              const base = pal.wall['#'];
-              const ra = Math.max(yCeil, Math.ceil(projF(zHi, dExit)));
-              const rb = Math.min(yFloor, Math.floor(projF(zLo, dExit)));
+              const base = pal.floor;                              // a SHADOWED ledge (darkened floor), not bright stone
+              const ra = Math.max(yCeil, Math.floor(projF(zHi, dExit)));
+              const rb = Math.min(yFloor, Math.ceil(projF(zLo, dExit)));
               const [r, g, bl] = fogMix(base[0] * sd, base[1] * sd, base[2] * sd, ft);
               for (let y = ra; y < rb; y++) { const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dExit; }
               yFloor = Math.min(yFloor, ra);
@@ -683,19 +724,26 @@ export const RaycastCanvas: React.FC<{
         const sx0 = Math.max(0, Math.floor(screenX - halfW)), sx1 = Math.min(W, Math.ceil(screenX + halfW));
         const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
         const fogT = 1 - 1 / (1 + camY * camY * 0.012);
-        const lf = lightAt(camY);
-        const eR = e.chasing ? 255 : 170, eG = e.chasing ? 40 : 110, eB = 40;
+        const lf = Math.max(lightAt(camY), 0.45);    // self-lit floor so they loom out of the dark, never vanish
+        const eR = e.chasing ? 255 : 200, eG = e.chasing ? 30 : 120, eB = 30;
         for (let x = sx0; x < sx1; x++) {
           const u = (x - screenX) / figW + sway;          // -0.5..0.5 across the figure
           for (let y = sy0; y < sy1; y++) {
             if (camY >= depth[y * W + x]) continue;        // occluded by walls/steps
             const v = (y - top) / figH;                    // 0 head .. 1 feet
             const bodyW = v < 0.16 ? 0.22 : v < 0.62 ? 0.5 : Math.max(0.04, 0.5 - (v - 0.62) * 0.9);
-            if (Math.abs(u) > bodyW) continue;
+            const au = Math.abs(u);
+            if (au > bodyW) continue;
             let r: number, g: number, b: number;
-            if (v > 0.06 && v < 0.13 && Math.abs(Math.abs(u) - 0.11) < 0.05) { r = eR; g = eG; b = eB; }   // glowing eyes (unfogged)
+            if (v > 0.06 && v < 0.13 && Math.abs(au - 0.11) < 0.05) { r = eR; g = eG; b = eB; }            // glowing eyes (unfogged)
             else if (e.flash > 0) { r = 255; g = 230; b = 230; }                                          // hit flash
-            else { const edge = 1 - Math.abs(u) / Math.max(0.01, bodyW); r = (8 + 16 * edge) * lf; g = (6 + 12 * edge) * lf; b = (12 + 26 * edge) * lf; const m = fogMix(r, g, b, fogT * 0.7); r = m[0]; g = m[1]; b = m[2]; }
+            else {
+              const rim = Math.pow(au / Math.max(0.01, bodyW), 3);   // bright silhouette edge → reads against the dark
+              let R = 26 + 95 * rim, G = 22 + 40 * rim, B = 34 + 110 * rim;
+              if (e.chasing) { R += 70 * rim + 14; G -= 10 * rim; }  // angry red rim when hunting
+              R *= lf; G *= lf; B *= lf;
+              const m = fogMix(R, G, B, fogT * 0.45); r = m[0]; g = m[1]; b = m[2];
+            }
             const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
           }
         }
@@ -769,6 +817,13 @@ export const RaycastCanvas: React.FC<{
     };
 
     // ── Weather overlay (full-res, drawn over the blitted scene) ─────────────────────────────────
+    // Stars are a DISTANT background — only paint them where the sky is actually visible (depth = far),
+    // so they don't speckle over walls/ceilings. Rain/snow/embers are foreground, drawn everywhere.
+    const skyVisibleAt = (sx: number, sy: number) => {
+      const bx = Math.min(RES_W - 1, Math.max(0, Math.floor((sx / canvas.width) * RES_W)));
+      const by = Math.min(RES_H - 1, Math.max(0, Math.floor((sy / canvas.height) * RES_H)));
+      return depth[by * RES_W + bx] > 1e8;
+    };
     const drawWeather = (fx: string) => {
       const w = canvas.width, h = canvas.height, t = tick;
       if (fx === 'rain') {
@@ -780,7 +835,7 @@ export const RaycastCanvas: React.FC<{
         for (let i = 0; i < 120; i++) { const xx = ((i * 131 + Math.sin(t * 0.02 + i) * 22) % (w + 20)) - 10; const yy = ((i * 71 + t * 1.6) % (h + 20)) - 10; ctx.fillRect(xx, yy, 2, 2); }
       } else if (fx === 'stars') {
         const pan = (dir / (Math.PI * 2)) * w * 2;
-        for (let i = 0; i < 150; i++) { const xx = (((i * 167) - pan) % w + w) % w; const yy = (i * 89) % (h * 0.55); const tw = 0.5 + 0.5 * Math.sin(t * 0.05 + i); ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.55 * tw})`; ctx.fillRect(xx, yy, 1.6, 1.6); }
+        for (let i = 0; i < 150; i++) { const xx = (((i * 167) - pan) % w + w) % w; const yy = (i * 89) % (h * 0.6); if (!skyVisibleAt(xx, yy)) continue; const tw = 0.5 + 0.5 * Math.sin(t * 0.05 + i); ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.55 * tw})`; ctx.fillRect(xx, yy, 1.6, 1.6); }
       } else if (fx === 'embers') {
         for (let i = 0; i < 90; i++) { const xx = ((i * 149 + Math.sin(t * 0.03 + i) * 30) % w + w) % w; const yy = h - ((i * 53 + t * 2.4) % h); const a = yy / h; ctx.fillStyle = `rgba(255,${110 + 80 * Math.abs(Math.sin(i))},40,${0.55 * a})`; ctx.fillRect(xx, yy, 2, 2); }
       } else if (fx === 'mist') {

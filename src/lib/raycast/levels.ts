@@ -78,7 +78,7 @@ export const ATMOS: Record<string, { label: string; palette: Partial<Palette>; l
   neon:     { label: 'Neon',     palette: { ceil: [4, 8, 16], floor: [10, 16, 24], fog: [2, 6, 14] } },
   // Horror lanterns — most of the world is pitch black; you see only a small ring around you.
   blackout: { label: 'Blackout', palette: { ceil: [2, 2, 4], floor: [16, 14, 18], fog: [0, 0, 0] }, light: { radius: 4.5, ambient: 0.04, flicker: 0 } },
-  candle:   { label: 'Candle',   palette: { ceil: [10, 6, 4], floor: [30, 22, 16], fog: [0, 0, 0], wall: { '#': [120, 96, 70] } }, light: { radius: 5.5, ambient: 0.05, flicker: 0.18 } },
+  candle:   { label: 'Candle',   palette: { ceil: [10, 6, 4], floor: [44, 33, 24], fog: [0, 0, 0], wall: { '#': [140, 112, 82] } }, light: { radius: 7, ambient: 0.09, flicker: 0.16 } },
 };
 
 export function paletteOf(level: Level3D): Palette {
