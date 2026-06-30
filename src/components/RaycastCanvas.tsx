@@ -1188,14 +1188,18 @@ export const RaycastCanvas: React.FC<{
         if (s > -Infinity && s >= pz - STEP_UP) { pz = s; groundZ = s; }
         else { grounded = false; vz -= GRAV; pz += vz; }            // walked off a ledge taller than a step → fall
       } else {
-        // airborne: integrate gravity, bonk on ceilings, land on the first surface you reach
-        vz -= GRAV; pz += vz;
+        // airborne: integrate gravity (capped at a terminal velocity so a long fall can't tunnel THROUGH
+        // thin floors), bonk on ceilings, then SWEEP for the highest surface we crossed this tick.
+        const pzPrev = pz;
+        vz = Math.max(-0.6, vz - GRAV);
+        pz += vz;
         if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
-        const s = highestUnder(pz, 0.06);
-        if (s > -Infinity && pz <= s) { if (vz < 0) fallDamage(groundZ - s); pz = s; vz = 0; grounded = true; groundZ = s; }
+        let s = -Infinity;
+        for (const t of tops) if (t <= pzPrev + 0.06 && pz <= t && t > s) s = t;   // were above it, have now reached it
+        if (s > -Infinity) { if (vz < 0) fallDamage(groundZ - s); pz = s; vz = 0; grounded = true; groundZ = s; }
         else grounded = false;
       }
-      if (!grounded && tops.length === 0 && pz < -0.8) {           // genuine void (a column of pure air) → reset, scaled by the fall
+      if (!grounded && pz < -0.8 && highestUnder(pz, 0.06) === -Infinity) {   // nothing left to land on below → reset, scaled by the fall
         if (!fallDamage(groundZ - pz)) { px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = baseZ(spawnFloor); vz = 0; grounded = true; groundZ = pz; shake = Math.min(4, shake + 2); beep(200, 0.18, 'sine', 0.05); }
       }
       // smooth the eye for stair lifts/landings, but keep jumps crisp
