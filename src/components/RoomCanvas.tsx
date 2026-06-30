@@ -473,7 +473,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
   const remotesRef = useRef<Map<string, Avatar>>(new Map());
   const itemsRef = useRef<Item[]>([]);
   const decorRef = useRef<Item[]>([]);    // curated, non-removable furniture for the room
-  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; lineQueue?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number; bodyScale?: number })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
+  const npcsRef = useRef<(Avatar & { id?: string; lines?: string[]; lineQueue?: string[]; hx?: number; hy?: number; roam?: number; path: { gx: number; gy: number; z: number }[]; wanderCool: number; beats?: string[]; hints?: string[]; hintIdx?: number; nid?: string; near?: boolean; cool?: number; lastLine?: string; hz?: HazardSpec; defeated?: boolean; peaceful?: boolean; lastNpcAtk?: number; respawnAt?: number; bodyScale?: number; provoked?: boolean })[]>([]);   // curated + admin-placed NPCs (hints + lore beats + chatter + roaming + hazard combat)
   const placedNpcsRef = useRef<{ id: string; gx: number; gy: number; data: NpcData }[]>([]);   // admin-placed NPCs (persisted as `npc:` rows)
   const npcHpRef = useRef<Map<string, number>>(new Map());   // mid-fight NPC hp by nid — survives rebuildNpcs so a concurrent placement doesn't heal a boss
   const deviceRef = useRef('');   // stable device token — furni ownership (persists across reloads)
@@ -1253,6 +1253,10 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
       spawnDmg(n.fx, n.fy, n.z, dmg, '#ffd84a');
       if (wp.style === 'magic') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 18, max: 18, color: '#b98cff' });
       else if (wp.style === 'gun') projRef.current.push({ fx0: me.fx, fy0: me.fy, z0: me.z + 0.4, fx1: n.fx, fy1: n.fy, z1: n.z + 0.4, life: 10, max: 10, color: '#ffd700', style: 'gun' });
+      // attacking any NPC triggers all provoked-mode NPCs in the room to go aggressive
+      for (const other of npcsRef.current) {
+        if (other.hz?.provoked && !other.provoked && !other.defeated && !other.peaceful) other.provoked = true;
+      }
       if (n.hp <= 0) defeatNpc(n);
     }
     // Swing animation goes last — purely cosmetic, lower priority than pos/attack/hp in the send queue.
@@ -2650,7 +2654,7 @@ export const RoomCanvas: React.FC<{ stageScale?: number; isMobileStage?: boolean
         // Chase target is the closest non-KO'd player (local OR remote). All clients have the same remote
         // positions via 'pos' broadcasts, so they independently converge on the same chase target — giving
         // every observer a consistent view of the NPC without any extra coordination.
-        if (n.hz && !n.peaceful && !n.defeated && n.hp != null && n.hz.contactDamage > 0) {
+        if (n.hz && !n.peaceful && !n.defeated && n.hp != null && n.hz.contactDamage > 0 && (!n.hz.provoked || n.provoked)) {
           const nowKo = Date.now();
           let chaseTarget: { fx: number; fy: number } = sf;
           let chaseDist = Math.hypot(n.fx - sf.fx, n.fy - sf.fy);

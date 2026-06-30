@@ -42,6 +42,7 @@ export type HazardSpec = {
   respawnMs?: number;             // 'farmable' only
   onKill?: KillTrigger;
   deadLines?: string[];           // dialogue after defeat (policy 'once')
+  provoked?: boolean;             // stays neutral until any NPC in the room is attacked, then goes aggressive
 };
 
 // Clamp/validate an untrusted hazard blob from storage or the network. Returns undefined for a
@@ -79,6 +80,7 @@ export function sanitizeHazard(o: unknown): HazardSpec | undefined {
     respawnMs: policy === 'farmable' ? num(h.respawnMs, 600000, 1000, 86_400_000) : undefined,
     onKill,
     deadLines: Array.isArray(h.deadLines) ? (h.deadLines as unknown[]).map(s => String(s).slice(0, 120)).slice(0, 8) : undefined,
+    ...(h.provoked ? { provoked: true } : {}),
   };
 }
 
@@ -137,6 +139,7 @@ export const NpcEditor: React.FC<{
   const [trigVal, setTrigVal] = useState(
     ih?.onKill ? ('text' in ih.onKill ? ih.onKill.text : 'skinId' in ih.onKill ? ih.onKill.skinId : ih.onKill.flag) : ''
   );
+  const [provokedMode, setProvokedMode] = useState(!!ih?.provoked);
 
   if (!open) return null;
   const setP = (patch: Partial<PersonSpec>) => setPerson(p => ({ ...p, ...patch }));
@@ -172,6 +175,7 @@ export const NpcEditor: React.FC<{
         loot: { crystals: lootCrystals, items: lootItems },
         policy, respawnMs: respawnMin * 60000, onKill,
         deadLines: policy === 'once' ? splitLines(deadLinesText) : undefined,
+        ...(provokedMode ? { provoked: true } : {}),
       });
     }
     onPlace({ n: name.trim().slice(0, 24), a, l, ...(h ? { h } : {}), ...(size !== 1 ? { sz: size } : {}) });
@@ -300,6 +304,17 @@ export const NpcEditor: React.FC<{
                 <NumField label="Hit speed" val={cooldownMs} set={setCooldownMs} min={200} max={60000} step={100} suffix="ms" />
               </div>
               <p className="text-[10px] text-white/30 -mt-1">Armour % cuts every hit it takes (like a worn shield). Its damage 0 = a punching bag that never hits back.</p>
+
+              <button onClick={() => setProvokedMode(p => !p)}
+                className="w-full flex items-center justify-between px-3 py-2 border border-white/10 bg-white/[0.03] hover:border-white/20 transition-colors">
+                <span className="text-left">
+                  <span className="text-[11px] uppercase tracking-widest text-white/70 font-bold">Provoked</span>
+                  <span className="text-[10px] text-white/35 ml-2">— stays neutral until another NPC in the room is attacked</span>
+                </span>
+                <span className={`w-9 h-5 rounded-full border flex items-center px-0.5 transition-colors shrink-0 ml-3 ${provokedMode ? 'bg-[#ff5d5d] border-[#ff5d5d] justify-end' : 'bg-white/5 border-white/20 justify-start'}`}>
+                  <span className="w-4 h-4 rounded-full bg-white" />
+                </span>
+              </button>
 
               <Row label="Reward — Cristais">
                 <input type="number" value={lootCrystals} min={0} max={1000000}
