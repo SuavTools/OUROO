@@ -11,7 +11,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  type Level3D, type Mood, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, findSpawn, getLevel, heightAt, hasHeightMap, MONSTER_CHAR,
+  type Level3D, type Mood, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, findSpawn, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -85,6 +85,12 @@ export const RaycastCanvas: React.FC<{
     const totalCrystals = sprites.filter(s => s.kind === 'crystal').length;
     const grabbed = new Set<number>();   // indices of crystals already collected
 
+    // Tunnels — centres of every 'O' cell in reading order. Stepping on one warps you to the next.
+    const tunnels: { x: number; y: number }[] = [];
+    for (let y = 0; y < rows.length; y++)
+      for (let x = 0; x < rows[y].length; x++)
+        if (rows[y][x] === TUNNEL_CHAR) tunnels.push({ x: x + 0.5, y: y + 0.5 });
+
     // Hazard NPCs — stalkers that wander near home until they see you, then hunt. Spawned from 'M' cells.
     // Friendly NPCs (your character-builder characters) dropped into the realm — billboarded.
     const npcs = level.npcs ?? [];
@@ -123,6 +129,7 @@ export const RaycastCanvas: React.FC<{
     let tick = 0;
     let bob = 0;               // view bob phase
     let shake = 0;             // damage shake
+    let tpLock = false;        // true while standing on the tunnel you just arrived at (no instant re-warp)
 
     // ── Offscreen framebuffer (low-res, blitted up for the chunky retro look) ───────────────────
     const buf = document.createElement('canvas');
@@ -346,6 +353,17 @@ export const RaycastCanvas: React.FC<{
       // standing-tile effects
       const cx = Math.floor(px), cy = Math.floor(py);
       const here = cellAt(rows, cx, cy);
+      if (here === TUNNEL_CHAR) {               // tunnel — warp to the next tunnel cell (loops/pairs)
+        if (!tpLock && tunnels.length > 1) {
+          const idx = tunnels.findIndex(t => Math.floor(t.x) === cx && Math.floor(t.y) === cy);
+          const dst = tunnels[(idx + 1) % tunnels.length];
+          px = dst.x; py = dst.y;
+          pz = floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT;
+          tpLock = true;                         // don't bounce off the destination pad on arrival
+          shake = Math.min(4, shake + 1.2);
+          beep(520, 0.1, 'sine', 0.05); beep(780, 0.12, 'sine', 0.045); beep(1180, 0.14, 'sine', 0.04);
+        }
+      } else { tpLock = false; }                 // stepped off a pad → tunnels armed again
       if (here === '~') {                       // pit — you fall and die
         beep(180, 0.5, 'sawtooth', 0.06);
         hp = 0; respawn = 70;
@@ -546,6 +564,9 @@ export const RaycastCanvas: React.FC<{
           } else if (c === 'E') {                         // exit — cyan pad
             const sh = 0.7 + 0.3 * Math.sin(tick * 0.18);
             fr = 30; fg = 200 * sh; fb = 230 * sh; emissive = true;
+          } else if (c === TUNNEL_CHAR) {                 // tunnel — swirling violet warp pad
+            const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3);
+            fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emissive = true;
           } else if (c === 'g') {                         // grass
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88;
             fr = 46 * chk; fg = 120 * chk; fb = 48 * chk;
@@ -638,6 +659,7 @@ export const RaycastCanvas: React.FC<{
                 if (curCh === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emis = true; }
                 else if (curCh === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emis = true; }
                 else if (curCh === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); fr = 30; fg = 200 * sh; fb = 230 * sh; emis = true; }
+                else if (curCh === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emis = true; }
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
                 else if (curCh === 'g') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
                 else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.94; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
@@ -895,6 +917,7 @@ export const RaycastCanvas: React.FC<{
           else if (c === 'L') ctx.fillStyle = '#ff5a1e';
           else if (c === '~') ctx.fillStyle = '#000';
           else if (c === 'E') ctx.fillStyle = '#1ee0ff';
+          else if (c === TUNNEL_CHAR) ctx.fillStyle = '#b35cff';
           else continue;
           ctx.fillRect(pad + x * cell, pad + y * cell, cell, cell);
         }

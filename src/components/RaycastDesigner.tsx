@@ -26,6 +26,7 @@ const BRUSHES: Brush[] = [
   { ch: 'L', label: 'Lava', color: '#ff5a1e' },
   { ch: '~', label: 'Pit', color: '#050308' },
   { ch: 'C', label: 'Crystal', color: '#9beaff' },
+  { ch: 'O', label: 'Tunnel', color: '#b35cff' },
   { ch: 'M', label: 'Stalker', color: '#b03030' },
   { ch: 'E', label: 'Exit', color: '#1ee0ff' },
   { ch: 'S', label: 'Spawn', color: '#ffd400' },
@@ -283,7 +284,7 @@ export const RaycastDesigner: React.FC<{
                       boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
                     }}
                   >
-                    {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ''}
+                    {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'O' ? '◎' : ''}
                     {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
                   </button>
                 );

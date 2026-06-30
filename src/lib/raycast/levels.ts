@@ -10,6 +10,8 @@
 //   'L'                  lava  (walkable, but drains HP while you stand in it)
 //   '~'                  pit   (walkable onto — you fall and die)
 //   'C'                  crystal pickup (walkable; grab for a small reward)
+//   'O'                  tunnel (walkable; step on to warp to the NEXT tunnel cell — two make an A↔B
+//                        pair, three+ form a loop you cycle through in reading order)
 //   'E'                  exit  (walkable; step on it to return to the flat room)
 //   'S'                  spawn (walkable; where you appear — exactly one)
 
@@ -38,6 +40,9 @@ export type Level3D = {
 
 // 'M' cells spawn a HAZARD NPC (a stalker that hunts you). It's walkable floor otherwise.
 export const MONSTER_CHAR = 'M';
+
+// 'O' cells are tunnels: stepping onto one warps you to the next tunnel cell (reading order, wrapping).
+export const TUNNEL_CHAR = 'O';
 
 // Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
 // `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.
@@ -215,7 +220,7 @@ const HOLLOW: Level3D = {
   atmo: 'candle',
   rows: [
     '##################',
-    '#S...#.....#....C#',
+    '#S.O.#.....#....C#',
     '###.#.###.#.####.#',
     '#...#...#.#....#.#',
     '#.#####.#.###.#.##',
@@ -229,7 +234,7 @@ const HOLLOW: Level3D = {
     '#.#.###.##.###.#.#',
     '#...#...##...#...#',
     '###.#.######.###.#',
-    '#...#....E.....#.#',
+    '#.O.#....E.....#.#',
     '#.############.#.#',
     '##################',
   ],
