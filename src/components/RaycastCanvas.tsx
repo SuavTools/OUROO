@@ -30,6 +30,12 @@ const MAX_HP = 100;
 const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
 const EYE_BASE = 0.62;             // eye height above the floor you stand on — taller player = you feel bigger,
                                    // walls read as human-scale (chest/head high) instead of towering over you
+// FOV / zoom. The camera focal length is RES_H, giving a narrow ~53° lens that makes every block look
+// huge and right in your face. FOV widens the lens: apparent size of EVERYTHING (walls, blocks, floor
+// cells) scales by 1/FOV, so 1.7 ≈ "half the size". The raycaster is fisheye-corrected (walls use
+// perpendicular distance), so a wide lens just reveals more world — it doesn't bend the walls. This is
+// the real "make blocks smaller" knob; dial it up for smaller/further, down for bigger/closer.
+const FOV = 2.0;                   // 2.0 = blocks render at HALF their size/volume in every dimension
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
 const GRAV = 0.012;              // stacked realms: gravity pull per tick
@@ -609,7 +615,8 @@ export const RaycastCanvas: React.FC<{
     const draw = () => {
       const W = RES_W, H = RES_H;
       const cos = Math.cos(dir), sin = Math.sin(dir);
-      const planeLen = (W / H) * 0.5;          // square pixels on any aspect
+      const F = H / FOV;                       // focal length — apparent size of everything scales with this
+      const planeLen = (W / H) * 0.5 * FOV;    // widen the lens by FOV; keeps pixels square with focal F
       const planeX = -sin * planeLen, planeY = cos * planeLen;
       const horizon = (H >> 1) + Math.round(pitch) + (heightMap ? 0 : Math.round(jz * 120));   // pitch + jump-bob (flat)
       const fog = pal.fog;
@@ -648,7 +655,7 @@ export const RaycastCanvas: React.FC<{
       // row too (≤ horizon) so a pitched view never leaves an uncovered tearing line.
       for (let y = 0; y <= horizon && y < H; y++) {
         const p = Math.max(1, horizon - y);
-        const rowDist = (0.5 * H) / p;
+        const rowDist = (0.5 * F) / p;
         let cr: number, cg: number, cb: number, dd: number;
         if (sky) { [cr, cg, cb] = skyColAt(y); dd = 1e9; }
         else { const lf = lightAt(rowDist); const ft = 1 - 1 / (1 + rowDist * rowDist * 0.012); const m = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], ft * 0.7); cr = m[0] * lf; cg = m[1] * lf; cb = m[2] * lf; dd = rowDist; }
@@ -659,7 +666,7 @@ export const RaycastCanvas: React.FC<{
       const rdx1 = cos + planeX, rdy1 = sin + planeY;   // rightmost ray
       for (let y = Math.max(0, horizon + 1); y < H; y++) {
         const p = y - horizon;
-        const rowDist = (0.5 * H) / p;                  // camera height 0.5
+        const rowDist = (0.5 * F) / p;                  // camera height 0.5
         const stepX = (rowDist * (rdx1 - rdx0)) / W;
         const stepY = (rowDist * (rdy1 - rdy0)) / W;
         let fx = px + rowDist * rdx0;
@@ -738,7 +745,7 @@ export const RaycastCanvas: React.FC<{
           if (isWall(c)) { hitCh = c; break; }
         }
         const perp = Math.max(0.02, side === 0 ? sideX - ddx : sideY - ddy);
-        const lineH = Math.min(H * 12, Math.max(1, Math.floor(H / perp)));
+        const lineH = Math.min(H * 12, Math.max(1, Math.floor(F / perp)));
         let drawStart = horizon - (lineH >> 1);
         let drawEnd = drawStart + lineH;
         const top = Math.max(0, drawStart), bot = Math.min(H, drawEnd);
@@ -767,7 +774,7 @@ export const RaycastCanvas: React.FC<{
         // ceiling, and a vertical riser wherever the floor steps up/down. A free window [yCeil, yFloor)
         // shrinks as we go, so nearer geometry occludes farther — the trick that makes height read.
         const eye = pz + EYE_BASE + jz;   // jump raises your eye in 3D-height realms
-        const projF = (z: number, d: number) => horizon + ((eye - z) * H) / d;
+        const projF = (z: number, d: number) => horizon + ((eye - z) * F) / d;
         const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
         for (let x = 0; x < W; x++) {
           const camX = (2 * x) / W - 1;
@@ -792,7 +799,7 @@ export const RaycastCanvas: React.FC<{
               const b = Math.min(yFloor, Math.ceil(projF(curZ, dEnter)));     // each strip 1px → no seams
               for (let y = a; y < b; y++) {
                 const pp = y - horizon; if (pp <= 0) continue;
-                const d = ((eye - curZ) * H) / pp;
+                const d = ((eye - curZ) * F) / pp;
                 const fx = px + d * rdx, fy = py + d * rdy;
                 let fr: number, fg: number, fb: number, emis = false;
                 if (curCh === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emis = true; }
@@ -821,7 +828,7 @@ export const RaycastCanvas: React.FC<{
                 const pp = y - horizon; if (pp >= 0) continue;
                 const o = (y * W + x) * 4;
                 if (sky) { const [sr, sg, sb] = skyColAt(y); data[o] = sr; data[o + 1] = sg; data[o + 2] = sb; data[o + 3] = 255; depth[y * W + x] = 1e9; }
-                else { const d = ((eye - CEIL_Z) * H) / pp; const lf = lightAt(d); const [cr, cg, cbl] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7); data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cbl * lf; data[o + 3] = 255; depth[y * W + x] = d; }
+                else { const d = ((eye - CEIL_Z) * F) / pp; const lf = lightAt(d); const [cr, cg, cbl] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7); data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cbl * lf; data[o + 3] = 255; depth[y * W + x] = d; }
               }
               yCeil = Math.max(yCeil, cb);
             }
@@ -880,11 +887,11 @@ export const RaycastCanvas: React.FC<{
         if (camY <= 0.1) continue;
         const camX = invDet * (sin * relX - cos * relY);
         const screenX = Math.floor((W / 2) * (1 + camX / camY));
-        const sizeBase = Math.abs(Math.floor(H / camY));
+        const sizeBase = Math.abs(Math.floor(F / camY));
         const zfS = heightMap ? floorLvl(Math.floor(s.x), Math.floor(s.y)) * STEP_UNIT : 0;
         const eyeH2 = heightMap ? pz + EYE_BASE + jz : 0.5;
-        const groundY = horizon + ((eyeH2 - zfS) * H) / camY;             // where this cell's floor meets the sprite
-        const hShift = heightMap ? Math.round(((pz - zfS) * H) / camY) : 0;
+        const groundY = horizon + ((eyeH2 - zfS) * F) / camY;             // where this cell's floor meets the sprite
+        const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
         const szMul = kind === 'tree' ? 1.4 : kind === 'lamp' ? 1.1 : kind === 'rock' ? 0.72 : kind === 'bush' ? 0.62 : kind === 'flower' ? 0.42 : kind === 'exit' ? 1 : 0.55;
         const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * szMul);
         const half = sz >> 1;
@@ -947,9 +954,9 @@ export const RaycastCanvas: React.FC<{
         if (camY <= 0.05) continue;
         const camX = invDet * (sin * relX - cos * relY);
         const screenX = (W / 2) * (1 + camX / camY);
-        const sizeBase = Math.abs(H / camY);
+        const sizeBase = Math.abs(F / camY);
         const zfE = heightMap ? floorLvl(Math.floor(e.x), Math.floor(e.y)) * STEP_UNIT : 0;
-        const groundY = horizon + ((eyeH - zfE) * H) / camY;
+        const groundY = horizon + ((eyeH - zfE) * F) / camY;
         const figH = sizeBase * 0.95, figW = sizeBase * 0.46;
         const top = groundY - figH, halfW = figW / 2;
         const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
@@ -1004,11 +1011,11 @@ export const RaycastCanvas: React.FC<{
           const camX = invDet * (sin * relX - cos * relY);
           const scrX = (W / 2) * (1 + camX / camY);
           const zfN = heightMap ? floorLvl(nn.x, nn.y) * STEP_UNIT : 0;
-          const groundY = horizon + ((eyeH - zfN) * H) / camY;
+          const groundY = horizon + ((eyeH - zfN) * F) / camY;
           const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX)));
-          const by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (H / camY) * 0.4)));
+          const by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (F / camY) * 0.4)));
           if (camY > depth[by * W + bx] + 0.3) continue;   // torso behind a wall → hide
-          const figScreen = (H / camY) * 0.82 * (nn.sz ?? 1) * S;
+          const figScreen = (F / camY) * 0.82 * (nn.sz ?? 1) * S;
           const drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
           renderAppearance(nn.a, tick * 0.5);
           ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
@@ -1262,7 +1269,8 @@ export const RaycastCanvas: React.FC<{
     const drawStacked = () => {
       const W = RES_W, H = RES_H;
       const cos = Math.cos(dir), sin = Math.sin(dir);
-      const planeLen = (W / H) * 0.5;
+      const F = H / FOV;                       // focal length — apparent size of everything scales with this
+      const planeLen = (W / H) * 0.5 * FOV;    // widen the lens by FOV; keeps pixels square with focal F
       const planeX = -sin * planeLen, planeY = cos * planeLen;
       const horizon = (H >> 1) + Math.round(pitch);
       const eye = viewZ + EYE_BASE;
@@ -1274,7 +1282,7 @@ export const RaycastCanvas: React.FC<{
       const lightAt = (d: number) => { if (!lighting) return 1; const f = 1 - d / lighting.radius; return (f < lighting.ambient ? lighting.ambient : f) * flick; };
       const skyColAt = (y: number): [number, number, number] => { const t = horizon <= 0 ? 1 : Math.max(0, Math.min(1, y / horizon)); return [sky![0][0] + (sky![1][0] - sky![0][0]) * t, sky![0][1] + (sky![1][1] - sky![0][1]) * t, sky![0][2] + (sky![1][2] - sky![0][2]) * t]; };
       const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
-      const projF = (z: number, d: number) => horizon + ((eye - z) * H) / d;
+      const projF = (z: number, d: number) => horizon + ((eye - z) * F) / d;
 
       // surface colour for a floor/slab cell at world (fx,fy) → [r,g,b,emissive]
       const floorColor = (c: string, fx: number, fy: number): [number, number, number, boolean] => {
@@ -1299,7 +1307,7 @@ export const RaycastCanvas: React.FC<{
         const y0 = Math.max(0, Math.min(ya, yb)), y1 = Math.min(H, Math.max(ya, yb));
         for (let y = y0; y < y1; y++) {
           const pp = y - horizon; if (pp <= 0) continue;            // floor is below the horizon
-          const d = ((eye - z) * H) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
+          const d = ((eye - z) * F) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
           let R: number, G: number, B: number;
@@ -1314,7 +1322,7 @@ export const RaycastCanvas: React.FC<{
         const y0 = Math.max(0, Math.min(ya, yb)), y1 = Math.min(H, Math.max(ya, yb));
         for (let y = y0; y < y1; y++) {
           const pp = y - horizon; if (pp >= 0) continue;            // underside is above the horizon
-          const d = ((eye - z) * H) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
+          const d = ((eye - z) * F) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
           const [r, g, b] = floorColor(c, fx, fy); const ft = fogTd(d), lf = lightAt(d);
@@ -1381,7 +1389,7 @@ export const RaycastCanvas: React.FC<{
           if (depth[y * W + x] < 1e8) continue;
           const o = (y * W + x) * 4;
           if (sky) { const [sr, sg, sb] = skyColAt(y); data[o] = sr; data[o + 1] = sg; data[o + 2] = sb; data[o + 3] = 255; }
-          else { const pp = horizon - y; const d = pp > 0 ? ((topZ - eye) * H) / pp : 40; const lf = lightAt(d); const [cr, cg, cb] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7); data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cb * lf; data[o + 3] = 255; depth[y * W + x] = d; }
+          else { const pp = horizon - y; const d = pp > 0 ? ((topZ - eye) * F) / pp : 40; const lf = lightAt(d); const [cr, cg, cb] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7); data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cb * lf; data[o + 3] = 255; depth[y * W + x] = d; }
         }
       }
 
@@ -1398,9 +1406,9 @@ export const RaycastCanvas: React.FC<{
         if (camY <= 0.1) continue;
         const camX = invDet * (sin * relX - cos * relY);
         const screenX = Math.floor((W / 2) * (1 + camX / camY));
-        const sizeBase = Math.abs(Math.floor(H / camY));
+        const sizeBase = Math.abs(Math.floor(F / camY));
         const zf = baseZ(s.k);
-        const groundY = horizon + ((eye - zf) * H) / camY;        // where this layer's floor meets the sprite
+        const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
         const szMul = kind === 'tree' ? 1.4 : kind === 'lamp' ? 1.1 : kind === 'rock' ? 0.72 : kind === 'bush' ? 0.62 : kind === 'flower' ? 0.42 : kind === 'exit' ? 1 : 0.55;
         const sz = Math.floor(sizeBase * szMul), half = sz >> 1;
         const isGround = kind !== 'crystal';
@@ -1439,9 +1447,9 @@ export const RaycastCanvas: React.FC<{
         if (camY <= 0.05) continue;
         const camX = invDet * (sin * relX - cos * relY);
         const screenX = (W / 2) * (1 + camX / camY);
-        const sizeBase = Math.abs(H / camY);
+        const sizeBase = Math.abs(F / camY);
         const zfE = baseZ(e.k ?? 0);
-        const groundY = horizon + ((eye - zfE) * H) / camY;
+        const groundY = horizon + ((eye - zfE) * F) / camY;
         const figH = sizeBase * 0.95, figW = sizeBase * 0.46, top = groundY - figH;
         const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
         const sx0 = Math.max(0, Math.floor(screenX - figW / 2)), sx1 = Math.min(W, Math.ceil(screenX + figW / 2));
@@ -1482,10 +1490,10 @@ export const RaycastCanvas: React.FC<{
           if (camY <= 0.3) continue;
           const camX = invDet * (sin * relX - cos * relY);
           const scrX = (W / 2) * (1 + camX / camY);
-          const groundY = horizon + ((eye - baseZ(nn.k)) * H) / camY;
-          const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX))), by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (H / camY) * 0.4)));
+          const groundY = horizon + ((eye - baseZ(nn.k)) * F) / camY;
+          const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX))), by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (F / camY) * 0.4)));
           if (camY > depth[by * W + bx] + 0.3) continue;
-          const figScreen = (H / camY) * 0.82 * (nn.sz ?? 1) * S, drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
+          const figScreen = (F / camY) * 0.82 * (nn.sz ?? 1) * S, drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
           renderAppearance(nn.a, tick * 0.5);
           ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
           const headY = groundY * S - figScreen;
