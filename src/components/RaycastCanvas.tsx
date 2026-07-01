@@ -24,11 +24,14 @@ const RES_H = 240;                 // internal vertical resolution (RES_W tracks
 const MOVE = 0.045;                // tiles per tick (walk)
 const RUN = 0.085;                 // tiles per tick (run)
 const TURN = 0.045;                // radians per tick (keyboard/stick turn)
-const RADIUS = 0.22;               // player collision radius (tiles)
+const RADIUS = 0.3;                // player collision radius (tiles) — Minecraft-ish: a block is ~1.7x your width
 const LAVA_DPS = 0.55;             // HP drained per tick standing in lava
 const MAX_HP = 100;
 const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
-const EYE_BASE = 0.5;              // eye height above the floor you stand on
+const EYE_BASE = 1.55;             // eye height — MINECRAFT PROPORTION. A block/storey is ~0.96 tall, so 1.55
+                                   // ≈ 1.6x a block: you are ~1.8 blocks tall and TOWER over a single block
+                                   // (see clean over it, it sits low in view). Stack 2 blocks for a real wall.
+                                   // Consequence (same as Minecraft): rooms must be 2 blocks tall to stand in.
 // FOV / zoom. The camera focal length is RES_H, giving a narrow ~53° lens that makes every block look
 // huge and right in your face. FOV widens the lens: apparent size of EVERYTHING (walls, blocks, floor
 // cells) scales by 1/FOV, so 1.7 ≈ "half the size". The raycaster is fisheye-corrected (walls use
@@ -170,7 +173,7 @@ export const RaycastCanvas: React.FC<{
     // movement collision that allows STEPPING: walls/props always block the body; raised terrain only
     // blocks the part that's more than one step above your feet, so 1-level terrain forms walkable ramps.
     const solidFor = (x: number, y: number, feet: number): boolean => {
-      const zLo = feet + 0.12, zHi = feet + 0.7;
+      const zLo = feet + 0.3, zHi = feet + 1.6;   // Minecraft-tall body (~1.8 blocks) — 2-block walls block you
       for (let k = 0; k < nLayers; k++) {
         const c = cellL(k, x, y);
         if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }                       // walls/props: solid full storey
@@ -1210,7 +1213,7 @@ export const RaycastCanvas: React.FC<{
         const pzPrev = pz;
         vz = Math.max(-0.6, vz - GRAV);
         pz += vz;
-        if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
+        if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.4); if (pz + 1.7 > head) { pz = head - 1.7; vz = 0; } }   // head-bonk (Minecraft-tall)
         let s = -Infinity;
         for (const t of tops) if (t <= pzPrev + 0.06 && pz <= t && t > s) s = t;   // were above it, have now reached it
         if (s > -Infinity) { if (vz < 0) fallDamage(groundZ - s); pz = s; vz = 0; grounded = true; groundZ = s; }
