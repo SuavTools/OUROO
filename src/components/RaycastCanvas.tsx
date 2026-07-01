@@ -21,18 +21,14 @@ import { drawIconSpec } from '@/lib/icons';
 
 const STEP = 1000 / 60;            // fixed sim tick
 const RES_H = 240;                 // internal vertical resolution (RES_W tracks aspect for square pixels)
-// The player is BIG — roughly a giant relative to the grid — so a map cell / cube reads as small (about
-// half-size in both width and height), Minecraft-style. Bumping these together (speed, radius, eye) is
-// what shrinks the world without any lens/FOV trick. Dial them up for an even bigger player / smaller cells.
-const MOVE = 0.08;                 // tiles per tick (walk) — big player crosses cells fast
-const RUN = 0.15;                  // tiles per tick (run)
+const MOVE = 0.045;                // tiles per tick (walk)
+const RUN = 0.085;                 // tiles per tick (run)
 const TURN = 0.045;                // radians per tick (keyboard/stick turn)
-const RADIUS = 0.36;               // player collision radius (tiles) — wide, so you stand back from walls
+const RADIUS = 0.22;               // player collision radius (tiles)
 const LAVA_DPS = 0.55;             // HP drained per tick standing in lava
 const MAX_HP = 100;
 const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
-const EYE_BASE = 0.9;              // eye height — tall player, so blocks sit low (you nearly see over a
-                                   // one-storey block). Kept just under a storey (0.96) so you still fit rooms.
+const EYE_BASE = 0.5;              // eye height above the floor you stand on
 // FOV / zoom. The camera focal length is RES_H, giving a narrow ~53° lens that makes every block look
 // huge and right in your face. FOV widens the lens: apparent size of EVERYTHING (walls, blocks, floor
 // cells) scales by 1/FOV, so 1.7 ≈ "half the size". The raycaster is fisheye-corrected (walls use
@@ -174,7 +170,7 @@ export const RaycastCanvas: React.FC<{
     // movement collision that allows STEPPING: walls/props always block the body; raised terrain only
     // blocks the part that's more than one step above your feet, so 1-level terrain forms walkable ramps.
     const solidFor = (x: number, y: number, feet: number): boolean => {
-      const zLo = feet + 0.2, zHi = feet + 0.85;   // taller player body (kept just under a storey so you fit rooms)
+      const zLo = feet + 0.12, zHi = feet + 0.7;
       for (let k = 0; k < nLayers; k++) {
         const c = cellL(k, x, y);
         if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }                       // walls/props: solid full storey
@@ -1214,7 +1210,7 @@ export const RaycastCanvas: React.FC<{
         const pzPrev = pz;
         vz = Math.max(-0.6, vz - GRAV);
         pz += vz;
-        if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.35); if (pz + 0.92 > head) { pz = head - 0.92; vz = 0; } }   // head-bonk (tall player)
+        if (vz > 0) { const head = ceilAbove(cx, cy, pz + 0.2); if (pz + 0.78 > head) { pz = head - 0.78; vz = 0; } }   // head-bonk
         let s = -Infinity;
         for (const t of tops) if (t <= pzPrev + 0.06 && pz <= t && t > s) s = t;   // were above it, have now reached it
         if (s > -Infinity) { if (vz < 0) fallDamage(groundZ - s); pz = s; vz = 0; grounded = true; groundZ = s; }
