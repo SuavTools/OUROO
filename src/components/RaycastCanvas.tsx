@@ -328,6 +328,7 @@ export const RaycastCanvas: React.FC<{
   // HUD mirror (kept tiny — only what the React overlay needs)
   const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false, breath: 100, submerged: false, chests: 0, chestTotal: 0 });
   const [toast, setToast] = useState<{ msg: string; kind: 'good' | 'bad' } | null>(null);
+  const [pop, setPop] = useState<{ id: number; n: number } | null>(null);   // crystal pickup pop
   const onExitRef = useRef(onExit); useEffect(() => { onExitRef.current = onExit; });
   const onRewardRef = useRef(onReward); useEffect(() => { onRewardRef.current = onReward; });
   const attackFnRef = useRef<(() => void) | null>(null);   // mobile FIRE button → the in-effect attack
@@ -588,6 +589,23 @@ export const RaycastCanvas: React.FC<{
     const denied = () => { beep(130, 0.14, 'square', 0.05); beep(98, 0.18, 'square', 0.04); };
     // Gate open — a bright rising fanfare when the last chest is opened and the exit unlocks.
     const gateFanfare = () => { if (mutedRef.current) return; [523, 659, 784, 1047, 1319].forEach(f => beep(f, 0.5, 'triangle', 0.05)); beep(262, 0.6, 'sine', 0.05); };
+    // Crystal grab — a fun, bright ascending arpeggio + a sparkle shimmer (louder than a plain beep).
+    const crystalGrab = () => {
+      if (mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t0 = actx!.currentTime;
+        [659.25, 880, 1174.66, 1567.98].forEach((f, i) => {
+          const o = actx!.createOscillator(), g = actx!.createGain(); const t = t0 + i * 0.055;
+          o.type = 'triangle'; o.frequency.value = f;
+          g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.1, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+          o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.26);
+        });
+        const s = actx!.createOscillator(), sg = actx!.createGain();
+        s.type = 'sine'; s.frequency.setValueAtTime(2100, t0); s.frequency.exponentialRampToValueAtTime(3800, t0 + 0.28);
+        sg.gain.setValueAtTime(0.055, t0); sg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.32);
+        s.connect(sg); sg.connect(dest); s.start(t0); s.stop(t0 + 0.34);
+      } catch { /* audio blocked */ }
+    };
     // Reusable soft-clip fuzz curve → the electric, gritty, distorted edge. Higher amount = nastier.
     const shaper = (amount: number) => {
       const n = 1024, curve = new Float32Array(n), k = amount;
@@ -955,6 +973,8 @@ export const RaycastCanvas: React.FC<{
     const showToast = (msg: string, kind: 'good' | 'bad') => {
       setToast({ msg, kind }); clearTimeout(toastTimer); toastTimer = setTimeout(() => setToast(null), 2400);
     };
+    let popTimer: ReturnType<typeof setTimeout> | undefined, popId = 0;
+    const showPop = (n: number) => { popId++; setPop({ id: popId, n }); clearTimeout(popTimer); popTimer = setTimeout(() => setPop(null), 850); };
     // Advance the lava-bubble pool: integrate rise/fall under gravity, retire spent ones, spawn fresh
     // pops from lava tiles near the player. Cheap — a capped pool, only within view range.
     const stepBubbles = () => {
@@ -1000,21 +1020,28 @@ export const RaycastCanvas: React.FC<{
       const dxp = env.px - e.x, dyp = env.py - e.y, dd = Math.hypot(dxp, dyp) || 1;
       const fx = dxp / dd, fy = dyp / dd, perpX = -fy, perpY = fx;   // toward-camera + lateral units
       const sway = e.chasing ? Math.sin(tick * 0.34 + e.hx) * 0.06 + Math.sin(tick * 0.71) * 0.03 : Math.sin(tick * 0.12 + e.hx) * 0.02;
+      const bob = e.chasing ? Math.abs(Math.sin(tick * 0.3)) * 0.03 : 0;
       const HX = e.x + perpX * sway, HY = e.y + perpY * sway;
-      let R = 26, G = 22, B = 34;                       // dark body
-      if (e.chasing) { R = 78; G = 16; B = 22; }        // seething red when hunting
-      if (e.flash > 0) { R = 255; G = 230; B = 230; }   // hit flash
-      // box at lateral L / depth D from the figure centre, spanning world-Z [z0,z1]
+      // A gaunt, hunched GHOUL (ashen flesh + pale bone) — deliberately not a solid-black slim figure.
+      let R = 50, G = 46, B = 44, KR = 150, KG = 143, KB = 128;   // body / bone
+      if (e.chasing) { R = 86; G = 28; B = 24; KR = 176; KG = 120; KB = 104; }   // flushed, hungry
+      if (e.flash > 0) { R = 255; G = 230; B = 230; KR = 255; KG = 240; KB = 240; }   // hit flash
+      // box at lateral L / depth D from the figure centre, world-Z [z0,z1] (bob added)
       const box = (L: number, D: number, w: number, d: number, z0: number, z1: number, r: number, g: number, b: number, glow = false, lg = light) =>
-        drawBox3D(env, HX + perpX * L + fx * D, HY + perpY * L + fy * D, w, d, gz + z0, gz + z1, r, g, b, lg, glow);
-      box(-0.1, 0, 0.16, 0.16, 0, 0.82, R, G, B); box(0.1, 0, 0.16, 0.16, 0, 0.82, R, G, B);   // legs
-      box(0, 0, 0.42, 0.34, 0.8, 1.5, R, G, B);                                                 // torso
-      box(-0.27, 0, 0.13, 0.13, 0.84, 1.48, R, G, B); box(0.27, 0, 0.13, 0.13, 0.84, 1.48, R, G, B);   // long arms
-      box(0, 0, 0.32, 0.3, 1.5, 1.88, R, G, B);                                                 // head
+        drawBox3D(env, HX + perpX * L + fx * D, HY + perpY * L + fy * D, w, d, gz + z0 + bob, gz + z1 + bob, r, g, b, lg, glow);
+      box(-0.09, 0.06, 0.1, 0.1, 0, 0.42, R, G, B); box(0.09, 0.06, 0.1, 0.1, 0, 0.42, R, G, B);          // shins (bent forward)
+      box(-0.09, -0.02, 0.11, 0.11, 0.38, 0.84, R, G, B); box(0.09, -0.02, 0.11, 0.11, 0.38, 0.84, R, G, B);   // thighs
+      box(0, 0.05, 0.36, 0.26, 0.8, 1.34, R, G, B);                                                        // torso, leaning forward
+      box(0, 0.17, 0.22, 0.04, 0.92, 1.28, KR, KG, KB);                                                     // exposed pale ribs/sternum
+      box(-0.24, 0.03, 0.09, 0.09, 0.92, 1.36, R, G, B); box(0.24, 0.03, 0.09, 0.09, 0.92, 1.36, R, G, B);  // upper arms
+      box(-0.27, 0.12, 0.08, 0.08, 0.42, 0.98, R, G, B); box(0.27, 0.12, 0.08, 0.08, 0.42, 0.98, R, G, B);  // forearms reaching low
+      box(-0.28, 0.14, 0.07, 0.07, 0.3, 0.44, KR, KG, KB); box(0.28, 0.14, 0.07, 0.07, 0.3, 0.44, KR, KG, KB);   // bone claws
+      box(0, 0.18, 0.26, 0.26, 1.3, 1.62, KR, KG, KB);                                                      // pale skull, thrust forward (hunched)
       const eyeGl = e.chasing ? 1 + 0.4 * Math.sin(tick * 0.5) : 1;
-      const eR = (e.chasing ? 255 : 205) * eyeGl, eG = e.chasing ? 34 : 120, es = e.chasing ? 0.09 : 0.07;
-      box(-es, 0.15, 0.08, 0.06, 1.66, 1.74, eR, eG, 34, true, 1); box(es, 0.15, 0.08, 0.06, 1.66, 1.74, eR, eG, 34, true, 1);   // glowing eyes
-      if (e.chasing) box(0, 0.15, 0.18, 0.05, 1.55, 1.63, 44 + 26 * Math.sin(tick * 0.3), 4, 6, true, 1);   // gaping maw
+      const eR = (e.chasing ? 255 : 210) * eyeGl, eG = e.chasing ? 30 : 90, es = e.chasing ? 0.08 : 0.06;
+      box(-es, 0.31, 0.07, 0.05, 1.45, 1.52, eR, eG, 30, true, 1); box(es, 0.31, 0.07, 0.05, 1.45, 1.52, eR, eG, 30, true, 1);   // sunken glowing eyes
+      const mawH = e.chasing ? 0.1 : 0.035;
+      box(0, 0.31, 0.14, 0.05, 1.34, 1.34 + mawH, 40 + 26 * Math.sin(tick * 0.3), 5, 8, true, 1);           // gaping maw (wider when hunting)
     };
     // Exit as a VOXEL DOOR: a rock frame (pillars + lintel + threshold) around a swirling pixel-gradient
     // energy panel, facing `dirDeg` (0/90/180/270). Locked → the rock reddens and the panel smoulders.
@@ -1136,7 +1163,7 @@ export const RaycastCanvas: React.FC<{
       for (const s of sprites) {
         if (s.kind !== 'crystal' || !s.key || grabbed.has(s.key)) continue;
         if (Math.abs(s.x - px) < 0.45 && Math.abs(s.y - py) < 0.45) {
-          grabbed.add(s.key); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
+          grabbed.add(s.key); onRewardRef.current?.(5); crystalGrab(); showPop(5);
         }
       }
 
@@ -1940,7 +1967,7 @@ export const RaycastCanvas: React.FC<{
       for (const s of allSprites) {
         if (s.kind !== 'crystal' || !s.key || grabbed.has(s.key)) continue;
         if (Math.abs(s.x - px) < 0.45 && Math.abs(s.y - py) < 0.45 && Math.abs(baseZ(s.k) - pz) < 0.7) {
-          grabbed.add(s.key); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
+          grabbed.add(s.key); onRewardRef.current?.(5); crystalGrab(); showPop(5);
         }
       }
       // chest opening — same-storey step-on; opening every chest unlocks the exit
@@ -2293,7 +2320,7 @@ export const RaycastCanvas: React.FC<{
 
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(toastTimer);
+      clearTimeout(toastTimer); clearTimeout(popTimer);
       ro.disconnect();
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
@@ -2324,6 +2351,15 @@ export const RaycastCanvas: React.FC<{
   return (
     <div className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" style={{ cursor: isMobileStage ? 'auto' : 'crosshair' }} />
+
+      {/* Crystal pickup pop — floats up and fades */}
+      <style>{`@keyframes cpop{0%{transform:translate(-50%,0) scale(.6);opacity:0}18%{opacity:1;transform:translate(-50%,-8px) scale(1.15)}100%{transform:translate(-50%,-52px) scale(1);opacity:0}}`}</style>
+      {pop && (
+        <div key={pop.id} className="absolute left-1/2 top-[45%] z-40 pointer-events-none font-mono text-xl font-bold text-[#9beaff]"
+          style={{ animation: 'cpop 0.85s ease-out forwards', textShadow: '0 0 10px #1ee0ff, 0 0 2px #fff' }}>
+          +{pop.n} ◆
+        </div>
+      )}
 
       {/* Toast — gate cleared / gate locked */}
       {toast && (
