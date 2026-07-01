@@ -141,8 +141,18 @@ const projPt = (e: BoxEnv, wx: number, wy: number, wz: number): PC => {
   const cx = e.invDet * (e.sin * rx - e.cos * ry);
   return { sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + ((e.eye - wz) * e.F) / cy, cy };
 };
-// fill a screen triangle with a flat pre-shaded colour, depth-testing per pixel (interpolated 1/cy)
-const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, rr: number, gg: number, bb: number) => {
+// Per-face pixel texture: a stable blocky value-noise (per texel-cell brightness) + darker mortar
+// lines at cell borders → chunky Minecraft-ish grit. u,v are in cell units (integer per cube-pixel).
+const texel = (u: number, v: number): number => {
+  const cu = Math.floor(u), cv = Math.floor(v);
+  let h = (cu * 374761393 + cv * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h >>> 0;
+  let b = 0.82 + (h & 255) / 255 * 0.26;                                   // 0.82..1.08 per cell
+  const fu = u - cu, fv = v - cv, edge = Math.min(fu, 1 - fu, fv, 1 - fv);
+  if (edge < 0.1) b *= 0.82;                                               // mortar seam between cubes
+  return b;
+};
+// fill a screen triangle, depth-testing per pixel (interpolated 1/cy) and texturing via affine u,v
+const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: number, v1: number, u2: number, v2: number, rr: number, gg: number, bb: number) => {
   const minX = Math.max(0, Math.floor(Math.min(p0.sx, p1.sx, p2.sx)));
   const maxX = Math.min(e.W - 1, Math.ceil(Math.max(p0.sx, p1.sx, p2.sx)));
   const minY = Math.max(0, Math.floor(Math.min(p0.sy, p1.sy, p2.sy)));
@@ -158,33 +168,38 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, rr: number, gg: number, bb: 
       const e2 = (p0.sx - p2.sx) * (fy - p2.sy) - (p0.sy - p2.sy) * (fx - p2.sx);
       if (!((e0 >= 0 && e1 >= 0 && e2 >= 0) || (e0 <= 0 && e1 <= 0 && e2 <= 0))) continue;
       const sum = e0 + e1 + e2; if (sum === 0) continue;
-      const cy = sum / (e1 * i0 + e2 * i1 + e0 * i2);   // 1 / interpolated(1/cy)
+      const wa = e1 / sum, wb = e2 / sum, wc = e0 / sum;
+      const cy = 1 / (wa * i0 + wb * i1 + wc * i2);
       const idx = y * e.W + x;
       if (cy >= e.depth[idx]) continue;
-      const o = idx * 4; e.data[o] = rr; e.data[o + 1] = gg; e.data[o + 2] = bb; e.data[o + 3] = 255;
+      const tm = texel(wa * u0 + wb * u1 + wc * u2, wa * v0 + wb * v1 + wc * v2);
+      const o = idx * 4; e.data[o] = rr * tm; e.data[o + 1] = gg * tm; e.data[o + 2] = bb * tm; e.data[o + 3] = 255;
       e.depth[idx] = cy;
     }
   }
 };
 // draw one axis-aligned cuboid: top + the ≤2 camera-facing side faces, Minecraft-shaded (top brightest),
 // fogged by mean depth, dimmed by `light` (lantern). Colour (r,g,bl) is the base albedo.
-const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0: number, z1: number, r: number, g: number, bl: number, light: number) => {
-  const x0 = wx - w / 2, x1 = wx + w / 2, y0 = wy - dep / 2, y1 = wy + dep / 2;
+const TEXD = 6;   // texel-cells per world unit (chunky pixel size)
+const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0: number, z1: number, r: number, g: number, bl: number, light: number, glow = false) => {
+  const x0 = wx - w / 2, x1 = wx + w / 2, y0 = wy - dep / 2, y1 = wy + dep / 2, hgt = z1 - z0;
   const P = (X: number, Y: number, Z: number) => projPt(e, X, Y, Z);
   const c000 = P(x0, y0, z0), c100 = P(x1, y0, z0), c010 = P(x0, y1, z0), c110 = P(x1, y1, z0);
   const c001 = P(x0, y0, z1), c101 = P(x1, y0, z1), c011 = P(x0, y1, z1), c111 = P(x1, y1, z1);
-  const quad = (a: PC, b: PC, c: PC, d: PC, shade: number) => {
+  // nu,nv = texel-cell counts across the face's two world dimensions (≥1)
+  const quad = (a: PC, b: PC, c: PC, d: PC, shade: number, nu: number, nv: number) => {
     if (!(a.cy > 0.06 && b.cy > 0.06 && c.cy > 0.06 && d.cy > 0.06)) return;
-    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * 0.012); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * 0.6;
+    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * 0.012); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * (glow ? 0.25 : 0.6);
     const sl = shade * light;
     const rr = r * sl + (e.fog[0] - r * sl) * ft, gg = g * sl + (e.fog[1] - g * sl) * ft, bb = bl * sl + (e.fog[2] - bl * sl) * ft;
-    fillTri(e, a, b, c, rr, gg, bb); fillTri(e, a, c, d, rr, gg, bb);
+    fillTri(e, a, b, c, 0, 0, nu, 0, nu, nv, rr, gg, bb); fillTri(e, a, c, d, 0, 0, nu, nv, 0, nv, rr, gg, bb);
   };
-  quad(c001, c101, c111, c011, 1.0);                       // top face — brightest
-  if (e.px > x1) quad(c100, c110, c111, c101, 0.6);        // east  face
-  else if (e.px < x0) quad(c000, c010, c011, c001, 0.6);   // west  face
-  if (e.py > y1) quad(c010, c110, c111, c011, 0.82);       // south face
-  else if (e.py < y0) quad(c000, c100, c101, c001, 0.82);  // north face
+  const cw = Math.max(1, w * TEXD), cd = Math.max(1, dep * TEXD), ch = Math.max(1, hgt * TEXD);
+  quad(c001, c101, c111, c011, 1.0, cw, cd);                        // top face — brightest
+  if (e.px > x1) quad(c100, c110, c111, c101, 0.6, cd, ch);         // east  face
+  else if (e.px < x0) quad(c000, c010, c011, c001, 0.6, cd, ch);    // west  face
+  if (e.py > y1) quad(c010, c110, c111, c011, 0.82, cw, ch);        // south face
+  else if (e.py < y0) quad(c000, c100, c101, c001, 0.82, cw, ch);   // north face
 };
 // A prop = a list of cuboids relative to its tile centre. dx,dy = horizontal offset (tiles); w,dep =
 // footprint; z0,z1 = height range above the tile floor (world-Z); rgb = albedo; glow>0 = self-lit.
@@ -206,6 +221,29 @@ const chestBoxes = (open: boolean): PropBox[] => open
       { dx: 0, dy: 0, w: 0.68, dep: 0.5, z0: 0.42, z1: 0.6, r: 100, g: 60, b: 28 },       // closed lid
       { dx: 0, dy: -0.24, w: 0.12, dep: 0.06, z0: 0.36, z1: 0.5, r: 240, g: 196, b: 80, glow: 0.9 }, // lock
     ];
+const ROCK_BOXES: PropBox[] = [
+  { dx: 0, dy: 0, w: 0.64, dep: 0.58, z0: 0, z1: 0.34, r: 120, g: 124, b: 132 },
+  { dx: 0.08, dy: -0.06, w: 0.42, dep: 0.4, z0: 0.3, z1: 0.58, r: 134, g: 138, b: 146 },
+  { dx: -0.13, dy: 0.1, w: 0.26, dep: 0.24, z0: 0.28, z1: 0.46, r: 106, g: 110, b: 118 },
+];
+const BUSH_BOXES: PropBox[] = [
+  { dx: 0, dy: 0, w: 0.62, dep: 0.58, z0: 0, z1: 0.42, r: 36, g: 104, b: 46 },
+  { dx: 0.1, dy: 0.09, w: 0.4, dep: 0.4, z0: 0.36, z1: 0.62, r: 44, g: 122, b: 54 },
+  { dx: -0.12, dy: -0.09, w: 0.34, dep: 0.32, z0: 0.34, z1: 0.54, r: 30, g: 92, b: 40 },
+];
+const LAMP_BOXES: PropBox[] = [
+  { dx: 0, dy: 0, w: 0.12, dep: 0.12, z0: 0, z1: 0.92, r: 54, g: 52, b: 62 },              // post
+  { dx: 0, dy: 0, w: 0.3, dep: 0.3, z0: 0.9, z1: 1.2, r: 255, g: 224, b: 130, glow: 1 },   // glowing orb
+];
+const FLOWER_HUES = [[235, 80, 90], [235, 150, 60], [210, 90, 220], [90, 150, 240], [240, 240, 250]];
+const flowerBoxes = (hue: number): PropBox[] => {
+  const P = FLOWER_HUES[hue];
+  return [
+    { dx: 0, dy: 0, w: 0.07, dep: 0.07, z0: 0, z1: 0.34, r: 40, g: 112, b: 52 },            // stem
+    { dx: 0, dy: 0, w: 0.26, dep: 0.26, z0: 0.32, z1: 0.5, r: P[0], g: P[1], b: P[2] },     // bloom petals
+    { dx: 0, dy: 0, w: 0.1, dep: 0.1, z0: 0.42, z1: 0.54, r: 250, g: 220, b: 70, glow: 0.7 }, // golden centre
+  ];
+};
 
 export const RaycastCanvas: React.FC<{
   levelId?: string;
@@ -1370,12 +1408,13 @@ export const RaycastCanvas: React.FC<{
         const groundY = horizon + ((eyeH2 - zfS) * F) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
         // Voxel props — real depth-tested cubes (walk around them), not billboards
-        const isVox = kind === 'tree' || kind === 'chest';
+        const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
           const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
           const light = lightAt(camY);
-          const boxes = kind === 'tree' ? TREE_BOXES : chestBoxes(!!(s.key && opened.has(s.key)));
-          for (const bx of boxes) drawBox3D(env, s.x + bx.dx, s.y + bx.dy, bx.w, bx.dep, zfS + bx.z0, zfS + bx.z1, bx.r, bx.g, bx.b, bx.glow ? Math.max(light, bx.glow) : light);
+          const boxes = kind === 'tree' ? TREE_BOXES : kind === 'rock' ? ROCK_BOXES : kind === 'bush' ? BUSH_BOXES : kind === 'lamp' ? LAMP_BOXES
+            : kind === 'flower' ? flowerBoxes((Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5) : chestBoxes(!!(s.key && opened.has(s.key)));
+          for (const bx of boxes) drawBox3D(env, s.x + bx.dx, s.y + bx.dy, bx.w, bx.dep, zfS + bx.z0, zfS + bx.z1, bx.r, bx.g, bx.b, bx.glow ? Math.max(light, bx.glow) : light, !!bx.glow);
           continue;
         }
         // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
@@ -1935,12 +1974,13 @@ export const RaycastCanvas: React.FC<{
         const zf = baseZ(s.k);
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
         // Voxel props — real depth-tested cubes (walk around them), not billboards
-        const isVox = kind === 'tree' || kind === 'chest';
+        const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
           const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
           const light = lightAt(camY);
-          const boxes = kind === 'tree' ? TREE_BOXES : chestBoxes(!!(s.key && opened.has(s.key)));
-          for (const bx of boxes) drawBox3D(env, s.x + bx.dx, s.y + bx.dy, bx.w, bx.dep, zf + bx.z0, zf + bx.z1, bx.r, bx.g, bx.b, bx.glow ? Math.max(light, bx.glow) : light);
+          const boxes = kind === 'tree' ? TREE_BOXES : kind === 'rock' ? ROCK_BOXES : kind === 'bush' ? BUSH_BOXES : kind === 'lamp' ? LAMP_BOXES
+            : kind === 'flower' ? flowerBoxes((Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5) : chestBoxes(!!(s.key && opened.has(s.key)));
+          for (const bx of boxes) drawBox3D(env, s.x + bx.dx, s.y + bx.dy, bx.w, bx.dep, zf + bx.z0, zf + bx.z1, bx.r, bx.g, bx.b, bx.glow ? Math.max(light, bx.glow) : light, !!bx.glow);
           continue;
         }
         // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
