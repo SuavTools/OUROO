@@ -428,14 +428,14 @@ export const RaycastCanvas: React.FC<{
         const o = actx!.createOscillator(); o.type = 'sine';
         o.frequency.setValueAtTime(150 + Math.random() * 40, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.08);
         const g = actx!.createGain();
-        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.045, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.1, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);   // louder than the room bed
         o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.15);
         const len = Math.floor(actx!.sampleRate * 0.05);
         const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
         const ns = actx!.createBufferSource(); ns.buffer = buf;
         const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
-        const ng = actx!.createGain(); ng.gain.value = 0.018;
+        const ng = actx!.createGain(); ng.gain.value = 0.04;
         ns.connect(bp); bp.connect(ng); ng.connect(dest); ns.start(t);
       } catch { /* audio blocked */ }
     };
@@ -488,7 +488,7 @@ export const RaycastCanvas: React.FC<{
       try { a.master.gain.linearRampToValueAtTime(0, actx.currentTime + 0.4); } catch { /* noop */ }
       setTimeout(() => a.nodes.forEach(n => { try { n.stop(); } catch { /* noop */ } }), 500);
     };
-    ambToggleRef.current = (m: boolean) => { if (m) stopAmbience(); else startAmbience(); };
+    ambToggleRef.current = (m: boolean) => { if (m) { stopAmbience(); stopHunt(); } else startAmbience(); };
     // Duck the music down hard for a moment so a screech/hit PUNCHES through and dominates the mix (sidechain).
     const duck = (dur = 0.9) => {
       if (!amb || !actx) return;
@@ -498,6 +498,58 @@ export const RaycastCanvas: React.FC<{
         g.linearRampToValueAtTime(VOL[mood] * 0.12, t + 0.03);   // music drops out
         g.linearRampToValueAtTime(VOL[mood], t + dur);           // swells back
       } catch { /* noop */ }
+    };
+
+    // ── HUNT VOICE — a SUSTAINED screech that HOLDS the whole time a stalker is locked on you and
+    // intensifies as it closes / as panic climbs: a high held violin-ish note + a screeching resonant-
+    // noise layer, over a low bowed drone. Not one-shot swishes — it rides under you until you're safe.
+    let hunt: { master: GainNode; hi: OscillatorNode; hi2: OscillatorNode; noise: AudioBufferSourceNode; bp: BiquadFilterNode; low: OscillatorNode; low2: OscillatorNode } | null = null;
+    const startHunt = () => {
+      if (hunt || mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t = actx!.currentTime;
+        const master = actx!.createGain(); master.gain.value = 0; master.connect(dest);
+        master.gain.linearRampToValueAtTime(0.16, t + 0.18);          // swell in on lock
+        // HIGH HELD SCREECH — a shrill sustained scream, NOT a warble. Two barely-detuned saws
+        // beat slowly against each other (tense/dissonant, not cute); a bandpass gives it a
+        // throat-y formant so it reads as a SCREAM. No fast vibrato — that warble was the 'pikachu'.
+        const hi = actx!.createOscillator(); hi.type = 'sawtooth'; hi.frequency.value = 1180;
+        const hi2 = actx!.createOscillator(); hi2.type = 'sawtooth'; hi2.frequency.value = 1180 * 1.006;   // slow menacing beat
+        const hf = actx!.createBiquadFilter(); hf.type = 'bandpass'; hf.Q.value = 3.2; hf.frequency.value = 1700;
+        const hg = actx!.createGain(); hg.gain.value = 0.1; hi.connect(hf); hi2.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t);
+        // SCREECH AIR — resonant white noise riding on top for the shrieking, hissing edge.
+        const len = Math.floor(actx!.sampleRate * 2); const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const noise = actx!.createBufferSource(); noise.buffer = buf; noise.loop = true;
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 24; bp.frequency.value = 2600;   // screeching resonance
+        const ng = actx!.createGain(); ng.gain.value = 0.06; noise.connect(bp); bp.connect(ng); ng.connect(master); noise.start(t);
+        // LOW HUM — a smooth, steady dread drone. Two detuned sines beat slowly; solid, not buzzy.
+        const low = actx!.createOscillator(); low.type = 'sine'; low.frequency.value = 57;
+        const low2 = actx!.createOscillator(); low2.type = 'sine'; low2.frequency.value = 57 * 1.013;   // slow ~0.75Hz throb
+        const lg = actx!.createGain(); lg.gain.value = 0.24; low.connect(lg); low2.connect(lg); lg.connect(master); low.start(t); low2.start(t);
+        hunt = { master, hi, hi2, noise, bp, low, low2 };
+        if (amb) { const g = amb.master.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(VOL[mood] * 0.2, t + 0.15); }   // duck music while hunted
+      } catch { /* noop */ }
+    };
+    const setHunt = (prox: number, pan: number) => {   // live intensify while it holds
+      if (!hunt || !actx) return;
+      try {
+        const t = actx.currentTime, I = prox + pan * 0.5;
+        hunt.master.gain.setTargetAtTime(0.12 + I * 0.16, t, 0.15);                 // louder as it nears / panic rises
+        hunt.bp.frequency.setTargetAtTime(2100 + prox * 2200 + pan * 1000, t, 0.2); // shriek air opens up, shriller
+        const f = 1180 + prox * 640 + pan * 460;                                    // held scream climbs as it closes
+        hunt.hi.frequency.setTargetAtTime(f, t, 0.25);
+        hunt.hi2.frequency.setTargetAtTime(f * 1.006, t, 0.25);                     // keep the detune beat as it rises
+      } catch { /* noop */ }
+    };
+    const stopHunt = () => {
+      if (!hunt || !actx) return;
+      const h = hunt; hunt = null;
+      try {
+        const t = actx.currentTime; h.master.gain.cancelScheduledValues(t); h.master.gain.setValueAtTime(h.master.gain.value, t); h.master.gain.linearRampToValueAtTime(0, t + 0.55);
+        if (amb) { const g = amb.master.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(VOL[mood], t + 0.8); }   // music swells back
+      } catch { /* noop */ }
+      setTimeout(() => { try { h.hi.stop(); h.hi2.stop(); h.noise.stop(); h.low.stop(); h.low2.stop(); } catch { /* noop */ } }, 650);
     };
 
     // ── Input ─────────────────────────────────────────────────────────────────────────────────
@@ -574,7 +626,7 @@ export const RaycastCanvas: React.FC<{
       if (!blocked(px, ny, base)) py = ny;
     };
 
-    const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; panic = 0; };
+    const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; panic = 0; stopHunt(); };
 
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1;
     const pushHud = () => {
@@ -684,7 +736,7 @@ export const RaycastCanvas: React.FC<{
       }
 
       // exit
-      if (here === 'E') { exited = true; beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+      if (here === 'E') { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
 
       updateEnemies();
       musicStep();
@@ -772,16 +824,18 @@ export const RaycastCanvas: React.FC<{
         if (sameZ && dist < 0.6 && e.hit === 0 && respawn === 0) {
           hp -= E_DMG * 8; e.hit = 40; shake = 5; panic = Math.min(1.4, panic + 0.4);   // each hit winds the terror up
           hurt(); screech(1.5, 0.45); duck(0.7);   // fleshy hit + a fresh shriek that gets shriller as panic climbs
-          if (hp <= 0) { hp = 0; respawn = 70; screech(2, 1.1); duck(1.4); }
+          if (hp <= 0) { hp = 0; respawn = 70; stopHunt(); screech(2, 1.1); duck(1.4); }
         }
       }
       // Escalating hunt dread — the closer the nearest stalker, the LOUDER, higher and faster the growl,
       // plus a heartbeat thump and rasp when it's right on you. Ramps up so being caught feels frantic.
       if (chaseDist < Infinity) {
         const prox = 1 - Math.min(chaseDist, SIGHT) / SIGHT;          // 0 far → 1 breathing down your neck
-        if (tick % Math.max(8, Math.round(20 - prox * 12)) === 0) growl(prox, 0.32);   // wet snarl, faster & louder as it nears
-        if (prox > 0.6 && tick % 66 === 0) screech(prox * 0.9, 0.5);                    // it shrieks when it's right on you
-        if (prox > 0.5 && tick % Math.max(8, Math.round(26 - prox * 16)) === 0) beep(42, 0.13, 'sine', 0.06 + prox * 0.1);   // heartbeat thump (a thud, not electric)
+        startHunt(); setHunt(prox, panic);                           // the HELD screech that rides under you while hunted
+        if (tick % Math.max(10, Math.round(26 - prox * 14)) === 0) growl(prox, 0.3);    // wet snarl over the top
+        if (prox > 0.4 && tick % Math.max(8, Math.round(26 - prox * 16)) === 0) beep(42, 0.13, 'sine', 0.06 + prox * 0.12);   // heartbeat thud under it
+      } else {
+        stopHunt();
       }
     };
 
@@ -1462,7 +1516,7 @@ export const RaycastCanvas: React.FC<{
           grabbed.add(s.key); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
         }
       }
-      if (here === 'E') { exited = true; beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+      if (here === 'E') { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
 
       updateEnemies();
       musicStep();
@@ -1795,7 +1849,7 @@ export const RaycastCanvas: React.FC<{
       window.removeEventListener('pointerup', tu);
       window.removeEventListener('pointercancel', tu);
       if (document.pointerLockElement === canvas) document.exitPointerLock?.();
-      stopAmbience();
+      stopAmbience(); stopHunt();
       try { actx?.close(); } catch { /* noop */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
