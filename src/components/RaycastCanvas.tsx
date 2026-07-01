@@ -94,16 +94,29 @@ type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'chest' | 'tree
 // ── Animated molten lava (DOOM-style animated flat). Layered, domain-warped flow → dark crust veins,
 // glowing molten cells and hot yellow-white cores that churn over time. Cheap enough for per-pixel
 // floor casting. Returns [r,g,b] (emissive — not fogged/lit by the caller).
+const LAVA_PIX = 7;   // molten "pixels" per world tile — blocky, not a smooth gradient
 const moltenLava = (fx: number, fy: number, t: number): [number, number, number] => {
-  const wx = fx + 0.4 * Math.sin(fy * 2.3 + t * 0.05) + 0.15 * Math.sin(fy * 6.1 - t * 0.09);   // turbulent warp
-  const wy = fy + 0.4 * Math.sin(fx * 2.1 - t * 0.04) + 0.15 * Math.sin(fx * 5.7 + t * 0.07);
+  const gx = Math.floor(fx * LAVA_PIX), gy = Math.floor(fy * LAVA_PIX);   // quantise to texel cells
+  const qx = gx / LAVA_PIX, qy = gy / LAVA_PIX;
+  const wx = qx + 0.4 * Math.sin(qy * 2.3 + t * 0.05) + 0.15 * Math.sin(qy * 6.1 - t * 0.09);   // turbulent warp
+  const wy = qy + 0.4 * Math.sin(qx * 2.1 - t * 0.04) + 0.15 * Math.sin(qx * 5.7 + t * 0.07);
   let n = Math.sin(wx * 3.1 + t * 0.06) * Math.sin(wy * 2.7 - t * 0.05) + 0.55 * Math.sin((wx + wy) * 5.6 + t * 0.11);
-  n = n * 0.5 + 0.5;                                   // → 0..1 molten field
+  n = n * 0.5 + 0.5;                                   // → 0..1 molten field, constant within a cell
   const heat = Math.max(0, Math.min(1, (n - 0.24) * 1.7));
   let r = 34 + heat * 221, g = 5 + heat * heat * 150, b = 3 + heat * 16;   // crust-red → molten-orange
   const core = Math.max(0, n - 0.8) * 5;                                    // hot yellow-white peaks
   r = Math.min(255, r + core * 30); g = Math.min(255, g + core * 150); b = Math.min(140, b + core * 90);
-  return [r, g, b];
+  const sx = fx * LAVA_PIX - gx, sy = fy * LAVA_PIX - gy, seam = Math.min(sx, 1 - sx, sy, 1 - sy) < 0.12 ? 0.78 : 1;   // dark crust seams between cells
+  return [r * seam, g * seam, b * seam];
+};
+// Pixelated water — blocky rippling texels with the same crust-seam grid (matches the voxel look).
+const pixelWater = (fx: number, fy: number, t: number): [number, number, number] => {
+  const gx = Math.floor(fx * LAVA_PIX), gy = Math.floor(fy * LAVA_PIX);
+  const qx = gx / LAVA_PIX, qy = gy / LAVA_PIX;
+  const n = 0.5 + 0.5 * Math.sin(qx * 4.2 + t * 0.09) * Math.sin(qy * 3.4 - t * 0.06) + 0.2 * Math.sin((qx + qy) * 7 + t * 0.13);
+  let r = 16 + n * 26, g = 66 + n * 74, b = 148 + n * 78;
+  const sx = fx * LAVA_PIX - gx, sy = fy * LAVA_PIX - gy, seam = Math.min(sx, 1 - sx, sy, 1 - sy) < 0.12 ? 0.82 : 1;
+  return [r * seam, g * seam, b * seam];
 };
 
 // ── Portal energy field, in cell-local space (fx,fy are world coords; we take the fractional cell
@@ -310,6 +323,10 @@ export const RaycastCanvas: React.FC<{
     const opened = new Set<string>();     // "fi:x:y" keys of chests already opened
     const exitLocked = () => totalChests > 0 && opened.size < totalChests;
 
+    // Lava bubbling: molten voxel cubes that pop up out of lava tiles and fall back (a live particle pool).
+    let lavaCells: { x: number; y: number; z: number }[] = [];   // centres + surface height of every 'L' tile
+    const bubbles: { x: number; y: number; z: number; vz: number; gz: number; sz: number }[] = [];
+
     type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number; k?: number };
 
     // ── Active storey (mutable — swapped when you take the stairs) ───────────────────────────────
@@ -335,10 +352,11 @@ export const RaycastCanvas: React.FC<{
       maxLvl = 0;
       for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
       CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform on this floor
-      sprites = []; tunnels = []; enemies = [];
+      sprites = []; tunnels = []; enemies = []; lavaCells = [];
       for (let y = 0; y < rows.length; y++)
         for (let x = 0; x < rows[y].length; x++) {
           const c = rows[y][x];
+          if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
           if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
           else if (c === CHEST_CHAR) sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'chest', key: `${fi}:${x}:${y}` });
           else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
@@ -406,10 +424,12 @@ export const RaycastCanvas: React.FC<{
     const allNpcs: (Npc3D & { k: number })[] = [];
     if (stacked) {
       const all: Enemy[] = [];
+      lavaCells = [];
       for (let k = 0; k < nLayers; k++) {
         const g = grids[k];
         for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
           const c = g[y][x];
+          if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
           if (c === 'C') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${k}:${x}:${y}`, k });
           else if (c === CHEST_CHAR) allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'chest', key: `${k}:${x}:${y}`, k });
           else if (c === 'E') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit', k });
@@ -887,6 +907,29 @@ export const RaycastCanvas: React.FC<{
     const showToast = (msg: string, kind: 'good' | 'bad') => {
       setToast({ msg, kind }); clearTimeout(toastTimer); toastTimer = setTimeout(() => setToast(null), 2400);
     };
+    // Advance the lava-bubble pool: integrate rise/fall under gravity, retire spent ones, spawn fresh
+    // pops from lava tiles near the player. Cheap — a capped pool, only within view range.
+    const stepBubbles = () => {
+      for (let i = bubbles.length - 1; i >= 0; i--) {
+        const b = bubbles[i]; b.vz -= 0.0018; b.z += b.vz;
+        if (b.z <= b.gz - 0.03) bubbles.splice(i, 1);
+      }
+      if (lavaCells.length && bubbles.length < 70) {
+        for (let s = 0; s < 2; s++) {
+          const lc = lavaCells[(Math.random() * lavaCells.length) | 0];
+          const dx = lc.x - px, dy = lc.y - py;
+          if (dx * dx + dy * dy > 144 || Math.random() > 0.22) continue;   // sparse, within ~12 tiles
+          bubbles.push({ x: lc.x + (Math.random() - 0.5) * 0.7, y: lc.y + (Math.random() - 0.5) * 0.7, z: lc.z, gz: lc.z, vz: 0.028 + Math.random() * 0.032, sz: 0.08 + Math.random() * 0.07 });
+        }
+      }
+    };
+    // Draw the bubbles as glowing molten cubes (hotter/brighter near the surface, cooling as they arc up).
+    const drawBubbles = (env: BoxEnv) => {
+      for (const b of bubbles) {
+        const hot = Math.max(0.25, 1 - (b.z - b.gz) * 2.2);
+        drawBox3D(env, b.x, b.y, b.sz, b.sz, b.z, b.z + b.sz, 255, 70 + hot * 150, 20 + hot * 40, 1, true);
+      }
+    };
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1, hudCh = -1;
     const pushHud = () => {
       const c = grabbed.size, br = Math.round(breath), oc = opened.size;
@@ -1007,6 +1050,7 @@ export const RaycastCanvas: React.FC<{
       }
 
       updateEnemies();
+      stepBubbles();
       musicStep();
       pushHud();
     };
@@ -1316,7 +1360,7 @@ export const RaycastCanvas: React.FC<{
                 const fx = px + d * rdx, fy = py + d * rdy;
                 let fr: number, fg: number, fb: number, emis = false;
                 if (curCh === 'L') { [fr, fg, fb] = moltenLava(fx, fy, tick); emis = true; }
-                else if (curCh === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emis = true; }
+                else if (curCh === 'w') { [fr, fg, fb] = pixelWater(fx, fy, tick); emis = true; }
                 else if (curCh === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick, exitLocked()); const bs = sampleTex(TEXES.dirt, fx, fy, lodOf(d)); fr = pr + pal.floor[0] * bs * (1 - pa); fg = pg + pal.floor[1] * bs * (1 - pa); fb = pb + pal.floor[2] * bs * (1 - pa); emis = true; }
                 else if (curCh === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emis = true; }
                 else if (curCh === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; fr = 180 * st; fg = 200 * st; fb = 150 * st; emis = true; }
@@ -1485,8 +1529,11 @@ export const RaycastCanvas: React.FC<{
         }
       }
 
-      // 4) Stalkers — dark humanoid billboards with glowing eyes, standing on their floor, depth-tested.
+      // 3.5) Lava bubbles — glowing molten voxel pops rising out of the lava
       const eyeH = heightMap ? pz + EYE_BASE + jz : 0.5;
+      if (bubbles.length) drawBubbles({ px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, data, depth });
+
+      // 4) Stalkers — dark humanoid billboards with glowing eyes, standing on their floor, depth-tested.
       const eorder = enemies.filter(e => e.hp > 0)
         .map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
       for (const { e } of eorder) {
@@ -1820,6 +1867,7 @@ export const RaycastCanvas: React.FC<{
       }
 
       updateEnemies();
+      stepBubbles();
       musicStep();
       pushHud();
     };
@@ -1846,7 +1894,7 @@ export const RaycastCanvas: React.FC<{
       // surface colour for a floor/slab cell at world (fx,fy), mip-sampled by lod → [r,g,b,emissive]
       const floorColor = (c: string, fx: number, fy: number, lod = 0): [number, number, number, boolean] => {
         if (c === 'L') { const [r, g, b] = moltenLava(fx, fy, tick); return [r, g, b, true]; }
-        if (c === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); return [20 * sh, 90 * sh, 170 * sh, true]; }
+        if (c === 'w') { const [r, g, b] = pixelWater(fx, fy, tick); return [r, g, b, true]; }
         if (c === '~') return [4, 3, 8, true];
         if (c === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick, exitLocked()); const bs = sampleTex(TEXES.dirt, fx, fy, lod); return [pr + pal.floor[0] * bs * (1 - pa), pg + pal.floor[1] * bs * (1 - pa), pb + pal.floor[2] * bs * (1 - pa), true]; }
         if (c === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); return [150 * sw + 40, 40 * sw, 210 * sw + 40, true]; }
@@ -2028,6 +2076,9 @@ export const RaycastCanvas: React.FC<{
           }
         }
       }
+
+      // 3.5) Lava bubbles — glowing molten voxel pops rising out of the lava
+      if (bubbles.length) drawBubbles({ px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth });
 
       // 4) Stalkers — dark billboards on their own layer, depth-tested.
       const eorder = enemies.filter(e => e.hp > 0).map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
