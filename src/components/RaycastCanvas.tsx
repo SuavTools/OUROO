@@ -288,6 +288,7 @@ export const RaycastCanvas: React.FC<{
     let atkCd = 0, atkAnim = 0;                                      // weapon cooldown + swing animation
     let breath = 100, submerged = false;                            // swimming: air left, are you under water
     let hp = MAX_HP;
+    let panic = 0;             // rises each time a stalker strikes you → the screech gets more unhinged, decays slowly
     let respawn = 0;            // >0 = dead, counting down a fade before respawn
     let exited = false;
     let tick = 0;
@@ -345,25 +346,49 @@ export const RaycastCanvas: React.FC<{
     // "scream formant") plus a wailing detuned saw with heavy vibrato. Organic and horrible, not a beep.
     const screech = (intensity = 1, dur = 0.6) => {
       if (mutedRef.current) return;
+      const I = intensity * (1 + panic * 0.9);   // the more hits you've taken, the more unhinged it gets
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
         const len = Math.floor(actx!.sampleRate * dur);
         const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;   // white noise body
         const ns = actx!.createBufferSource(); ns.buffer = buf;
-        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 7 + intensity * 10;
-        bp.frequency.setValueAtTime(500 + intensity * 300, t);
-        bp.frequency.exponentialRampToValueAtTime(1500 + intensity * 1400, t + dur * 0.35);   // rising shriek
-        bp.frequency.exponentialRampToValueAtTime(260, t + dur);                              // falling wail
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 12 + I * 14;   // sharper = more piercing
+        bp.frequency.setValueAtTime(900 + I * 500, t);
+        bp.frequency.exponentialRampToValueAtTime(2800 + I * 2200, t + dur * 0.3);               // shriek up HIGH
+        bp.frequency.exponentialRampToValueAtTime(520, t + dur);
         const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.14 * intensity, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        g.gain.linearRampToValueAtTime(0.26 * Math.min(2, I), t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         ns.connect(bp); bp.connect(g); g.connect(dest); ns.start(t); ns.stop(t + dur);
-        // wailing voice under the noise — detuned saw with fast vibrato, sliding down
+        // shrill high ring on top — the piercing part that raises the hairs
+        const ring = actx!.createOscillator(); ring.type = 'sawtooth';
+        ring.frequency.setValueAtTime(1700 + I * 900, t); ring.frequency.exponentialRampToValueAtTime(3400 + I * 800, t + dur * 0.4);
+        const rl = actx!.createOscillator(); rl.frequency.value = 18 + I * 8; const rlg = actx!.createGain(); rlg.gain.value = 60; rl.connect(rlg); rlg.connect(ring.frequency); rl.start(t); rl.stop(t + dur);
+        const rg = actx!.createGain(); rg.gain.setValueAtTime(0.0001, t); rg.gain.linearRampToValueAtTime(0.07 * Math.min(2, I), t + 0.03); rg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        ring.connect(rg); rg.connect(dest); ring.start(t); ring.stop(t + dur);
+        // wailing voice under it — detuned saw, higher, heavy vibrato, sliding down
         const o = actx!.createOscillator(); o.type = 'sawtooth';
-        o.frequency.setValueAtTime(170 + intensity * 70, t); o.frequency.exponentialRampToValueAtTime(85, t + dur);
-        const lfo = actx!.createOscillator(); lfo.frequency.value = 13 + intensity * 6; const lg = actx!.createGain(); lg.gain.value = 26; lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur);
-        const og = actx!.createGain(); og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.07 * intensity, t + 0.05); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.frequency.setValueAtTime(300 + I * 110, t); o.frequency.exponentialRampToValueAtTime(120, t + dur);
+        const lfo = actx!.createOscillator(); lfo.frequency.value = 15 + I * 7; const lg = actx!.createGain(); lg.gain.value = 40; lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur);
+        const og = actx!.createGain(); og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.1 * Math.min(2, I), t + 0.04); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         o.connect(og); og.connect(dest); o.start(t); o.stop(t + dur);
+      } catch { /* audio blocked */ }
+    };
+    // Hit — a fleshy slash + heavy thud when the ghoul strikes you. Nasty and physical.
+    const hurt = () => {
+      if (mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t = actx!.currentTime;
+        const len = Math.floor(actx!.sampleRate * 0.2);
+        const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);   // decaying noise = slash
+        const ns = actx!.createBufferSource(); ns.buffer = buf;
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 1.2;
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.24, t + 0.004); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+        ns.connect(bp); bp.connect(ng); ng.connect(dest); ns.start(t);
+        const o = actx!.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(240, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.14);   // body thud
+        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+        o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.17);
       } catch { /* audio blocked */ }
     };
     // Growl — low bandpassed noise rumble (a wet snarl), volume/pitch driven by proximity. Not a clean tone.
@@ -464,6 +489,16 @@ export const RaycastCanvas: React.FC<{
       setTimeout(() => a.nodes.forEach(n => { try { n.stop(); } catch { /* noop */ } }), 500);
     };
     ambToggleRef.current = (m: boolean) => { if (m) stopAmbience(); else startAmbience(); };
+    // Duck the music down hard for a moment so a screech/hit PUNCHES through and dominates the mix (sidechain).
+    const duck = (dur = 0.9) => {
+      if (!amb || !actx) return;
+      try {
+        const t = actx.currentTime, g = amb.master.gain;
+        g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
+        g.linearRampToValueAtTime(VOL[mood] * 0.12, t + 0.03);   // music drops out
+        g.linearRampToValueAtTime(VOL[mood], t + dur);           // swells back
+      } catch { /* noop */ }
+    };
 
     // ── Input ─────────────────────────────────────────────────────────────────────────────────
     const keys = new Set<string>();
@@ -539,7 +574,7 @@ export const RaycastCanvas: React.FC<{
       if (!blocked(px, ny, base)) py = ny;
     };
 
-    const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; };
+    const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; panic = 0; };
 
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1;
     const pushHud = () => {
@@ -628,6 +663,7 @@ export const RaycastCanvas: React.FC<{
         if (hp <= 0) { hp = 0; respawn = 70; beep(150, 0.5, 'sawtooth', 0.06); }
       }
       if (shake > 0) shake *= 0.85;
+      if (panic > 0) panic *= 0.992;   // terror ebbs slowly once you get away
 
       // swimming — water saps your air; surface (any non-water tile) to breathe, or you drown
       submerged = here === 'w';
@@ -711,8 +747,8 @@ export const RaycastCanvas: React.FC<{
         const dx = px - e.x, dy = py - e.y;
         const dist = Math.hypot(dx, dy);
         const sees = sameZ && dist < SIGHT && lineClear(g, e.x, e.y, px, py);
-        if (sees && !e.chasing) {   // JUST spotted you → a screaming-ghoul shriek + wet snarl, not a beep
-          screech(1.4, 0.8); growl(1, 0.7); shake = Math.min(6, shake + 4);
+        if (sees && !e.chasing) {   // the INSTANT it locks on → a piercing shriek that ducks the music and dominates
+          screech(1.9, 0.9); growl(1.1, 0.7); duck(1.1); shake = Math.min(6, shake + 4);
         }
         if (sees) e.chasing = true; else if (dist > LOSE || !sameZ) e.chasing = false;   // give up if you break line of sight / change floors
         if (e.chasing && dist < chaseDist) chaseDist = dist;
@@ -734,8 +770,9 @@ export const RaycastCanvas: React.FC<{
 
         // touch → damage (with a short cooldown so it ticks, not nukes)
         if (sameZ && dist < 0.6 && e.hit === 0 && respawn === 0) {
-          hp -= E_DMG * 8; e.hit = 40; shake = 4; beep(70, 0.25, 'sawtooth', 0.07);
-          if (hp <= 0) { hp = 0; respawn = 70; beep(140, 0.6, 'sawtooth', 0.07); }
+          hp -= E_DMG * 8; e.hit = 40; shake = 5; panic = Math.min(1.4, panic + 0.4);   // each hit winds the terror up
+          hurt(); screech(1.5, 0.45); duck(0.7);   // fleshy hit + a fresh shriek that gets shriller as panic climbs
+          if (hp <= 0) { hp = 0; respawn = 70; screech(2, 1.1); duck(1.4); }
         }
       }
       // Escalating hunt dread — the closer the nearest stalker, the LOUDER, higher and faster the growl,
@@ -1416,6 +1453,7 @@ export const RaycastCanvas: React.FC<{
       else if (breath < 100) breath = Math.min(100, breath + 2.2);
 
       if (shake > 0) shake *= 0.85;
+      if (panic > 0) panic *= 0.992;   // terror ebbs slowly once you get away
 
       // crystal pickups — must be on roughly the same level as the crystal
       for (const s of allSprites) {
