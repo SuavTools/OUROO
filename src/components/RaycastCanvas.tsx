@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, getRealmRemote,
+  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -371,8 +371,8 @@ export const RaycastCanvas: React.FC<{
     let grassCells: { x: number; y: number; z: number }[] = [];   // 'g' tiles → sprout little voxel grass tufts
     // Blocks placed ON floor cells (grass→rock etc). blockCells drives rendering; solidBlocks is the
     // collision set (full-footprint blocks only — thin posts & short slabs are decorative/walk-through).
-    let blockCells: { x: number; y: number; z: number; ch: string; k?: number }[] = [];
-    let solidBlocks = new Set<string>();   // "x:y" (flat) / "k:x:y" (stacked)
+    let blockCells: { x: number; y: number; z: number; ch: string; nH: number; k?: number }[] = [];
+    let solidBlocks = new Map<string, number>();   // "x:y" (flat) / "k:x:y" (stacked) → top world-Z of the block
     const isSolidBlock = (ch: string) => !!BLOCKS[ch] && !BLOCKS[ch].thin && !BLOCKS[ch].h;
 
     type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number; k?: number };
@@ -400,13 +400,13 @@ export const RaycastCanvas: React.FC<{
       maxLvl = 0;
       for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
       CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform on this floor
-      sprites = []; tunnels = []; enemies = []; lavaCells = []; grassCells = []; blockCells = []; solidBlocks = new Set();
+      sprites = []; tunnels = []; enemies = []; lavaCells = []; grassCells = []; blockCells = []; solidBlocks = new Map();
       const fBlocks = fl.blocks;
       for (let y = 0; y < rows.length; y++)
         for (let x = 0; x < rows[y].length; x++) {
           const c = rows[y][x];
           const bch = fBlocks?.[y]?.[x];
-          if (bch && BLOCKS[bch]) { blockCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT, ch: bch }); if (isSolidBlock(bch)) solidBlocks.add(`${x}:${y}`); }
+          if (bch && BLOCKS[bch]) { const nH = blockHeightAt(fl, x, y), z = floorLvl(x, y) * STEP_UNIT; blockCells.push({ x: x + 0.5, y: y + 0.5, z, ch: bch, nH }); if (isSolidBlock(bch)) solidBlocks.set(`${x}:${y}`, z + nH * (STOREY_LEVELS * STEP_UNIT)); }
           if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
           else if (c === 'g') grassCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
           if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
@@ -447,7 +447,7 @@ export const RaycastCanvas: React.FC<{
     // every standable surface in a column: wall roofs (base+STOREY_H) and thin slab tops (base + raise).
     const standTops = (x: number, y: number): number[] => {
       const t: number[] = [];
-      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); }
+      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); const bt = solidBlocks.get(`${k}:${x}:${y}`); if (bt !== undefined) t.push(bt); }
       return t;
     };
     // movement collision that allows STEPPING: walls/props always block the body; raised terrain only
@@ -458,7 +458,7 @@ export const RaycastCanvas: React.FC<{
         const c = cellL(k, x, y);
         if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }                       // walls/props: solid full storey
         else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > feet + STEP_UP && zHi > b && zLo < top) return true; }   // raised terrain: a SOLID hill you can't step straight up
-        if (solidBlocks.has(`${k}:${x}:${y}`)) { const s = slabZ(k, x, y); if (zHi > s && zLo < s + STOREY_H) return true; }   // a placed full block on this layer's floor
+        { const top = solidBlocks.get(`${k}:${x}:${y}`); if (top !== undefined) { const s = slabZ(k, x, y); if (zHi > s && zLo < top) return true; } }   // a placed (possibly stacked) block on this layer's floor
       }
       return false;
     };
@@ -477,14 +477,14 @@ export const RaycastCanvas: React.FC<{
     const allNpcs: (Npc3D & { k: number })[] = [];
     if (stacked) {
       const all: Enemy[] = [];
-      lavaCells = []; grassCells = []; blockCells = []; solidBlocks = new Set();
+      lavaCells = []; grassCells = []; blockCells = []; solidBlocks = new Map();
       for (let k = 0; k < nLayers; k++) {
         const g = grids[k];
         const kBlocks = floors[k].blocks;
         for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
           const c = g[y][x];
           const bch = kBlocks?.[y]?.[x];
-          if (bch && BLOCKS[bch]) { blockCells.push({ x: x + 0.5, y: y + 0.5, z: slabZ(k, x, y), ch: bch, k }); if (isSolidBlock(bch)) solidBlocks.add(`${k}:${x}:${y}`); }
+          if (bch && BLOCKS[bch]) { const nH = blockHeightAt(floors[k], x, y), z = slabZ(k, x, y); blockCells.push({ x: x + 0.5, y: y + 0.5, z, ch: bch, nH, k }); if (isSolidBlock(bch)) solidBlocks.set(`${k}:${x}:${y}`, z + nH * (STOREY_LEVELS * STEP_UNIT)); }
           if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
           else if (c === 'g') grassCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
           if (c === 'C') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${k}:${x}:${y}`, k });
@@ -1034,7 +1034,7 @@ export const RaycastCanvas: React.FC<{
         const dx = bc.x - px, dy = bc.y - py, d2 = dx * dx + dy * dy;
         if (d2 > 900) continue;                       // blocks are large → visible ~30 tiles
         const def = BLOCKS[bc.ch]; if (!def) continue;
-        const fw = def.thin ? 0.28 : 0.98, h = def.h ?? STOREY_H_BLK;
+        const fw = def.thin ? 0.28 : 0.98, h = def.h ?? (bc.nH * STOREY_H_BLK);   // stacked N cubes tall
         drawBox3D(env, bc.x, bc.y, fw, fw, bc.z, bc.z + h, def.color[0], def.color[1], def.color[2], lightFn(Math.sqrt(d2)), false);
       }
     };

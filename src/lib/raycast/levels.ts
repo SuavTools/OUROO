@@ -45,7 +45,7 @@ export type Palette = {
 
 // One storey of a multi-floor realm: its own walkable grid (+ optional per-cell terrain heights and
 // placed NPCs). Floors stack bottom→top; you cross between them via '>' / '<' stair cells.
-export type Floor3D = { rows: string[]; heights?: string[]; blocks?: string[]; npcs?: Npc3D[] };
+export type Floor3D = { rows: string[]; heights?: string[]; blocks?: string[]; blockH?: string[]; npcs?: Npc3D[] };
 
 export type Level3D = {
   id: string;
@@ -65,6 +65,7 @@ export type Level3D = {
                            // = flat (classic renderer). Steps of 1 level are climbable; bigger = a wall.
   blocks?: string[];       // OPTIONAL per-cell BLOCK-on-top grid (same dims as rows). A block sits ON the
                            // floor material (grass/dirt/…), so you get "grass then rock on top". ' '/'.' = none.
+  blockH?: string[];       // OPTIONAL per-cell block STACK height ('1'–'9', how many cubes tall). Absent = 1.
   author?: string;
 };
 
@@ -137,6 +138,12 @@ export const blockAt = (f: Pick<Floor3D, 'blocks'>, x: number, y: number): strin
   const b = f.blocks; if (!b) return '';
   const row = b[y]; const c = row && row[x];
   return c && BLOCKS[c] ? c : '';
+};
+// How many cubes tall a block is stacked (1–9). Absent height grid → 1.
+export const blockHeightAt = (f: Pick<Floor3D, 'blockH'>, x: number, y: number): number => {
+  const h = f.blockH; if (!h) return 1;
+  const c = h[y]?.[x]; const n = c ? c.charCodeAt(0) - 48 : 0;
+  return n >= 1 && n <= 9 ? n : 1;
 };
 
 export const DEFAULT_PALETTE: Palette = {
@@ -235,7 +242,7 @@ export const cellAt = (rows: string[], x: number, y: number): string => {
 export const floorsOf = (level: Level3D): Floor3D[] =>
   level.floors && level.floors.length
     ? level.floors
-    : [{ rows: level.rows, heights: level.heights, blocks: level.blocks, npcs: level.npcs }];
+    : [{ rows: level.rows, heights: level.heights, blocks: level.blocks, blockH: level.blockH, npcs: level.npcs }];
 
 // Which floor (and tile) holds the one spawn 'S'. Falls back to floor 0's open cell.
 export function findSpawnFloor(floors: Floor3D[]): { fi: number; x: number; y: number } {
@@ -317,97 +324,100 @@ const STARTER: Level3D = (() => {
   };
 })();
 
-// ── THE GREEN REACH — a 60×60 open grassland (Haven/day): a lake with a dock, forests, flower
-// meadows, rock fields, lamp-lined roads, and a 2-storey brick KEEP with an interior, stairs, and a
-// rooftop terrace where the exit portal waits. Deterministic layout (seeded), so it's the same each visit.
+// ── THE GREEN REACH — a 60×60 open grassland (Haven/day): a lake with a dock, forests, flower meadows,
+// rock fields, lamp-lined roads, and a big walled COURTYARD KEEP built from tall STACKED-BLOCK walls
+// (3 cubes high — real walls you can't hop) with a raised dais and the exit inside. Single open floor,
+// so the whole thing is walkable under the open sky. Deterministic seeded layout (same each visit).
 const GREEN_REACH: Level3D = (() => {
-  const W = 60, H = 60, NF = 3;
-  const Fl = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
-  const Bl = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
+  const W = 60, H = 60;
+  const g = Array.from({ length: H }, () => ' '.repeat(W));
+  const Bl = Array.from({ length: H }, () => ' '.repeat(W));
+  const BH = Array.from({ length: H }, () => '1'.repeat(W));
   const hh = Array.from({ length: H }, () => '0'.repeat(W));
   const setC = (grid: string[], x: number, y: number, c: string) => { if (x >= 0 && x < W && y >= 0 && y < H) grid[y] = grid[y].substring(0, x) + c + grid[y].substring(x + 1); };
-  const put = (k: number, x: number, y: number, c: string) => setC(Fl[k], x, y, c);
-  const blk = (k: number, x: number, y: number, c: string) => setC(Bl[k], x, y, c);
+  const put = (x: number, y: number, c: string) => setC(g, x, y, c);
+  const blk = (x: number, y: number, c: string, n = 1) => { setC(Bl, x, y, c); setC(BH, x, y, String(n)); };
+  const noblk = (x: number, y: number) => setC(Bl, x, y, ' ');
   const setH = (x: number, y: number, n: number) => setC(hh, x, y, String(Math.max(0, Math.min(9, Math.round(n)))));
   const R = (i: number) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
   const scatter = (c: string, x0: number, y0: number, x1: number, y1: number, n: number, seed: number) => {
-    for (let i = 0; i < n; i++) { const x = x0 + Math.floor(R(seed + i * 2.3) * (x1 - x0 + 1)), y = y0 + Math.floor(R(seed + i * 2.3 + 0.7) * (y1 - y0 + 1)); if (Fl[0][y]?.[x] === 'g') put(0, x, y, c); }
+    for (let i = 0; i < n; i++) { const x = x0 + Math.floor(R(seed + i * 2.3) * (x1 - x0 + 1)), y = y0 + Math.floor(R(seed + i * 2.3 + 0.7) * (y1 - y0 + 1)); if (g[y]?.[x] === 'g') put(x, y, c); }
   };
-  // grassland with a 2-block stone border
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const edge = x === 0 || y === 0 || x === W - 1 || y === H - 1; put(0, x, y, edge ? '#' : 'g'); if (edge) put(1, x, y, '#'); }
+  // grassland with a stone border (the flat renderer draws '#' walls a fixed ~2 blocks tall)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? '#' : 'g');
   // gentle climbable hills
-  const hill = (cx: number, cy: number, rad: number, top: number) => { for (let y = cy - rad; y <= cy + rad; y++) for (let x = cx - rad; x <= cx + rad; x++) { const d = Math.hypot(x - cx, y - cy); if (d < rad && Fl[0][y]?.[x] === 'g') setH(x, y, top - d * (top / rad)); } };
-  hill(11, 49, 7, 4); hill(50, 11, 6, 3);
+  const hill = (cx: number, cy: number, rad: number, top: number) => { for (let y = cy - rad; y <= cy + rad; y++) for (let x = cx - rad; x <= cx + rad; x++) { const d = Math.hypot(x - cx, y - cy); if (d < rad && g[y]?.[x] === 'g') setH(x, y, top - d * (top / rad)); } };
+  hill(11, 49, 7, 4); hill(51, 12, 6, 3);
   // a lake with a dirt shore + a little wooden dock in the SE
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (Fl[0][y][x] !== 'g') continue; const d = Math.hypot(x - 44, y - 44); if (d < 9) put(0, x, y, 'w'); else if (d < 10.5) put(0, x, y, 'd'); }
-  for (let x = 34; x <= 38; x++) put(0, x, 44, 'k'); put(0, 33, 44, 'l');
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (g[y][x] !== 'g') continue; const d = Math.hypot(x - 45, y - 46); if (d < 8) put(x, y, 'w'); else if (d < 9.5) put(x, y, 'd'); }
+  for (let x = 37; x <= 41; x++) put(x, 46, 'k'); put(36, 46, 'l');
   // forest (NE), flower meadow (SW), rock field (NW), crystals everywhere
-  scatter('T', 34, 4, 57, 20, 48, 1); scatter('b', 34, 4, 57, 20, 24, 2); scatter('f', 34, 4, 57, 20, 18, 3);
-  scatter('f', 4, 34, 22, 55, 90, 4); scatter('b', 4, 34, 22, 55, 22, 5); scatter('T', 5, 40, 20, 55, 12, 6);
-  scatter('r', 4, 4, 20, 20, 16, 7); scatter('T', 4, 4, 18, 18, 8, 8); scatter('C', 3, 3, 56, 56, 26, 9);
-  // lamp-lined road from the west spawn to the keep
-  for (let x = 5; x <= 27; x++) { put(0, x, 30, 'p'); if (x % 5 === 0) { put(0, x, 28, 'l'); put(0, x, 32, 'l'); } }
-  // decorative BLOCKS on the grass — stone planters + a wood-post fence
-  for (let x = 8; x <= 12; x++) for (let y = 24; y <= 26; y++) if ((x + y) % 2 === 0) blk(0, x, y, 'r');
-  for (let y = 34; y <= 46; y++) blk(0, 24, y, 'i'); for (let x = 44; x <= 54; x++) blk(0, x, 54, 'i');
-  // ── the Keep — a 2-storey brick hall (walls span floors 0+1 → ~6 levels tall) + rooftop terrace ──
-  const kx0 = 28, ky0 = 20, kx1 = 42, ky1 = 34;
-  const ring = (k: number, ch: string, windows: boolean) => {
-    for (let x = kx0; x <= kx1; x++) { put(k, x, ky0, ch); put(k, x, ky1, ch); }
-    for (let y = ky0; y <= ky1; y++) { put(k, kx0, y, ch); put(k, kx1, y, ch); }
-    if (windows) { for (let x = kx0 + 3; x < kx1; x += 4) { put(k, x, ky0, ' '); put(k, x, ky1, ' '); } for (let y = ky0 + 3; y < ky1; y += 4) { put(k, kx0, y, ' '); put(k, kx1, y, ' '); } }
-  };
-  const fill = (k: number, c: string) => { for (let x = kx0 + 1; x < kx1; x++) for (let y = ky0 + 1; y < ky1; y++) put(k, x, y, c); };
-  fill(0, 'k'); ring(0, '1', false);
-  put(0, 34, ky1, '.'); put(0, 35, ky1, '.'); put(0, 34, ky1 + 1, 'p'); put(0, 35, ky1 + 1, 'p');  // doorway + porch
-  put(0, 30, 22, '>'); put(0, 32, 30, 'C'); put(0, 38, 24, 'C'); put(0, 30, 32, 'l'); put(0, 40, 22, 'l');
-  fill(1, 'k'); ring(1, '1', true); put(1, 30, 22, 'k'); put(1, 40, 32, '>'); put(1, 35, 26, 'C'); put(1, 31, 31, 'l');
-  fill(2, 'k'); put(2, 40, 32, 'k');
-  for (let x = kx0 + 1; x < kx1; x++) { blk(2, x, ky0 + 1, 's'); blk(2, x, ky1 - 1, 's'); }
-  for (let y = ky0 + 1; y < ky1; y++) { blk(2, kx0 + 1, y, 's'); blk(2, kx1 - 1, y, 's'); }
-  put(2, 35, 27, 'E'); put(2, 33, 24, 'C'); put(2, 37, 30, 'C');
-  put(0, 6, 30, 'S');
-  return { id: 'green-reach', name: 'The Green Reach', atmo: 'haven', sky: 'day', music: 'haven' as Mood, spawnDir: 0, exitDir: 90, rows: Fl[0], floors: Fl.map((rows, k) => ({ rows, blocks: Bl[k], heights: k === 0 ? hh : undefined })) };
+  scatter('T', 40, 4, 57, 22, 46, 1); scatter('b', 40, 4, 57, 22, 22, 2); scatter('f', 40, 4, 57, 22, 16, 3);
+  scatter('f', 4, 40, 24, 56, 80, 4); scatter('b', 4, 40, 24, 56, 20, 5); scatter('T', 5, 44, 20, 56, 12, 6);
+  scatter('r', 4, 4, 18, 18, 15, 7); scatter('T', 4, 4, 16, 16, 8, 8); scatter('C', 3, 3, 56, 56, 26, 9);
+  // lamp-lined road from the west spawn to the keep gate
+  for (let x = 5; x <= 27; x++) { put(x, 30, 'p'); if (x % 5 === 0) { put(x, 28, 'l'); put(x, 32, 'l'); } }
+  // a wood-post fence line + a few stone planters (decorative blocks)
+  for (let y = 36; y <= 48; y++) blk(22, y, 'i', 1); for (let x = 8; x <= 12; x++) for (let y = 22; y <= 25; y++) if ((x + y) % 2 === 0) blk(x, y, 'r', 1);
+  // ── the Keep — a walled courtyard of 3-high stacked STONE blocks with a gate, dais & exit ──
+  const kx0 = 28, ky0 = 20, kx1 = 46, ky1 = 40;
+  for (let x = kx0; x <= kx1; x++) { blk(x, ky0, 'r', 3); blk(x, ky1, 'r', 3); }
+  for (let y = ky0; y <= ky1; y++) { blk(kx0, y, 'r', 3); blk(kx1, y, 'r', 3); }
+  noblk(36, ky1); noblk(37, ky1); put(36, ky1, '.'); put(37, ky1, '.');   // south gate
+  for (let x = kx0 + 1; x < kx1; x++) for (let y = ky0 + 1; y < ky1; y++) put(x, y, 'k');   // wood courtyard floor
+  blk(kx0 + 2, ky0 + 2, 'i', 2); blk(kx1 - 2, ky0 + 2, 'i', 2); blk(kx0 + 2, ky1 - 2, 'i', 2); blk(kx1 - 2, ky1 - 2, 'i', 2);   // corner pillars
+  put(31, 24, 'l'); put(43, 24, 'l'); put(31, 36, 'l'); put(43, 36, 'l');
+  // a stepped stone dais in the middle with the exit portal on top
+  for (let y = 28; y <= 32; y++) for (let x = 35; x <= 39; x++) { const d = Math.max(Math.abs(x - 37), Math.abs(y - 30)); setH(x, y, 2 - d); }
+  put(37, 30, 'E'); put(34, 27, 'C'); put(40, 33, 'C'); put(35, 34, 'C'); put(39, 26, 'C');
+  put(6, 30, 'S');
+  return { id: 'green-reach', name: 'The Green Reach', atmo: 'haven', sky: 'day', music: 'haven' as Mood, spawnDir: 0, exitDir: 270, rows: g, heights: hh, blocks: Bl, blockH: BH };
 })();
 
 // ── THE SUNKEN HOLLOW — a 48×48 candle-lit RUIN (run-and-hide): a central stone dais ringed by a lava
 // moat with narrow bridges, water pools, ruined chambers, rubble blocks, a broken tower you climb, and
 // STALKERS hunting while you open the chests that unlock the exit gate. No weapon — survive and escape.
 const SUNKEN_HOLLOW: Level3D = (() => {
-  const W = 48, H = 48, NF = 2;
-  const Fl = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
-  const Bl = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
+  const W = 48, H = 48;
+  const g = Array.from({ length: H }, () => ' '.repeat(W));
+  const Bl = Array.from({ length: H }, () => ' '.repeat(W));
+  const BH = Array.from({ length: H }, () => '1'.repeat(W));
   const hh = Array.from({ length: H }, () => '0'.repeat(W));
   const setC = (grid: string[], x: number, y: number, c: string) => { if (x >= 0 && x < W && y >= 0 && y < H) grid[y] = grid[y].substring(0, x) + c + grid[y].substring(x + 1); };
-  const put = (k: number, x: number, y: number, c: string) => setC(Fl[k], x, y, c);
-  const blk = (k: number, x: number, y: number, c: string) => setC(Bl[k], x, y, c);
+  const put = (x: number, y: number, c: string) => setC(g, x, y, c);
+  const blk = (x: number, y: number, c: string, n = 1) => { setC(Bl, x, y, c); setC(BH, x, y, String(n)); };
+  const noblk = (x: number, y: number) => setC(Bl, x, y, ' ');
   const setH = (x: number, y: number, n: number) => setC(hh, x, y, String(Math.max(0, Math.min(9, Math.round(n)))));
   const R = (i: number) => { const s = Math.sin(i * 91.7 + 47.3) * 24634.6345; return s - Math.floor(s); };
-  const room = (x0: number, y0: number, x1: number, y1: number, ch = '#') => { for (let x = x0; x <= x1; x++) { put(0, x, y0, ch); put(0, x, y1, ch); } for (let y = y0; y <= y1; y++) { put(0, x0, y, ch); put(0, x1, y, ch); } };
-  // dungeon floor + 2-block border
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const edge = x === 0 || y === 0 || x === W - 1 || y === H - 1; put(0, x, y, edge ? '#' : '.'); if (edge) put(1, x, y, '#'); }
-  // central raised dais ringed by a lava moat
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const d = Math.hypot(x - 24, y - 24); if (d < 4) setH(x, y, 2); else if (d >= 6 && d < 8.5) put(0, x, y, 'L'); }
-  for (let t = 3; t <= 9; t++) { put(0, 24, 24 - t, '.'); put(0, 24, 24 + t, '.'); put(0, 24 - t, 24, '.'); put(0, 24 + t, 24, '.'); }   // stone bridges across the moat
-  put(0, 24, 24, 'C'); put(0, 23, 23, 'H'); blk(0, 25, 25, 'x'); blk(0, 22, 25, 'x');
-  // water pools + rubble scattered on the floor
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (Fl[0][y][x] !== '.') continue; if (Math.hypot(x - 8, y - 40) < 4 || Math.hypot(x - 40, y - 8) < 3.5) put(0, x, y, 'w'); }
-  for (let i = 0; i < 40; i++) { const x = 3 + Math.floor(R(i) * 42), y = 3 + Math.floor(R(i + 99) * 42); if (Fl[0][y]?.[x] === '.') blk(0, x, y, R(i * 3) > 0.5 ? 'c' : 'x'); }
-  // ruined chambers with a doorway + a chest each
-  room(4, 4, 14, 14); put(0, 9, 14, '.'); put(0, 9, 9, 'H'); put(0, 6, 6, 'C');
-  room(34, 33, 44, 44); put(0, 39, 33, '.'); put(0, 39, 39, 'H'); put(0, 42, 42, 'C');
+  // ruined block-wall ring — broken heights (some tall, some crumbled) for a ruin look; leaves a doorway
+  const ruin = (x0: number, y0: number, x1: number, y1: number, mat: string, door: [number, number]) => {
+    let i = 0;
+    const wall = (x: number, y: number) => { const n = R(x * 3.1 + y * 7.7) > 0.35 ? 3 : (R(x + y) > 0.5 ? 2 : 1); blk(x, y, mat, n); i++; };
+    for (let x = x0; x <= x1; x++) { wall(x, y0); wall(x, y1); } for (let y = y0; y <= y1; y++) { wall(x0, y); wall(x1, y); }
+    noblk(door[0], door[1]); put(door[0], door[1], '.'); void i;
+  };
+  // dungeon floor + stone border (flat renderer draws '#' a fixed ~2 blocks tall)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(x, y, (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? '#' : '.');
+  // central raised dais ringed by a lava moat, with stone bridges across
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const d = Math.hypot(x - 24, y - 24); if (d < 4) setH(x, y, 2); else if (d >= 6 && d < 8.5) put(x, y, 'L'); }
+  for (let t = 3; t <= 9; t++) { put(24, 24 - t, '.'); put(24, 24 + t, '.'); put(24 - t, 24, '.'); put(24 + t, 24, '.'); }
+  put(24, 24, 'C'); put(23, 23, 'H'); blk(25, 25, 'x', 1); blk(22, 25, 'x', 1);
+  // water pools + scattered rubble blocks
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (g[y][x] !== '.') continue; if (Math.hypot(x - 8, y - 40) < 4 || Math.hypot(x - 40, y - 8) < 3.5) put(x, y, 'w'); }
+  for (let i = 0; i < 40; i++) { const x = 3 + Math.floor(R(i) * 42), y = 3 + Math.floor(R(i + 99) * 42); if (g[y]?.[x] === '.') blk(x, y, R(i * 3) > 0.5 ? 'c' : 'x', 1); }
+  // ruined chambers (broken tall cobble walls) with a chest each
+  ruin(4, 4, 14, 14, 'c', [9, 14]); put(9, 9, 'H'); put(6, 6, 'C');
+  ruin(33, 33, 44, 44, 'c', [39, 33]); put(39, 39, 'H'); put(42, 42, 'C');
   // the locked EXIT gate chamber (north) — opens once every chest is looted
-  room(18, 2, 30, 10); put(0, 24, 10, '.'); put(0, 24, 6, 'E');
-  // a broken tower you climb (stairs up to floor 1) with a chest on top
-  room(37, 5, 43, 11, '4'); for (let x = 38; x <= 42; x++) for (let y = 6; y <= 10; y++) put(0, x, y, '.'); put(0, 40, 11, '.');
-  put(0, 40, 8, '>');
-  for (let x = 38; x <= 42; x++) for (let y = 6; y <= 10; y++) { put(1, x, y, '.'); if (x === 38 || x === 42 || y === 6 || y === 10) put(1, x, y, '4'); }
-  put(1, 40, 8, '.'); put(1, 40, 7, 'H'); put(1, 39, 9, 'C'); put(1, 41, 9, 'C');
-  // stalkers prowling the ruin
-  put(0, 16, 24, 'M'); put(0, 32, 22, 'M'); put(0, 24, 34, 'M'); put(0, 12, 34, 'M'); put(0, 34, 30, 'M');
-  for (let i = 0; i < 14; i++) { const x = 3 + Math.floor(R(i + 7) * 42), y = 3 + Math.floor(R(i + 51) * 42); if (Fl[0][y]?.[x] === '.') put(0, x, y, 'C'); }
-  put(0, 4, 24, 'S');
-  return { id: 'sunken-hollow', name: 'The Sunken Hollow', atmo: 'candle', music: 'spooky' as Mood, combat: false, spawnDir: 0, rows: Fl[0], floors: Fl.map((rows, k) => ({ rows, blocks: Bl[k], heights: k === 0 ? hh : undefined })) };
+  ruin(18, 2, 30, 10, 'r', [24, 10]); put(24, 6, 'E');
+  // a stepped stone ZIGGURAT you climb (raised terrain — no stairs) with a chest on the summit
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const d = Math.max(Math.abs(dx), Math.abs(dy)); if (d <= 4) setH(39 + dx, 8 + dy, 4 - d); }
+  put(39, 8, 'H'); put(38, 8, 'C'); put(40, 9, 'C');
+  // stalkers prowling the ruin + crystals to grab
+  put(16, 24, 'M'); put(32, 22, 'M'); put(24, 34, 'M'); put(12, 34, 'M'); put(34, 30, 'M');
+  for (let i = 0; i < 14; i++) { const x = 3 + Math.floor(R(i + 7) * 42), y = 3 + Math.floor(R(i + 51) * 42); if (g[y]?.[x] === '.') put(x, y, 'C'); }
+  put(4, 24, 'S');
+  return { id: 'sunken-hollow', name: 'The Sunken Hollow', atmo: 'candle', music: 'spooky' as Mood, combat: false, spawnDir: 0, rows: g, heights: hh, blocks: Bl, blockH: BH };
 })();
 
 export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW];

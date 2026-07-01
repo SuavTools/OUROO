@@ -70,6 +70,15 @@ function setBlockCell(blocks: string[] | undefined, rows: string[], x: number, y
   grid[y] = grid[y].substring(0, x) + ch + grid[y].substring(x + 1);
   return grid;
 }
+// Bump a cell's block STACK height (1–9). Only where a block exists; returns the digit grid.
+function bumpBlockH(rows: string[], blocks: string[] | undefined, blockH: string[] | undefined, x: number, y: number, delta: number): string[] | undefined {
+  const w = rows[0]?.length ?? 0;
+  const grid = (blockH && blockH.length === rows.length) ? blockH.map(r => (r.length === w ? r : r.padEnd(w, '1').slice(0, w))) : rows.map(() => '1'.repeat(w));
+  const cur = grid[y].charCodeAt(x) - 48;
+  const next = Math.max(1, Math.min(9, (cur >= 1 && cur <= 9 ? cur : 1) + delta));
+  grid[y] = grid[y].substring(0, x) + String(next) + grid[y].substring(x + 1);
+  return grid;
+}
 
 // Cell classification for the side elevation: walls are solid one-storey columns; pits/air are gaps;
 // everything else is a thin walkable slab sitting at the floor's height.
@@ -178,12 +187,12 @@ const SideElevation: React.FC<{
 // ghost of the floor below (for aligning overhangs), the live rectangle preview, and the slice line.
 const GLYPH: Record<string, string> = { C: '◆', H: '▤', S: '★', E: '⎋', M: '☠', T: '♣', b: '♧', f: '✿', r: '●', l: '☀', O: '◎', '>': '▲', '<': '▼' };
 const GridCanvas: React.FC<{
-  rows: string[]; heights?: string[]; blocks?: string[]; belowRows?: string[]; npcs?: { x: number; y: number }[];
+  rows: string[]; heights?: string[]; blocks?: string[]; blockH?: string[]; belowRows?: string[]; npcs?: { x: number; y: number }[];
   w: number; h: number; cellPx: number;
   rect: { ax: number; ay: number; bx: number; by: number } | null;
   sliceOn: boolean; sideAxis: 'front' | 'side'; slice: number;
   onDown: (x: number, y: number) => void; onMove: (x: number, y: number) => void; onUp: () => void;
-}> = ({ rows, heights, blocks, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice, onDown, onMove, onUp }) => {
+}> = ({ rows, heights, blocks, blockH, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice, onDown, onMove, onUp }) => {
   const ref = useRef<HTMLCanvasElement>(null);
   const last = useRef<{ x: number; y: number } | null>(null);
 
@@ -214,7 +223,11 @@ const GridCanvas: React.FC<{
         if (lvl > 0) { ctx.fillStyle = `rgba(255,212,0,${0.08 + lvl * 0.07})`; ctx.fillRect(px, py, cellPx, cellPx); }
         // a placed BLOCK sitting on this cell's floor — an inset raised square with a lit top edge
         const bch = blocks?.[y]?.[x];
-        if (bch && bch !== ' ') { const bc = colorOf('blk:' + bch); const g = cellPx * 0.16; ctx.fillStyle = bc; ctx.fillRect(px + g, py + g, cellPx - 2 * g, cellPx - 2 * g); ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(px + g, py + g, cellPx - 2 * g, Math.max(1, cellPx * 0.12)); }
+        if (bch && bch !== ' ') {
+          const bc = colorOf('blk:' + bch); const g = cellPx * 0.16; ctx.fillStyle = bc; ctx.fillRect(px + g, py + g, cellPx - 2 * g, cellPx - 2 * g);
+          ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(px + g, py + g, cellPx - 2 * g, Math.max(1, cellPx * 0.12));
+          const bh = blockH?.[y]?.[x]; if (bh && bh !== '1' && bh !== '0' && cellPx > 10) { ctx.fillStyle = '#fff'; ctx.font = `${cellPx * 0.34}px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(bh, px + cellPx / 2, py + cellPx / 2 + 1); }
+        }
         // grid line
         ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, cellPx - 1, cellPx - 1);
         // glyph / NPC marker
@@ -237,7 +250,7 @@ const GridCanvas: React.FC<{
       ctx.strokeStyle = 'rgba(30,224,255,0.9)'; ctx.lineWidth = 2;
       ctx.strokeRect(x0 * cellPx + 1, y0 * cellPx + 1, (x1 - x0 + 1) * cellPx - 2, (y1 - y0 + 1) * cellPx - 2);
     }
-  }, [rows, heights, blocks, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice]);
+  }, [rows, heights, blocks, blockH, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice]);
 
   const cellOf = (e: React.PointerEvent): { x: number; y: number } | null => {
     const cv = ref.current; if (!cv) return null;
@@ -307,12 +320,12 @@ const blankFloorRows = (w: number, h: number): string[] =>
 
 // The designer always edits in multi-floor form; normalise any level into floors[] on load.
 const toFloors = (l: Level3D): Level3D =>
-  l.floors && l.floors.length ? l : { ...l, floors: [{ rows: l.rows, heights: l.heights, blocks: l.blocks, npcs: l.npcs }] };
+  l.floors && l.floors.length ? l : { ...l, floors: [{ rows: l.rows, heights: l.heights, blocks: l.blocks, blockH: l.blockH, npcs: l.npcs }] };
 // …and collapse a single-storey realm back to the simple grid format on save (so old realms stay tidy).
 const collapse = (l: Level3D): Level3D => {
-  const fs = l.floors ?? [{ rows: l.rows, heights: l.heights, blocks: l.blocks, npcs: l.npcs }];
-  if (fs.length === 1) { const { floors: _drop, ...rest } = l; void _drop; return { ...rest, rows: fs[0].rows, heights: fs[0].heights, blocks: fs[0].blocks, npcs: fs[0].npcs }; }
-  return { ...l, floors: fs, rows: fs[0].rows, heights: undefined, blocks: undefined, npcs: undefined };   // mirror floor0 into the required rows
+  const fs = l.floors ?? [{ rows: l.rows, heights: l.heights, blocks: l.blocks, blockH: l.blockH, npcs: l.npcs }];
+  if (fs.length === 1) { const { floors: _drop, ...rest } = l; void _drop; return { ...rest, rows: fs[0].rows, heights: fs[0].heights, blocks: fs[0].blocks, blockH: fs[0].blockH, npcs: fs[0].npcs }; }
+  return { ...l, floors: fs, rows: fs[0].rows, heights: undefined, blocks: undefined, blockH: undefined, npcs: undefined };   // mirror floor0 into the required rows
 };
 
 export const RaycastDesigner: React.FC<{
@@ -411,6 +424,10 @@ export const RaycastDesigner: React.FC<{
       setActiveFloor(f => ({ ...f, blocks: setBlockCell(f.blocks, f.rows, x, y, mat === '.' ? ' ' : mat) }));
       return;
     }
+    if (brush === 'BH+' || brush === 'BH-') {   // stack the block on this cell taller / shorter
+      setActiveFloor(f => { if (!f.blocks || f.blocks[y]?.[x] === ' ' || !f.blocks[y]?.[x]?.trim()) return f; return { ...f, blockH: bumpBlockH(f.rows, f.blocks, f.blockH, x, y, brush === 'BH+' ? 1 : -1) }; });
+      return;
+    }
     setActiveFloor(f => {
       // painting a cell also clears any NPC sitting on it
       const npcs = (f.npcs ?? []).filter(n => !(n.x === x && n.y === y));
@@ -461,6 +478,14 @@ export const RaycastDesigner: React.FC<{
       });
       return;
     }
+    if (brush === 'BH+' || brush === 'BH-') {   // stack a box of blocks taller/shorter
+      setActiveFloor(f => {
+        if (!f.blocks) return f; let bh = f.blockH;
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const b = f.blocks[y]?.[x]; if (b && b !== ' ') bh = bumpBlockH(f.rows, f.blocks, bh, x, y, brush === 'BH+' ? 1 : -1); }
+        return { ...f, blockH: bh };
+      });
+      return;
+    }
     setActiveFloor(f => {
       const rws = [...f.rows];
       for (let y = y0; y <= y1; y++) { let r = rws[y]; for (let x = x0; x <= x1; x++) r = r.substring(0, x) + brush + r.substring(x + 1); rws[y] = r; }
@@ -486,7 +511,7 @@ export const RaycastDesigner: React.FC<{
     setLevel(l => {
       const fs = (l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }]).map(f => {
         const rws = resizeRows(f.rows, cw, ch, isAirFloor(f.rows));
-        return { ...f, rows: rws, heights: f.heights ? normHeights(rws, f.heights) : undefined, blocks: f.blocks ? resizeRows(f.blocks, cw, ch, true) : undefined };
+        return { ...f, rows: rws, heights: f.heights ? normHeights(rws, f.heights) : undefined, blocks: f.blocks ? resizeRows(f.blocks, cw, ch, true) : undefined, blockH: f.blockH ? resizeRows(f.blockH, cw, ch, true) : undefined };
       });
       return { ...l, floors: fs, rows: fs[0].rows };
     });
@@ -636,6 +661,16 @@ export const RaycastDesigner: React.FC<{
             ))}
           </div>
 
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Stack blocks <span className="text-white/25 normal-case tracking-normal">(taller walls)</span></p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {([['BH+', '⤒ Stack +'], ['BH-', '⤓ Stack −']] as [string, string][]).map(([ch, label]) => (
+              <button key={ch} onClick={() => setBrush(ch)}
+                className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === ch ? 'border-[#c8963c] bg-[#c8963c]/10 text-[#c8963c]' : 'border-white/15 hover:border-white/40'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Atmosphere</p>
           <div className="flex flex-wrap gap-1">
             {Object.entries(ATMOS).map(([key, a]) => (
@@ -718,7 +753,7 @@ export const RaycastDesigner: React.FC<{
           onPointerUp={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
           onPointerLeave={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
           <GridCanvas
-            rows={rows} heights={cur.heights} blocks={cur.blocks} belowRows={fIdx > 0 ? floors[fIdx - 1]?.rows : undefined} npcs={cur.npcs}
+            rows={rows} heights={cur.heights} blocks={cur.blocks} blockH={cur.blockH} belowRows={fIdx > 0 ? floors[fIdx - 1]?.rows : undefined} npcs={cur.npcs}
             w={w} h={h} cellPx={cellPx} rect={rect} sliceOn={sideOpen} sideAxis={sideAxis} slice={slice}
             onDown={(x, y) => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
             onMove={(x, y) => { setHover({ x, y }); if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
