@@ -1559,12 +1559,22 @@ export const RaycastCanvas: React.FC<{
               const base = pal.wall[nextCh] ?? pal.wall['#'];
               const sd = (side === 1 ? 0.6 : 1) * lightAt(dExit);   // stronger N/S face shading → more depth
               const ft = fogTd(dExit);
-              const wTopF = projF(CEIL_Z, dExit), wBotF = projF(curZ, dExit);
+              // Walls are a FIXED height (≈2 blocks) above their own base — NOT stretched up to the ceiling.
+              // Raising an interior platform lifts CEIL_Z (headroom) but must never grow the edge walls.
+              const wallTopZ = floorLvl(mapX, mapY) * STEP_UNIT + CEIL_GAP;
+              const wTopF = projF(wallTopZ, dExit), wBotF = projF(curZ, dExit);
+              const wTopY = Math.floor(wTopF);
+              // fill the strip ABOVE a short wall (roof lifted by a platform, or open sky) so no void shows
+              for (let y = Math.max(0, yCeil); y < Math.min(yFloor, wTopY); y++) {
+                const pp = y - horizon; const o = (y * W + x) * 4;
+                if (sky) { const [sr, sg, sb] = skyColAt(y); data[o] = sr; data[o + 1] = sg; data[o + 2] = sb; data[o + 3] = 255; depth[y * W + x] = 1e9; }
+                else if (pp < 0) { const d = ((eye - CEIL_Z) * F) / pp; const lf = lightAt(d); const [cr, cg, cbl] = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], fogTd(d) * 0.7); data[o] = cr * lf; data[o + 1] = cg * lf; data[o + 2] = cbl * lf; data[o + 3] = 255; depth[y * W + x] = d; }
+              }
               const span = Math.max(1, wBotF - wTopF);
               const wxv = side === 0 ? py + dExit * rdy : px + dExit * rdx;
               const wxf = wxv - Math.floor(wxv);
-              const wt = Math.max(yCeil, Math.floor(wTopF)), wb = Math.min(yFloor, Math.ceil(wBotF));
-              const tex = wallTexOf(nextCh), lod = lodOf(dExit), vScale = (CEIL_Z - curZ) / STOREY_H;   // one texture tile per block
+              const wt = Math.max(yCeil, wTopY), wb = Math.min(yFloor, Math.ceil(wBotF));
+              const tex = wallTexOf(nextCh), lod = lodOf(dExit), vScale = (wallTopZ - curZ) / STOREY_H;   // one texture tile per block
               const edgeAO = 0.88 + 0.12 * (1 - Math.abs(wxf - 0.5) * 2);   // fake AO: darker toward block edges
               for (let y = wt; y < wb; y++) {
                 const ty = (y - wTopF) / span;
