@@ -348,42 +348,54 @@ export const RaycastCanvas: React.FC<{
       for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x)); }
       const ws = actx!.createWaveShaper(); ws.curve = curve; ws.oversample = '4x'; return ws;
     };
-    // ── Screech — an ELECTRIC ZAP-FUZZ SCREAM. A distorted saw that ZAPS up in a fraction of a second
-    // then hangs shrill, plus a screaming noise formant sweeping up fast. No slow warble (that was the
-    // pikachu squelch) — this is a harsh, fried, hair-raising shriek that spikes instantly.
-    const screech = (intensity = 1, dur = 0.6) => {
+    // ── Screech — a RING-MODULATED, COMB-RESONANT, HARD-CLIPPED demon scream. NO pitch swoosh (that
+    // reads as a magic zap). Carrier×modulator at an inharmonic ratio makes clangorous metallic
+    // sidebands (the demon-voice trick); a short feedback comb adds ringing metallic resonance;
+    // extreme waveshaping fries the whole thing; a sub rumble + hissing air make it physical terror.
+    const screech = (intensity = 1, dur = 0.75) => {
       if (mutedRef.current) return;
-      const I = intensity * (1 + panic * 0.9);   // the more hits you've taken, the more unhinged it gets
+      const I = Math.min(2.4, intensity * (1 + panic * 0.9));   // more hits → more unhinged
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
-        // ZAP saw through heavy fuzz — snaps up FAST, then holds a shrill fried tone
-        const zap = actx!.createOscillator(); zap.type = 'sawtooth';
-        zap.frequency.setValueAtTime(360 + I * 160, t);
-        zap.frequency.exponentialRampToValueAtTime(2700 + I * 1700, t + 0.06);   // ZAP up in ~60ms
-        zap.frequency.setTargetAtTime(1500 + I * 750, t + 0.08, 0.28);           // then hang shrill
-        const fuzz = shaper(30 + I * 24);
-        const zg = actx!.createGain(); zg.gain.setValueAtTime(0.0001, t);
-        zg.gain.linearRampToValueAtTime(0.34 * Math.min(2.3, I), t + 0.008);     // near-instant attack
-        zg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        zap.connect(fuzz); fuzz.connect(zg); zg.connect(dest); zap.start(t); zap.stop(t + dur);
-        // screaming noise formant — sharp resonant bandpass sweeping up HARD and fast
+        // shared output envelope — brutal near-instant attack, ugly decay
+        const out = actx!.createGain();
+        out.gain.setValueAtTime(0.0001, t);
+        out.gain.linearRampToValueAtTime(0.5 * Math.min(2, I), t + 0.006);
+        out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        out.connect(dest);
+        // RING MOD — carrier saw × square modulator (inharmonic ratio) = harsh clangorous metal.
+        // Pitches DRIFT DOWN slightly = dread; never sweep up (that was the swoosh).
+        const carrier = actx!.createOscillator(); carrier.type = 'sawtooth';
+        carrier.frequency.setValueAtTime(232 + I * 80, t); carrier.frequency.linearRampToValueAtTime(150 + I * 46, t + dur);
+        const modu = actx!.createOscillator(); modu.type = 'square';
+        modu.frequency.setValueAtTime(87 + I * 33, t); modu.frequency.linearRampToValueAtTime(61 + I * 19, t + dur);
+        const ring = actx!.createGain(); ring.gain.value = 0;   // base 0 → pure multiply (ring mod)
+        modu.connect(ring.gain); carrier.connect(ring);
+        // HARD FUZZ — extreme clip, basically a square-off
+        const fz = shaper(150 + I * 90); ring.connect(fz);
+        // COMB — short feedback delay → ringing metallic resonance
+        const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0055 + I * 0.0012;
+        const fb = actx!.createGain(); fb.gain.value = 0.85; fz.connect(comb); comb.connect(fb); fb.connect(comb);
+        // sum dry+comb through a screaming formant bandpass, then a highpass to keep it nasty
+        const bpf = actx!.createBiquadFilter(); bpf.type = 'bandpass'; bpf.Q.value = 2.4; bpf.frequency.value = 1350 + I * 500;
+        fz.connect(bpf); comb.connect(bpf);
+        const hp = actx!.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 260;
+        bpf.connect(hp); hp.connect(out);
+        // SUB rumble — a distorted low sine so the scream has a menacing body under it
+        const sub = actx!.createOscillator(); sub.type = 'sine'; sub.frequency.setValueAtTime(52, t); sub.frequency.exponentialRampToValueAtTime(33, t + dur);
+        const subfz = shaper(6);
+        const sg = actx!.createGain(); sg.gain.setValueAtTime(0.0001, t); sg.gain.linearRampToValueAtTime(0.32, t + 0.02); sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        sub.connect(subfz); subfz.connect(sg); sg.connect(dest);
+        // HISSING AIR — screaming noise through a sharp resonant bandpass (steady, no big sweep)
         const len = Math.floor(actx!.sampleRate * dur);
         const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
-        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;   // white noise body
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
         const ns = actx!.createBufferSource(); ns.buffer = buf;
-        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 16 + I * 16;   // sharper = more piercing
-        bp.frequency.setValueAtTime(1100 + I * 600, t);
-        bp.frequency.exponentialRampToValueAtTime(4200 + I * 2600, t + 0.05);    // shriek up HIGH, fast
-        bp.frequency.exponentialRampToValueAtTime(600, t + dur);
-        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.3 * Math.min(2.2, I), t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        ns.connect(bp); bp.connect(g); g.connect(dest); ns.start(t); ns.stop(t + dur);
-        // shrill fried ring on top — a second distorted saw an octave up for the piercing edge
-        const ring = actx!.createOscillator(); ring.type = 'sawtooth';
-        ring.frequency.setValueAtTime(1900 + I * 900, t); ring.frequency.exponentialRampToValueAtTime(3800 + I * 900, t + 0.09);
-        const rfuzz = shaper(18 + I * 14);
-        const rg = actx!.createGain(); rg.gain.setValueAtTime(0.0001, t); rg.gain.linearRampToValueAtTime(0.09 * Math.min(2, I), t + 0.02); rg.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.8);
-        ring.connect(rfuzz); rfuzz.connect(rg); rg.connect(dest); ring.start(t); ring.stop(t + dur);
+        const nbp = actx!.createBiquadFilter(); nbp.type = 'bandpass'; nbp.Q.value = 7 + I * 8; nbp.frequency.value = 2600 + I * 800;
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.16 * Math.min(2, I), t + 0.02); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.85);
+        ns.connect(nbp); nbp.connect(ng); ng.connect(dest);
+        carrier.start(t); modu.start(t); sub.start(t); ns.start(t);
+        carrier.stop(t + dur); modu.stop(t + dur); sub.stop(t + dur); ns.stop(t + dur);
       } catch { /* audio blocked */ }
     };
     // Hit — a brutal KICK-THUMP + gritty slash when the ghoul strikes you. Physical, chest-punching.
@@ -523,21 +535,24 @@ export const RaycastCanvas: React.FC<{
     // ── HUNT VOICE — a SUSTAINED screech that HOLDS the whole time a stalker is locked on you and
     // intensifies as it closes / as panic climbs: a high held violin-ish note + a screeching resonant-
     // noise layer, over a low bowed drone. Not one-shot swishes — it rides under you until you're safe.
-    let hunt: { master: GainNode; hi: OscillatorNode; hi2: OscillatorNode; noise: AudioBufferSourceNode; bp: BiquadFilterNode; low: OscillatorNode; low2: OscillatorNode } | null = null;
+    let hunt: { master: GainNode; hi: OscillatorNode; hi2: OscillatorNode; rmod: OscillatorNode; noise: AudioBufferSourceNode; bp: BiquadFilterNode; low: OscillatorNode; low2: OscillatorNode } | null = null;
     const startHunt = () => {
       if (hunt || mutedRef.current) return;
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
         const master = actx!.createGain(); master.gain.value = 0; master.connect(dest);
         master.gain.linearRampToValueAtTime(0.3, t + 0.18);           // swell in on lock — LOUD, dominates the mix
-        // HIGH HELD SCREECH — a shrill sustained scream, NOT a warble. Two barely-detuned saws
-        // beat slowly against each other (tense/dissonant, not cute), pushed through fuzz for a
-        // fried electric edge; a bandpass gives it a throat-y formant so it reads as a SCREAM.
+        // HIGH HELD SCREECH — a metallic demonic SUSTAIN, not a musical note. Two detuned saws are
+        // RING-MODULATED by a low inharmonic square (clangorous sidebands), fried through fuzz, then
+        // run through a feedback comb for ringing metallic resonance. Menacing, alien, never cute.
         const hi = actx!.createOscillator(); hi.type = 'sawtooth'; hi.frequency.value = 1180;
         const hi2 = actx!.createOscillator(); hi2.type = 'sawtooth'; hi2.frequency.value = 1180 * 1.006;   // slow menacing beat
-        const hfz = shaper(16);
+        const rmod = actx!.createOscillator(); rmod.type = 'square'; rmod.frequency.value = 63;             // inharmonic ring modulator
+        const ring = actx!.createGain(); ring.gain.value = 0; rmod.connect(ring.gain); hi.connect(ring); hi2.connect(ring);
+        const hfz = shaper(22); ring.connect(hfz);
+        const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0072; const cfb = actx!.createGain(); cfb.gain.value = 0.72; hfz.connect(comb); comb.connect(cfb); cfb.connect(comb);
         const hf = actx!.createBiquadFilter(); hf.type = 'bandpass'; hf.Q.value = 3.2; hf.frequency.value = 1700;
-        const hg = actx!.createGain(); hg.gain.value = 0.16; hi.connect(hfz); hi2.connect(hfz); hfz.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t);
+        const hg = actx!.createGain(); hg.gain.value = 0.17; hfz.connect(hf); comb.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t); rmod.start(t);
         // SCREECH AIR — resonant white noise riding on top for the shrieking, hissing edge.
         const len = Math.floor(actx!.sampleRate * 2); const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -548,7 +563,7 @@ export const RaycastCanvas: React.FC<{
         const low = actx!.createOscillator(); low.type = 'sine'; low.frequency.value = 57;
         const low2 = actx!.createOscillator(); low2.type = 'sine'; low2.frequency.value = 57 * 1.013;   // slow ~0.75Hz throb
         const lg = actx!.createGain(); lg.gain.value = 0.24; low.connect(lg); low2.connect(lg); lg.connect(master); low.start(t); low2.start(t);
-        hunt = { master, hi, hi2, noise, bp, low, low2 };
+        hunt = { master, hi, hi2, rmod, noise, bp, low, low2 };
         if (amb) { const g = amb.master.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(VOL[mood] * 0.2, t + 0.15); }   // duck music while hunted
       } catch { /* noop */ }
     };
@@ -570,7 +585,7 @@ export const RaycastCanvas: React.FC<{
         const t = actx.currentTime; h.master.gain.cancelScheduledValues(t); h.master.gain.setValueAtTime(h.master.gain.value, t); h.master.gain.linearRampToValueAtTime(0, t + 0.55);
         if (amb) { const g = amb.master.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(VOL[mood], t + 0.8); }   // music swells back
       } catch { /* noop */ }
-      setTimeout(() => { try { h.hi.stop(); h.hi2.stop(); h.noise.stop(); h.low.stop(); h.low2.stop(); } catch { /* noop */ } }, 650);
+      setTimeout(() => { try { h.hi.stop(); h.hi2.stop(); h.rmod.stop(); h.noise.stop(); h.low.stop(); h.low2.stop(); } catch { /* noop */ } }, 650);
     };
 
     // ── Input ─────────────────────────────────────────────────────────────────────────────────
