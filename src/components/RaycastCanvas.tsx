@@ -367,6 +367,7 @@ export const RaycastCanvas: React.FC<{
     // Lava bubbling: molten voxel cubes that pop up out of lava tiles and fall back (a live particle pool).
     let lavaCells: { x: number; y: number; z: number }[] = [];   // centres + surface height of every 'L' tile
     const bubbles: { x: number; y: number; z: number; vz: number; gz: number; sz: number }[] = [];
+    let grassCells: { x: number; y: number; z: number }[] = [];   // 'g' tiles → sprout little voxel grass tufts
 
     type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number; k?: number };
 
@@ -393,11 +394,12 @@ export const RaycastCanvas: React.FC<{
       maxLvl = 0;
       for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
       CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform on this floor
-      sprites = []; tunnels = []; enemies = []; lavaCells = [];
+      sprites = []; tunnels = []; enemies = []; lavaCells = []; grassCells = [];
       for (let y = 0; y < rows.length; y++)
         for (let x = 0; x < rows[y].length; x++) {
           const c = rows[y][x];
           if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
+          else if (c === 'g') grassCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
           if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
           else if (c === CHEST_CHAR) sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'chest', key: `${fi}:${x}:${y}` });
           else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
@@ -465,12 +467,13 @@ export const RaycastCanvas: React.FC<{
     const allNpcs: (Npc3D & { k: number })[] = [];
     if (stacked) {
       const all: Enemy[] = [];
-      lavaCells = [];
+      lavaCells = []; grassCells = [];
       for (let k = 0; k < nLayers; k++) {
         const g = grids[k];
         for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
           const c = g[y][x];
           if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
+          else if (c === 'g') grassCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
           if (c === 'C') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${k}:${x}:${y}`, k });
           else if (c === CHEST_CHAR) allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'chest', key: `${k}:${x}:${y}`, k });
           else if (c === 'E') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit', k });
@@ -973,6 +976,21 @@ export const RaycastCanvas: React.FC<{
       for (const b of bubbles) {
         const hot = Math.max(0.25, 1 - (b.z - b.gz) * 2.2);
         drawBox3D(env, b.x, b.y, b.sz, b.sz, b.z, b.z + b.sz, 255, 70 + hot * 150, 20 + hot * 40, 1, true);
+      }
+    };
+    // Sprout little voxel grass tufts on nearby 'g' tiles so the ground reads 3D (deterministic per
+    // tile: a few short green blade-cubes at hashed offsets, gently swaying). Culled to view range.
+    const drawGrass = (env: BoxEnv, lightFn: (d: number) => number) => {
+      for (const gc of grassCells) {
+        const dx = gc.x - px, dy = gc.y - py, d2 = dx * dx + dy * dy;
+        if (d2 > 110) continue;                       // ~10 tiles
+        const gx = Math.floor(gc.x), gy = Math.floor(gc.y), light = lightFn(Math.sqrt(d2));
+        for (let i = 0; i < 3; i++) {
+          const rx = cellRand(gx * 4 + i, gy * 7 + i * 13), ry = cellRand(gx * 9 + i * 5, gy * 3 + i), rh = cellRand(gx + i, gy + i * 2);
+          const sway = Math.sin(tick * 0.05 + gx + gy + i) * 0.02;
+          const h = 0.12 + rh * 0.16;
+          drawBox3D(env, gc.x + (rx - 0.5) * 0.66 + sway, gc.y + (ry - 0.5) * 0.66, 0.08, 0.08, gc.z, gc.z + h, 36, 96 + rh * 70, 44, light, false);
+        }
       }
     };
     // Draw a stalker as a blocky VOXEL humanoid (legs, torso, dangling arms, head) with glowing eyes
@@ -1642,6 +1660,7 @@ export const RaycastCanvas: React.FC<{
       const eyeH = heightMap ? pz + EYE_BASE + jz : 0.5;
       const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, data, depth };
       if (bubbles.length) drawBubbles(env3d);
+      if (grassCells.length) drawGrass(env3d, lightAt);
       const eorder = enemies.filter(e => e.hp > 0)
         .map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
       for (const { e } of eorder) {
@@ -2165,6 +2184,7 @@ export const RaycastCanvas: React.FC<{
       // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes on their own layer, depth-tested
       const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
       if (bubbles.length) drawBubbles(env3d);
+      if (grassCells.length) drawGrass(env3d, lightAt);
       const eorder = enemies.filter(e => e.hp > 0).map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
       for (const { e } of eorder) {
         const relX = e.x - px, relY = e.y - py;
