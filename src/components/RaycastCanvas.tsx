@@ -360,7 +360,7 @@ export const RaycastCanvas: React.FC<{
         // shared output envelope — brutal near-instant attack, ugly decay
         const out = actx!.createGain();
         out.gain.setValueAtTime(0.0001, t);
-        out.gain.linearRampToValueAtTime(0.5 * Math.min(2, I), t + 0.006);
+        out.gain.linearRampToValueAtTime(0.4 * Math.min(2, I), t + 0.006);
         out.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         out.connect(dest);
         // RING MOD — carrier saw × square modulator (inharmonic ratio) = harsh clangorous metal.
@@ -384,7 +384,7 @@ export const RaycastCanvas: React.FC<{
         // SUB rumble — a distorted low sine so the scream has a menacing body under it
         const sub = actx!.createOscillator(); sub.type = 'sine'; sub.frequency.setValueAtTime(52, t); sub.frequency.exponentialRampToValueAtTime(33, t + dur);
         const subfz = shaper(6);
-        const sg = actx!.createGain(); sg.gain.setValueAtTime(0.0001, t); sg.gain.linearRampToValueAtTime(0.32, t + 0.02); sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        const sg = actx!.createGain(); sg.gain.setValueAtTime(0.0001, t); sg.gain.linearRampToValueAtTime(0.26, t + 0.02); sg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         sub.connect(subfz); subfz.connect(sg); sg.connect(dest);
         // HISSING AIR — screaming noise through a sharp resonant bandpass (steady, no big sweep)
         const len = Math.floor(actx!.sampleRate * dur);
@@ -392,7 +392,7 @@ export const RaycastCanvas: React.FC<{
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
         const ns = actx!.createBufferSource(); ns.buffer = buf;
         const nbp = actx!.createBiquadFilter(); nbp.type = 'bandpass'; nbp.Q.value = 7 + I * 8; nbp.frequency.value = 2600 + I * 800;
-        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.16 * Math.min(2, I), t + 0.02); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.85);
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.13 * Math.min(2, I), t + 0.02); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.85);
         ns.connect(nbp); nbp.connect(ng); ng.connect(dest);
         carrier.start(t); modu.start(t); sub.start(t); ns.start(t);
         carrier.stop(t + dur); modu.stop(t + dur); sub.stop(t + dur); ns.stop(t + dur);
@@ -407,7 +407,7 @@ export const RaycastCanvas: React.FC<{
         // 1) SLAM — a deep fuzzed sub kick with a hard click transient
         const slam = actx!.createOscillator(); slam.type = 'sine'; slam.frequency.setValueAtTime(180, t); slam.frequency.exponentialRampToValueAtTime(28, t + 0.35);
         const slfz = shaper(10);
-        const slg = actx!.createGain(); slg.gain.setValueAtTime(0.55, t); slg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        const slg = actx!.createGain(); slg.gain.setValueAtTime(0.44, t); slg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
         slam.connect(slfz); slfz.connect(slg); slg.connect(dest); slam.start(t); slam.stop(t + 0.52);
         const clk = actx!.createOscillator(); clk.type = 'triangle'; clk.frequency.setValueAtTime(1400, t); clk.frequency.exponentialRampToValueAtTime(160, t + 0.05);
         const clg = actx!.createGain(); clg.gain.setValueAtTime(0.28, t); clg.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
@@ -419,7 +419,7 @@ export const RaycastCanvas: React.FC<{
         const dfz = shaper(220); rg.connect(dfz);
         const dcomb = actx!.createDelay(0.05); dcomb.delayTime.value = 0.0093; const dfb = actx!.createGain(); dfb.gain.value = 0.9; dfz.connect(dcomb); dcomb.connect(dfb); dfb.connect(dcomb);
         const dbp = actx!.createBiquadFilter(); dbp.type = 'bandpass'; dbp.Q.value = 1.6; dbp.frequency.setValueAtTime(1300, t); dbp.frequency.exponentialRampToValueAtTime(300, t + dur);
-        const dg = actx!.createGain(); dg.gain.setValueAtTime(0.0001, t); dg.gain.linearRampToValueAtTime(0.42, t + 0.04); dg.gain.setTargetAtTime(0.0001, t + dur * 0.6, 0.5);
+        const dg = actx!.createGain(); dg.gain.setValueAtTime(0.0001, t); dg.gain.linearRampToValueAtTime(0.34, t + 0.04); dg.gain.setTargetAtTime(0.0001, t + dur * 0.6, 0.5);
         dfz.connect(dbp); dcomb.connect(dbp); dbp.connect(dg); dg.connect(dest);
         car.start(t); mod.start(t); car.stop(t + dur); mod.stop(t + dur);
         // 3) COLLAPSING SHRIEK — noise shriek that sweeps DOWN and dies (the last breath)
@@ -428,7 +428,7 @@ export const RaycastCanvas: React.FC<{
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
         const ns = actx!.createBufferSource(); ns.buffer = buf;
         const nbp = actx!.createBiquadFilter(); nbp.type = 'bandpass'; nbp.Q.value = 10; nbp.frequency.setValueAtTime(3200, t); nbp.frequency.exponentialRampToValueAtTime(240, t + dur * 0.6);
-        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.2, t + 0.03); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.7);
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.16, t + 0.03); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.7);
         ns.connect(nbp); nbp.connect(ng); ng.connect(dest); ns.start(t); ns.stop(t + dur * 0.7);
       } catch { /* audio blocked */ }
     };
@@ -444,16 +444,16 @@ export const RaycastCanvas: React.FC<{
         const ns = actx!.createBufferSource(); ns.buffer = buf;
         const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 1.1;
         const slashFuzz = shaper(12);
-        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.26, t + 0.003); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.21, t + 0.003); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
         ns.connect(bp); bp.connect(slashFuzz); slashFuzz.connect(ng); ng.connect(dest); ns.start(t);
         // KICK — a hard sub thump: sine punched from high down to sub-bass, fuzzed for a fried edge.
         const o = actx!.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
         const kfuzz = shaper(8);
-        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.42, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.34, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
         o.connect(kfuzz); kfuzz.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.24);
         // click transient — the sharp attack that makes it read as a KICK, not a hum
         const cl = actx!.createOscillator(); cl.type = 'triangle'; cl.frequency.setValueAtTime(1100, t); cl.frequency.exponentialRampToValueAtTime(180, t + 0.03);
-        const cg = actx!.createGain(); cg.gain.setValueAtTime(0.22, t); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+        const cg = actx!.createGain(); cg.gain.setValueAtTime(0.18, t); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
         cl.connect(cg); cg.connect(dest); cl.start(t); cl.stop(t + 0.05);
       } catch { /* audio blocked */ }
     };
@@ -561,7 +561,7 @@ export const RaycastCanvas: React.FC<{
       try {
         const t = actx.currentTime, g = amb.master.gain;
         g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
-        g.linearRampToValueAtTime(VOL[mood] * 0.12, t + 0.03);   // music drops out
+        g.linearRampToValueAtTime(VOL[mood] * 0.4, t + 0.03);    // music dips but stays audible
         g.linearRampToValueAtTime(VOL[mood], t + dur);           // swells back
       } catch { /* noop */ }
     };
@@ -575,7 +575,7 @@ export const RaycastCanvas: React.FC<{
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
         const master = actx!.createGain(); master.gain.value = 0; master.connect(dest);
-        master.gain.linearRampToValueAtTime(0.3, t + 0.18);           // swell in on lock — LOUD, dominates the mix
+        master.gain.linearRampToValueAtTime(0.24, t + 0.18);          // swell in on lock — present but leaves room for the song
         // HELD DRONE — a metallic, disharmonic, comb-distorted MID drone (not a shrill note). Two
         // detuned saws ring-modulated by a low inharmonic square = clangorous metal; fried through
         // fuzz; run through a feedback comb for ringing resonance. The DREAD comes from it SWELLING
@@ -599,14 +599,14 @@ export const RaycastCanvas: React.FC<{
         const low2 = actx!.createOscillator(); low2.type = 'sine'; low2.frequency.value = 57 * 1.013;   // slow ~0.75Hz throb
         const lg = actx!.createGain(); lg.gain.value = 0.24; low.connect(lg); low2.connect(lg); lg.connect(master); low.start(t); low2.start(t);
         hunt = { master, hi, hi2, rmod, noise, bp, low, low2 };
-        if (amb) { const g = amb.master.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(VOL[mood] * 0.2, t + 0.15); }   // duck music while hunted
+        if (amb) { const g = amb.master.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(VOL[mood] * 0.5, t + 0.15); }   // duck music while hunted, but keep the level song present
       } catch { /* noop */ }
     };
     const setHunt = (prox: number, pan: number) => {   // live intensify while it holds
       if (!hunt || !actx) return;
       try {
         const t = actx.currentTime, I = prox + pan * 0.5;
-        hunt.master.gain.setTargetAtTime(0.2 + I * 0.34, t, 0.18);                  // VOLUME SWELL — the drone looms louder as it closes / panic rises
+        hunt.master.gain.setTargetAtTime(0.16 + I * 0.27, t, 0.18);                 // VOLUME SWELL — the drone looms louder as it closes / panic rises
         hunt.bp.frequency.setTargetAtTime(1400 + prox * 1400 + pan * 700, t, 0.25); // metallic air opens a little
         const f = 300 + prox * 150 + pan * 90;                                      // drone barely creeps up — dread is the swell, not the pitch
         hunt.hi.frequency.setTargetAtTime(f, t, 0.35);
