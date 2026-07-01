@@ -346,10 +346,15 @@ export const RaycastCanvas: React.FC<{
         o.stop(t + dur + 0.05);
       } catch { /* audio blocked */ }
     };
-    // Melodic scales per mood (semitones over a root). Spooky = Phrygian dread; chill = warm pentatonic.
-    const ROOT = mood === 'tense' ? 98 : mood === 'spooky' ? 130.81 : 261.63;   // G2 / C3 / C4
-    const SCALE = mood === 'spooky' ? [0, 1, 3, 5, 7, 8] : mood === 'tense' ? [0, 3, 5, 6, 7, 10] : [0, 2, 4, 7, 9];
-    const noteHz = (semi: number) => ROOT * Math.pow(2, semi / 12);
+    // Per-theme material: root pitch, melodic scale, and overall volume. Each atmosphere sounds different.
+    const ROOTS: Record<Mood, number> = { day: 261.63, mist: 220.0, dungeon: 130.81, spooky: 130.81, mystery: 174.61, hell: 98.0 };
+    const SCALES: Record<Mood, number[]> = {
+      day: [0, 2, 4, 7, 9], mist: [0, 2, 4, 6, 9, 11], dungeon: [0, 2, 3, 5, 7, 10],
+      spooky: [0, 1, 3, 5, 6, 8], mystery: [0, 2, 4, 6, 8, 10], hell: [0, 1, 4, 6, 7, 10],
+    };
+    const VOL: Record<Mood, number> = { day: 0.05, mist: 0.045, dungeon: 0.055, spooky: 0.06, mystery: 0.048, hell: 0.07 };
+    const SCALE = SCALES[mood];
+    const noteHz = (semi: number) => ROOTS[mood] * Math.pow(2, semi / 12);
 
     // ── Ambience — generative drone matching the level's mood (spooky/tense/chill). Starts on the
     // first user gesture (audio policy); a ♪ button mutes it. Spooky/tense get eerie stings over time.
@@ -359,20 +364,26 @@ export const RaycastCanvas: React.FC<{
       try {
         if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
         const master = actx.createGain(); master.gain.value = 0; master.connect(actx.destination);
-        master.gain.linearRampToValueAtTime(mood === 'chill' ? 0.1 : 0.13, actx.currentTime + 2.5);
+        master.gain.linearRampToValueAtTime(VOL[mood], actx.currentTime + 2.5);   // gentler overall level
         const nodes: OscillatorNode[] = [];
         const mk = (f: number, type: OscillatorType, g: number) => {
           const o = actx!.createOscillator(), gg = actx!.createGain();
           o.type = type; o.frequency.value = f; gg.gain.value = g; o.connect(gg); gg.connect(master); o.start(); nodes.push(o); return o;
         };
-        if (mood === 'spooky') {
-          mk(52, 'sawtooth', 0.32); mk(55.5, 'sawtooth', 0.2);          // low detuned dread drone (beating)
-          const eerie = mk(415, 'sine', 0.05);                          // high wavering tone
-          const lfo = actx.createOscillator(); lfo.frequency.value = 0.07; const lg = actx.createGain(); lg.gain.value = 8; lfo.connect(lg); lg.connect(eerie.frequency); lfo.start(); nodes.push(lfo);
-        } else if (mood === 'tense') {
-          mk(65, 'square', 0.16); mk(32.5, 'sine', 0.3); mk(98, 'sawtooth', 0.05);
-        } else {
-          mk(130.8, 'sine', 0.16); mk(196, 'sine', 0.11); mk(261.6, 'sine', 0.05);   // soft consonant pad
+        const wobble = (o: OscillatorNode, rate: number, depth: number) => { const lfo = actx!.createOscillator(); lfo.frequency.value = rate; const lg = actx!.createGain(); lg.gain.value = depth; lfo.connect(lg); lg.connect(o.frequency); lfo.start(); nodes.push(lfo); };
+        if (mood === 'day') {
+          mk(130.8, 'sine', 0.16); mk(196, 'sine', 0.11); mk(261.6, 'sine', 0.05);          // warm consonant pad
+        } else if (mood === 'mist') {
+          mk(110, 'sine', 0.14); mk(164.8, 'sine', 0.06); wobble(mk(659, 'sine', 0.03), 0.05, 4);   // airy, high shimmer drifting
+        } else if (mood === 'dungeon') {
+          mk(65.4, 'sine', 0.22); mk(98, 'triangle', 0.09); mk(130.8, 'sine', 0.05);         // low, moody, foreboding
+        } else if (mood === 'spooky') {
+          mk(52, 'sawtooth', 0.32); mk(55.5, 'sawtooth', 0.2);                                // detuned dread drone (beating)
+          wobble(mk(415, 'sine', 0.05), 0.07, 8);                                             // high wavering tone
+        } else if (mood === 'mystery') {
+          mk(87.3, 'triangle', 0.15); mk(130.8, 'sine', 0.07); wobble(mk(523, 'sine', 0.035), 0.09, 6);   // cold, curious
+        } else {   // hell
+          mk(49, 'square', 0.2); mk(51.9, 'sawtooth', 0.16); mk(69.3, 'sawtooth', 0.1); mk(98, 'square', 0.06);   // menacing, dissonant
         }
         amb = { master, nodes };
       } catch { /* audio blocked */ }
@@ -578,23 +589,32 @@ export const RaycastCanvas: React.FC<{
     let musicSeq = 0;
     const musicStep = () => {
       if (!amb || mutedRef.current) return;
-      if (mood === 'chill') {
-        // gentle rolling arpeggio that drifts up and down the pentatonic, plus a soft bass swell
-        if (tick % 26 === 0) {
-          const n = SCALE.length, i = musicSeq % (n * 2), idx = i < n ? i : n * 2 - 1 - i;   // up then down
-          tone(noteHz(SCALE[idx] + 12), 0.9, 'sine', 0.05); musicSeq++;
-        }
+      if (mood === 'day') {
+        // gentle rolling arpeggio up and down the pentatonic + a soft bass swell
+        if (tick % 26 === 0) { const n = SCALE.length, i = musicSeq % (n * 2), idx = i < n ? i : n * 2 - 1 - i; tone(noteHz(SCALE[idx] + 12), 0.9, 'sine', 0.05); musicSeq++; }
         if (tick % 208 === 0) tone(noteHz(SCALE[(musicSeq * 3) % SCALE.length]) / 2, 3.5, 'triangle', 0.045);
-      } else if (mood === 'tense') {
-        // driving pulse + a stab every other bar
-        if (tick % 18 === 0) { tone(noteHz(0) / 2, 0.14, 'square', 0.05); musicSeq++; }
-        if (tick % 144 === 72) tone(noteHz(SCALE[(musicSeq) % SCALE.length] + 12), 0.4, 'sawtooth', 0.04);
-      } else {
-        // spooky: sparse, irregular minor notes that creep in + a low tritone swell
+      } else if (mood === 'mist') {
+        // sparse, airy high notes drifting in and out with long release
+        if (tick % 96 === 0) { tone(noteHz(SCALE[(musicSeq * 2) % SCALE.length] + 12), 2.6, 'sine', 0.035); musicSeq++; }
+        if (tick % 240 === 120) tone(noteHz(SCALE[musicSeq % SCALE.length] + 24), 3.0, 'sine', 0.022);
+      } else if (mood === 'dungeon') {
+        // slow ominous notes + a distant low toll
+        if (tick % 84 === 0) { tone(noteHz(SCALE[(musicSeq * 4) % SCALE.length]), 1.8, 'triangle', 0.045); musicSeq++; }
+        if (tick % 300 === 150) tone(noteHz(0) / 2, 3.4, 'sine', 0.05);
+      } else if (mood === 'spooky') {
+        // sparse, irregular minor notes that creep in + a low tritone swell
         const phr = tick % 168;
         if (phr === 0) { tone(noteHz(SCALE[(musicSeq * 5) % SCALE.length] + 12), 1.6, 'sine', 0.04); musicSeq++; }
-        else if (phr === 70) tone(noteHz(SCALE[(musicSeq * 2 + 1) % SCALE.length] + 12) * 1.0, 1.1, 'sine', 0.03);
-        else if (phr === 118 && (musicSeq & 1)) tone(noteHz(6) / 2, 2.2, 'sawtooth', 0.03);   // creeping tritone
+        else if (phr === 70) tone(noteHz(SCALE[(musicSeq * 2 + 1) % SCALE.length] + 12), 1.1, 'sine', 0.03);
+        else if (phr === 118 && (musicSeq & 1)) tone(noteHz(6) / 2, 2.2, 'sawtooth', 0.03);
+      } else if (mood === 'mystery') {
+        // wandering whole-tone notes at irregular spacing — unresolved, curious
+        if (tick % 60 === 0) { tone(noteHz(SCALE[(musicSeq * 3 + 1) % SCALE.length] + 12), 1.2, 'triangle', 0.035); musicSeq++; }
+        if (tick % 190 === 95) tone(noteHz(SCALE[musicSeq % SCALE.length] + 6), 1.6, 'sine', 0.03);
+      } else {   // hell — driving pulse + dissonant stabs + tritone menace
+        if (tick % 16 === 0) { tone(noteHz(0) / 2, 0.13, 'square', 0.06); musicSeq++; }
+        if (tick % 128 === 64) tone(noteHz(SCALE[musicSeq % SCALE.length] + 12), 0.5, 'sawtooth', 0.05);
+        if (tick % 96 === 48) tone(noteHz(6) / 2, 0.9, 'sawtooth', 0.045);
       }
     };
 
@@ -620,8 +640,11 @@ export const RaycastCanvas: React.FC<{
         const dx = px - e.x, dy = py - e.y;
         const dist = Math.hypot(dx, dy);
         const sees = sameZ && dist < SIGHT && lineClear(g, e.x, e.y, px, py);
-        if (sees && !e.chasing) {   // JUST spotted you → a snarl/shriek so you hear the hunt begin
-          beep(70, 0.5, 'sawtooth', 0.09); beep(104, 0.45, 'sawtooth', 0.06); beep(320, 0.3, 'square', 0.04); shake = Math.min(4, shake + 1.5);
+        if (sees && !e.chasing) {   // JUST spotted you → a LOUD guttural roar + screech so you feel the terror
+          beep(48, 0.8, 'sawtooth', 0.22); beep(51, 0.8, 'sawtooth', 0.17);          // guttural low roar (beating)
+          beep(220, 0.55, 'square', 0.13); beep(370, 0.45, 'sawtooth', 0.11);         // dissonant screech
+          beep(1046, 0.3, 'square', 0.08);                                            // shrill top spike
+          shake = Math.min(6, shake + 4);
         }
         if (sees) e.chasing = true; else if (dist > LOSE || !sameZ) e.chasing = false;   // give up if you break line of sight / change floors
         // while hunting, a rhythmic low growl that quickens as it closes in — dread you can hear

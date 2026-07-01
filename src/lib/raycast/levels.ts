@@ -169,12 +169,24 @@ export const skyOf = (level: Level3D): Sky | null => (level.sky && SKIES[level.s
 // ── Music mood ───────────────────────────────────────────────────────────────────────────────────
 // Spooky levels get spooky tunes, chill levels chill. Derived from the atmosphere/sky unless the level
 // sets `music` explicitly. The RaycastCanvas ambience synth reads this.
-export type Mood = 'chill' | 'spooky' | 'tense';
+// Each atmosphere gets its OWN theme for immersion — from a warm daytime tune, through airy mist and
+// moody dungeons, to eerie spooky worlds, cold mystery, and full hell menace. Derived from atmo/sky
+// unless the level sets `music` explicitly. The RaycastCanvas synth plays a distinct drone+melody per theme.
+export type Mood = 'day' | 'mist' | 'dungeon' | 'spooky' | 'mystery' | 'hell';
+const MOODS: Mood[] = ['day', 'mist', 'dungeon', 'spooky', 'mystery', 'hell'];
 export function moodOf(level: Level3D): Mood {
-  if (level.music === 'chill' || level.music === 'spooky' || level.music === 'tense') return level.music;
-  if (level.atmo === 'candle' || level.atmo === 'blackout' || level.sky === 'void' || level.sky === 'night') return 'spooky';
-  if (level.atmo === 'hell' || level.sky === 'lava') return 'tense';
-  return 'chill';
+  const m = level.music as string | undefined;
+  if (m && MOODS.includes(m as Mood)) return m as Mood;
+  if (m === 'tense') return 'hell';        // back-compat with old saved realms
+  if (m === 'chill') return 'day';
+  const a = level.atmo, s = level.sky;
+  if (a === 'hell' || s === 'lava') return 'hell';
+  if (a === 'candle' || a === 'blackout') return 'spooky';
+  if (s === 'void' || s === 'night') return 'mystery';
+  if (a === 'neon') return 'mystery';
+  if (a === 'fog' || s === 'mist' || s === 'overcast' || s === 'rain' || s === 'snow' || s === 'haze') return 'mist';
+  if (a === 'dungeon' || !s) return 'dungeon';   // enclosed/roofed realms feel like moody dungeons
+  return 'day';
 }
 
 // Grid helpers — cells beyond the row strings read as solid wall, so the world is always enclosed.
@@ -266,7 +278,7 @@ const STARTER: Level3D = (() => {
   cry(6, 24); cry(20, 4); cry(35, 11); cry(4, 12);
 
   return {
-    id: 'starter', name: 'The Wide', spawnDir: 0, sky: 'day', music: 'chill' as Mood,
+    id: 'starter', name: 'The Wide', spawnDir: 0, sky: 'day', music: 'day' as Mood,
     rows: g0, floors: [{ rows: g0, heights: hh }, { rows: g1 }, { rows: g2 }],
   };
 })();
