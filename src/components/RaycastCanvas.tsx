@@ -346,6 +346,28 @@ export const RaycastCanvas: React.FC<{
         o.stop(t + dur + 0.05);
       } catch { /* audio blocked */ }
     };
+    // Footstep — the same soft pitch-dropping thud + bandpassed scuff the flat rooms use, so walking here
+    // feels continuous with the rest of the world. Called once per stride from the movement code.
+    const footstep = () => {
+      if (mutedRef.current) return;
+      try {
+        if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const t = actx.currentTime;
+        const o = actx.createOscillator(); o.type = 'sine';
+        o.frequency.setValueAtTime(150 + Math.random() * 40, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.08);
+        const g = actx.createGain();
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.045, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.15);
+        const len = Math.floor(actx.sampleRate * 0.05);
+        const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+        const ns = actx.createBufferSource(); ns.buffer = buf;
+        const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+        const ng = actx.createGain(); ng.gain.value = 0.018;
+        ns.connect(bp); bp.connect(ng); ng.connect(actx.destination); ns.start(t);
+      } catch { /* audio blocked */ }
+    };
+    let stepAt = 0;   // stride counter → one footstep per ~0.9 of view-bob travelled
     // Per-theme material: root pitch, melodic scale, and overall volume. Each atmosphere sounds different.
     const ROOTS: Record<Mood, number> = { day: 261.63, mist: 220.0, dungeon: 130.81, spooky: 130.81, mystery: 174.61, hell: 98.0 };
     const SCALES: Record<Mood, number[]> = {
@@ -519,6 +541,7 @@ export const RaycastCanvas: React.FC<{
       if (nx !== px || ny !== py) {
         tryMove(nx, ny);
         bob += sp;
+        const s = Math.floor(bob / 0.9); if (s !== stepAt) { stepAt = s; footstep(); }   // one footfall per stride
       }
 
       // ease eye-height toward the floor you're standing on (so steps feel smooth, not teleporty)
@@ -631,6 +654,7 @@ export const RaycastCanvas: React.FC<{
       return true;
     };
     const updateEnemies = () => {
+      let chaseDist = Infinity;   // nearest hunting stalker → drives the escalating dread audio
       for (const e of enemies) {
         if (e.hp <= 0) continue;
         const g = e.k != null ? grids[e.k] : rows;     // stalkers hunt within their own storey's grid
@@ -647,8 +671,7 @@ export const RaycastCanvas: React.FC<{
           shake = Math.min(6, shake + 4);
         }
         if (sees) e.chasing = true; else if (dist > LOSE || !sameZ) e.chasing = false;   // give up if you break line of sight / change floors
-        // while hunting, a rhythmic low growl that quickens as it closes in — dread you can hear
-        if (e.chasing && tick % Math.max(10, Math.round(dist * 6)) === 0) beep(58 + (SIGHT - Math.min(dist, SIGHT)) * 6, 0.16, 'sawtooth', 0.05);
+        if (e.chasing && dist < chaseDist) chaseDist = dist;
 
         let tx: number, ty: number, sp: number;
         if (e.chasing) { tx = px; ty = py; sp = E_CHASE; }
@@ -670,6 +693,16 @@ export const RaycastCanvas: React.FC<{
           hp -= E_DMG * 8; e.hit = 40; shake = 4; beep(70, 0.25, 'sawtooth', 0.07);
           if (hp <= 0) { hp = 0; respawn = 70; beep(140, 0.6, 'sawtooth', 0.07); }
         }
+      }
+      // Escalating hunt dread — the closer the nearest stalker, the LOUDER, higher and faster the growl,
+      // plus a heartbeat thump and rasp when it's right on you. Ramps up so being caught feels frantic.
+      if (chaseDist < Infinity) {
+        const prox = 1 - Math.min(chaseDist, SIGHT) / SIGHT;          // 0 far → 1 breathing down your neck
+        if (tick % Math.max(6, Math.round(15 - prox * 10)) === 0) {
+          beep(50 + prox * 28, 0.18, 'sawtooth', 0.05 + prox * 0.14); // growl: louder + higher as it nears
+          if (prox > 0.45) beep(150 + prox * 260, 0.1, 'square', prox * 0.09);   // wet rasp when close
+        }
+        if (prox > 0.55 && tick % Math.max(7, Math.round(24 - prox * 15)) === 0) beep(42, 0.13, 'sine', 0.06 + prox * 0.1);   // heartbeat thump
       }
     };
 
@@ -1041,7 +1074,9 @@ export const RaycastCanvas: React.FC<{
         const groundY = horizon + ((eyeH - zfE) * F) / camY;
         const figH = sizeBase * 1.9, figW = sizeBase * 0.5;   // tall, looming figures — much scarier
         const top = groundY - figH, halfW = figW / 2;
-        const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
+        const sway = e.chasing
+          ? (Math.sin(tick * 0.34 + e.hx) * 0.08 + Math.sin(tick * 0.71) * 0.05)   // fast, erratic lurching when hunting
+          : Math.sin(tick * 0.12 + e.hx) * 0.04;
         const sx0 = Math.max(0, Math.floor(screenX - halfW)), sx1 = Math.min(W, Math.ceil(screenX + halfW));
         const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
         const fogT = 1 - 1 / (1 + camY * camY * 0.012);
@@ -1056,12 +1091,18 @@ export const RaycastCanvas: React.FC<{
             const au = Math.abs(u);
             if (au > bodyW) continue;
             let r: number, g: number, b: number;
-            if (v > 0.06 && v < 0.13 && Math.abs(au - 0.11) < 0.05) { r = eR; g = eG; b = eB; }            // glowing eyes (unfogged)
+            const eyeGl = e.chasing ? 1 + 0.45 * Math.sin(tick * 0.5) : 1;                                 // eyes pulse when hunting
+            if (v > 0.05 && v < (e.chasing ? 0.15 : 0.13) && Math.abs(au - 0.12) < (e.chasing ? 0.075 : 0.05)) { r = eR * eyeGl; g = eG; b = eB; }   // glowing eyes (bigger when chasing)
+            else if (e.chasing && v > 0.17 && v < 0.29 && au < 0.15) {                                     // gaping toothed maw — only when hunting
+              const tt = Math.floor(((u + 0.15) / 0.3) * 6) & 1, edge = v < 0.195 || v > 0.265;
+              if (tt && edge) { r = 232; g = 224; b = 208; }                                              // jagged teeth top & bottom
+              else { r = 30 + 26 * Math.sin(tick * 0.3); g = 3; b = 6; }                                   // dark red throat
+            }
             else if (e.flash > 0) { r = 255; g = 230; b = 230; }                                          // hit flash
             else {
               const rim = Math.pow(au / Math.max(0.01, bodyW), 3);   // bright silhouette edge → reads against the dark
               let R = 26 + 95 * rim, G = 22 + 40 * rim, B = 34 + 110 * rim;
-              if (e.chasing) { R += 70 * rim + 14; G -= 10 * rim; }  // angry red rim when hunting
+              if (e.chasing) { R += 120 * rim + 30; G -= 14 * rim; B -= 20 * rim; }  // seething red rim when hunting
               R *= lf; G *= lf; B *= lf;
               const m = fogMix(R, G, B, fogT * 0.45); r = m[0]; g = m[1]; b = m[2];
             }
@@ -1265,6 +1306,7 @@ export const RaycastCanvas: React.FC<{
         if (free(nx, py)) px = nx;
         if (free(px, ny)) py = ny;
         bob += sp;
+        const s = Math.floor(bob / 0.9); if (s !== stepAt) { stepAt = s; footstep(); }   // one footfall per stride
       }
 
       // gravity, stepping & landing (real Z) — Minecraft-style. You auto-step UP a one-level ledge (so
@@ -1539,7 +1581,9 @@ export const RaycastCanvas: React.FC<{
         const zfE = baseZ(e.k ?? 0);
         const groundY = horizon + ((eye - zfE) * F) / camY;
         const figH = sizeBase * 1.9, figW = sizeBase * 0.5, top = groundY - figH;   // tall, looming figures — much scarier
-        const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
+        const sway = e.chasing
+          ? (Math.sin(tick * 0.34 + e.hx) * 0.08 + Math.sin(tick * 0.71) * 0.05)   // fast, erratic lurching when hunting
+          : Math.sin(tick * 0.12 + e.hx) * 0.04;
         const sx0 = Math.max(0, Math.floor(screenX - figW / 2)), sx1 = Math.min(W, Math.ceil(screenX + figW / 2));
         const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
         const fogT = 1 - 1 / (1 + camY * camY * 0.012);
