@@ -28,14 +28,14 @@ const RADIUS = 0.22;               // player collision radius (tiles)
 const LAVA_DPS = 0.55;             // HP drained per tick standing in lava
 const MAX_HP = 100;
 const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
-const EYE_BASE = 0.62;             // eye height above the floor you stand on — taller player = you feel bigger,
-                                   // walls read as human-scale (chest/head high) instead of towering over you
+const EYE_BASE = 0.5;              // eye height above the floor you stand on
 // FOV / zoom. The camera focal length is RES_H, giving a narrow ~53° lens that makes every block look
 // huge and right in your face. FOV widens the lens: apparent size of EVERYTHING (walls, blocks, floor
 // cells) scales by 1/FOV, so 1.7 ≈ "half the size". The raycaster is fisheye-corrected (walls use
 // perpendicular distance), so a wide lens just reveals more world — it doesn't bend the walls. This is
-// the real "make blocks smaller" knob; dial it up for smaller/further, down for bigger/closer.
-const FOV = 2.0;                   // 2.0 = blocks render at HALF their size/volume in every dimension
+// FOV = 1.0 is the original lens (no change). Widening it (>1) zooms out but at wide angles fisheyes the
+// view, so it is NOT the way to shrink blocks — kept at 1.0. Block size is set by the world geometry below.
+const FOV = 1.0;
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
 const GRAV = 0.012;              // stacked realms: gravity pull per tick
