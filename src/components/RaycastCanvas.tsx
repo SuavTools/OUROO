@@ -817,7 +817,7 @@ export const RaycastCanvas: React.FC<{
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
                 else if (curCh === 'g' || curCh === 'b' || curCh === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
                 else if (curCh === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; fr = 150 * chk * grout; fg = 150 * chk * grout; fb = 162 * chk * grout; }
-                else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.94; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
+                else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.975; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
                 let r: number, g: number, bl: number;
                 if (emis) { r = fr; g = fg; bl = fb; } else { [r, g, bl] = fogMix(fr, fg, fb, fogTd(d)); const lf = lightAt(d); r *= lf; g *= lf; bl *= lf; }
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
@@ -849,11 +849,13 @@ export const RaycastCanvas: React.FC<{
               const wxv = side === 0 ? py + dExit * rdy : px + dExit * rdx;
               const wxf = wxv - Math.floor(wxv);
               const wt = Math.max(yCeil, Math.floor(wTopF)), wb = Math.min(yFloor, Math.ceil(wBotF));
+              const df = Math.max(0, 1 - dExit * 0.16);   // fade the brick detail out with distance → no shimmer
               for (let y = wt; y < wb; y++) {
                 const ty = (y - wTopF) / span;
                 const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
-                const mortar = (ty * 6) % 1 < 0.09 || (((wxf + off) % 1) * 3) % 1 < 0.06 ? 0.55 : 1;
-                const shade = sd * mortar * (0.8 + 0.2 * (1 - ty));
+                const mortarRaw = (ty * 6) % 1 < 0.07 || (((wxf + off) % 1) * 3) % 1 < 0.045 ? 0.72 : 1;
+                const mortar = 1 - (1 - mortarRaw) * df;     // softer mortar, faded far away
+                const shade = sd * mortar * (0.84 + 0.16 * (1 - ty));
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
                 depth[y * W + x] = dExit;
@@ -1301,7 +1303,7 @@ export const RaycastCanvas: React.FC<{
         if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
         if (c === 'g' || c === 'b' || c === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; return [46 * chk, 120 * chk, 48 * chk, false]; }
         if (c === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; return [150 * chk * grout, 150 * chk * grout, 162 * chk * grout, false]; }
-        const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.95; return [pal.floor[0] * chk, pal.floor[1] * chk, pal.floor[2] * chk, false];
+        const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.975; return [pal.floor[0] * chk, pal.floor[1] * chk, pal.floor[2] * chk, false];
       };
 
       depth.fill(1e9);
@@ -1363,11 +1365,13 @@ export const RaycastCanvas: React.FC<{
               const wxv = entrySide === 0 ? py + dEnter * rdy : px + dEnter * rdx, wxf = wxv - Math.floor(wxv);
               const sd = (entrySide === 1 ? 0.7 : 1) * lightAt(dEnter), ft = fogTd(dEnter);
               const wt = Math.max(0, Math.floor(wTopF)), wb = Math.min(H, Math.ceil(wBotF));
+              const df = Math.max(0, 1 - dEnter * 0.16);   // fade brick detail with distance → no shimmer
               for (let y = wt; y < wb; y++) {
                 if (dEnter >= depth[y * W + x]) continue;
                 const ty = (y - wTopF) / span; const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
-                const mortar = (ty * 6) % 1 < 0.09 || (((wxf + off) % 1) * 3) % 1 < 0.06 ? 0.55 : 1;
-                const shade = sd * mortar * (0.8 + 0.2 * (1 - ty));
+                const mortarRaw = (ty * 6) % 1 < 0.07 || (((wxf + off) % 1) * 3) % 1 < 0.045 ? 0.72 : 1;
+                const mortar = 1 - (1 - mortarRaw) * df;
+                const shade = sd * mortar * (0.84 + 0.16 * (1 - ty));
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter;
               }

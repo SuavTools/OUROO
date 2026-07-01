@@ -364,15 +364,18 @@ export async function deleteRealmRemote(id: string): Promise<boolean> {
   return !error;
 }
 
+// A fresh realm is a 2-BLOCK-TALL room by default (two stacked floors of border wall), so you spawn into
+// the Minecraft-tall view straight away and the walls actually enclose you. Interior is open to the sky.
 export function blankLevel(w = 12, h = 12): Level3D {
-  const rows: string[] = [];
+  const g0: string[] = [], g1: string[] = [];
   for (let y = 0; y < h; y++) {
-    let row = '';
+    let r0 = '', r1 = '';
     for (let x = 0; x < w; x++) {
       const edge = x === 0 || y === 0 || x === w - 1 || y === h - 1;
-      row += edge ? '#' : (x === 1 && y === 1 ? 'S' : '.');
+      r0 += edge ? '#' : (x === 1 && y === 1 ? 'S' : '.');
+      r1 += edge ? '#' : ' ';   // second course of wall → 2-block-tall room; air (open sky) inside
     }
-    rows.push(row);
+    g0.push(r0); g1.push(r1);
   }
-  return { id: newLevelId(), name: 'Untitled Realm', rows, spawnDir: 0 };
+  return { id: newLevelId(), name: 'Untitled Realm', rows: g0, floors: [{ rows: g0 }, { rows: g1 }], spawnDir: 0, sky: 'day' };
 }
