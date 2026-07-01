@@ -15,6 +15,8 @@
 //   'L'                  lava  (walkable, but drains HP while you stand in it)
 //   '~'                  pit   (walkable onto — you fall and die)
 //   'C'                  crystal pickup (walkable; grab for a small reward)
+//   'H'                  chest (walkable; step onto it to OPEN → loot + reward. If a realm has any
+//                        chests, the exit stays LOCKED until every chest is opened — a room condition)
 //   'O'                  tunnel (walkable; step on to warp to the NEXT tunnel cell — two make an A↔B
 //                        pair, three+ form a loop you cycle through in reading order)
 //   '>'                  stairs UP   (walkable; step on to climb to the storey above, same x,y)
@@ -68,6 +70,10 @@ export const MONSTER_CHAR = 'M';
 
 // 'O' cells are tunnels: stepping onto one warps you to the next tunnel cell (reading order, wrapping).
 export const TUNNEL_CHAR = 'O';
+
+// 'H' cells are chests: step onto one to open it (loot + reward). If a realm has any chests, its exit
+// stays locked until they are ALL opened — the room-clear condition.
+export const CHEST_CHAR = 'H';
 
 // Inter-storey stairs: step on '>' to climb a floor, '<' to descend — you land at the same x,y.
 export const STAIR_UP = '>';

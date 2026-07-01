@@ -33,6 +33,7 @@ const BRUSHES: Brush[] = [
   { ch: 'L', label: 'Lava', color: '#ff5a1e' },
   { ch: '~', label: 'Pit', color: '#050308' },
   { ch: 'C', label: 'Crystal', color: '#9beaff' },
+  { ch: 'H', label: 'Chest', color: '#c8963c' },
   { ch: 'O', label: 'Tunnel', color: '#b35cff' },
   { ch: '>', label: 'Stairs ↑', color: '#9be07a' },
   { ch: '<', label: 'Stairs ↓', color: '#3a4a66' },
@@ -147,7 +148,7 @@ const SideElevation: React.FC<{
 // One canvas for the whole map instead of one <button> per cell — so a 128×128 realm (16k cells) paints
 // smoothly instead of choking the DOM. Draws cell colours, height shading, special-cell glyphs, the
 // ghost of the floor below (for aligning overhangs), the live rectangle preview, and the slice line.
-const GLYPH: Record<string, string> = { C: '◆', S: '★', E: '⎋', M: '☠', T: '♣', b: '♧', f: '✿', r: '●', l: '☀', O: '◎', '>': '▲', '<': '▼' };
+const GLYPH: Record<string, string> = { C: '◆', H: '▤', S: '★', E: '⎋', M: '☠', T: '♣', b: '♧', f: '✿', r: '●', l: '☀', O: '◎', '>': '▲', '<': '▼' };
 const GridCanvas: React.FC<{
   rows: string[]; heights?: string[]; belowRows?: string[]; npcs?: { x: number; y: number }[];
   w: number; h: number; cellPx: number;

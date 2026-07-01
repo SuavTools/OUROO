@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, getRealmRemote,
+  STAIR_UP, STAIR_DOWN, CHEST_CHAR, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -89,7 +89,7 @@ const WALL_TEX: Record<string, Tex> = { '#': TEXES.stone, '1': TEXES.brick, '2':
 const wallTexOf = (c: string) => WALL_TEX[c] ?? TEXES.stone;
 const lodOf = (d: number) => (d < 1 ? 0 : Math.log2(d) * 0.9);   // farther = higher mip = no shimmer
 
-type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' | 'bush' | 'flower' | 'rock' | 'lamp'; key?: string };
+type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'chest' | 'tree' | 'bush' | 'flower' | 'rock' | 'lamp'; key?: string };
 
 // ── Animated molten lava (DOOM-style animated flat). Layered, domain-warped flow → dark crust veins,
 // glowing molten cells and hot yellow-white cores that churn over time. Cheap enough for per-pixel
@@ -109,17 +109,19 @@ const moltenLava = (fx: number, fy: number, t: number): [number, number, number]
 // ── Portal energy field, in cell-local space (fx,fy are world coords; we take the fractional cell
 // position). A rotating spiral + concentric rings that fade to nothing at the tile edge → a swirling
 // gateway instead of a flat pad. Returns [r,g,b,alpha] (alpha 0 = show floor beneath).
-const portalFloor = (fx: number, fy: number, t: number): [number, number, number, number] => {
+const portalFloor = (fx: number, fy: number, t: number, locked = false): [number, number, number, number] => {
   const cx = fx - Math.floor(fx) - 0.5, cy = fy - Math.floor(fy) - 0.5;
   const rad = Math.hypot(cx, cy);
   if (rad > 0.48) return [0, 0, 0, 0];                         // outside the ring → floor shows through
   const ang = Math.atan2(cy, cx);
-  const spiral = 0.5 + 0.5 * Math.sin(ang * 3 + rad * 22 - t * 0.16);   // 3-arm swirl
-  const rings = 0.5 + 0.5 * Math.sin(rad * 30 - t * 0.22);
+  const spiral = 0.5 + 0.5 * Math.sin(ang * 3 + rad * 22 - t * (locked ? 0.05 : 0.16));   // 3-arm swirl (sluggish when locked)
+  const rings = 0.5 + 0.5 * Math.sin(rad * 30 - t * (locked ? 0.06 : 0.22));
   const edge = Math.min(1, (0.48 - rad) * 6);                  // soft outer falloff
   const core = Math.max(0, 1 - rad * 3.2);                     // bright hot centre
   const e = (0.35 + 0.65 * spiral * rings) * edge;
-  return [30 * e + 120 * core, 200 * e + 180 * core, 250 * e + 120 * core, edge];
+  return locked
+    ? [200 * e + 150 * core, 60 * e + 40 * core, 30 * e + 20 * core, edge]      // locked → smouldering red
+    : [30 * e + 120 * core, 200 * e + 180 * core, 250 * e + 120 * core, edge];  // open  → teal-white vortex
 };
 
 export const RaycastCanvas: React.FC<{
@@ -149,7 +151,7 @@ export const RaycastCanvas: React.FC<{
   }, [levelId, levelProp]);
 
   // HUD mirror (kept tiny — only what the React overlay needs)
-  const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false, breath: 100, submerged: false });
+  const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false, breath: 100, submerged: false, chests: 0, chestTotal: 0 });
   const onExitRef = useRef(onExit); useEffect(() => { onExitRef.current = onExit; });
   const onRewardRef = useRef(onReward); useEffect(() => { onRewardRef.current = onReward; });
   const attackFnRef = useRef<(() => void) | null>(null);   // mobile FIRE button → the in-effect attack
@@ -179,6 +181,12 @@ export const RaycastCanvas: React.FC<{
     // Crystals are a whole-realm goal; remember grabbed ones by floor+tile so they stay gone across storeys.
     const totalCrystals = floors.reduce((n, f) => n + f.rows.reduce((m, r) => m + (r.match(/C/g)?.length ?? 0), 0), 0);
     const grabbed = new Set<string>();    // "fi:x:y" keys of crystals already collected
+
+    // Chests are a room-clear condition: open every one to UNLOCK the exit. Tracked by floor+tile like
+    // crystals so they stay open across storeys. If a realm has no chests, the exit is unlocked as before.
+    const totalChests = floors.reduce((n, f) => n + f.rows.reduce((m, r) => m + (r.match(/H/g)?.length ?? 0), 0), 0);
+    const opened = new Set<string>();     // "fi:x:y" keys of chests already opened
+    const exitLocked = () => totalChests > 0 && opened.size < totalChests;
 
     type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number; k?: number };
 
@@ -210,6 +218,7 @@ export const RaycastCanvas: React.FC<{
         for (let x = 0; x < rows[y].length; x++) {
           const c = rows[y][x];
           if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
+          else if (c === CHEST_CHAR) sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'chest', key: `${fi}:${x}:${y}` });
           else if (c === 'E') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit' });
           else if (c === 'T') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree' });
           else if (c === 'b') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'bush' });
@@ -280,6 +289,7 @@ export const RaycastCanvas: React.FC<{
         for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
           const c = g[y][x];
           if (c === 'C') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${k}:${x}:${y}`, k });
+          else if (c === CHEST_CHAR) allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'chest', key: `${k}:${x}:${y}`, k });
           else if (c === 'E') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'exit', k });
           else if (c === 'T') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'tree', k });
           else if (c === 'b') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'bush', k });
@@ -373,6 +383,23 @@ export const RaycastCanvas: React.FC<{
         o.stop(t + dur);
       } catch { /* audio blocked */ }
     };
+    // Chest opening — a wooden latch/creak then a warm rising loot chime (reward, not horror).
+    const chestOpen = () => {
+      if (mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t = actx!.currentTime;
+        const len = Math.floor(actx!.sampleRate * 0.12);   // latch: short filtered noise knock
+        const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+        const ns = actx!.createBufferSource(); ns.buffer = buf;
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 2;
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.16, t); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        ns.connect(bp); bp.connect(ng); ng.connect(dest); ns.start(t);
+        [523, 659, 784, 1047].forEach(f => beep(f, 0.24, 'triangle', 0.045));   // warm loot chord (Cmaj7)
+      } catch { /* audio blocked */ }
+    };
+    // Denied — a dull low buzz when you touch a locked exit (chests still to open).
+    const denied = () => { beep(130, 0.14, 'square', 0.05); beep(98, 0.18, 'square', 0.04); };
     // Reusable soft-clip fuzz curve → the electric, gritty, distorted edge. Higher amount = nastier.
     const shaper = (amount: number) => {
       const n = 1024, curve = new Float32Array(n), k = amount;
@@ -730,12 +757,12 @@ export const RaycastCanvas: React.FC<{
 
     const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; panic = 0; stopHunt(); };
 
-    let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1;
+    let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1, hudCh = -1;
     const pushHud = () => {
-      const c = grabbed.size, br = Math.round(breath);
-      if (hp !== hudHp || c !== hudCry || (respawn > 0) !== hudDead || br !== hudBr) {
-        hudHp = hp; hudCry = c; hudDead = respawn > 0; hudBr = br;
-        setHud({ hp: Math.max(0, Math.round(hp)), crystals: c, total: totalCrystals, dead: respawn > 0, exited, breath: br, submerged });
+      const c = grabbed.size, br = Math.round(breath), oc = opened.size;
+      if (hp !== hudHp || c !== hudCry || (respawn > 0) !== hudDead || br !== hudBr || oc !== hudCh) {
+        hudHp = hp; hudCry = c; hudDead = respawn > 0; hudBr = br; hudCh = oc;
+        setHud({ hp: Math.max(0, Math.round(hp)), crystals: c, total: totalCrystals, dead: respawn > 0, exited, breath: br, submerged, chests: oc, chestTotal: totalChests });
       }
     };
 
@@ -837,8 +864,17 @@ export const RaycastCanvas: React.FC<{
         }
       }
 
-      // exit
-      if (here === 'E') { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+      // chest opening — step onto a chest to open it (loot + reward); opening all unlocks the exit
+      for (const s of sprites) {
+        if (s.kind !== 'chest' || !s.key || opened.has(s.key)) continue;
+        if (Math.abs(s.x - px) < 0.5 && Math.abs(s.y - py) < 0.5) { opened.add(s.key); onRewardRef.current?.(10); chestOpen(); }
+      }
+
+      // exit — locked until every chest is opened
+      if (here === 'E') {
+        if (exitLocked()) { if (tick % 22 === 0) denied(); }
+        else { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+      }
 
       updateEnemies();
       musicStep();
@@ -1151,7 +1187,7 @@ export const RaycastCanvas: React.FC<{
                 let fr: number, fg: number, fb: number, emis = false;
                 if (curCh === 'L') { [fr, fg, fb] = moltenLava(fx, fy, tick); emis = true; }
                 else if (curCh === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emis = true; }
-                else if (curCh === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick); const bs = sampleTex(TEXES.dirt, fx, fy, lodOf(d)); fr = pr + pal.floor[0] * bs * (1 - pa); fg = pg + pal.floor[1] * bs * (1 - pa); fb = pb + pal.floor[2] * bs * (1 - pa); emis = true; }
+                else if (curCh === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick, exitLocked()); const bs = sampleTex(TEXES.dirt, fx, fy, lodOf(d)); fr = pr + pal.floor[0] * bs * (1 - pa); fg = pg + pal.floor[1] * bs * (1 - pa); fb = pb + pal.floor[2] * bs * (1 - pa); emis = true; }
                 else if (curCh === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emis = true; }
                 else if (curCh === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; fr = 180 * st; fg = 200 * st; fb = 150 * st; emis = true; }
                 else if (curCh === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; fr = 40 * st; fg = 44 * st; fb = 60 * st; emis = true; }
@@ -1242,7 +1278,7 @@ export const RaycastCanvas: React.FC<{
         const groundY = horizon + ((eyeH2 - zfS) * F) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
         // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
-        const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : 0.9;
+        const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : kind === 'chest' ? 0.85 : 0.9;
         const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * szMul);
         const half = sz >> 1;
         const isGround = kind === 'tree' || kind === 'bush' || kind === 'flower' || kind === 'rock' || kind === 'lamp';
@@ -1282,12 +1318,23 @@ export const RaycastCanvas: React.FC<{
               if (Math.abs(u) < 0.05 && v > -0.18) { on = true; lit = true; r = 52; g = 50; b = 60; }                   // post
               else { const cu = u, cv = v + 0.34; const dd = Math.sqrt(cu * cu + cv * cv);
                 if (dd < 0.17) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.12); r = 255 * gl; g = 222 * gl; b = 120 * gl; } }   // emissive orb
+            } else if (kind === 'chest') {                 // wooden chest — glowing lock when closed, treasure-glow when open
+              const isOpen = !!(s.key && opened.has(s.key));
+              if (Math.abs(u) < 0.32 && v > 0.0 && v < 0.46) { on = true; lit = true; const band = (Math.abs(u) > 0.27 || Math.abs(u) < 0.02) ? 0.6 : 1; const sh = 0.65 + 0.35 * (1 - v / 0.46); r = 118 * sh * band; g = 72 * sh * band; b = 32 * sh * band; }   // box body + iron bands
+              if (isOpen) {
+                if (Math.abs(u) < 0.3 && v > -0.36 && v < -0.08) { on = true; lit = true; r = 55; g = 33; b = 15; }                                                          // lid flung up
+                if (Math.abs(u) < 0.28 && v >= -0.08 && v < 0.06) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.2 + u * 9); r = 255 * gl; g = 220 * gl; b = 120 * gl; }   // treasure glow
+              } else {
+                if (Math.abs(u) < 0.34 && v > -0.16 && v <= 0.02) { on = true; lit = true; const sh = 0.72; r = 100 * sh; g = 60 * sh; b = 28 * sh; }                          // closed lid
+                if (Math.abs(u) < 0.055 && v > 0.0 && v < 0.13) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.14); r = 255 * gl; g = 200 * gl; b = 80 * gl; }            // glowing lock
+              }
             } else {                                       // exit — a swirling vertical portal of energy
               const pu = u / 0.34, pv = (v + 0.05) / 0.55; const rr2 = pu * pu + pv * pv;
               if (rr2 < 1) { on = true;
                 const ang = Math.atan2(pv, pu); const swirl = 0.5 + 0.5 * Math.sin(ang * 4 + rr2 * 8 - tick * 0.3 + v * 6);
                 const rim = Math.max(0, 1 - Math.abs(1 - rr2) * 6); const core = (1 - rr2) * (1 - rr2); const gl = 0.35 + 0.65 * swirl;
-                r = 40 * gl + 180 * rim + 130 * core; g = 210 * gl + 120 * rim + 150 * core; b = 255 * gl + 200 * rim + 120 * core; }
+                if (exitLocked()) { r = 200 * gl + 180 * rim + 150 * core; g = 55 * gl + 60 * rim + 40 * core; b = 30 * gl + 40 * rim + 20 * core; }   // locked → smouldering red
+                else { r = 40 * gl + 180 * rim + 130 * core; g = 210 * gl + 120 * rim + 150 * core; b = 255 * gl + 200 * rim + 120 * core; } }
             }
             if (!on) continue;
             if (lit) { r *= lfTree; g *= lfTree; b *= lfTree; }
@@ -1622,7 +1669,15 @@ export const RaycastCanvas: React.FC<{
           grabbed.add(s.key); onRewardRef.current?.(5); beep(880, 0.12, 'triangle', 0.05); beep(1320, 0.1, 'triangle', 0.04);
         }
       }
-      if (here === 'E') { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+      // chest opening — same-storey step-on; opening every chest unlocks the exit
+      for (const s of allSprites) {
+        if (s.kind !== 'chest' || !s.key || opened.has(s.key)) continue;
+        if (Math.abs(s.x - px) < 0.5 && Math.abs(s.y - py) < 0.5 && Math.abs(baseZ(s.k) - pz) < 0.7) { opened.add(s.key); onRewardRef.current?.(10); chestOpen(); }
+      }
+      if (here === 'E') {
+        if (exitLocked()) { if (tick % 22 === 0) denied(); }
+        else { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
+      }
 
       updateEnemies();
       musicStep();
@@ -1653,7 +1708,7 @@ export const RaycastCanvas: React.FC<{
         if (c === 'L') { const [r, g, b] = moltenLava(fx, fy, tick); return [r, g, b, true]; }
         if (c === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); return [20 * sh, 90 * sh, 170 * sh, true]; }
         if (c === '~') return [4, 3, 8, true];
-        if (c === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick); const bs = sampleTex(TEXES.dirt, fx, fy, lod); return [pr + pal.floor[0] * bs * (1 - pa), pg + pal.floor[1] * bs * (1 - pa), pb + pal.floor[2] * bs * (1 - pa), true]; }
+        if (c === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick, exitLocked()); const bs = sampleTex(TEXES.dirt, fx, fy, lod); return [pr + pal.floor[0] * bs * (1 - pa), pg + pal.floor[1] * bs * (1 - pa), pb + pal.floor[2] * bs * (1 - pa), true]; }
         if (c === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); return [150 * sw + 40, 40 * sw, 210 * sw + 40, true]; }
         if (c === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; return [180 * st, 200 * st, 150 * st, true]; }
         if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
@@ -1779,7 +1834,7 @@ export const RaycastCanvas: React.FC<{
         const zf = baseZ(s.k);
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
         // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
-        const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : 0.9;
+        const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : kind === 'chest' ? 0.85 : 0.9;
         const sz = Math.floor(sizeBase * szMul), half = sz >> 1;
         const isGround = kind !== 'crystal';
         const vCenter = isGround ? Math.round(groundY) - half : Math.round(groundY) - Math.floor(sizeBase * 0.5) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04);
@@ -1800,10 +1855,22 @@ export const RaycastCanvas: React.FC<{
             else if (kind === 'flower') { if (Math.abs(u) < 0.04 && v > -0.04) { on = true; lit = true; r = 40; g = 112; b = 52; } else { const cu = u, cv = v + 0.28; const dd = Math.sqrt(cu * cu + cv * cv); if (dd < 0.2) { on = true; lit = true; if (dd < 0.06) { r = 250; g = 220; b = 70; } else { const P = [[235, 80, 90], [235, 150, 60], [210, 90, 220], [90, 150, 240], [240, 240, 250]][hue]; r = P[0]; g = P[1]; b = P[2]; } } } }
             else if (kind === 'rock') { const cu = u, cv = v - 0.2; const dd = Math.sqrt(cu * cu + cv * cv * 1.3); if (dd < 0.44) { on = true; lit = true; const sh = 0.55 + 0.45 * (1 - dd / 0.44) + 0.07 * Math.sin(u * 16); const g0 = 120 * sh; r = g0; g = g0 + 4; b = g0 + 14; } }
             else if (kind === 'lamp') { if (Math.abs(u) < 0.05 && v > -0.18) { on = true; lit = true; r = 52; g = 50; b = 60; } else { const cu = u, cv = v + 0.34; const dd = Math.sqrt(cu * cu + cv * cv); if (dd < 0.17) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.12); r = 255 * gl; g = 222 * gl; b = 120 * gl; } } }
+            else if (kind === 'chest') {                   // wooden chest — glowing lock when closed, treasure-glow when open
+              const isOpen = !!(s.key && opened.has(s.key));
+              if (Math.abs(u) < 0.32 && v > 0.0 && v < 0.46) { on = true; lit = true; const band = (Math.abs(u) > 0.27 || Math.abs(u) < 0.02) ? 0.6 : 1; const sh = 0.65 + 0.35 * (1 - v / 0.46); r = 118 * sh * band; g = 72 * sh * band; b = 32 * sh * band; }
+              if (isOpen) {
+                if (Math.abs(u) < 0.3 && v > -0.36 && v < -0.08) { on = true; lit = true; r = 55; g = 33; b = 15; }
+                if (Math.abs(u) < 0.28 && v >= -0.08 && v < 0.06) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.2 + u * 9); r = 255 * gl; g = 220 * gl; b = 120 * gl; }
+              } else {
+                if (Math.abs(u) < 0.34 && v > -0.16 && v <= 0.02) { on = true; lit = true; const sh = 0.72; r = 100 * sh; g = 60 * sh; b = 28 * sh; }
+                if (Math.abs(u) < 0.055 && v > 0.0 && v < 0.13) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.14); r = 255 * gl; g = 200 * gl; b = 80 * gl; }
+              }
+            }
             else { const pu = u / 0.34, pv = (v + 0.05) / 0.55; const rr2 = pu * pu + pv * pv;
               if (rr2 < 1) { on = true; const ang = Math.atan2(pv, pu); const swirl = 0.5 + 0.5 * Math.sin(ang * 4 + rr2 * 8 - tick * 0.3 + v * 6);
                 const rim = Math.max(0, 1 - Math.abs(1 - rr2) * 6); const core = (1 - rr2) * (1 - rr2); const gl = 0.35 + 0.65 * swirl;
-                r = 40 * gl + 180 * rim + 130 * core; g = 210 * gl + 120 * rim + 150 * core; b = 255 * gl + 200 * rim + 120 * core; } }
+                if (exitLocked()) { r = 200 * gl + 180 * rim + 150 * core; g = 55 * gl + 60 * rim + 40 * core; b = 30 * gl + 40 * rim + 20 * core; }   // locked → smouldering red
+                else { r = 40 * gl + 180 * rim + 130 * core; g = 210 * gl + 120 * rim + 150 * core; b = 255 * gl + 200 * rim + 120 * core; } } }
             if (!on) continue;
             if (lit) { r *= lfTree; g *= lfTree; b *= lfTree; }
             const [rr, gg, bb] = fogMix(r, g, b, fogT * 0.6);
@@ -1989,6 +2056,11 @@ export const RaycastCanvas: React.FC<{
           <span className="font-mono text-[10px] text-white/70">{hud.hp}</span>
         </div>
         {hud.total > 0 && <div className="font-mono text-[11px] text-[#9beaff]">◆ {hud.crystals}/{hud.total}</div>}
+        {hud.chestTotal > 0 && (
+          <div className={`font-mono text-[11px] ${hud.chests >= hud.chestTotal ? 'text-[#7fe38f]' : 'text-[#ffb24d]'}`}>
+            {hud.chests >= hud.chestTotal ? '⚿ exit open' : `▤ ${hud.chests}/${hud.chestTotal} — exit locked`}
+          </div>
+        )}
         {(hud.submerged || hud.breath < 100) && (
           <div className="flex items-center gap-2">
             <div className="w-28 h-2.5 border border-[#4fb3ff]/50 bg-black/60">
