@@ -21,8 +21,8 @@ import { drawIconSpec } from '@/lib/icons';
 
 const STEP = 1000 / 60;            // fixed sim tick
 const RES_H = 240;                 // internal vertical resolution (RES_W tracks aspect for square pixels)
-const MOVE = 0.045;                // tiles per tick (walk)
-const RUN = 0.085;                 // tiles per tick (run)
+const MOVE = 0.055;                // tiles per tick (walk) — a touch snappier
+const RUN = 0.11;                  // tiles per tick (run)
 const TURN = 0.045;                // radians per tick (keyboard/stick turn)
 const RADIUS = 0.3;                // player collision radius (tiles) — Minecraft-ish: a block is ~1.7x your width
 const LAVA_DPS = 0.55;             // HP drained per tick standing in lava
@@ -39,7 +39,8 @@ const EYE_BASE = 1.55;             // eye height — MINECRAFT PROPORTION. A blo
 // FOV = 1.0 is the original lens (no change). Widening it (>1) zooms out but at wide angles fisheyes the
 // view, so it is NOT the way to shrink blocks — kept at 1.0. Block size is set by the world geometry below.
 const FOV = 1.0;
-const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
+const CEIL_GAP = 2.2;             // ceiling/wall height above the floor — ~2 blocks, so a single-floor room is
+                                 // 2 levels tall by default and the tall player can't see over its walls
 const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
 const GRAV = 0.012;              // stacked realms: gravity pull per tick
 
@@ -122,9 +123,11 @@ export const RaycastCanvas: React.FC<{
       const fl = floors[fi];
       rows = fl.rows;
       fHeights = fl.heights;
-      heightMap = hasHeightMap(fl);
+      // Always use the height-aware renderer for single-floor realms (not just ones with raised terrain),
+      // so the tall-player view is CONSISTENT everywhere — a plain flat room looks the same as a built one.
+      heightMap = true;
       maxLvl = 0;
-      if (heightMap) for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
+      for (let y = 0; y < rows.length; y++) for (let x = 0; x < rows[y].length; x++) maxLvl = Math.max(maxLvl, floorLvl(x, y));
       CEIL_Z = maxLvl * STEP_UNIT + CEIL_GAP;          // flat ceiling above the tallest platform on this floor
       sprites = []; tunnels = []; enemies = [];
       for (let y = 0; y < rows.length; y++)
@@ -1310,7 +1313,9 @@ export const RaycastCanvas: React.FC<{
         const y0 = Math.max(0, Math.min(ya, yb)), y1 = Math.min(H, Math.max(ya, yb));
         for (let y = y0; y < y1; y++) {
           const pp = y - horizon; if (pp <= 0) continue;            // floor is below the horizon
-          const d = ((eye - z) * F) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
+          // NOTE: no distance-band cull here — the y-range already bounds this cell's screen span, and a
+          // hard [dA,dB] reject skipped boundary pixels, opening the flickering 1px seams. Depth-test only.
+          const d = ((eye - z) * F) / pp;
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
           let R: number, G: number, B: number;
@@ -1325,7 +1330,7 @@ export const RaycastCanvas: React.FC<{
         const y0 = Math.max(0, Math.min(ya, yb)), y1 = Math.min(H, Math.max(ya, yb));
         for (let y = y0; y < y1; y++) {
           const pp = y - horizon; if (pp >= 0) continue;            // underside is above the horizon
-          const d = ((eye - z) * F) / pp; if (d < dA - 0.002 || d > dB + 0.002) continue;
+          const d = ((eye - z) * F) / pp;                           // no band cull (see drawHoriz) — closes seams
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
           const [r, g, b] = floorColor(c, fx, fy); const ft = fogTd(d), lf = lightAt(d);
