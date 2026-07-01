@@ -44,6 +44,51 @@ const CEIL_GAP = 2.2;             // ceiling/wall height above the floor — ~2 
 const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
 const GRAV = 0.012;              // stacked realms: gravity pull per tick
 
+// ── Procedural block textures ───────────────────────────────────────────────────────────────────
+// Everything here stays GENERATED — no image assets. Each texture is a small tileable BRIGHTNESS pattern
+// (multipliers ~0.5–1.15) that gets tinted by the palette colour at draw time, so atmospheres still
+// recolour every surface. Each is mip-chained (repeatedly averaged down) so distant surfaces sample a
+// blurred level and DON'T shimmer/alias. This is the "real textures" win while keeping the procedural soul.
+type Tex = { mips: Float32Array[]; sizes: number[] };
+const TX = 16;
+const thash = (x: number, y: number, s: number) => {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s, 1442695051)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+};
+const buildTex = (fn: (x: number, y: number) => number): Tex => {
+  const base = new Float32Array(TX * TX);
+  for (let y = 0; y < TX; y++) for (let x = 0; x < TX; x++) base[y * TX + x] = fn(x, y);
+  const mips = [base], sizes = [TX];
+  let cur = base, sz = TX;
+  while (sz > 1) {
+    const n = sz >> 1, nx = new Float32Array(n * n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++)
+      nx[y * n + x] = (cur[2 * y * sz + 2 * x] + cur[2 * y * sz + 2 * x + 1] + cur[(2 * y + 1) * sz + 2 * x] + cur[(2 * y + 1) * sz + 2 * x + 1]) / 4;
+    mips.push(nx); sizes.push(n); cur = nx; sz = n;
+  }
+  return { mips, sizes };
+};
+const sampleTex = (t: Tex, u: number, v: number, lod: number): number => {
+  const l = lod < 0 ? 0 : lod > t.mips.length - 1 ? t.mips.length - 1 : lod | 0;
+  const sz = t.sizes[l];
+  const x = (((u % 1) + 1) % 1) * sz | 0, y = (((v % 1) + 1) % 1) * sz | 0;
+  return t.mips[l][y * sz + x];
+};
+const TEXES = {
+  stone: buildTex((x, y) => 0.84 + thash(x, y, 1) * 0.22 - (thash(x >> 2, y >> 2, 7) > 0.86 ? 0.28 : 0)),
+  brick: buildTex((x, y) => { const row = (y / 5) | 0, off = (row & 1) ? 3 : 0, bx = (x + off) % 6; return (y % 5 === 4 || bx === 5) ? 0.55 : 0.88 + thash(((x + off) / 6) | 0, row, 3) * 0.22; }),
+  cobble: buildTex((x, y) => { const cx = (x + (((y / 4) | 0) & 1) * 2) % 4, cy = y % 4; return (cx === 3 || cy === 3) ? 0.5 : 0.8 + thash(x >> 2, y >> 2, 5) * 0.3; }),
+  moss: buildTex((x, y) => { const s = 0.82 + thash(x, y, 2) * 0.22; return thash(x >> 1, y >> 1, 9) > 0.62 ? s * 0.8 : s; }),
+  sand: buildTex((x, y) => 0.9 + thash(x, y, 4) * 0.14 + Math.sin(y * 1.3) * 0.03),
+  grass: buildTex((x, y) => 0.74 + thash(x, y, 6) * 0.34 - (thash(x, y >> 1, 8) > 0.72 ? 0.16 : 0)),
+  dirt: buildTex((x, y) => 0.8 + thash(x, y, 11) * 0.22 - (thash(x >> 2, y >> 1, 12) > 0.82 ? 0.18 : 0)),
+  pave: buildTex((x, y) => ((x & 7) === 0 || (y & 7) === 0) ? 0.6 : 0.92 + thash(x >> 3, y >> 3, 13) * 0.12),
+};
+const WALL_TEX: Record<string, Tex> = { '#': TEXES.stone, '1': TEXES.brick, '2': TEXES.cobble, '3': TEXES.moss, '4': TEXES.sand };
+const wallTexOf = (c: string) => WALL_TEX[c] ?? TEXES.stone;
+const lodOf = (d: number) => (d < 1 ? 0 : Math.log2(d) * 0.9);   // farther = higher mip = no shimmer
+
 type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' | 'bush' | 'flower' | 'rock' | 'lamp'; key?: string };
 
 export const RaycastCanvas: React.FC<{
@@ -815,9 +860,9 @@ export const RaycastCanvas: React.FC<{
                 else if (curCh === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; fr = 180 * st; fg = 200 * st; fb = 150 * st; emis = true; }
                 else if (curCh === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; fr = 40 * st; fg = 44 * st; fb = 60 * st; emis = true; }
                 else if (curCh === '~') { fr = 4; fg = 3; fb = 8; emis = true; }
-                else if (curCh === 'g' || curCh === 'b' || curCh === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; fr = 46 * chk; fg = 120 * chk; fb = 48 * chk; }
-                else if (curCh === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; fr = 150 * chk * grout; fg = 150 * chk * grout; fb = 162 * chk * grout; }
-                else { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.975; fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk; }
+                else if (curCh === 'g' || curCh === 'b' || curCh === 'f') { const b = sampleTex(TEXES.grass, fx, fy, lodOf(d)); fr = 46 * b; fg = 120 * b; fb = 48 * b; }
+                else if (curCh === 'p') { const b = sampleTex(TEXES.pave, fx, fy, lodOf(d)); fr = 150 * b; fg = 150 * b; fb = 162 * b; }
+                else { const b = sampleTex(TEXES.dirt, fx, fy, lodOf(d)); fr = pal.floor[0] * b; fg = pal.floor[1] * b; fb = pal.floor[2] * b; }
                 let r: number, g: number, bl: number;
                 if (emis) { r = fr; g = fg; bl = fb; } else { [r, g, bl] = fogMix(fr, fg, fb, fogTd(d)); const lf = lightAt(d); r *= lf; g *= lf; bl *= lf; }
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
@@ -849,13 +894,11 @@ export const RaycastCanvas: React.FC<{
               const wxv = side === 0 ? py + dExit * rdy : px + dExit * rdx;
               const wxf = wxv - Math.floor(wxv);
               const wt = Math.max(yCeil, Math.floor(wTopF)), wb = Math.min(yFloor, Math.ceil(wBotF));
-              const df = Math.max(0, 1 - dExit * 0.16);   // fade the brick detail out with distance → no shimmer
+              const tex = wallTexOf(nextCh), lod = lodOf(dExit), vScale = (CEIL_Z - curZ) / STOREY_H;   // one texture tile per block
               for (let y = wt; y < wb; y++) {
                 const ty = (y - wTopF) / span;
-                const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
-                const mortarRaw = (ty * 6) % 1 < 0.07 || (((wxf + off) % 1) * 3) % 1 < 0.045 ? 0.72 : 1;
-                const mortar = 1 - (1 - mortarRaw) * df;     // softer mortar, faded far away
-                const shade = sd * mortar * (0.84 + 0.16 * (1 - ty));
+                const b = sampleTex(tex, wxf, ty * vScale, lod);       // real (procedural) block texture
+                const shade = sd * b * (0.9 + 0.1 * (1 - ty));
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
                 depth[y * W + x] = dExit;
@@ -1293,8 +1336,8 @@ export const RaycastCanvas: React.FC<{
       const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
       const projF = (z: number, d: number) => horizon + ((eye - z) * F) / d;
 
-      // surface colour for a floor/slab cell at world (fx,fy) → [r,g,b,emissive]
-      const floorColor = (c: string, fx: number, fy: number): [number, number, number, boolean] => {
+      // surface colour for a floor/slab cell at world (fx,fy), mip-sampled by lod → [r,g,b,emissive]
+      const floorColor = (c: string, fx: number, fy: number, lod = 0): [number, number, number, boolean] => {
         if (c === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); return [255 * sh, 90 * sh + 30, 20 * sh, true]; }
         if (c === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); return [20 * sh, 90 * sh, 170 * sh, true]; }
         if (c === '~') return [4, 3, 8, true];
@@ -1302,9 +1345,9 @@ export const RaycastCanvas: React.FC<{
         if (c === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); return [150 * sw + 40, 40 * sw, 210 * sw + 40, true]; }
         if (c === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; return [180 * st, 200 * st, 150 * st, true]; }
         if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
-        if (c === 'g' || c === 'b' || c === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; return [46 * chk, 120 * chk, 48 * chk, false]; }
-        if (c === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; return [150 * chk * grout, 150 * chk * grout, 162 * chk * grout, false]; }
-        const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.975; return [pal.floor[0] * chk, pal.floor[1] * chk, pal.floor[2] * chk, false];
+        if (c === 'g' || c === 'b' || c === 'f') { const b = sampleTex(TEXES.grass, fx, fy, lod); return [46 * b, 120 * b, 48 * b, false]; }
+        if (c === 'p') { const b = sampleTex(TEXES.pave, fx, fy, lod); return [150 * b, 150 * b, 162 * b, false]; }
+        const b = sampleTex(TEXES.dirt, fx, fy, lod); return [pal.floor[0] * b, pal.floor[1] * b, pal.floor[2] * b, false];
       };
 
       depth.fill(1e9);
@@ -1322,8 +1365,8 @@ export const RaycastCanvas: React.FC<{
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
           let R: number, G: number, B: number;
-          if (roof) { const base = pal.wall[c] ?? pal.wall['#']; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 0.92 : 0.78; const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(base[0] * chk, base[1] * chk, base[2] * chk, ft); R *= lf; G *= lf; B *= lf; }
-          else { const [r, g, b, emis] = floorColor(c, fx, fy); if (emis) { R = r; G = g; B = b; } else { const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(r, g, b, ft); R *= lf; G *= lf; B *= lf; } }
+          if (roof) { const base = pal.wall[c] ?? pal.wall['#']; const b = sampleTex(wallTexOf(c), fx, fy, lodOf(d)) * 0.88; const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(base[0] * b, base[1] * b, base[2] * b, ft); R *= lf; G *= lf; B *= lf; }
+          else { const [r, g, b, emis] = floorColor(c, fx, fy, lodOf(d)); if (emis) { R = r; G = g; B = b; } else { const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(r, g, b, ft); R *= lf; G *= lf; B *= lf; } }
           const o = (y * W + x) * 4; data[o] = R; data[o + 1] = G; data[o + 2] = B; data[o + 3] = 255; depth[y * W + x] = d;
         }
       };
@@ -1336,7 +1379,7 @@ export const RaycastCanvas: React.FC<{
           const d = ((eye - z) * F) / pp;                           // no band cull (see drawHoriz) — closes seams
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
-          const [r, g, b] = floorColor(c, fx, fy); const ft = fogTd(d), lf = lightAt(d);
+          const [r, g, b] = floorColor(c, fx, fy, lodOf(d)); const ft = fogTd(d), lf = lightAt(d);
           const [R, G, B] = fogMix(r * 0.45, g * 0.45, b * 0.45, ft);   // a shadowed underside
           const o = (y * W + x) * 4; data[o] = R * lf; data[o + 1] = G * lf; data[o + 2] = B * lf; data[o + 3] = 255; depth[y * W + x] = d;
         }
@@ -1366,13 +1409,12 @@ export const RaycastCanvas: React.FC<{
               const wxv = entrySide === 0 ? py + dEnter * rdy : px + dEnter * rdx, wxf = wxv - Math.floor(wxv);
               const sd = (entrySide === 1 ? 0.7 : 1) * lightAt(dEnter), ft = fogTd(dEnter);
               const wt = Math.max(0, Math.floor(wTopF)), wb = Math.min(H, Math.ceil(wBotF));
-              const df = Math.max(0, 1 - dEnter * 0.16);   // fade brick detail with distance → no shimmer
+              const tex = wallTexOf(c), lod = lodOf(dEnter);   // one texture tile over this block-tall face
               for (let y = wt; y < wb; y++) {
                 if (dEnter >= depth[y * W + x]) continue;
-                const ty = (y - wTopF) / span; const off = (Math.floor(ty * 6) & 1) ? 0.5 : 0;
-                const mortarRaw = (ty * 6) % 1 < 0.07 || (((wxf + off) % 1) * 3) % 1 < 0.045 ? 0.72 : 1;
-                const mortar = 1 - (1 - mortarRaw) * df;
-                const shade = sd * mortar * (0.84 + 0.16 * (1 - ty));
+                const ty = (y - wTopF) / span;
+                const b = sampleTex(tex, wxf, ty, lod);       // real (procedural) block texture
+                const shade = sd * b * (0.9 + 0.1 * (1 - ty));
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter;
               }
@@ -1384,7 +1426,7 @@ export const RaycastCanvas: React.FC<{
               if (z > zb + 0.02) {                                                 // SOLID cliff face — raised ground is a filled hill, not a floating shelf
                 const fTopF = projF(z, dEnter), fBotF = projF(zb, dEnter);
                 const y0 = Math.max(0, Math.floor(fTopF)), y1 = Math.min(H, Math.ceil(fBotF));
-                const [cr0, cg0, cb0] = floorColor(c, px + dEnter * rdx, py + dEnter * rdy);
+                const [cr0, cg0, cb0] = floorColor(c, px + dEnter * rdx, py + dEnter * rdy, lodOf(dEnter));
                 const sd = (entrySide === 1 ? 0.6 : 0.82) * lightAt(dEnter), ftf = fogTd(dEnter);
                 for (let y = y0; y < y1; y++) { if (dEnter >= depth[y * W + x]) continue; const [r, g, bl] = fogMix(cr0 * sd, cg0 * sd, cb0 * sd, ftf); const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter; }
               }
