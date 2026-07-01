@@ -620,7 +620,12 @@ export const RaycastCanvas: React.FC<{
         const dx = px - e.x, dy = py - e.y;
         const dist = Math.hypot(dx, dy);
         const sees = sameZ && dist < SIGHT && lineClear(g, e.x, e.y, px, py);
+        if (sees && !e.chasing) {   // JUST spotted you → a snarl/shriek so you hear the hunt begin
+          beep(70, 0.5, 'sawtooth', 0.09); beep(104, 0.45, 'sawtooth', 0.06); beep(320, 0.3, 'square', 0.04); shake = Math.min(4, shake + 1.5);
+        }
         if (sees) e.chasing = true; else if (dist > LOSE || !sameZ) e.chasing = false;   // give up if you break line of sight / change floors
+        // while hunting, a rhythmic low growl that quickens as it closes in — dread you can hear
+        if (e.chasing && tick % Math.max(10, Math.round(dist * 6)) === 0) beep(58 + (SIGHT - Math.min(dist, SIGHT)) * 6, 0.16, 'sawtooth', 0.05);
 
         let tx: number, ty: number, sp: number;
         if (e.chasing) { tx = px; ty = py; sp = E_CHASE; }
@@ -887,7 +892,7 @@ export const RaycastCanvas: React.FC<{
             const nextCh = cellAt(rows, mapX, mapY);
             if (isWall(nextCh)) {                                   // full wall → close the column
               const base = pal.wall[nextCh] ?? pal.wall['#'];
-              const sd = (side === 1 ? 0.7 : 1) * lightAt(dExit);
+              const sd = (side === 1 ? 0.6 : 1) * lightAt(dExit);   // stronger N/S face shading → more depth
               const ft = fogTd(dExit);
               const wTopF = projF(CEIL_Z, dExit), wBotF = projF(curZ, dExit);
               const span = Math.max(1, wBotF - wTopF);
@@ -895,10 +900,12 @@ export const RaycastCanvas: React.FC<{
               const wxf = wxv - Math.floor(wxv);
               const wt = Math.max(yCeil, Math.floor(wTopF)), wb = Math.min(yFloor, Math.ceil(wBotF));
               const tex = wallTexOf(nextCh), lod = lodOf(dExit), vScale = (CEIL_Z - curZ) / STOREY_H;   // one texture tile per block
+              const edgeAO = 0.88 + 0.12 * (1 - Math.abs(wxf - 0.5) * 2);   // fake AO: darker toward block edges
               for (let y = wt; y < wb; y++) {
                 const ty = (y - wTopF) / span;
                 const b = sampleTex(tex, wxf, ty * vScale, lod);       // real (procedural) block texture
-                const shade = sd * b * (0.9 + 0.1 * (1 - ty));
+                const baseAO = 0.66 + 0.34 * Math.min(1, (1 - ty) * 3);   // contact shadow where the wall meets the floor
+                const shade = sd * b * baseAO * edgeAO;
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255;
                 depth[y * W + x] = dExit;
@@ -1009,7 +1016,7 @@ export const RaycastCanvas: React.FC<{
         const sizeBase = Math.abs(F / camY);
         const zfE = heightMap ? floorLvl(Math.floor(e.x), Math.floor(e.y)) * STEP_UNIT : 0;
         const groundY = horizon + ((eyeH - zfE) * F) / camY;
-        const figH = sizeBase * 0.95, figW = sizeBase * 0.46;
+        const figH = sizeBase * 1.9, figW = sizeBase * 0.5;   // tall, looming figures — much scarier
         const top = groundY - figH, halfW = figW / 2;
         const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
         const sx0 = Math.max(0, Math.floor(screenX - halfW)), sx1 = Math.min(W, Math.ceil(screenX + halfW));
@@ -1407,14 +1414,16 @@ export const RaycastCanvas: React.FC<{
               const wTopF = projF(zt, dEnter), wBotF = projF(zb, dEnter), span = Math.max(1, wBotF - wTopF);
               const base = pal.wall[c] ?? pal.wall['#'];
               const wxv = entrySide === 0 ? py + dEnter * rdy : px + dEnter * rdx, wxf = wxv - Math.floor(wxv);
-              const sd = (entrySide === 1 ? 0.7 : 1) * lightAt(dEnter), ft = fogTd(dEnter);
+              const sd = (entrySide === 1 ? 0.6 : 1) * lightAt(dEnter), ft = fogTd(dEnter);   // stronger N/S shading
               const wt = Math.max(0, Math.floor(wTopF)), wb = Math.min(H, Math.ceil(wBotF));
               const tex = wallTexOf(c), lod = lodOf(dEnter);   // one texture tile over this block-tall face
+              const edgeAO = 0.88 + 0.12 * (1 - Math.abs(wxf - 0.5) * 2);   // fake AO toward block edges
               for (let y = wt; y < wb; y++) {
                 if (dEnter >= depth[y * W + x]) continue;
                 const ty = (y - wTopF) / span;
                 const b = sampleTex(tex, wxf, ty, lod);       // real (procedural) block texture
-                const shade = sd * b * (0.9 + 0.1 * (1 - ty));
+                const baseAO = 0.66 + 0.34 * Math.min(1, (1 - ty) * 3);   // contact shadow at each block's base
+                const shade = sd * b * baseAO * edgeAO;
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter;
               }
@@ -1506,7 +1515,7 @@ export const RaycastCanvas: React.FC<{
         const sizeBase = Math.abs(F / camY);
         const zfE = baseZ(e.k ?? 0);
         const groundY = horizon + ((eye - zfE) * F) / camY;
-        const figH = sizeBase * 0.95, figW = sizeBase * 0.46, top = groundY - figH;
+        const figH = sizeBase * 1.9, figW = sizeBase * 0.5, top = groundY - figH;   // tall, looming figures — much scarier
         const sway = Math.sin(tick * 0.12 + e.hx) * 0.04 * (e.chasing ? 2 : 1);
         const sx0 = Math.max(0, Math.floor(screenX - figW / 2)), sx1 = Math.min(W, Math.ceil(screenX + figW / 2));
         const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
