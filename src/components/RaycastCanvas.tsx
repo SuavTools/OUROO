@@ -215,6 +215,46 @@ const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0
   if (e.py > y1) quad(c010, c110, c111, c011, 0.82, cw, ch);        // south face
   else if (e.py < y0) quad(c000, c100, c101, c001, 0.82, cw, ch);   // north face
 };
+// The exit DOOR's energy panel: a swirling pixel-gradient oval, quantised into blocks. u,v in 0..1
+// across the door opening; returns null outside the oval (frame/room shows through).
+const PORTAL_PIX = 9;
+const portalPanelPix = (u: number, v: number, t: number, locked: boolean): [number, number, number] | null => {
+  const cu = (Math.floor(u * PORTAL_PIX) + 0.5) / PORTAL_PIX - 0.5, cv = (Math.floor(v * PORTAL_PIX) + 0.5) / PORTAL_PIX - 0.5;
+  const rad = Math.hypot(cu, cv * 1.25);
+  if (rad > 0.5) return null;
+  const ang = Math.atan2(cv, cu);
+  const spiral = 0.5 + 0.5 * Math.sin(ang * 3 + rad * 20 - t * (locked ? 0.05 : 0.2));
+  const rings = 0.5 + 0.5 * Math.sin(rad * 22 - t * (locked ? 0.04 : 0.16));
+  const core = Math.max(0, 1 - rad * 3), e = 0.32 + 0.68 * spiral * rings;
+  return locked ? [200 * e + 150 * core, 60 * e + 40 * core, 30 * e + 20 * core] : [30 * e + 120 * core, 200 * e + 170 * core, 250 * e + 120 * core];
+};
+// Fill an oriented quad (a→b→c→d) with the swirling portal panel, depth-tested, uv (0,0)(1,0)(1,1)(0,1).
+const fillPortalQuad = (e: BoxEnv, a: PC, b: PC, c: PC, d: PC, locked: boolean, t: number) => {
+  const tri = (p0: PC, u0: number, v0: number, p1: PC, u1: number, v1: number, p2: PC, u2: number, v2: number) => {
+    if (!(p0.cy > 0.06 && p1.cy > 0.06 && p2.cy > 0.06)) return;
+    const minX = Math.max(0, Math.floor(Math.min(p0.sx, p1.sx, p2.sx))), maxX = Math.min(e.W - 1, Math.ceil(Math.max(p0.sx, p1.sx, p2.sx)));
+    const minY = Math.max(0, Math.floor(Math.min(p0.sy, p1.sy, p2.sy))), maxY = Math.min(e.H - 1, Math.ceil(Math.max(p0.sy, p1.sy, p2.sy)));
+    if (minX > maxX || minY > maxY) return;
+    const i0 = 1 / p0.cy, i1 = 1 / p1.cy, i2 = 1 / p2.cy;
+    for (let y = minY; y <= maxY; y++) {
+      const fy = y + 0.5;
+      for (let x = minX; x <= maxX; x++) {
+        const fx = x + 0.5;
+        const g0 = (p1.sx - p0.sx) * (fy - p0.sy) - (p1.sy - p0.sy) * (fx - p0.sx);
+        const g1 = (p2.sx - p1.sx) * (fy - p1.sy) - (p2.sy - p1.sy) * (fx - p1.sx);
+        const g2 = (p0.sx - p2.sx) * (fy - p2.sy) - (p0.sy - p2.sy) * (fx - p2.sx);
+        if (!((g0 >= 0 && g1 >= 0 && g2 >= 0) || (g0 <= 0 && g1 <= 0 && g2 <= 0))) continue;
+        const sum = g0 + g1 + g2; if (sum === 0) continue;
+        const wa = g1 / sum, wb = g2 / sum, wc = g0 / sum, cy = 1 / (wa * i0 + wb * i1 + wc * i2);
+        const idx = y * e.W + x; if (cy >= e.depth[idx]) continue;
+        const col = portalPanelPix(wa * u0 + wb * u1 + wc * u2, wa * v0 + wb * v1 + wc * v2, t, locked);
+        if (!col) continue;
+        const o = idx * 4; e.data[o] = col[0]; e.data[o + 1] = col[1]; e.data[o + 2] = col[2]; e.data[o + 3] = 255; e.depth[idx] = cy;
+      }
+    }
+  };
+  tri(a, 0, 0, b, 1, 0, c, 1, 1); tri(a, 0, 0, c, 1, 1, d, 0, 1);
+};
 // A prop = a list of cuboids relative to its tile centre. dx,dy = horizontal offset (tiles); w,dep =
 // footprint; z0,z1 = height range above the tile floor (world-Z); rgb = albedo; glow>0 = self-lit.
 type PropBox = { dx: number; dy: number; w: number; dep: number; z0: number; z1: number; r: number; g: number; b: number; glow?: number };
@@ -958,6 +998,23 @@ export const RaycastCanvas: React.FC<{
       box(-es, 0.15, 0.08, 0.06, 1.66, 1.74, eR, eG, 34, true, 1); box(es, 0.15, 0.08, 0.06, 1.66, 1.74, eR, eG, 34, true, 1);   // glowing eyes
       if (e.chasing) box(0, 0.15, 0.18, 0.05, 1.55, 1.63, 44 + 26 * Math.sin(tick * 0.3), 4, 6, true, 1);   // gaping maw
     };
+    // Exit as a VOXEL DOOR: a rock frame (pillars + lintel + threshold) around a swirling pixel-gradient
+    // energy panel, facing `dirDeg` (0/90/180/270). Locked → the rock reddens and the panel smoulders.
+    const drawExitDoor = (env: BoxEnv, wx: number, wy: number, gz: number, dirDeg: number, locked: boolean, light: number) => {
+      const rd = dirDeg * Math.PI / 180, fxv = Math.cos(rd), fyv = Math.sin(rd), perpX = -fyv, perpY = fxv;
+      const rr = locked ? 96 : 112, rg = locked ? 78 : 106, rb = locked ? 72 : 98;
+      const fbox = (L: number, D: number, tLat: number, tDir: number, z0: number, z1: number) => {
+        const w = Math.abs(perpX) * tLat + Math.abs(fxv) * tDir, dep = Math.abs(perpY) * tLat + Math.abs(fyv) * tDir;
+        drawBox3D(env, wx + perpX * L + fxv * D, wy + perpY * L + fyv * D, w, dep, gz + z0, gz + z1, rr, rg, rb, light, false);
+      };
+      fbox(-0.44, 0, 0.2, 0.36, 0, 1.72);      // left pillar
+      fbox(0.44, 0, 0.2, 0.36, 0, 1.72);       // right pillar
+      fbox(0, 0, 1.08, 0.36, 1.6, 1.92);       // lintel
+      fbox(0, 0, 1.08, 0.36, -0.02, 0.12);     // threshold
+      const hw = 0.36, z0 = gz + 0.12, z1 = gz + 1.58;
+      const P = (L: number, z: number) => projPt(env, wx + perpX * L, wy + perpY * L, z);
+      fillPortalQuad(env, P(-hw, z0), P(hw, z0), P(hw, z1), P(-hw, z1), locked, tick);
+    };
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1, hudCh = -1;
     const pushHud = () => {
       const c = grabbed.size, br = Math.round(breath), oc = opened.size;
@@ -1493,6 +1550,14 @@ export const RaycastCanvas: React.FC<{
           drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.12, 0.12, fb + 0.24, fb + 0.38, 190, 250, 255, 1, true);
+          continue;
+        }
+        // Exit — a voxel rock DOOR with a swirling pixel-gradient panel, facing its chosen direction
+        if (kind === 'exit') {
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
+          const gx = Math.floor(s.x), gy = Math.floor(s.y);
+          const auto = !isWall(cellAt(rows, gx + 1, gy)) ? 0 : !isWall(cellAt(rows, gx, gy + 1)) ? 90 : !isWall(cellAt(rows, gx - 1, gy)) ? 180 : 270;
+          drawExitDoor(env, s.x, s.y, zfS, level.exitDir ?? auto, exitLocked(), Math.max(lightAt(camY), 0.6));
           continue;
         }
         // Voxel props — real depth-tested cubes (walk around them), not billboards
@@ -2031,6 +2096,14 @@ export const RaycastCanvas: React.FC<{
           drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.12, 0.12, fb + 0.24, fb + 0.38, 190, 250, 255, 1, true);
+          continue;
+        }
+        // Exit — a voxel rock DOOR with a swirling pixel-gradient panel, facing its chosen direction
+        if (kind === 'exit') {
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+          const gg = grids[s.k]; const gx = Math.floor(s.x), gy = Math.floor(s.y);
+          const auto = !isWall(cellAt(gg, gx + 1, gy)) ? 0 : !isWall(cellAt(gg, gx, gy + 1)) ? 90 : !isWall(cellAt(gg, gx - 1, gy)) ? 180 : 270;
+          drawExitDoor(env, s.x, s.y, zf, level.exitDir ?? auto, exitLocked(), Math.max(lightAt(camY), 0.6));
           continue;
         }
         // Voxel props — real depth-tested cubes (walk around them), not billboards

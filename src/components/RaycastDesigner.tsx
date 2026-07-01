@@ -611,6 +611,16 @@ export const RaycastDesigner: React.FC<{
             ⚔ Combat (else run-and-hide)
           </label>
 
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Exit door faces</p>
+          <div className="flex flex-wrap gap-1">
+            {([['Auto', undefined], ['East ▶', 0], ['South ▼', 90], ['West ◀', 180], ['North ▲', 270]] as const).map(([lbl, deg]) => (
+              <button key={lbl} onClick={() => { setLevel(l => ({ ...l, exitDir: deg })); setSaved(false); }}
+                className={`text-[9px] font-mono px-2 py-1 border transition-colors ${(level.exitDir ?? 'auto') === (deg ?? 'auto') ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Size <span className="text-white/25 normal-case tracking-normal">(up to 128)</span></p>
           {([['w', w] as const, ['h', h] as const]).map(([dim, val]) => (
             <div key={dim} className="flex items-center gap-1.5 text-[11px] font-mono">

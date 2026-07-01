@@ -54,6 +54,7 @@ export type Level3D = {
   floors?: Floor3D[];      // OPTIONAL storey stack, ordered bottom→top. Present = multi-floor realm;
                            // absent = single floor built from rows/heights/npcs (back-compat).
   spawnDir?: number;       // facing in degrees (0 = +X / east), default 0
+  exitDir?: number;        // exit DOOR facing in degrees (0/90/180/270). Absent = auto (faces the open side)
   atmo?: string;           // atmosphere preset key (see ATMOS) — sets palette + lighting mood
   sky?: string;            // sky preset key (see SKIES) — gradient + weather instead of a flat ceiling
   music?: Mood;            // override the ambience mood (else derived from atmo/sky)
