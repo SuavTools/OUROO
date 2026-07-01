@@ -226,19 +226,21 @@ const GridCanvas: React.FC<{
 };
 
 // Resize a rows[] grid, preserving overlap; new cells are walls on the edge, floor inside.
-function resizeRows(rows: string[], w: number, h: number): string[] {
+// Grow/shrink a grid, KEEPING existing cells. New cells are padded with the floor's own base material:
+// AIR for an air/overhang floor (so it never sprouts phantom walls + floating slabs up top), plain
+// floor '.' for a solid floor (no auto rock border — the out-of-bounds is an implicit wall anyway).
+function resizeRows(rows: string[], w: number, h: number, air: boolean): string[] {
+  const fill = air ? AIR : '.';
   const out: string[] = [];
   for (let y = 0; y < h; y++) {
     let row = '';
-    for (let x = 0; x < w; x++) {
-      const edge = x === 0 || y === 0 || x === w - 1 || y === h - 1;
-      const prev = rows[y]?.[x];
-      row += prev ?? (edge ? '#' : '.');
-    }
+    for (let x = 0; x < w; x++) row += rows[y]?.[x] ?? fill;
     out.push(row);
   }
   return out;
 }
+// An air/overhang floor is one that already has open sky in it (built via "add floor above").
+const isAirFloor = (rows: string[]): boolean => rows.some(r => r.includes(AIR));
 
 // Ensure exactly one spawn cell: when you paint a new 'S', clear the old one.
 function setCell(rows: string[], x: number, y: number, ch: string): string[] {
@@ -438,7 +440,7 @@ export const RaycastDesigner: React.FC<{
     const cw = Math.max(4, Math.min(128, nw)), ch = Math.max(4, Math.min(128, nh));
     setLevel(l => {
       const fs = (l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }]).map(f => {
-        const rws = resizeRows(f.rows, cw, ch);
+        const rws = resizeRows(f.rows, cw, ch, isAirFloor(f.rows));
         return { ...f, rows: rws, heights: f.heights ? normHeights(rws, f.heights) : undefined };
       });
       return { ...l, floors: fs, rows: fs[0].rows };
