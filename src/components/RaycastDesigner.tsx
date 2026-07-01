@@ -295,6 +295,8 @@ export const RaycastDesigner: React.FC<{
   const [npcCell, setNpcCell] = useState<{ x: number; y: number } | null>(null);   // open the builder for this cell
   const [rectMode, setRectMode] = useState(false);   // drag a rectangle and fill it in one stroke
   const [rect, setRect] = useState<{ ax: number; ay: number; bx: number; by: number } | null>(null);   // live rect drag
+  const [stackMode, setStackMode] = useState(false); // paint a wall = build a column N blocks tall from the ground
+  const [stackN, setStackN] = useState(2);           // how many blocks tall stacked walls are
   const [libRealms, setLibRealms] = useState<Level3D[]>(() => listLevels());   // builtins + local; merged with shared on open
   const [libLoading, setLibLoading] = useState(false);
   const painting = useRef(false);
@@ -325,8 +327,29 @@ export const RaycastDesigner: React.FC<{
     setSaved(false);
   };
 
+  // Build (or erase) an N-block-tall wall COLUMN from the ground up at (x,y): sets the wall char on floors
+  // 0..N-1 (auto-adding air floors so the realm is tall enough) and air on floors above. This is the fast
+  // way to build walls of a chosen height — pick "3" and paint, get a 3-block wall — no floor juggling.
+  const stackWall = (x: number, y: number, ch: string, n: number) => {
+    setLevel(l => {
+      let fs = [...(l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }])];
+      const fw = fs[0].rows[0].length, fh = fs[0].rows.length;
+      const erase = ch === AIR;
+      while (!erase && fs.length < n) fs.push({ rows: blankAirRows(fw, fh) });
+      fs = fs.map((f, i) => {
+        const c = erase ? AIR : (i < n ? ch : AIR);
+        const rws = [...f.rows]; rws[y] = rws[y].substring(0, x) + c + rws[y].substring(x + 1);
+        const npcs = (f.npcs ?? []).filter(nn => !(nn.x === x && nn.y === y));
+        return { ...f, rows: rws, npcs: npcs.length ? npcs : undefined };
+      });
+      return { ...l, floors: fs, rows: fs[0].rows };
+    });
+    setSaved(false);
+  };
+
   const paint = useCallback((x: number, y: number) => {
     if (brush === 'NPC') { setNpcCell({ x, y }); return; }   // open the character builder for this tile
+    if (stackMode && (isWallCh(brush) || brush === AIR)) { stackWall(x, y, brush, stackN); return; }   // build a wall column
     if (brush === 'S') {
       // spawn is unique across the WHOLE realm — clear 'S' on every storey, then set it here
       setLevel(l => {
@@ -354,7 +377,7 @@ export const RaycastDesigner: React.FC<{
       const npcs = (f.npcs ?? []).filter(n => !(n.x === x && n.y === y));
       return { ...f, rows: setCell(f.rows, x, y, brush), npcs: npcs.length ? npcs : undefined };
     });
-  }, [brush, fIdx]);   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [brush, fIdx, stackMode, stackN]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rectangle stroke — paint/erase a whole box of cells (or bump a box of heights) in one go, so
   // building floors, walls and big air openings is fast. Uses whatever brush is selected.
@@ -362,6 +385,22 @@ export const RaycastDesigner: React.FC<{
     if (brush === 'NPC') return;
     if (brush === 'S') { paint(bx, by); return; }   // spawn is unique — just drop it at the end cell
     const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+    if (stackMode && (isWallCh(brush) || brush === AIR)) {   // drag a whole run of N-tall wall in one stroke
+      setLevel(l => {
+        let fs = [...(l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }])];
+        const fw = fs[0].rows[0].length, fh = fs[0].rows.length, erase = brush === AIR;
+        while (!erase && fs.length < stackN) fs.push({ rows: blankAirRows(fw, fh) });
+        fs = fs.map((f, i) => {
+          const c = erase ? AIR : (i < stackN ? brush : AIR);
+          const rws = [...f.rows];
+          for (let y = y0; y <= y1; y++) { let r = rws[y]; for (let x = x0; x <= x1; x++) r = r.substring(0, x) + c + r.substring(x + 1); rws[y] = r; }
+          return { ...f, rows: rws };
+        });
+        return { ...l, floors: fs, rows: fs[0].rows };
+      });
+      setSaved(false);
+      return;
+    }
     if (brush === 'H+' || brush === 'H-') {
       setActiveFloor(f => {
         const hh = normHeights(f.rows, f.heights);
@@ -519,6 +558,20 @@ export const RaycastDesigner: React.FC<{
             className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${rectMode ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 hover:border-white/40'}`}>
             ▭ Rectangle fill <span className="text-white/30 normal-case">{rectMode ? '(drag a box)' : '(off)'}</span>
           </button>
+
+          <button onClick={() => setStackMode(v => !v)}
+            className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${stackMode ? 'border-[#ff8a3d] bg-[#ff8a3d]/10 text-[#ff8a3d]' : 'border-white/15 hover:border-white/40'}`}>
+            🧱 Stack walls <span className="text-white/30 normal-case">{stackMode ? `(${stackN} tall)` : '(off)'}</span>
+          </button>
+          {stackMode && (
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5, 6].map(n => (
+                <button key={n} onClick={() => setStackN(n)}
+                  className={`flex-1 py-1 border text-[10px] font-mono transition-colors ${n === stackN ? 'border-[#ff8a3d] bg-[#ff8a3d]/10 text-[#ff8a3d]' : 'border-white/15 text-white/50 hover:border-white/40'}`}>{n}</button>
+              ))}
+            </div>
+          )}
+          {stackMode && <p className="text-[9px] text-white/30 font-mono leading-tight">paint a wall brush → builds it {stackN} blocks tall from the ground. Air erases the whole column.</p>}
 
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Height <span className="text-white/25 normal-case tracking-normal">(steps · climb 1)</span></p>
           <div className="grid grid-cols-2 gap-1.5">
