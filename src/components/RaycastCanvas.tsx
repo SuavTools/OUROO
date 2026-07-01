@@ -542,17 +542,18 @@ export const RaycastCanvas: React.FC<{
         const dest = ensureAudio(); const t = actx!.currentTime;
         const master = actx!.createGain(); master.gain.value = 0; master.connect(dest);
         master.gain.linearRampToValueAtTime(0.3, t + 0.18);           // swell in on lock — LOUD, dominates the mix
-        // HIGH HELD SCREECH — a metallic demonic SUSTAIN, not a musical note. Two detuned saws are
-        // RING-MODULATED by a low inharmonic square (clangorous sidebands), fried through fuzz, then
-        // run through a feedback comb for ringing metallic resonance. Menacing, alien, never cute.
-        const hi = actx!.createOscillator(); hi.type = 'sawtooth'; hi.frequency.value = 1180;
-        const hi2 = actx!.createOscillator(); hi2.type = 'sawtooth'; hi2.frequency.value = 1180 * 1.006;   // slow menacing beat
-        const rmod = actx!.createOscillator(); rmod.type = 'square'; rmod.frequency.value = 63;             // inharmonic ring modulator
+        // HELD DRONE — a metallic, disharmonic, comb-distorted MID drone (not a shrill note). Two
+        // detuned saws ring-modulated by a low inharmonic square = clangorous metal; fried through
+        // fuzz; run through a feedback comb for ringing resonance. The DREAD comes from it SWELLING
+        // in volume as the stalker closes — not from rising pitch.
+        const hi = actx!.createOscillator(); hi.type = 'sawtooth'; hi.frequency.value = 300;
+        const hi2 = actx!.createOscillator(); hi2.type = 'sawtooth'; hi2.frequency.value = 300 * 1.008;    // slow menacing beat
+        const rmod = actx!.createOscillator(); rmod.type = 'square'; rmod.frequency.value = 47;             // inharmonic ring modulator
         const ring = actx!.createGain(); ring.gain.value = 0; rmod.connect(ring.gain); hi.connect(ring); hi2.connect(ring);
-        const hfz = shaper(22); ring.connect(hfz);
-        const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0072; const cfb = actx!.createGain(); cfb.gain.value = 0.72; hfz.connect(comb); comb.connect(cfb); cfb.connect(comb);
-        const hf = actx!.createBiquadFilter(); hf.type = 'bandpass'; hf.Q.value = 3.2; hf.frequency.value = 1700;
-        const hg = actx!.createGain(); hg.gain.value = 0.17; hfz.connect(hf); comb.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t); rmod.start(t);
+        const hfz = shaper(26); ring.connect(hfz);
+        const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0081; const cfb = actx!.createGain(); cfb.gain.value = 0.78; hfz.connect(comb); comb.connect(cfb); cfb.connect(comb);
+        const hf = actx!.createBiquadFilter(); hf.type = 'bandpass'; hf.Q.value = 2.6; hf.frequency.value = 900;
+        const hg = actx!.createGain(); hg.gain.value = 0.22; hfz.connect(hf); comb.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t); rmod.start(t);
         // SCREECH AIR — resonant white noise riding on top for the shrieking, hissing edge.
         const len = Math.floor(actx!.sampleRate * 2); const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -571,11 +572,11 @@ export const RaycastCanvas: React.FC<{
       if (!hunt || !actx) return;
       try {
         const t = actx.currentTime, I = prox + pan * 0.5;
-        hunt.master.gain.setTargetAtTime(0.24 + I * 0.24, t, 0.15);                 // louder as it nears / panic rises
-        hunt.bp.frequency.setTargetAtTime(2100 + prox * 2200 + pan * 1000, t, 0.2); // shriek air opens up, shriller
-        const f = 1180 + prox * 640 + pan * 460;                                    // held scream climbs as it closes
-        hunt.hi.frequency.setTargetAtTime(f, t, 0.25);
-        hunt.hi2.frequency.setTargetAtTime(f * 1.006, t, 0.25);                     // keep the detune beat as it rises
+        hunt.master.gain.setTargetAtTime(0.2 + I * 0.34, t, 0.18);                  // VOLUME SWELL — the drone looms louder as it closes / panic rises
+        hunt.bp.frequency.setTargetAtTime(1400 + prox * 1400 + pan * 700, t, 0.25); // metallic air opens a little
+        const f = 300 + prox * 150 + pan * 90;                                      // drone barely creeps up — dread is the swell, not the pitch
+        hunt.hi.frequency.setTargetAtTime(f, t, 0.35);
+        hunt.hi2.frequency.setTargetAtTime(f * 1.008, t, 0.35);                     // keep the detune beat
       } catch { /* noop */ }
     };
     const stopHunt = () => {
