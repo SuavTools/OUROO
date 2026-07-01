@@ -28,7 +28,8 @@ const RADIUS = 0.22;               // player collision radius (tiles)
 const LAVA_DPS = 0.55;             // HP drained per tick standing in lava
 const MAX_HP = 100;
 const STEP_UNIT = 0.32;            // world height of one floor level (wall = 1.0 tall)
-const EYE_BASE = 0.5;              // eye height above the floor you stand on
+const EYE_BASE = 0.62;             // eye height above the floor you stand on — taller player = you feel bigger,
+                                   // walls read as human-scale (chest/head high) instead of towering over you
 const CEIL_GAP = 1.0;             // flat ceiling sits this far above the highest floor
 const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
 const GRAV = 0.012;              // stacked realms: gravity pull per tick
@@ -667,7 +668,16 @@ export const RaycastCanvas: React.FC<{
         const lf = lightAt(rowDist);
         const floorRow = y * W * 4;
         for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
-          const c = cellAt(rows, Math.floor(fx), Math.floor(fy));
+          const mx = Math.floor(fx), my = Math.floor(fy);
+          // Past the edge of the grid there is NO floor — paint the void (sky if the realm has one, else a
+          // dark fog) instead of an endless checkerboard. This is what kills the "infinite chessboard" look.
+          if (my < 0 || my >= rows.length || mx < 0 || mx >= rows[my].length) {
+            const o = floorRow + x * 4;
+            if (sky) { const [sr, sg, sb] = skyColAt(y); data[o] = sr; data[o + 1] = sg; data[o + 2] = sb; data[o + 3] = 255; depth[y * W + x] = 1e9; }
+            else { const [vr, vg, vb] = fogMix(fog[0], fog[1], fog[2], 0); data[o] = vr * 0.6; data[o + 1] = vg * 0.6; data[o + 2] = vb * 0.6; data[o + 3] = 255; depth[y * W + x] = rowDist; }
+            continue;
+          }
+          const c = cellAt(rows, mx, my);
           // floor colour by tile. Lava and the exit pad are EMISSIVE — they light themselves, so the
           // lantern darkness doesn't dim them (they read as beacons in a blackout).
           let fr: number, fg: number, fb: number, emissive = false;
@@ -692,15 +702,15 @@ export const RaycastCanvas: React.FC<{
             const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28;
             fr = 40 * st; fg = 44 * st; fb = 60 * st; emissive = true;
           } else if (c === 'g' || c === 'b' || c === 'f') {  // grass (also under bushes/flowers)
-            const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88;
+            const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.95;
             fr = 46 * chk; fg = 120 * chk; fb = 48 * chk;
           } else if (c === 'p') {                          // pavement — light stone tiles with grout
             const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy);
             const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1;
             const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9;
             fr = 150 * chk * grout; fg = 150 * chk * grout; fb = 162 * chk * grout;
-          } else {                                        // normal floor with a faint checker
-            const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.86;
+          } else {                                        // normal floor — a faint grid, not a stark checker
+            const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.95;
             fr = pal.floor[0] * chk; fg = pal.floor[1] * chk; fb = pal.floor[2] * chk;
           }
           const isVoid = c === '~';
@@ -1277,7 +1287,7 @@ export const RaycastCanvas: React.FC<{
         if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
         if (c === 'g' || c === 'b' || c === 'f') { const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.88; return [46 * chk, 120 * chk, 48 * chk, false]; }
         if (c === 'p') { const gx = fx - Math.floor(fx), gy = fy - Math.floor(fy); const grout = (gx < 0.06 || gx > 0.94 || gy < 0.06 || gy > 0.94) ? 0.55 : 1; const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; return [150 * chk * grout, 150 * chk * grout, 162 * chk * grout, false]; }
-        const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.9; return [pal.floor[0] * chk, pal.floor[1] * chk, pal.floor[2] * chk, false];
+        const chk = ((Math.floor(fx) + Math.floor(fy)) & 1) ? 1 : 0.95; return [pal.floor[0] * chk, pal.floor[1] * chk, pal.floor[2] * chk, false];
       };
 
       depth.fill(1e9);

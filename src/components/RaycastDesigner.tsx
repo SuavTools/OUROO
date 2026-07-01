@@ -143,6 +143,87 @@ const SideElevation: React.FC<{
   return <canvas ref={ref} onClick={click} className="w-full h-full block cursor-pointer" />;
 };
 
+// ── TOP-DOWN PAINT GRID (canvas) ────────────────────────────────────────────────────────────────
+// One canvas for the whole map instead of one <button> per cell — so a 128×128 realm (16k cells) paints
+// smoothly instead of choking the DOM. Draws cell colours, height shading, special-cell glyphs, the
+// ghost of the floor below (for aligning overhangs), the live rectangle preview, and the slice line.
+const GLYPH: Record<string, string> = { C: '◆', S: '★', E: '⎋', M: '☠', T: '♣', b: '♧', f: '✿', r: '●', l: '☀', O: '◎', '>': '▲', '<': '▼' };
+const GridCanvas: React.FC<{
+  rows: string[]; heights?: string[]; belowRows?: string[]; npcs?: { x: number; y: number }[];
+  w: number; h: number; cellPx: number;
+  rect: { ax: number; ay: number; bx: number; by: number } | null;
+  sliceOn: boolean; sideAxis: 'front' | 'side'; slice: number;
+  onDown: (x: number, y: number) => void; onMove: (x: number, y: number) => void; onUp: () => void;
+}> = ({ rows, heights, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice, onDown, onMove, onUp }) => {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const last = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const ctx = cv.getContext('2d'); if (!ctx) return;
+    const DPR = window.devicePixelRatio || 1;
+    const W = w * cellPx, H = h * cellPx;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    cv.style.width = `${W}px`; cv.style.height = `${H}px`;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const npcSet = new Set((npcs ?? []).map(n => `${n.x}:${n.y}`));
+
+    for (let y = 0; y < h; y++) {
+      const row = rows[y] ?? '';
+      for (let x = 0; x < w; x++) {
+        const ch = row[x] || '.';
+        const px = x * cellPx, py = y * cellPx;
+        const air = isAir(ch);
+        ctx.fillStyle = air ? '#0a0a14' : colorOf(ch);
+        ctx.fillRect(px, py, cellPx, cellPx);
+        // ghost of the solid cell directly below (so overhangs/holes line up while building upper storeys)
+        if (air && belowRows) { const bc = belowRows[y]?.[x]; if (bc && !isAir(bc)) { ctx.fillStyle = colorOf(bc); ctx.globalAlpha = 0.28; const g = cellPx * 0.34; ctx.fillRect(px + g, py + g, cellPx - 2 * g, cellPx - 2 * g); ctx.globalAlpha = 1; } }
+        // raised terrain — brighter the taller it is (block-stack height), with the level digit
+        const hd = heights?.[y]?.[x]; const lvl = hd && hd !== '0' ? +hd : 0;
+        if (lvl > 0) { ctx.fillStyle = `rgba(255,212,0,${0.08 + lvl * 0.07})`; ctx.fillRect(px, py, cellPx, cellPx); }
+        // grid line
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, cellPx - 1, cellPx - 1);
+        // glyph / NPC marker
+        if (cellPx > 8) {
+          if (npcSet.has(`${x}:${y}`)) { ctx.fillStyle = '#1ED760'; ctx.font = `${cellPx * 0.6}px serif`; ctx.fillText('☻', px + cellPx / 2, py + cellPx / 2 + 1); }
+          else if (GLYPH[ch]) { ctx.fillStyle = ch === 'S' ? '#ffd400' : ch === 'E' ? '#1ee0ff' : ch === 'C' ? '#9beaff' : '#fff'; ctx.font = `${cellPx * 0.55}px serif`; ctx.fillText(GLYPH[ch], px + cellPx / 2, py + cellPx / 2 + 1); }
+          if (lvl > 0) { ctx.fillStyle = '#ffd400'; ctx.font = `${cellPx * 0.3}px ui-monospace, monospace`; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(hd!, px + cellPx - 1, py + cellPx - 1); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; }
+        }
+      }
+    }
+    // slice line the cross-section is cutting
+    if (sliceOn) {
+      ctx.fillStyle = 'rgba(155,234,255,0.14)';
+      if (sideAxis === 'front') ctx.fillRect(0, slice * cellPx, W, cellPx);
+      else ctx.fillRect(slice * cellPx, 0, cellPx, H);
+    }
+    // live rectangle preview
+    if (rect) {
+      const x0 = Math.min(rect.ax, rect.bx), x1 = Math.max(rect.ax, rect.bx), y0 = Math.min(rect.ay, rect.by), y1 = Math.max(rect.ay, rect.by);
+      ctx.strokeStyle = 'rgba(30,224,255,0.9)'; ctx.lineWidth = 2;
+      ctx.strokeRect(x0 * cellPx + 1, y0 * cellPx + 1, (x1 - x0 + 1) * cellPx - 2, (y1 - y0 + 1) * cellPx - 2);
+    }
+  }, [rows, heights, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice]);
+
+  const cellOf = (e: React.PointerEvent): { x: number; y: number } | null => {
+    const cv = ref.current; if (!cv) return null;
+    const r = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / cellPx), y = Math.floor((e.clientY - r.top) / cellPx);
+    if (x < 0 || x >= w || y < 0 || y >= h) return null;
+    return { x, y };
+  };
+  return (
+    <canvas ref={ref} className="block touch-none cursor-crosshair border border-white/10"
+      onPointerDown={e => { const c = cellOf(e); if (!c) return; last.current = c; onDown(c.x, c.y); }}
+      onPointerMove={e => { const c = cellOf(e); if (!c) return; if (last.current && last.current.x === c.x && last.current.y === c.y) return; last.current = c; onMove(c.x, c.y); }}
+      onPointerUp={() => { last.current = null; onUp(); }}
+      onPointerCancel={() => { last.current = null; onUp(); }}
+    />
+  );
+};
+
 // Resize a rows[] grid, preserving overlap; new cells are walls on the edge, floor inside.
 function resizeRows(rows: string[], w: number, h: number): string[] {
   const out: string[] = [];
@@ -314,7 +395,7 @@ export const RaycastDesigner: React.FC<{
   };
 
   const doResize = (nw: number, nh: number) => {
-    const cw = Math.max(4, Math.min(40, nw)), ch = Math.max(4, Math.min(40, nh));
+    const cw = Math.max(4, Math.min(128, nw)), ch = Math.max(4, Math.min(128, nh));
     setLevel(l => {
       const fs = (l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }]).map(f => {
         const rws = resizeRows(f.rows, cw, ch);
@@ -394,8 +475,9 @@ export const RaycastDesigner: React.FC<{
     );
   }
 
-  // Cell size scales down for bigger grids so the whole map fits the panel.
-  const cellPx = Math.max(12, Math.min(30, Math.floor(560 / Math.max(w, h))));
+  // Cell size scales down for bigger grids so the whole map fits the panel (the canvas painter handles
+  // large grids fine; below ~8px glyphs are dropped). The canvas itself scrolls inside its panel.
+  const cellPx = Math.max(8, Math.min(30, Math.floor(760 / Math.max(w, h))));
 
   return (
     <div className="relative w-full h-full flex flex-col bg-[#0a0a12] text-white overflow-hidden" style={{ touchAction: 'none' }}>
@@ -475,17 +557,17 @@ export const RaycastDesigner: React.FC<{
             ⚔ Combat (else run-and-hide)
           </label>
 
-          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Size</p>
-          <div className="flex items-center gap-1.5 text-[11px] font-mono">
-            <button onClick={() => doResize(w - 1, h)} className="w-7 h-7 border border-white/20 hover:border-white/50">–</button>
-            <span className="w-8 text-center">{w}w</span>
-            <button onClick={() => doResize(w + 1, h)} className="w-7 h-7 border border-white/20 hover:border-white/50">+</button>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] font-mono">
-            <button onClick={() => doResize(w, h - 1)} className="w-7 h-7 border border-white/20 hover:border-white/50">–</button>
-            <span className="w-8 text-center">{h}h</span>
-            <button onClick={() => doResize(w, h + 1)} className="w-7 h-7 border border-white/20 hover:border-white/50">+</button>
-          </div>
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Size <span className="text-white/25 normal-case tracking-normal">(up to 128)</span></p>
+          {([['w', w] as const, ['h', h] as const]).map(([dim, val]) => (
+            <div key={dim} className="flex items-center gap-1.5 text-[11px] font-mono">
+              <button onClick={() => (dim === 'w' ? doResize(w - 1, h) : doResize(w, h - 1))} className="w-7 h-7 border border-white/20 hover:border-white/50">–</button>
+              <input type="number" min={4} max={128} value={val}
+                onChange={e => { const n = parseInt(e.target.value, 10); if (!isNaN(n)) dim === 'w' ? doResize(n, h) : doResize(w, n); }}
+                className="w-12 h-7 bg-white/5 border border-white/15 text-center outline-none focus:border-[#1ee0ff]" />
+              <span className="text-white/40">{dim}</span>
+              <button onClick={() => (dim === 'w' ? doResize(w + 1, h) : doResize(w, h + 1))} className="w-7 h-7 border border-white/20 hover:border-white/50">+</button>
+            </div>
+          ))}
 
           <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Storeys <span className="text-white/25 normal-case tracking-normal">(2+ = walk under · jump up · air = see through)</span></p>
           <div className="flex items-center gap-1 text-[11px] font-mono">
@@ -519,41 +601,13 @@ export const RaycastDesigner: React.FC<{
         <div className="flex-1 overflow-auto p-4 flex items-start justify-center"
           onPointerUp={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
           onPointerLeave={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
-          <div className="inline-grid border border-white/10"
-            style={{ gridTemplateColumns: `repeat(${w}, ${cellPx}px)` }}>
-            {rows.flatMap((row, y) =>
-              Array.from({ length: w }, (_, x) => {
-                const ch = row[x] || '.';
-                const hd = cur.heights?.[y]?.[x];
-                const raised = hd && hd !== '0';
-                const air = isAir(ch);
-                const belowCh = fIdx > 0 ? floors[fIdx - 1]?.rows[y]?.[x] : undefined;   // what's directly under this cell
-                const ghost = air && belowCh && !isAir(belowCh);                          // show through-floor so overhangs line up
-                const inRect = !!rect && x >= Math.min(rect.ax, rect.bx) && x <= Math.max(rect.ax, rect.bx) && y >= Math.min(rect.ay, rect.by) && y <= Math.max(rect.ay, rect.by);
-                const onSlice = sideOpen && (sideAxis === 'front' ? y === slice : x === slice);   // the line the cross-section is cutting
-                return (
-                  <button
-                    key={`${x}-${y}`}
-                    onPointerDown={() => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
-                    onPointerEnter={() => { setHover({ x, y }); if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
-                    className="flex items-center justify-center relative"
-                    style={{
-                      width: cellPx, height: cellPx, background: colorOf(ch),
-                      outline: inRect ? '1px solid rgba(30,224,255,0.9)' : onSlice ? '1px solid rgba(155,234,255,0.55)' : '1px solid rgba(255,255,255,0.05)',
-                      backgroundImage: air ? 'repeating-linear-gradient(45deg,rgba(255,255,255,0.04) 0 2px,transparent 2px 5px)' : undefined,
-                      fontSize: cellPx * 0.5, lineHeight: 1,
-                      boxShadow: raised ? `inset 0 0 0 ${Math.max(1, Math.round(Number(hd)))}px rgba(255,212,0,0.5)` : undefined,
-                    }}
-                  >
-                    {/* ghost of the floor below, so you can align overhangs & holes */}
-                    {ghost && <span className="absolute inset-[18%] rounded-sm" style={{ background: colorOf(belowCh!), opacity: 0.28 }} />}
-                    {npcAt(x, y) ? <span className="text-[#1ED760]">☻</span> : ch === 'C' ? '◆' : ch === 'S' ? '★' : ch === 'E' ? '⎋' : ch === 'M' ? '☠' : ch === 'T' ? '♣' : ch === 'b' ? '♧' : ch === 'f' ? '✿' : ch === 'r' ? '●' : ch === 'l' ? '☀' : ch === 'O' ? '◎' : ch === '>' ? '▲' : ch === '<' ? '▼' : ''}
-                    {raised && <span className="absolute bottom-0 right-0.5 text-[#ffd400] font-mono" style={{ fontSize: cellPx * 0.32 }}>{hd}</span>}
-                  </button>
-                );
-              })
-            )}
-          </div>
+          <GridCanvas
+            rows={rows} heights={cur.heights} belowRows={fIdx > 0 ? floors[fIdx - 1]?.rows : undefined} npcs={cur.npcs}
+            w={w} h={h} cellPx={cellPx} rect={rect} sliceOn={sideOpen} sideAxis={sideAxis} slice={slice}
+            onDown={(x, y) => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
+            onMove={(x, y) => { setHover({ x, y }); if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
+            onUp={() => { painting.current = false; }}
+          />
         </div>
 
         {/* Side elevation — a vertical cross-section so you can see the stack while you build */}
