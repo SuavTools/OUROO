@@ -13,35 +13,63 @@ import {
 import { RaycastCanvas } from './RaycastCanvas';
 import { NpcEditor, type NpcData } from './NpcEditor';
 
-type Brush = { ch: string; label: string; color: string };
+type Brush = { ch: string; label: string; color: string; grp: string };
 const BRUSHES: Brush[] = [
-  { ch: '#', label: 'Stone', color: '#787496' },
-  { ch: '1', label: 'Brick', color: '#965a50' },
-  { ch: '2', label: 'Blue', color: '#465a78' },
-  { ch: '3', label: 'Moss', color: '#28dcb4' },
-  { ch: '4', label: 'Gold', color: '#a08c46' },
-  { ch: '.', label: 'Floor', color: '#26242f' },
-  { ch: AIR, label: 'Air / Erase', color: '#0a0a14' },
-  { ch: 'g', label: 'Grass', color: '#2e7830' },
-  { ch: 'p', label: 'Pavement', color: '#969aa6' },
-  { ch: 'w', label: 'Water', color: '#1a5aaa' },
-  { ch: 'T', label: 'Tree', color: '#1e6b2e' },
-  { ch: 'b', label: 'Bush', color: '#3c8a40' },
-  { ch: 'f', label: 'Flower', color: '#e6557a' },
-  { ch: 'r', label: 'Rock', color: '#8a8a92' },
-  { ch: 'l', label: 'Lamp', color: '#ffd27a' },
-  { ch: 'L', label: 'Lava', color: '#ff5a1e' },
-  { ch: '~', label: 'Pit', color: '#050308' },
-  { ch: 'C', label: 'Crystal', color: '#9beaff' },
-  { ch: 'H', label: 'Chest', color: '#c8963c' },
-  { ch: 'O', label: 'Tunnel', color: '#b35cff' },
-  { ch: '>', label: 'Stairs ↑', color: '#9be07a' },
-  { ch: '<', label: 'Stairs ↓', color: '#3a4a66' },
-  { ch: 'M', label: 'Stalker', color: '#b03030' },
-  { ch: 'E', label: 'Exit', color: '#1ee0ff' },
-  { ch: 'S', label: 'Spawn', color: '#ffd400' },
+  // Floors — the walkable surface of a cell
+  { ch: '.', label: 'Floor', color: '#26242f', grp: 'Floors' },
+  { ch: 'g', label: 'Grass', color: '#2e7830', grp: 'Floors' },
+  { ch: 'd', label: 'Dirt', color: '#6b5238', grp: 'Floors' },
+  { ch: 'k', label: 'Wood', color: '#7a5a34', grp: 'Floors' },
+  { ch: 'p', label: 'Road', color: '#969aa6', grp: 'Floors' },
+  { ch: 'w', label: 'Water', color: '#1a5aaa', grp: 'Floors' },
+  { ch: 'L', label: 'Lava', color: '#ff5a1e', grp: 'Floors' },
+  { ch: '~', label: 'Pit', color: '#050308', grp: 'Floors' },
+  { ch: AIR, label: 'Air / Erase', color: '#0a0a14', grp: 'Floors' },
+  // Walls — full-storey structural (also used with Stack mode to build columns)
+  { ch: '#', label: 'Stone', color: '#787496', grp: 'Walls' },
+  { ch: '1', label: 'Brick', color: '#965a50', grp: 'Walls' },
+  { ch: '2', label: 'Blue', color: '#465a78', grp: 'Walls' },
+  { ch: '3', label: 'Moss', color: '#28dcb4', grp: 'Walls' },
+  { ch: '4', label: 'Gold', color: '#a08c46', grp: 'Walls' },
+  // Blocks — placed ON a floor cell (grass → rock on top). blk:<mat>, blk:. removes.
+  { ch: 'blk:r', label: 'Stone', color: '#7a766e', grp: 'Blocks' },
+  { ch: 'blk:c', label: 'Cobble', color: '#6c6e78', grp: 'Blocks' },
+  { ch: 'blk:w', label: 'Wood', color: '#966c3e', grp: 'Blocks' },
+  { ch: 'blk:b', label: 'Brick', color: '#964a3c', grp: 'Blocks' },
+  { ch: 'blk:l', label: 'Leaves', color: '#2e7a36', grp: 'Blocks' },
+  { ch: 'blk:x', label: 'Dark', color: '#42404a', grp: 'Blocks' },
+  { ch: 'blk:i', label: 'Wood post', color: '#8c643a', grp: 'Blocks' },
+  { ch: 'blk:o', label: 'Pillar', color: '#78746e', grp: 'Blocks' },
+  { ch: 'blk:s', label: 'Slab', color: '#807c76', grp: 'Blocks' },
+  { ch: 'blk:.', label: 'Un-block', color: '#1a1420', grp: 'Blocks' },
+  // Props — voxel objects & connectors
+  { ch: 'T', label: 'Tree', color: '#1e6b2e', grp: 'Props' },
+  { ch: 'b', label: 'Bush', color: '#3c8a40', grp: 'Props' },
+  { ch: 'f', label: 'Flower', color: '#e6557a', grp: 'Props' },
+  { ch: 'r', label: 'Rock', color: '#8a8a92', grp: 'Props' },
+  { ch: 'l', label: 'Lamp', color: '#ffd27a', grp: 'Props' },
+  { ch: 'C', label: 'Crystal', color: '#9beaff', grp: 'Props' },
+  { ch: 'H', label: 'Chest', color: '#c8963c', grp: 'Props' },
+  { ch: 'O', label: 'Tunnel', color: '#b35cff', grp: 'Props' },
+  { ch: '>', label: 'Stairs ↑', color: '#9be07a', grp: 'Props' },
+  { ch: '<', label: 'Stairs ↓', color: '#3a4a66', grp: 'Props' },
+  // Markers
+  { ch: 'M', label: 'Stalker', color: '#b03030', grp: 'Marks' },
+  { ch: 'E', label: 'Exit', color: '#1ee0ff', grp: 'Marks' },
+  { ch: 'S', label: 'Spawn', color: '#ffd400', grp: 'Marks' },
 ];
+const BRUSH_GROUPS = ['Floors', 'Walls', 'Blocks', 'Props', 'Marks'];
 const colorOf = (ch: string) => BRUSHES.find(b => b.ch === ch)?.color ?? '#26242f';
+const isBlockBrush = (b: string) => b.startsWith('blk:');
+// Set a cell in the parallel BLOCK grid (creating/normalising it to the rows' size). ' ' = no block.
+function setBlockCell(blocks: string[] | undefined, rows: string[], x: number, y: number, ch: string): string[] {
+  const w = rows[0]?.length ?? 0;
+  const grid = (blocks && blocks.length === rows.length)
+    ? blocks.map(r => (r.length === w ? r : r.padEnd(w, ' ').slice(0, w)))
+    : rows.map(() => ' '.repeat(w));
+  grid[y] = grid[y].substring(0, x) + ch + grid[y].substring(x + 1);
+  return grid;
+}
 
 // Cell classification for the side elevation: walls are solid one-storey columns; pits/air are gaps;
 // everything else is a thin walkable slab sitting at the floor's height.
@@ -150,12 +178,12 @@ const SideElevation: React.FC<{
 // ghost of the floor below (for aligning overhangs), the live rectangle preview, and the slice line.
 const GLYPH: Record<string, string> = { C: '◆', H: '▤', S: '★', E: '⎋', M: '☠', T: '♣', b: '♧', f: '✿', r: '●', l: '☀', O: '◎', '>': '▲', '<': '▼' };
 const GridCanvas: React.FC<{
-  rows: string[]; heights?: string[]; belowRows?: string[]; npcs?: { x: number; y: number }[];
+  rows: string[]; heights?: string[]; blocks?: string[]; belowRows?: string[]; npcs?: { x: number; y: number }[];
   w: number; h: number; cellPx: number;
   rect: { ax: number; ay: number; bx: number; by: number } | null;
   sliceOn: boolean; sideAxis: 'front' | 'side'; slice: number;
   onDown: (x: number, y: number) => void; onMove: (x: number, y: number) => void; onUp: () => void;
-}> = ({ rows, heights, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice, onDown, onMove, onUp }) => {
+}> = ({ rows, heights, blocks, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice, onDown, onMove, onUp }) => {
   const ref = useRef<HTMLCanvasElement>(null);
   const last = useRef<{ x: number; y: number } | null>(null);
 
@@ -184,6 +212,9 @@ const GridCanvas: React.FC<{
         // raised terrain — brighter the taller it is (block-stack height), with the level digit
         const hd = heights?.[y]?.[x]; const lvl = hd && hd !== '0' ? +hd : 0;
         if (lvl > 0) { ctx.fillStyle = `rgba(255,212,0,${0.08 + lvl * 0.07})`; ctx.fillRect(px, py, cellPx, cellPx); }
+        // a placed BLOCK sitting on this cell's floor — an inset raised square with a lit top edge
+        const bch = blocks?.[y]?.[x];
+        if (bch && bch !== ' ') { const bc = colorOf('blk:' + bch); const g = cellPx * 0.16; ctx.fillStyle = bc; ctx.fillRect(px + g, py + g, cellPx - 2 * g, cellPx - 2 * g); ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fillRect(px + g, py + g, cellPx - 2 * g, Math.max(1, cellPx * 0.12)); }
         // grid line
         ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1; ctx.strokeRect(px + 0.5, py + 0.5, cellPx - 1, cellPx - 1);
         // glyph / NPC marker
@@ -206,7 +237,7 @@ const GridCanvas: React.FC<{
       ctx.strokeStyle = 'rgba(30,224,255,0.9)'; ctx.lineWidth = 2;
       ctx.strokeRect(x0 * cellPx + 1, y0 * cellPx + 1, (x1 - x0 + 1) * cellPx - 2, (y1 - y0 + 1) * cellPx - 2);
     }
-  }, [rows, heights, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice]);
+  }, [rows, heights, blocks, belowRows, npcs, w, h, cellPx, rect, sliceOn, sideAxis, slice]);
 
   const cellOf = (e: React.PointerEvent): { x: number; y: number } | null => {
     const cv = ref.current; if (!cv) return null;
@@ -276,12 +307,12 @@ const blankFloorRows = (w: number, h: number): string[] =>
 
 // The designer always edits in multi-floor form; normalise any level into floors[] on load.
 const toFloors = (l: Level3D): Level3D =>
-  l.floors && l.floors.length ? l : { ...l, floors: [{ rows: l.rows, heights: l.heights, npcs: l.npcs }] };
+  l.floors && l.floors.length ? l : { ...l, floors: [{ rows: l.rows, heights: l.heights, blocks: l.blocks, npcs: l.npcs }] };
 // …and collapse a single-storey realm back to the simple grid format on save (so old realms stay tidy).
 const collapse = (l: Level3D): Level3D => {
-  const fs = l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }];
-  if (fs.length === 1) { const { floors: _drop, ...rest } = l; void _drop; return { ...rest, rows: fs[0].rows, heights: fs[0].heights, npcs: fs[0].npcs }; }
-  return { ...l, floors: fs, rows: fs[0].rows, heights: undefined, npcs: undefined };   // mirror floor0 into the required rows
+  const fs = l.floors ?? [{ rows: l.rows, heights: l.heights, blocks: l.blocks, npcs: l.npcs }];
+  if (fs.length === 1) { const { floors: _drop, ...rest } = l; void _drop; return { ...rest, rows: fs[0].rows, heights: fs[0].heights, blocks: fs[0].blocks, npcs: fs[0].npcs }; }
+  return { ...l, floors: fs, rows: fs[0].rows, heights: undefined, blocks: undefined, npcs: undefined };   // mirror floor0 into the required rows
 };
 
 export const RaycastDesigner: React.FC<{
@@ -375,6 +406,11 @@ export const RaycastDesigner: React.FC<{
       });
       return;
     }
+    if (isBlockBrush(brush)) {   // place/remove a BLOCK on top of this cell's floor (parallel grid)
+      const mat = brush.slice(4);
+      setActiveFloor(f => ({ ...f, blocks: setBlockCell(f.blocks, f.rows, x, y, mat === '.' ? ' ' : mat) }));
+      return;
+    }
     setActiveFloor(f => {
       // painting a cell also clears any NPC sitting on it
       const npcs = (f.npcs ?? []).filter(n => !(n.x === x && n.y === y));
@@ -416,6 +452,15 @@ export const RaycastDesigner: React.FC<{
       });
       return;
     }
+    if (isBlockBrush(brush)) {   // fill a box of blocks
+      const mat = brush.slice(4) === '.' ? ' ' : brush.slice(4);
+      setActiveFloor(f => {
+        let blk = f.blocks;
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) blk = setBlockCell(blk, f.rows, x, y, mat);
+        return { ...f, blocks: blk };
+      });
+      return;
+    }
     setActiveFloor(f => {
       const rws = [...f.rows];
       for (let y = y0; y <= y1; y++) { let r = rws[y]; for (let x = x0; x <= x1; x++) r = r.substring(0, x) + brush + r.substring(x + 1); rws[y] = r; }
@@ -441,7 +486,7 @@ export const RaycastDesigner: React.FC<{
     setLevel(l => {
       const fs = (l.floors ?? [{ rows: l.rows, heights: l.heights, npcs: l.npcs }]).map(f => {
         const rws = resizeRows(f.rows, cw, ch, isAirFloor(f.rows));
-        return { ...f, rows: rws, heights: f.heights ? normHeights(rws, f.heights) : undefined };
+        return { ...f, rows: rws, heights: f.heights ? normHeights(rws, f.heights) : undefined, blocks: f.blocks ? resizeRows(f.blocks, cw, ch, true) : undefined };
       });
       return { ...l, floors: fs, rows: fs[0].rows };
     });
@@ -542,15 +587,20 @@ export const RaycastDesigner: React.FC<{
         {/* Tools */}
         <div className="w-44 shrink-0 border-r border-white/10 p-3 flex flex-col gap-2 overflow-y-auto">
           <p className="text-[9px] uppercase tracking-widest text-white/40">Brush</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {BRUSHES.map(b => (
-              <button key={b.ch} onClick={() => setBrush(b.ch)}
-                className={`flex items-center gap-1.5 px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === b.ch ? 'border-[#1ee0ff] bg-[#1ee0ff]/10' : 'border-white/15 hover:border-white/40'}`}>
-                <span className="w-3 h-3 border border-white/30" style={{ background: b.color }} />
-                {b.label}
-              </button>
-            ))}
-          </div>
+          {BRUSH_GROUPS.map(grp => (
+            <div key={grp}>
+              <p className="text-[8px] uppercase tracking-widest text-white/30 mb-0.5">{grp}{grp === 'Blocks' ? ' · on floor' : ''}</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {BRUSHES.filter(b => b.grp === grp).map(b => (
+                  <button key={b.ch} onClick={() => setBrush(b.ch)}
+                    className={`flex items-center gap-1.5 px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === b.ch ? 'border-[#1ee0ff] bg-[#1ee0ff]/10' : 'border-white/15 hover:border-white/40'}`}>
+                    <span className="w-3 h-3 border border-white/30" style={{ background: b.color }} />
+                    {b.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
 
           <button onClick={() => setBrush('NPC')}
             className={`mt-1 px-2 py-1.5 border text-[10px] font-mono transition-colors ${brush === 'NPC' ? 'border-[#1ED760] bg-[#1ED760]/10 text-[#1ED760]' : 'border-white/15 hover:border-white/40'}`}>
@@ -668,7 +718,7 @@ export const RaycastDesigner: React.FC<{
           onPointerUp={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
           onPointerLeave={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
           <GridCanvas
-            rows={rows} heights={cur.heights} belowRows={fIdx > 0 ? floors[fIdx - 1]?.rows : undefined} npcs={cur.npcs}
+            rows={rows} heights={cur.heights} blocks={cur.blocks} belowRows={fIdx > 0 ? floors[fIdx - 1]?.rows : undefined} npcs={cur.npcs}
             w={w} h={h} cellPx={cellPx} rect={rect} sliceOn={sideOpen} sideAxis={sideAxis} slice={slice}
             onDown={(x, y) => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
             onMove={(x, y) => { setHover({ x, y }); if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}

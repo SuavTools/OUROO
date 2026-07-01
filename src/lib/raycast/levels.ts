@@ -45,7 +45,7 @@ export type Palette = {
 
 // One storey of a multi-floor realm: its own walkable grid (+ optional per-cell terrain heights and
 // placed NPCs). Floors stack bottom→top; you cross between them via '>' / '<' stair cells.
-export type Floor3D = { rows: string[]; heights?: string[]; npcs?: Npc3D[] };
+export type Floor3D = { rows: string[]; heights?: string[]; blocks?: string[]; npcs?: Npc3D[] };
 
 export type Level3D = {
   id: string;
@@ -63,6 +63,8 @@ export type Level3D = {
   palette?: Partial<Palette>;   // per-level overrides on top of the atmosphere
   heights?: string[];      // OPTIONAL per-cell floor level ('0'–'9'), same dims as rows. Absent/all-'0'
                            // = flat (classic renderer). Steps of 1 level are climbable; bigger = a wall.
+  blocks?: string[];       // OPTIONAL per-cell BLOCK-on-top grid (same dims as rows). A block sits ON the
+                           // floor material (grass/dirt/…), so you get "grass then rock on top". ' '/'.' = none.
   author?: string;
 };
 
@@ -113,6 +115,29 @@ export type Lighting = { radius: number; ambient: number; flicker: number };
 
 export const WALL_CHARS = new Set(['#', '1', '2', '3', '4']);
 export const isWall = (ch: string) => WALL_CHARS.has(ch);
+
+// ── Blocks ─────────────────────────────────────────────────────────────────────────────────────
+// A BLOCK sits on top of a cell's floor material (stored in the parallel `blocks` grid). Each has a
+// base colour (the voxel renderer adds pixel texture/shading) and a `thin` flag → a slender post/pillar
+// (fence/support) that lets the floor show around it, vs a full-footprint cube. `tall` → 1 storey; a
+// slab/roof piece is short. Solid to the player (walk around, stand on top).
+export type BlockDef = { label: string; color: [number, number, number]; thin?: boolean; h?: number };
+export const BLOCKS: Record<string, BlockDef> = {
+  r: { label: 'Stone',  color: [122, 118, 112] },
+  w: { label: 'Wood',   color: [150, 108, 62] },
+  b: { label: 'Brick',  color: [150, 74, 60] },
+  c: { label: 'Cobble', color: [108, 110, 120] },
+  l: { label: 'Leaves', color: [46, 122, 54] },
+  x: { label: 'Dark',   color: [66, 64, 74] },
+  i: { label: 'Post',   color: [140, 100, 58], thin: true },   // slender wood post/pillar
+  o: { label: 'Pillar', color: [120, 116, 110], thin: true },  // slender stone pillar
+  s: { label: 'Slab',   color: [128, 124, 118], h: 0.34 },     // low stone slab / step / roof piece
+};
+export const blockAt = (f: Pick<Floor3D, 'blocks'>, x: number, y: number): string => {
+  const b = f.blocks; if (!b) return '';
+  const row = b[y]; const c = row && row[x];
+  return c && BLOCKS[c] ? c : '';
+};
 
 export const DEFAULT_PALETTE: Palette = {
   ceil: [14, 14, 26],
@@ -210,7 +235,7 @@ export const cellAt = (rows: string[], x: number, y: number): string => {
 export const floorsOf = (level: Level3D): Floor3D[] =>
   level.floors && level.floors.length
     ? level.floors
-    : [{ rows: level.rows, heights: level.heights, npcs: level.npcs }];
+    : [{ rows: level.rows, heights: level.heights, blocks: level.blocks, npcs: level.npcs }];
 
 // Which floor (and tile) holds the one spawn 'S'. Falls back to floor 0's open cell.
 export function findSpawnFloor(floors: Floor3D[]): { fi: number; x: number; y: number } {
