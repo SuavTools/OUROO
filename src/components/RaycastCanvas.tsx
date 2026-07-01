@@ -900,7 +900,8 @@ export const RaycastCanvas: React.FC<{
         const eyeH2 = heightMap ? pz + EYE_BASE + jz : 0.5;
         const groundY = horizon + ((eyeH2 - zfS) * F) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
-        const szMul = kind === 'tree' ? 1.4 : kind === 'lamp' ? 1.1 : kind === 'rock' ? 0.72 : kind === 'bush' ? 0.62 : kind === 'flower' ? 0.42 : kind === 'exit' ? 1 : 0.55;
+        // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
+        const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : 0.9;
         const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * szMul);
         const half = sz >> 1;
         const isGround = kind === 'tree' || kind === 'bush' || kind === 'flower' || kind === 'rock' || kind === 'lamp';
@@ -1023,7 +1024,7 @@ export const RaycastCanvas: React.FC<{
           const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX)));
           const by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (F / camY) * 0.4)));
           if (camY > depth[by * W + bx] + 0.3) continue;   // torso behind a wall → hide
-          const figScreen = (F / camY) * 0.82 * (nn.sz ?? 1) * S;
+          const figScreen = (F / camY) * 1.35 * (nn.sz ?? 1) * S;   // taller NPCs to match the tall player
           const drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
           renderAppearance(nn.a, tick * 0.5);
           ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
@@ -1421,7 +1422,8 @@ export const RaycastCanvas: React.FC<{
         const sizeBase = Math.abs(Math.floor(F / camY));
         const zf = baseZ(s.k);
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
-        const szMul = kind === 'tree' ? 1.4 : kind === 'lamp' ? 1.1 : kind === 'rock' ? 0.72 : kind === 'bush' ? 0.62 : kind === 'flower' ? 0.42 : kind === 'exit' ? 1 : 0.55;
+        // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
+        const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : 0.9;
         const sz = Math.floor(sizeBase * szMul), half = sz >> 1;
         const isGround = kind !== 'crystal';
         const vCenter = isGround ? Math.round(groundY) - half : Math.round(groundY) - Math.floor(sizeBase * 0.5) - Math.floor(Math.sin(tick * 0.08) * sizeBase * 0.04);
@@ -1505,7 +1507,7 @@ export const RaycastCanvas: React.FC<{
           const groundY = horizon + ((eye - baseZ(nn.k)) * F) / camY;
           const bx = Math.max(0, Math.min(W - 1, Math.floor(scrX))), by = Math.max(0, Math.min(H - 1, Math.floor(groundY - (F / camY) * 0.4)));
           if (camY > depth[by * W + bx] + 0.3) continue;
-          const figScreen = (F / camY) * 0.82 * (nn.sz ?? 1) * S, drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);
+          const figScreen = (F / camY) * 1.35 * (nn.sz ?? 1) * S, drawH = figScreen / 0.6, drawW = drawH * (npcBuf.width / npcBuf.height);   // taller NPCs to match the tall player
           renderAppearance(nn.a, tick * 0.5);
           ctx.drawImage(npcBuf, scrX * S - drawW / 2, groundY * S - drawH * 0.84, drawW, drawH);
           const headY = groundY * S - figScreen;
