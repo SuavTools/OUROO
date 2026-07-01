@@ -91,6 +91,37 @@ const lodOf = (d: number) => (d < 1 ? 0 : Math.log2(d) * 0.9);   // farther = hi
 
 type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'tree' | 'bush' | 'flower' | 'rock' | 'lamp'; key?: string };
 
+// ── Animated molten lava (DOOM-style animated flat). Layered, domain-warped flow → dark crust veins,
+// glowing molten cells and hot yellow-white cores that churn over time. Cheap enough for per-pixel
+// floor casting. Returns [r,g,b] (emissive — not fogged/lit by the caller).
+const moltenLava = (fx: number, fy: number, t: number): [number, number, number] => {
+  const wx = fx + 0.4 * Math.sin(fy * 2.3 + t * 0.05) + 0.15 * Math.sin(fy * 6.1 - t * 0.09);   // turbulent warp
+  const wy = fy + 0.4 * Math.sin(fx * 2.1 - t * 0.04) + 0.15 * Math.sin(fx * 5.7 + t * 0.07);
+  let n = Math.sin(wx * 3.1 + t * 0.06) * Math.sin(wy * 2.7 - t * 0.05) + 0.55 * Math.sin((wx + wy) * 5.6 + t * 0.11);
+  n = n * 0.5 + 0.5;                                   // → 0..1 molten field
+  const heat = Math.max(0, Math.min(1, (n - 0.24) * 1.7));
+  let r = 34 + heat * 221, g = 5 + heat * heat * 150, b = 3 + heat * 16;   // crust-red → molten-orange
+  const core = Math.max(0, n - 0.8) * 5;                                    // hot yellow-white peaks
+  r = Math.min(255, r + core * 30); g = Math.min(255, g + core * 150); b = Math.min(140, b + core * 90);
+  return [r, g, b];
+};
+
+// ── Portal energy field, in cell-local space (fx,fy are world coords; we take the fractional cell
+// position). A rotating spiral + concentric rings that fade to nothing at the tile edge → a swirling
+// gateway instead of a flat pad. Returns [r,g,b,alpha] (alpha 0 = show floor beneath).
+const portalFloor = (fx: number, fy: number, t: number): [number, number, number, number] => {
+  const cx = fx - Math.floor(fx) - 0.5, cy = fy - Math.floor(fy) - 0.5;
+  const rad = Math.hypot(cx, cy);
+  if (rad > 0.48) return [0, 0, 0, 0];                         // outside the ring → floor shows through
+  const ang = Math.atan2(cy, cx);
+  const spiral = 0.5 + 0.5 * Math.sin(ang * 3 + rad * 22 - t * 0.16);   // 3-arm swirl
+  const rings = 0.5 + 0.5 * Math.sin(rad * 30 - t * 0.22);
+  const edge = Math.min(1, (0.48 - rad) * 6);                  // soft outer falloff
+  const core = Math.max(0, 1 - rad * 3.2);                     // bright hot centre
+  const e = (0.35 + 0.65 * spiral * rings) * edge;
+  return [30 * e + 120 * core, 200 * e + 180 * core, 250 * e + 120 * core, edge];
+};
+
 export const RaycastCanvas: React.FC<{
   levelId?: string;
   level?: Level3D;                 // pass a live (unsaved) level to test-play from the designer
@@ -1118,9 +1149,9 @@ export const RaycastCanvas: React.FC<{
                 const d = ((eye - curZ) * F) / pp;
                 const fx = px + d * rdx, fy = py + d * rdy;
                 let fr: number, fg: number, fb: number, emis = false;
-                if (curCh === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); fr = 255 * sh; fg = 90 * sh + 30; fb = 20 * sh; emis = true; }
+                if (curCh === 'L') { [fr, fg, fb] = moltenLava(fx, fy, tick); emis = true; }
                 else if (curCh === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); fr = 20 * sh; fg = 90 * sh; fb = 170 * sh; emis = true; }
-                else if (curCh === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); fr = 30; fg = 200 * sh; fb = 230 * sh; emis = true; }
+                else if (curCh === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick); const bs = sampleTex(TEXES.dirt, fx, fy, lodOf(d)); fr = pr + pal.floor[0] * bs * (1 - pa); fg = pg + pal.floor[1] * bs * (1 - pa); fb = pb + pal.floor[2] * bs * (1 - pa); emis = true; }
                 else if (curCh === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); fr = 150 * sw + 40; fg = 40 * sw; fb = 210 * sw + 40; emis = true; }
                 else if (curCh === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; fr = 180 * st; fg = 200 * st; fb = 150 * st; emis = true; }
                 else if (curCh === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; fr = 40 * st; fg = 44 * st; fb = 60 * st; emis = true; }
@@ -1251,8 +1282,12 @@ export const RaycastCanvas: React.FC<{
               if (Math.abs(u) < 0.05 && v > -0.18) { on = true; lit = true; r = 52; g = 50; b = 60; }                   // post
               else { const cu = u, cv = v + 0.34; const dd = Math.sqrt(cu * cu + cv * cv);
                 if (dd < 0.17) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.12); r = 255 * gl; g = 222 * gl; b = 120 * gl; } }   // emissive orb
-            } else {                                       // exit — bright cyan archway/beam
-              if (Math.abs(u) < 0.34 && v > -0.5) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.2 + y * 0.3); r = 60 * gl; g = 230 * gl; b = 255 * gl; }
+            } else {                                       // exit — a swirling vertical portal of energy
+              const pu = u / 0.34, pv = (v + 0.05) / 0.55; const rr2 = pu * pu + pv * pv;
+              if (rr2 < 1) { on = true;
+                const ang = Math.atan2(pv, pu); const swirl = 0.5 + 0.5 * Math.sin(ang * 4 + rr2 * 8 - tick * 0.3 + v * 6);
+                const rim = Math.max(0, 1 - Math.abs(1 - rr2) * 6); const core = (1 - rr2) * (1 - rr2); const gl = 0.35 + 0.65 * swirl;
+                r = 40 * gl + 180 * rim + 130 * core; g = 210 * gl + 120 * rim + 150 * core; b = 255 * gl + 200 * rim + 120 * core; }
             }
             if (!on) continue;
             if (lit) { r *= lfTree; g *= lfTree; b *= lfTree; }
@@ -1615,10 +1650,10 @@ export const RaycastCanvas: React.FC<{
 
       // surface colour for a floor/slab cell at world (fx,fy), mip-sampled by lod → [r,g,b,emissive]
       const floorColor = (c: string, fx: number, fy: number, lod = 0): [number, number, number, boolean] => {
-        if (c === 'L') { const sh = 0.6 + 0.4 * Math.sin((fx + fy) * 6 + tick * 0.25); return [255 * sh, 90 * sh + 30, 20 * sh, true]; }
+        if (c === 'L') { const [r, g, b] = moltenLava(fx, fy, tick); return [r, g, b, true]; }
         if (c === 'w') { const sh = 0.7 + 0.3 * Math.sin((fx * 3 + fy * 2) * 2 + tick * 0.12); return [20 * sh, 90 * sh, 170 * sh, true]; }
         if (c === '~') return [4, 3, 8, true];
-        if (c === 'E') { const sh = 0.7 + 0.3 * Math.sin(tick * 0.18); return [30, 200 * sh, 230 * sh, true]; }
+        if (c === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick); const bs = sampleTex(TEXES.dirt, fx, fy, lod); return [pr + pal.floor[0] * bs * (1 - pa), pg + pal.floor[1] * bs * (1 - pa), pb + pal.floor[2] * bs * (1 - pa), true]; }
         if (c === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); return [150 * sw + 40, 40 * sw, 210 * sw + 40, true]; }
         if (c === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; return [180 * st, 200 * st, 150 * st, true]; }
         if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
@@ -1765,7 +1800,10 @@ export const RaycastCanvas: React.FC<{
             else if (kind === 'flower') { if (Math.abs(u) < 0.04 && v > -0.04) { on = true; lit = true; r = 40; g = 112; b = 52; } else { const cu = u, cv = v + 0.28; const dd = Math.sqrt(cu * cu + cv * cv); if (dd < 0.2) { on = true; lit = true; if (dd < 0.06) { r = 250; g = 220; b = 70; } else { const P = [[235, 80, 90], [235, 150, 60], [210, 90, 220], [90, 150, 240], [240, 240, 250]][hue]; r = P[0]; g = P[1]; b = P[2]; } } } }
             else if (kind === 'rock') { const cu = u, cv = v - 0.2; const dd = Math.sqrt(cu * cu + cv * cv * 1.3); if (dd < 0.44) { on = true; lit = true; const sh = 0.55 + 0.45 * (1 - dd / 0.44) + 0.07 * Math.sin(u * 16); const g0 = 120 * sh; r = g0; g = g0 + 4; b = g0 + 14; } }
             else if (kind === 'lamp') { if (Math.abs(u) < 0.05 && v > -0.18) { on = true; lit = true; r = 52; g = 50; b = 60; } else { const cu = u, cv = v + 0.34; const dd = Math.sqrt(cu * cu + cv * cv); if (dd < 0.17) { on = true; const gl = 0.7 + 0.3 * Math.sin(tick * 0.12); r = 255 * gl; g = 222 * gl; b = 120 * gl; } } }
-            else { if (Math.abs(u) < 0.34 && v > -0.5) { on = true; const gl = 0.6 + 0.4 * Math.sin(tick * 0.2 + y * 0.3); r = 60 * gl; g = 230 * gl; b = 255 * gl; } }
+            else { const pu = u / 0.34, pv = (v + 0.05) / 0.55; const rr2 = pu * pu + pv * pv;
+              if (rr2 < 1) { on = true; const ang = Math.atan2(pv, pu); const swirl = 0.5 + 0.5 * Math.sin(ang * 4 + rr2 * 8 - tick * 0.3 + v * 6);
+                const rim = Math.max(0, 1 - Math.abs(1 - rr2) * 6); const core = (1 - rr2) * (1 - rr2); const gl = 0.35 + 0.65 * swirl;
+                r = 40 * gl + 180 * rim + 130 * core; g = 210 * gl + 120 * rim + 150 * core; b = 255 * gl + 200 * rim + 120 * core; } }
             if (!on) continue;
             if (lit) { r *= lfTree; g *= lfTree; b *= lfTree; }
             const [rr, gg, bb] = fogMix(r, g, b, fogT * 0.6);
