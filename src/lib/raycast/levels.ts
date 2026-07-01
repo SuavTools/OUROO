@@ -214,258 +214,64 @@ export function findSpawn(rows: string[]): { x: number; y: number } {
   return { x: 1.5, y: 1.5 };
 }
 
-// ── Built-in demo realms ────────────────────────────────────────────────────────────────────────
-// THE UNDERVAULT — a starter dungeon: stone halls, a lava moat with a narrow crossing, a bottomless
-// pit, a few crystals to grab, and an exit gate on the far side.
-const UNDERVAULT: Level3D = {
-  id: 'undervault',
-  name: 'The Undervault',
-  spawnDir: 0,
-  rows: [
-    '################',
-    '#S....#....C...#',
-    '#.....#...#....#',
-    '#.....#...#....1',
-    '#..C..#...#....1',
-    '###.###LLL#.####',
-    '#.....LLLLL....#',
-    '#..~~.LLLLL.~~.#',
-    '#..~~..LLL..~~.#',
-    '#..~~.......~~.#',
-    '#2222.....C..22#',
-    '#2....#####...2#',
-    '#2.C..#...#...2#',
-    '#2....#.E.#...2#',
-    '#2....#####...2#',
-    '################',
-  ],
-  palette: {
-    wall: { '1': [150, 90, 80], '2': [90, 80, 120] },
-    floor: [40, 36, 48],
-    fog: [6, 4, 12],
-  },
-};
-
-// NEON GRID — a brighter, open arena to show off textures/strafing without hazards crowding it.
-const NEONGRID: Level3D = {
-  id: 'neongrid',
-  name: 'Neon Grid',
-  spawnDir: 0,
-  rows: [
-    '############',
-    '#S.........#',
-    '#.3.3.3.3..#',
-    '#..........#',
-    '#.3.3.3.3.C#',
-    '#..........#',
-    '#.3.3.3.3..#',
-    '#....C.....#',
-    '#.3.3.3.3..#',
-    '#.........E#',
-    '############',
-  ],
-  palette: {
-    ceil: [4, 8, 16], floor: [10, 16, 24], fog: [2, 6, 14],
-    wall: { '3': [40, 220, 180] },
-  },
-};
-
-// THE HOLLOW — a pitch-black maze lit only by your candle. Crystals glow as beacons in the dark; find
-// your way to the exit before the dark gets to you. Slender/Amnesia in lo-fi.
-const HOLLOW: Level3D = {
-  id: 'hollow',
-  name: 'The Hollow',
-  spawnDir: 0,
-  atmo: 'candle',
-  rows: [
-    '##################',
-    '#S.O.#.....#....C#',
-    '###.#.###.#.####.#',
-    '#...#...#.#....#.#',
-    '#.#####.#.###.#.##',
-    '#.#...#.#...#.#..#',
-    '#.#.#.#.###.#.##.#',
-    '#...#...#C#.#..#.#',
-    '###.###.#.#.##.#.#',
-    '#C..#...#.#..#..C#',
-    '#.###.###.##.###.#',
-    '#.#...#....#...#.#',
-    '#.#.###.##.###.#.#',
-    '#...#...##...#...#',
-    '###.#.######.###.#',
-    '#.O.#....E.....#.#',
-    '#.############.#.#',
-    '##################',
-  ],
-};
-
-// THE ASCENT — a stepped pyramid: climb the rings (each one level higher) to the exit at the summit.
-// Shows off verticality — steps, looking down off the edge, crystals on the mid-tiers.
-const ASCENT: Level3D = (() => {
-  const n = 11, rows: string[] = [], heights: string[] = [];
-  for (let y = 0; y < n; y++) {
-    let r = '', h = '';
-    for (let x = 0; x < n; x++) {
-      const ring = Math.min(x, y, n - 1 - x, n - 1 - y);
-      if (ring === 0) { r += '#'; h += '0'; continue; }
-      const lvl = Math.min(ring - 1, 3);
-      let ch = '.';
-      if (x === 5 && y === 5) ch = 'E';                       // summit exit
-      else if (x === 1 && y === 1) ch = 'S';                  // start in a low corner
-      else if ((x === 5 && y === 1) || (x === 1 && y === 5) || (x === 9 && y === 5)) ch = 'C';
-      r += ch; h += String(lvl);
-    }
-    rows.push(r); heights.push(h);
-  }
-  return { id: 'ascent', name: 'The Ascent', spawnDir: 0, atmo: 'dungeon', rows, heights };
-})();
-
-// THE SPRAWL — a big open ruin under a night sky: a raised central plaza (climb the steps), lava
-// patches, a pit, crystals to grab, and five stalkers ('M') hunting you in the dark. Spooky music.
-const SPRAWL: Level3D = (() => {
-  const W = 22, H = 16;
-  const g: string[] = [], h: string[] = [];
+// ── The one starter realm ─────────────────────────────────────────────────────────────────────────
+// THE WIDE — a single big multi-storey sandbox that shows off the Minecraft-tall view. A far-and-wide
+// ground plaza under open sky, a hill you climb, roofed TUNNELS you duck through (blocks sitting two
+// levels up that you walk under), and overhang bridges. Walls are 2 blocks tall so you can't see over
+// them; tunnel roofs sit 2 blocks up so you fit under. Fork it in the Forge to start building your own.
+const STARTER: Level3D = (() => {
+  const W = 40, H = 28;
+  const g0: string[] = [], g1: string[] = [], g2: string[] = [], hh: string[] = [];
   for (let y = 0; y < H; y++) {
-    let row = '', hr = '';
+    let r0 = '', r1 = '', hr = '';
     for (let x = 0; x < W; x++) {
-      const border = x === 0 || y === 0 || x === W - 1 || y === H - 1;
-      if (border) { row += '#'; hr += '0'; continue; }
-      row += '.';
-      const cx = Math.abs(x - 11), cy = Math.abs(y - 8);
-      hr += String(cx <= 3 && cy <= 2 ? 2 : cx <= 4 && cy <= 3 ? 1 : 0);   // raised central plaza
+      const edge = x === 0 || y === 0 || x === W - 1 || y === H - 1;
+      r0 += edge ? '#' : '.';
+      r1 += edge ? '#' : ' ';   // 2-block-tall perimeter; open sky inside
+      hr += '0';
     }
-    g.push(row); h.push(hr);
+    g0.push(r0); g1.push(r1); g2.push(' '.repeat(W)); hh.push(hr);
   }
-  const set = (x: number, y: number, ch: string) => { g[y] = g[y].substring(0, x) + ch + g[y].substring(x + 1); };
-  ([[3, 3], [3, 12], [18, 3], [18, 12], [8, 6], [14, 6], [8, 10], [14, 10]] as [number, number][])
-    .forEach(([x, y]) => { set(x, y, '#'); set(x + 1, y, '#'); });   // pillar blocks
-  ([[2, 8], [3, 8], [19, 8]] as [number, number][]).forEach(([x, y]) => set(x, y, 'L'));   // lava
-  set(11, 2, '~'); set(11, 3, '~');                                                          // a pit
-  ([[5, 2], [17, 2], [5, 13], [17, 13], [11, 11]] as [number, number][]).forEach(([x, y]) => set(x, y, 'M'));  // stalkers
-  ([[11, 8], [10, 8], [12, 8], [2, 2], [20, 2], [2, 13], [20, 13]] as [number, number][]).forEach(([x, y]) => set(x, y, 'C'));
-  set(1, 1, 'S'); set(20, 14, 'E');
-  return { id: 'sprawl', name: 'The Sprawl', spawnDir: 0, atmo: 'candle', sky: 'night', music: 'spooky' as Mood, rows: g, heights: h };
+  const put = (g: string[], x: number, y: number, c: string) => { if (y >= 0 && y < H && x >= 0 && x < W) g[y] = g[y].substring(0, x) + c + g[y].substring(x + 1); };
+  const wall2 = (x: number, y: number) => { put(g0, x, y, '#'); put(g1, x, y, '#'); };            // 2-block wall (can't see over)
+  const corridor = (x: number, y: number) => { put(g0, x, y, '.'); put(g1, x, y, ' '); put(g2, x, y, '#'); };  // open floor + air + roof 2 up = tunnel you duck through
+  const cry = (x: number, y: number) => put(g0, x, y, 'C');
+  const setH = (x: number, y: number, n: number) => put(hh, x, y, String(Math.max(0, Math.min(3, n))));
+
+  // a hill to climb — stepped raised terrain in the north-west
+  const cx = 9, cy = 7, rad = 5;
+  for (let y = cy - rad; y <= cy + rad; y++) for (let x = cx - rad; x <= cx + rad; x++) {
+    const d = Math.hypot(x - cx, y - cy);
+    if (d < rad) setH(x, y, Math.round(3 - d * 0.7));
+  }
+  cry(cx, cy);
+
+  // main covered tunnel — a 1-wide roofed corridor running east across the south, exit at the far end
+  const ty = 21;
+  for (let x = 6; x <= 33; x++) { wall2(x, ty - 1); wall2(x, ty + 1); corridor(x, ty); }
+  put(g0, 6, ty, '.'); put(g1, 6, ty, ' ');   // west mouth, open to the plaza
+  cry(14, ty); cry(26, ty);
+  put(g0, 33, ty, 'E'); put(g2, 33, ty, ' ');  // exit deep in the tunnel, open above it
+
+  // a branch tunnel north to a small crystal alcove
+  for (let y = 13; y <= ty; y++) { wall2(24 - 1, y); wall2(24 + 1, y); corridor(24, y); }
+  cry(24, 14);
+
+  // overhang bridges over the open plaza — blocks up top you stroll under
+  for (let x = 15; x <= 21; x++) put(g2, x, 16, '#');
+  for (let y = 3; y <= 8; y++) put(g2, 31, y, '#');
+
+  // spawn out in the open west plaza + a few crystals to grab on the way
+  put(g0, 4, 24, 'S');
+  cry(6, 24); cry(20, 4); cry(35, 11); cry(4, 12);
+
+  return {
+    id: 'starter', name: 'The Wide', spawnDir: 0, sky: 'day', music: 'chill' as Mood,
+    rows: g0, floors: [{ rows: g0, heights: hh }, { rows: g1 }, { rows: g2 }],
+  };
 })();
 
-// THE GLADE — an outdoor grass clearing under a day sky: a pond to swim across (don't linger or you
-// drown), scattered trees, crystals. Shows grass/water/trees + the breath mechanic.
-const GLADE: Level3D = (() => {
-  const W = 16, H = 12, g: string[] = [];
-  for (let y = 0; y < H; y++) {
-    let row = '';
-    for (let x = 0; x < W; x++) row += (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? '#' : 'g';
-    g.push(row);
-  }
-  const set = (x: number, y: number, ch: string) => { g[y] = g[y].substring(0, x) + ch + g[y].substring(x + 1); };
-  for (let y = 4; y <= 7; y++) for (let x = 6; x <= 10; x++) set(x, y, 'w');     // pond
-  ([[2, 2], [13, 2], [3, 9], [12, 9], [7, 2], [11, 10], [2, 6], [13, 6]] as [number, number][]).forEach(([x, y]) => set(x, y, 'T'));
-  ([[2, 4], [13, 4], [8, 10]] as [number, number][]).forEach(([x, y]) => set(x, y, 'C'));
-  ([[4, 2], [10, 2], [3, 7], [12, 8], [5, 10]] as [number, number][]).forEach(([x, y]) => set(x, y, 'b'));            // bushes
-  ([[2, 3], [11, 2], [14, 4], [3, 5], [12, 5], [9, 10], [4, 9]] as [number, number][]).forEach(([x, y]) => set(x, y, 'f'));  // flowers
-  set(8, 3, 'r');                                                                                                   // a boulder
-  set(13, 10, 'l'); set(2, 10, 'l');                                                                                // lamp posts
-  ([[3, 3], [4, 3], [3, 4], [4, 4]] as [number, number][]).forEach(([x, y]) => set(x, y, 'p'));                     // a paved patio
-  set(1, 1, 'S'); set(14, 10, 'E');
-  return { id: 'glade', name: 'The Glade', spawnDir: 0, sky: 'day', music: 'chill' as Mood, rows: g };
-})();
-
-// THE SUNKEN SPIRE — a MULTI-STOREY demo: a lava-lit basement, a ground hall where you spawn, and a
-// rooftop with the exit. Storeys are stacked grids connected by aligned stairs ('>' up / '<' down):
-//   basement '>' (9,2)  ↔  ground '<' (9,2)        ground '>' (2,9)  ↔  roof '<' (2,9)
-// No solid towers — you walk on top of one floor and stand inside the next. Grab crystals on every
-// level, climb to the roof, then take the Exit.
-const SPIRE_BASEMENT = [
-  '############',
-  '#C........C#',
-  '#........>.#',   // '>' (9,2) climbs to the ground hall
-  '#.LLLL.....#',
-  '#..........#',
-  '#...C..C...#',
-  '#..........#',
-  '#.LLLL.LLL.#',
-  '#..........#',
-  '#C........C#',
-  '#..........#',
-  '############',
-];
-const SPIRE_GROUND = [
-  '############',
-  '#S........C#',   // spawn here — this storey is "Ground"
-  '#........<.#',   // '<' (9,2) descends to the basement
-  '#..####....#',
-  '#..........#',
-  '#....##....#',
-  '#..........#',
-  '#....##....#',
-  '#..........#',
-  '#.>.......C#',   // '>' (2,9) climbs to the roof
-  '#..........#',
-  '############',
-];
-const SPIRE_ROOF = [
-  '############',
-  '#C........C#',
-  '#..........#',
-  '#..........#',
-  '#....E.....#',   // the way out, up top
-  '#..........#',
-  '#...O..O...#',   // a little tunnel pair to play with on the roof
-  '#..........#',
-  '#..........#',
-  '#.<.......C#',   // '<' (2,9) descends back to the ground hall
-  '#..........#',
-  '############',
-];
-const SPIRE: Level3D = {
-  id: 'spire',
-  name: 'The Sunken Spire',
-  spawnDir: 0,
-  atmo: 'dungeon',
-  music: 'tense' as Mood,
-  rows: SPIRE_GROUND,                       // mirror of the spawn storey (floorsOf reads `floors`)
-  floors: [{ rows: SPIRE_BASEMENT }, { rows: SPIRE_GROUND }, { rows: SPIRE_ROOF }],
-};
-
-// THE OVERLOOK — a TRUE-OVERHANG demo for the stacked voxel renderer. A ground courtyard you spawn
-// in, with an upper balcony (the back half of floor +1) that juts out OVER the courtyard: stand below
-// and you walk UNDER it with the balcony as your ceiling; climb the stairs (or jump) to walk out onto
-// it and look down. Grab the crystal up top, drop off the edge, and head for the Exit.
-const OVERLOOK_GROUND = [
-  '############',
-  '#S.......>.#',   // '>' (9,1) lifts you to the balcony above
-  '#..........#',
-  '#..........#',
-  '#..........#',
-  '#....C.....#',
-  '#..........#',
-  '#.........E#',
-  '#..........#',
-  '############',
-];
-const OVERLOOK_UPPER = [
-  '            ',
-  '      ...<..',   // '<' (9,1) drops back to the courtyard
-  '      ......',
-  '      ......',   // this back-half slab overhangs the courtyard below — walk under it!
-  '      ...C..',
-  '            ',   // everything below is open AIR — you see (and fall) straight through to the ground
-  '            ',
-  '            ',
-  '            ',
-  '            ',
-];
-const OVERLOOK: Level3D = {
-  id: 'overlook',
-  name: 'The Overlook',
-  spawnDir: 0,
-  atmo: 'dungeon',
-  sky: 'sunset',
-  music: 'chill' as Mood,
-  rows: OVERLOOK_GROUND,
-  floors: [{ rows: OVERLOOK_GROUND }, { rows: OVERLOOK_UPPER }],
-};
-
-export const BUILTIN_LEVELS: Level3D[] = [UNDERVAULT, NEONGRID, HOLLOW, ASCENT, SPRAWL, GLADE, SPIRE, OVERLOOK];
+export const BUILTIN_LEVELS: Level3D[] = [STARTER];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';
