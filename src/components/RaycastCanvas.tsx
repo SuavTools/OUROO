@@ -124,6 +124,89 @@ const portalFloor = (fx: number, fy: number, t: number, locked = false): [number
     : [30 * e + 120 * core, 200 * e + 180 * core, 250 * e + 120 * core, edge];  // open  → teal-white vortex
 };
 
+// ── Voxel props (Minecraft look) ─────────────────────────────────────────────────────────────────
+// Draw props as clusters of shaded, depth-tested axis-aligned CUBES instead of camera-facing
+// billboards, so you can walk around them and see faces. `BoxEnv` bundles the per-frame camera +
+// buffers so the same rasterizer serves both the flat and stacked render paths.
+type PC = { sx: number; sy: number; cy: number };
+type BoxEnv = {
+  px: number; py: number; invDet: number; sin: number; cos: number; planeX: number; planeY: number;
+  W: number; H: number; F: number; horizon: number; eye: number; fog: [number, number, number];
+  data: Uint8ClampedArray; depth: Float32Array;
+};
+// project a world point (wx,wy,wz) → screen x/y + camera depth
+const projPt = (e: BoxEnv, wx: number, wy: number, wz: number): PC => {
+  const rx = wx - e.px, ry = wy - e.py;
+  const cy = e.invDet * (-e.planeY * rx + e.planeX * ry);
+  const cx = e.invDet * (e.sin * rx - e.cos * ry);
+  return { sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + ((e.eye - wz) * e.F) / cy, cy };
+};
+// fill a screen triangle with a flat pre-shaded colour, depth-testing per pixel (interpolated 1/cy)
+const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, rr: number, gg: number, bb: number) => {
+  const minX = Math.max(0, Math.floor(Math.min(p0.sx, p1.sx, p2.sx)));
+  const maxX = Math.min(e.W - 1, Math.ceil(Math.max(p0.sx, p1.sx, p2.sx)));
+  const minY = Math.max(0, Math.floor(Math.min(p0.sy, p1.sy, p2.sy)));
+  const maxY = Math.min(e.H - 1, Math.ceil(Math.max(p0.sy, p1.sy, p2.sy)));
+  if (minX > maxX || minY > maxY) return;
+  const i0 = 1 / p0.cy, i1 = 1 / p1.cy, i2 = 1 / p2.cy;
+  for (let y = minY; y <= maxY; y++) {
+    const fy = y + 0.5;
+    for (let x = minX; x <= maxX; x++) {
+      const fx = x + 0.5;
+      const e0 = (p1.sx - p0.sx) * (fy - p0.sy) - (p1.sy - p0.sy) * (fx - p0.sx);
+      const e1 = (p2.sx - p1.sx) * (fy - p1.sy) - (p2.sy - p1.sy) * (fx - p1.sx);
+      const e2 = (p0.sx - p2.sx) * (fy - p2.sy) - (p0.sy - p2.sy) * (fx - p2.sx);
+      if (!((e0 >= 0 && e1 >= 0 && e2 >= 0) || (e0 <= 0 && e1 <= 0 && e2 <= 0))) continue;
+      const sum = e0 + e1 + e2; if (sum === 0) continue;
+      const cy = sum / (e1 * i0 + e2 * i1 + e0 * i2);   // 1 / interpolated(1/cy)
+      const idx = y * e.W + x;
+      if (cy >= e.depth[idx]) continue;
+      const o = idx * 4; e.data[o] = rr; e.data[o + 1] = gg; e.data[o + 2] = bb; e.data[o + 3] = 255;
+      e.depth[idx] = cy;
+    }
+  }
+};
+// draw one axis-aligned cuboid: top + the ≤2 camera-facing side faces, Minecraft-shaded (top brightest),
+// fogged by mean depth, dimmed by `light` (lantern). Colour (r,g,bl) is the base albedo.
+const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0: number, z1: number, r: number, g: number, bl: number, light: number) => {
+  const x0 = wx - w / 2, x1 = wx + w / 2, y0 = wy - dep / 2, y1 = wy + dep / 2;
+  const P = (X: number, Y: number, Z: number) => projPt(e, X, Y, Z);
+  const c000 = P(x0, y0, z0), c100 = P(x1, y0, z0), c010 = P(x0, y1, z0), c110 = P(x1, y1, z0);
+  const c001 = P(x0, y0, z1), c101 = P(x1, y0, z1), c011 = P(x0, y1, z1), c111 = P(x1, y1, z1);
+  const quad = (a: PC, b: PC, c: PC, d: PC, shade: number) => {
+    if (!(a.cy > 0.06 && b.cy > 0.06 && c.cy > 0.06 && d.cy > 0.06)) return;
+    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * 0.012); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * 0.6;
+    const sl = shade * light;
+    const rr = r * sl + (e.fog[0] - r * sl) * ft, gg = g * sl + (e.fog[1] - g * sl) * ft, bb = bl * sl + (e.fog[2] - bl * sl) * ft;
+    fillTri(e, a, b, c, rr, gg, bb); fillTri(e, a, c, d, rr, gg, bb);
+  };
+  quad(c001, c101, c111, c011, 1.0);                       // top face — brightest
+  if (e.px > x1) quad(c100, c110, c111, c101, 0.6);        // east  face
+  else if (e.px < x0) quad(c000, c010, c011, c001, 0.6);   // west  face
+  if (e.py > y1) quad(c010, c110, c111, c011, 0.82);       // south face
+  else if (e.py < y0) quad(c000, c100, c101, c001, 0.82);  // north face
+};
+// A prop = a list of cuboids relative to its tile centre. dx,dy = horizontal offset (tiles); w,dep =
+// footprint; z0,z1 = height range above the tile floor (world-Z); rgb = albedo; glow>0 = self-lit.
+type PropBox = { dx: number; dy: number; w: number; dep: number; z0: number; z1: number; r: number; g: number; b: number; glow?: number };
+const TREE_BOXES: PropBox[] = [
+  { dx: 0, dy: 0, w: 0.2, dep: 0.2, z0: 0, z1: 0.98, r: 96, g: 60, b: 32 },        // trunk
+  { dx: 0, dy: 0, w: 0.78, dep: 0.78, z0: 0.82, z1: 1.5, r: 40, g: 118, b: 48 },   // main canopy cube
+  { dx: 0.16, dy: 0.12, w: 0.4, dep: 0.4, z0: 1.28, z1: 1.72, r: 46, g: 132, b: 54 },  // upper lump
+  { dx: -0.14, dy: -0.1, w: 0.34, dep: 0.34, z0: 1.2, z1: 1.5, r: 34, g: 104, b: 42 }, // side lump
+];
+const chestBoxes = (open: boolean): PropBox[] => open
+  ? [
+      { dx: 0, dy: 0, w: 0.64, dep: 0.46, z0: 0, z1: 0.44, r: 120, g: 74, b: 34 },       // body
+      { dx: 0, dy: -0.18, w: 0.66, dep: 0.12, z0: 0.44, z1: 0.82, r: 96, g: 58, b: 28 }, // lid flung back
+      { dx: 0, dy: 0.02, w: 0.5, dep: 0.34, z0: 0.36, z1: 0.5, r: 255, g: 216, b: 120, glow: 1 }, // treasure glow
+    ]
+  : [
+      { dx: 0, dy: 0, w: 0.64, dep: 0.46, z0: 0, z1: 0.42, r: 120, g: 74, b: 34 },        // body
+      { dx: 0, dy: 0, w: 0.68, dep: 0.5, z0: 0.42, z1: 0.6, r: 100, g: 60, b: 28 },       // closed lid
+      { dx: 0, dy: -0.24, w: 0.12, dep: 0.06, z0: 0.36, z1: 0.5, r: 240, g: 196, b: 80, glow: 0.9 }, // lock
+    ];
+
 export const RaycastCanvas: React.FC<{
   levelId?: string;
   level?: Level3D;                 // pass a live (unsaved) level to test-play from the designer
@@ -152,6 +235,7 @@ export const RaycastCanvas: React.FC<{
 
   // HUD mirror (kept tiny — only what the React overlay needs)
   const [hud, setHud] = useState({ hp: MAX_HP, crystals: 0, total: 0, dead: false, exited: false, breath: 100, submerged: false, chests: 0, chestTotal: 0 });
+  const [toast, setToast] = useState<{ msg: string; kind: 'good' | 'bad' } | null>(null);
   const onExitRef = useRef(onExit); useEffect(() => { onExitRef.current = onExit; });
   const onRewardRef = useRef(onReward); useEffect(() => { onRewardRef.current = onReward; });
   const attackFnRef = useRef<(() => void) | null>(null);   // mobile FIRE button → the in-effect attack
@@ -400,6 +484,8 @@ export const RaycastCanvas: React.FC<{
     };
     // Denied — a dull low buzz when you touch a locked exit (chests still to open).
     const denied = () => { beep(130, 0.14, 'square', 0.05); beep(98, 0.18, 'square', 0.04); };
+    // Gate open — a bright rising fanfare when the last chest is opened and the exit unlocks.
+    const gateFanfare = () => { if (mutedRef.current) return; [523, 659, 784, 1047, 1319].forEach(f => beep(f, 0.5, 'triangle', 0.05)); beep(262, 0.6, 'sine', 0.05); };
     // Reusable soft-clip fuzz curve → the electric, gritty, distorted edge. Higher amount = nastier.
     const shaper = (amount: number) => {
       const n = 1024, curve = new Float32Array(n), k = amount;
@@ -757,6 +843,12 @@ export const RaycastCanvas: React.FC<{
 
     const doRespawn = () => { if (!stacked && fi !== spawnFloor) loadFloor(spawnFloor); px = spawn.x; py = spawn.y; dir = ((level.spawnDir ?? 0) * Math.PI) / 180; pz = stacked ? baseZ(spawnFloor) : floorLvl(Math.floor(px), Math.floor(py)) * STEP_UNIT; viewZ = pz; vz = 0; grounded = true; pitch = 0; hp = MAX_HP; breath = 100; respawn = 0; tpLock = false; panic = 0; stopHunt(); };
 
+    // Transient on-screen message (gate cleared / gate locked). Cleared after a beat.
+    let toastTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastDeniedTick = -999;
+    const showToast = (msg: string, kind: 'good' | 'bad') => {
+      setToast({ msg, kind }); clearTimeout(toastTimer); toastTimer = setTimeout(() => setToast(null), 2400);
+    };
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1, hudCh = -1;
     const pushHud = () => {
       const c = grabbed.size, br = Math.round(breath), oc = opened.size;
@@ -867,12 +959,12 @@ export const RaycastCanvas: React.FC<{
       // chest opening — step onto a chest to open it (loot + reward); opening all unlocks the exit
       for (const s of sprites) {
         if (s.kind !== 'chest' || !s.key || opened.has(s.key)) continue;
-        if (Math.abs(s.x - px) < 0.5 && Math.abs(s.y - py) < 0.5) { opened.add(s.key); onRewardRef.current?.(10); chestOpen(); }
+        if (Math.abs(s.x - px) < 0.5 && Math.abs(s.y - py) < 0.5) { opened.add(s.key); onRewardRef.current?.(10); chestOpen(); if (opened.size === totalChests) { gateFanfare(); showToast('⚿ The gate is open', 'good'); } }
       }
 
       // exit — locked until every chest is opened
       if (here === 'E') {
-        if (exitLocked()) { if (tick % 22 === 0) denied(); }
+        if (exitLocked()) { if (tick % 22 === 0) denied(); if (tick - lastDeniedTick > 80) { lastDeniedTick = tick; showToast(`▤ Gate locked — open all chests (${opened.size}/${totalChests})`, 'bad'); } }
         else { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
       }
 
@@ -1266,7 +1358,7 @@ export const RaycastCanvas: React.FC<{
         .map((s, i) => ({ s, i, d: (s.x - px) ** 2 + (s.y - py) ** 2 }))
         .filter(o => !(o.s.kind === 'crystal' && o.s.key && grabbed.has(o.s.key)))
         .sort((a, b) => b.d - a.d);
-      for (const { s, kind } of order.map(o => ({ s: o.s, kind: o.s.kind }))) {
+      for (const { s, kind } of order.map(o => ({ s: o.s, kind: o.s.kind as string }))) {
         const relX = s.x - px, relY = s.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);  // depth (forward)
         if (camY <= 0.1) continue;
@@ -1277,6 +1369,15 @@ export const RaycastCanvas: React.FC<{
         const eyeH2 = heightMap ? pz + EYE_BASE + jz : 0.5;
         const groundY = horizon + ((eyeH2 - zfS) * F) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
+        // Voxel props — real depth-tested cubes (walk around them), not billboards
+        const isVox = kind === 'tree' || kind === 'chest';
+        if (isVox) {
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
+          const light = lightAt(camY);
+          const boxes = kind === 'tree' ? TREE_BOXES : chestBoxes(!!(s.key && opened.has(s.key)));
+          for (const bx of boxes) drawBox3D(env, s.x + bx.dx, s.y + bx.dy, bx.w, bx.dep, zfS + bx.z0, zfS + bx.z1, bx.r, bx.g, bx.b, bx.glow ? Math.max(light, bx.glow) : light);
+          continue;
+        }
         // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
         const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : kind === 'chest' ? 0.85 : 0.9;
         const sz = kind === 'exit' ? sizeBase : Math.floor(sizeBase * szMul);
@@ -1672,10 +1773,10 @@ export const RaycastCanvas: React.FC<{
       // chest opening — same-storey step-on; opening every chest unlocks the exit
       for (const s of allSprites) {
         if (s.kind !== 'chest' || !s.key || opened.has(s.key)) continue;
-        if (Math.abs(s.x - px) < 0.5 && Math.abs(s.y - py) < 0.5 && Math.abs(baseZ(s.k) - pz) < 0.7) { opened.add(s.key); onRewardRef.current?.(10); chestOpen(); }
+        if (Math.abs(s.x - px) < 0.5 && Math.abs(s.y - py) < 0.5 && Math.abs(baseZ(s.k) - pz) < 0.7) { opened.add(s.key); onRewardRef.current?.(10); chestOpen(); if (opened.size === totalChests) { gateFanfare(); showToast('⚿ The gate is open', 'good'); } }
       }
       if (here === 'E') {
-        if (exitLocked()) { if (tick % 22 === 0) denied(); }
+        if (exitLocked()) { if (tick % 22 === 0) denied(); if (tick - lastDeniedTick > 80) { lastDeniedTick = tick; showToast(`▤ Gate locked — open all chests (${opened.size}/${totalChests})`, 'bad'); } }
         else { exited = true; stopHunt(); beep(660, 0.15, 'sine', 0.06); beep(990, 0.2, 'sine', 0.05); setTimeout(() => onExitRef.current?.(), 220); }
       }
 
@@ -1824,7 +1925,7 @@ export const RaycastCanvas: React.FC<{
         .filter(o => !(o.s.kind === 'crystal' && o.s.key && grabbed.has(o.s.key)))
         .sort((a, b) => b.d - a.d);
       for (const { s } of order) {
-        const kind = s.kind;
+        const kind: string = s.kind;
         const relX = s.x - px, relY = s.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);
         if (camY <= 0.1) continue;
@@ -1833,6 +1934,15 @@ export const RaycastCanvas: React.FC<{
         const sizeBase = Math.abs(Math.floor(F / camY));
         const zf = baseZ(s.k);
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
+        // Voxel props — real depth-tested cubes (walk around them), not billboards
+        const isVox = kind === 'tree' || kind === 'chest';
+        if (isVox) {
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+          const light = lightAt(camY);
+          const boxes = kind === 'tree' ? TREE_BOXES : chestBoxes(!!(s.key && opened.has(s.key)));
+          for (const bx of boxes) drawBox3D(env, s.x + bx.dx, s.y + bx.dy, bx.w, bx.dep, zf + bx.z0, zf + bx.z1, bx.r, bx.g, bx.b, bx.glow ? Math.max(light, bx.glow) : light);
+          continue;
+        }
         // sizes bumped for the tall-player world (walls are ~2 blocks) so props/exit read proportional, not tiny
         const szMul = kind === 'tree' ? 2.4 : kind === 'lamp' ? 1.8 : kind === 'rock' ? 1.15 : kind === 'bush' ? 1.0 : kind === 'flower' ? 0.62 : kind === 'exit' ? 1.8 : kind === 'chest' ? 0.85 : 0.9;
         const sz = Math.floor(sizeBase * szMul), half = sz >> 1;
@@ -2015,6 +2125,7 @@ export const RaycastCanvas: React.FC<{
 
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(toastTimer);
       ro.disconnect();
       window.removeEventListener('keydown', kd);
       window.removeEventListener('keyup', ku);
@@ -2045,6 +2156,15 @@ export const RaycastCanvas: React.FC<{
   return (
     <div className="relative w-full h-full select-none overflow-hidden bg-black" style={{ touchAction: 'none' }}>
       <canvas ref={canvasRef} className="absolute inset-0 block w-full h-full" style={{ cursor: isMobileStage ? 'auto' : 'crosshair' }} />
+
+      {/* Toast — gate cleared / gate locked */}
+      {toast && (
+        <div className="absolute left-1/2 top-[22%] z-40 -translate-x-1/2 pointer-events-none">
+          <div className={`font-mono text-sm px-4 py-2 border rounded-sm backdrop-blur-sm shadow-lg ${toast.kind === 'good' ? 'text-[#8fffa8] border-[#8fffa8]/50 bg-[#08301a]/80' : 'text-[#ffcf7a] border-[#ffcf7a]/50 bg-[#301c08]/80'}`}>
+            {toast.msg}
+          </div>
+        </div>
+      )}
 
       {/* HUD */}
       <div className="absolute top-3 right-4 z-30 flex flex-col items-end gap-1.5 pointer-events-none">
