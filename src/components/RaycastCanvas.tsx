@@ -320,27 +320,75 @@ export const RaycastCanvas: React.FC<{
     const ro = new ResizeObserver(resize); ro.observe(canvas);
 
     // ── Audio (tiny, optional) ──────────────────────────────────────────────────────────────────
+    // Everything routes through one master gain (~0.5) so overall loudness matches the flat world's SFX bus.
     let actx: AudioContext | null = null;
+    let masterOut: GainNode | null = null;
+    const ensureAudio = (): GainNode => {
+      if (!actx) {
+        actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        masterOut = actx.createGain(); masterOut.gain.value = 0.5; masterOut.connect(actx.destination);
+      }
+      return masterOut!;
+    };
     const beep = (freq: number, dur: number, type: OscillatorType = 'square', gain = 0.05) => {
       try {
-        if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const o = actx.createOscillator(), g = actx.createGain();
+        const dest = ensureAudio();
+        const o = actx!.createOscillator(), g = actx!.createGain();
         o.type = type; o.frequency.value = freq; g.gain.value = gain;
-        o.connect(g); g.connect(actx.destination);
-        const t = actx.currentTime; o.start(t);
+        o.connect(g); g.connect(dest);
+        const t = actx!.currentTime; o.start(t);
         g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         o.stop(t + dur);
+      } catch { /* audio blocked */ }
+    };
+    // ── Screech — a screaming-ghoul shriek: white noise swept through a sharp resonant bandpass (the
+    // "scream formant") plus a wailing detuned saw with heavy vibrato. Organic and horrible, not a beep.
+    const screech = (intensity = 1, dur = 0.6) => {
+      if (mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t = actx!.currentTime;
+        const len = Math.floor(actx!.sampleRate * dur);
+        const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;   // white noise body
+        const ns = actx!.createBufferSource(); ns.buffer = buf;
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 7 + intensity * 10;
+        bp.frequency.setValueAtTime(500 + intensity * 300, t);
+        bp.frequency.exponentialRampToValueAtTime(1500 + intensity * 1400, t + dur * 0.35);   // rising shriek
+        bp.frequency.exponentialRampToValueAtTime(260, t + dur);                              // falling wail
+        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(0.14 * intensity, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        ns.connect(bp); bp.connect(g); g.connect(dest); ns.start(t); ns.stop(t + dur);
+        // wailing voice under the noise — detuned saw with fast vibrato, sliding down
+        const o = actx!.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(170 + intensity * 70, t); o.frequency.exponentialRampToValueAtTime(85, t + dur);
+        const lfo = actx!.createOscillator(); lfo.frequency.value = 13 + intensity * 6; const lg = actx!.createGain(); lg.gain.value = 26; lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur);
+        const og = actx!.createGain(); og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.07 * intensity, t + 0.05); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(og); og.connect(dest); o.start(t); o.stop(t + dur);
+      } catch { /* audio blocked */ }
+    };
+    // Growl — low bandpassed noise rumble (a wet snarl), volume/pitch driven by proximity. Not a clean tone.
+    const growl = (intensity: number, dur = 0.3) => {
+      if (mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t = actx!.currentTime;
+        const len = Math.floor(actx!.sampleRate * dur);
+        const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const ns = actx!.createBufferSource(); ns.buffer = buf;
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 4 + intensity * 4; bp.frequency.value = 90 + intensity * 120;
+        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.06 + intensity * 0.14, t + 0.04); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        ns.connect(bp); bp.connect(g); g.connect(dest); ns.start(t); ns.stop(t + dur);
       } catch { /* audio blocked */ }
     };
     // Softer voiced note (attack + release) for the melodic layer over the drone.
     const tone = (freq: number, dur: number, type: OscillatorType = 'sine', gain = 0.05) => {
       if (mutedRef.current) return;
       try {
-        if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const o = actx.createOscillator(), g = actx.createGain();
+        const dest = ensureAudio();
+        const o = actx!.createOscillator(), g = actx!.createGain();
         o.type = type; o.frequency.value = freq; g.gain.value = 0;
-        o.connect(g); g.connect(actx.destination);
-        const t = actx.currentTime; o.start(t);
+        o.connect(g); g.connect(dest);
+        const t = actx!.currentTime; o.start(t);
         g.gain.linearRampToValueAtTime(gain, t + Math.min(0.18, dur * 0.3));
         g.gain.linearRampToValueAtTime(0.0001, t + dur);
         o.stop(t + dur + 0.05);
@@ -351,20 +399,19 @@ export const RaycastCanvas: React.FC<{
     const footstep = () => {
       if (mutedRef.current) return;
       try {
-        if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const t = actx.currentTime;
-        const o = actx.createOscillator(); o.type = 'sine';
+        const dest = ensureAudio(); const t = actx!.currentTime;
+        const o = actx!.createOscillator(); o.type = 'sine';
         o.frequency.setValueAtTime(150 + Math.random() * 40, t); o.frequency.exponentialRampToValueAtTime(68, t + 0.08);
-        const g = actx.createGain();
+        const g = actx!.createGain();
         g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.045, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
-        o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + 0.15);
-        const len = Math.floor(actx.sampleRate * 0.05);
-        const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0);
+        o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.15);
+        const len = Math.floor(actx!.sampleRate * 0.05);
+        const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-        const ns = actx.createBufferSource(); ns.buffer = buf;
-        const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
-        const ng = actx.createGain(); ng.gain.value = 0.018;
-        ns.connect(bp); bp.connect(ng); ng.connect(actx.destination); ns.start(t);
+        const ns = actx!.createBufferSource(); ns.buffer = buf;
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+        const ng = actx!.createGain(); ng.gain.value = 0.018;
+        ns.connect(bp); bp.connect(ng); ng.connect(dest); ns.start(t);
       } catch { /* audio blocked */ }
     };
     let stepAt = 0;   // stride counter → one footstep per ~0.9 of view-bob travelled
@@ -384,9 +431,9 @@ export const RaycastCanvas: React.FC<{
     const startAmbience = () => {
       if (amb || mutedRef.current) return;
       try {
-        if (!actx) actx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        const master = actx.createGain(); master.gain.value = 0; master.connect(actx.destination);
-        master.gain.linearRampToValueAtTime(VOL[mood], actx.currentTime + 2.5);   // gentler overall level
+        const dest = ensureAudio();
+        const master = actx!.createGain(); master.gain.value = 0; master.connect(dest);
+        master.gain.linearRampToValueAtTime(VOL[mood], actx!.currentTime + 2.5);   // gentler overall level
         const nodes: OscillatorNode[] = [];
         const mk = (f: number, type: OscillatorType, g: number) => {
           const o = actx!.createOscillator(), gg = actx!.createGain();
@@ -664,11 +711,8 @@ export const RaycastCanvas: React.FC<{
         const dx = px - e.x, dy = py - e.y;
         const dist = Math.hypot(dx, dy);
         const sees = sameZ && dist < SIGHT && lineClear(g, e.x, e.y, px, py);
-        if (sees && !e.chasing) {   // JUST spotted you → a LOUD guttural roar + screech so you feel the terror
-          beep(48, 0.8, 'sawtooth', 0.22); beep(51, 0.8, 'sawtooth', 0.17);          // guttural low roar (beating)
-          beep(220, 0.55, 'square', 0.13); beep(370, 0.45, 'sawtooth', 0.11);         // dissonant screech
-          beep(1046, 0.3, 'square', 0.08);                                            // shrill top spike
-          shake = Math.min(6, shake + 4);
+        if (sees && !e.chasing) {   // JUST spotted you → a screaming-ghoul shriek + wet snarl, not a beep
+          screech(1.4, 0.8); growl(1, 0.7); shake = Math.min(6, shake + 4);
         }
         if (sees) e.chasing = true; else if (dist > LOSE || !sameZ) e.chasing = false;   // give up if you break line of sight / change floors
         if (e.chasing && dist < chaseDist) chaseDist = dist;
@@ -698,11 +742,9 @@ export const RaycastCanvas: React.FC<{
       // plus a heartbeat thump and rasp when it's right on you. Ramps up so being caught feels frantic.
       if (chaseDist < Infinity) {
         const prox = 1 - Math.min(chaseDist, SIGHT) / SIGHT;          // 0 far → 1 breathing down your neck
-        if (tick % Math.max(6, Math.round(15 - prox * 10)) === 0) {
-          beep(50 + prox * 28, 0.18, 'sawtooth', 0.05 + prox * 0.14); // growl: louder + higher as it nears
-          if (prox > 0.45) beep(150 + prox * 260, 0.1, 'square', prox * 0.09);   // wet rasp when close
-        }
-        if (prox > 0.55 && tick % Math.max(7, Math.round(24 - prox * 15)) === 0) beep(42, 0.13, 'sine', 0.06 + prox * 0.1);   // heartbeat thump
+        if (tick % Math.max(8, Math.round(20 - prox * 12)) === 0) growl(prox, 0.32);   // wet snarl, faster & louder as it nears
+        if (prox > 0.6 && tick % 66 === 0) screech(prox * 0.9, 0.5);                    // it shrieks when it's right on you
+        if (prox > 0.5 && tick % Math.max(8, Math.round(26 - prox * 16)) === 0) beep(42, 0.13, 'sine', 0.06 + prox * 0.1);   // heartbeat thump (a thud, not electric)
       }
     };
 
