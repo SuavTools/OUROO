@@ -371,13 +371,13 @@ export const RaycastCanvas: React.FC<{
         modu.frequency.setValueAtTime(87 + I * 33, t); modu.frequency.linearRampToValueAtTime(61 + I * 19, t + dur);
         const ring = actx!.createGain(); ring.gain.value = 0;   // base 0 → pure multiply (ring mod)
         modu.connect(ring.gain); carrier.connect(ring);
-        // HARD FUZZ — extreme clip, basically a square-off
-        const fz = shaper(150 + I * 90); ring.connect(fz);
-        // COMB — short feedback delay → ringing metallic resonance
+        // HARD FUZZ — extreme clip, basically a square-off. Cranked → nastier, brighter grit.
+        const fz = shaper(280 + I * 160); ring.connect(fz);
+        // COMB — short feedback delay → ringing metallic resonance. Higher feedback = more it screams.
         const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0055 + I * 0.0012;
-        const fb = actx!.createGain(); fb.gain.value = 0.85; fz.connect(comb); comb.connect(fb); fb.connect(comb);
+        const fb = actx!.createGain(); fb.gain.value = 0.93; fz.connect(comb); comb.connect(fb); fb.connect(comb);
         // sum dry+comb through a screaming formant bandpass, then a highpass to keep it nasty
-        const bpf = actx!.createBiquadFilter(); bpf.type = 'bandpass'; bpf.Q.value = 2.4; bpf.frequency.value = 1350 + I * 500;
+        const bpf = actx!.createBiquadFilter(); bpf.type = 'bandpass'; bpf.Q.value = 1.8; bpf.frequency.value = 1450 + I * 550;
         fz.connect(bpf); comb.connect(bpf);
         const hp = actx!.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 260;
         bpf.connect(hp); hp.connect(out);
@@ -396,6 +396,40 @@ export const RaycastCanvas: React.FC<{
         ns.connect(nbp); nbp.connect(ng); ng.connect(dest);
         carrier.start(t); modu.start(t); sub.start(t); ns.start(t);
         carrier.stop(t + dur); modu.stop(t + dur); sub.stop(t + dur); ns.stop(t + dur);
+      } catch { /* audio blocked */ }
+    };
+    // ── Death — when a stalker kills you. A body SLAM, then a dying-demon groan that ring-mods and
+    // slides DOWN into the sub while a shriek collapses over it, ending on a hollow comb-rung flatline.
+    const death = () => {
+      if (mutedRef.current) return;
+      try {
+        const dest = ensureAudio(); const t = actx!.currentTime; const dur = 2.2;
+        // 1) SLAM — a deep fuzzed sub kick with a hard click transient
+        const slam = actx!.createOscillator(); slam.type = 'sine'; slam.frequency.setValueAtTime(180, t); slam.frequency.exponentialRampToValueAtTime(28, t + 0.35);
+        const slfz = shaper(10);
+        const slg = actx!.createGain(); slg.gain.setValueAtTime(0.55, t); slg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+        slam.connect(slfz); slfz.connect(slg); slg.connect(dest); slam.start(t); slam.stop(t + 0.52);
+        const clk = actx!.createOscillator(); clk.type = 'triangle'; clk.frequency.setValueAtTime(1400, t); clk.frequency.exponentialRampToValueAtTime(160, t + 0.05);
+        const clg = actx!.createGain(); clg.gain.setValueAtTime(0.28, t); clg.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+        clk.connect(clg); clg.connect(dest); clk.start(t); clk.stop(t + 0.07);
+        // 2) DYING GROAN — ring-modulated metal sliding DOWN, hard-fuzzed, rung through a high-feedback comb
+        const car = actx!.createOscillator(); car.type = 'sawtooth'; car.frequency.setValueAtTime(360, t); car.frequency.exponentialRampToValueAtTime(52, t + dur);
+        const mod = actx!.createOscillator(); mod.type = 'square'; mod.frequency.setValueAtTime(104, t); mod.frequency.exponentialRampToValueAtTime(19, t + dur);
+        const rg = actx!.createGain(); rg.gain.value = 0; mod.connect(rg.gain); car.connect(rg);
+        const dfz = shaper(220); rg.connect(dfz);
+        const dcomb = actx!.createDelay(0.05); dcomb.delayTime.value = 0.0093; const dfb = actx!.createGain(); dfb.gain.value = 0.9; dfz.connect(dcomb); dcomb.connect(dfb); dfb.connect(dcomb);
+        const dbp = actx!.createBiquadFilter(); dbp.type = 'bandpass'; dbp.Q.value = 1.6; dbp.frequency.setValueAtTime(1300, t); dbp.frequency.exponentialRampToValueAtTime(300, t + dur);
+        const dg = actx!.createGain(); dg.gain.setValueAtTime(0.0001, t); dg.gain.linearRampToValueAtTime(0.42, t + 0.04); dg.gain.setTargetAtTime(0.0001, t + dur * 0.6, 0.5);
+        dfz.connect(dbp); dcomb.connect(dbp); dbp.connect(dg); dg.connect(dest);
+        car.start(t); mod.start(t); car.stop(t + dur); mod.stop(t + dur);
+        // 3) COLLAPSING SHRIEK — noise shriek that sweeps DOWN and dies (the last breath)
+        const len = Math.floor(actx!.sampleRate * (dur * 0.7));
+        const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        const ns = actx!.createBufferSource(); ns.buffer = buf;
+        const nbp = actx!.createBiquadFilter(); nbp.type = 'bandpass'; nbp.Q.value = 10; nbp.frequency.setValueAtTime(3200, t); nbp.frequency.exponentialRampToValueAtTime(240, t + dur * 0.6);
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.2, t + 0.03); ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.7);
+        ns.connect(nbp); nbp.connect(ng); ng.connect(dest); ns.start(t); ns.stop(t + dur * 0.7);
       } catch { /* audio blocked */ }
     };
     // Hit — a brutal KICK-THUMP + gritty slash when the ghoul strikes you. Physical, chest-punching.
@@ -550,8 +584,8 @@ export const RaycastCanvas: React.FC<{
         const hi2 = actx!.createOscillator(); hi2.type = 'sawtooth'; hi2.frequency.value = 300 * 1.008;    // slow menacing beat
         const rmod = actx!.createOscillator(); rmod.type = 'square'; rmod.frequency.value = 47;             // inharmonic ring modulator
         const ring = actx!.createGain(); ring.gain.value = 0; rmod.connect(ring.gain); hi.connect(ring); hi2.connect(ring);
-        const hfz = shaper(26); ring.connect(hfz);
-        const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0081; const cfb = actx!.createGain(); cfb.gain.value = 0.78; hfz.connect(comb); comb.connect(cfb); cfb.connect(comb);
+        const hfz = shaper(48); ring.connect(hfz);
+        const comb = actx!.createDelay(0.05); comb.delayTime.value = 0.0081; const cfb = actx!.createGain(); cfb.gain.value = 0.88; hfz.connect(comb); comb.connect(cfb); cfb.connect(comb);
         const hf = actx!.createBiquadFilter(); hf.type = 'bandpass'; hf.Q.value = 2.6; hf.frequency.value = 900;
         const hg = actx!.createGain(); hg.gain.value = 0.22; hfz.connect(hf); comb.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t); rmod.start(t);
         // SCREECH AIR — resonant white noise riding on top for the shrieking, hissing edge.
@@ -861,7 +895,7 @@ export const RaycastCanvas: React.FC<{
         if (sameZ && dist < 0.6 && e.hit === 0 && respawn === 0) {
           hp -= E_DMG * 8; e.hit = 40; shake = 5; panic = Math.min(1.4, panic + 0.4);   // each hit winds the terror up
           hurt(); screech(1.5, 0.45); duck(0.7);   // fleshy hit + a fresh shriek that gets shriller as panic climbs
-          if (hp <= 0) { hp = 0; respawn = 70; stopHunt(); screech(2, 1.1); duck(1.4); }
+          if (hp <= 0) { hp = 0; respawn = 70; stopHunt(); death(); duck(1.4); }
         }
       }
       // Escalating hunt dread — the closer the nearest stalker, the LOUDER, higher and faster the growl,
