@@ -935,6 +935,29 @@ export const RaycastCanvas: React.FC<{
         drawBox3D(env, b.x, b.y, b.sz, b.sz, b.z, b.z + b.sz, 255, 70 + hot * 150, 20 + hot * 40, 1, true);
       }
     };
+    // Draw a stalker as a blocky VOXEL humanoid (legs, torso, dangling arms, head) with glowing eyes
+    // and a gaping maw when hunting. Lateral/depth offsets are relative to the camera so the face and
+    // limbs read correctly from any angle; it lurches when chasing. gz = the storey floor it stands on.
+    const drawStalker = (env: BoxEnv, e: Enemy, gz: number, light: number) => {
+      const dxp = env.px - e.x, dyp = env.py - e.y, dd = Math.hypot(dxp, dyp) || 1;
+      const fx = dxp / dd, fy = dyp / dd, perpX = -fy, perpY = fx;   // toward-camera + lateral units
+      const sway = e.chasing ? Math.sin(tick * 0.34 + e.hx) * 0.06 + Math.sin(tick * 0.71) * 0.03 : Math.sin(tick * 0.12 + e.hx) * 0.02;
+      const HX = e.x + perpX * sway, HY = e.y + perpY * sway;
+      let R = 26, G = 22, B = 34;                       // dark body
+      if (e.chasing) { R = 78; G = 16; B = 22; }        // seething red when hunting
+      if (e.flash > 0) { R = 255; G = 230; B = 230; }   // hit flash
+      // box at lateral L / depth D from the figure centre, spanning world-Z [z0,z1]
+      const box = (L: number, D: number, w: number, d: number, z0: number, z1: number, r: number, g: number, b: number, glow = false, lg = light) =>
+        drawBox3D(env, HX + perpX * L + fx * D, HY + perpY * L + fy * D, w, d, gz + z0, gz + z1, r, g, b, lg, glow);
+      box(-0.1, 0, 0.16, 0.16, 0, 0.82, R, G, B); box(0.1, 0, 0.16, 0.16, 0, 0.82, R, G, B);   // legs
+      box(0, 0, 0.42, 0.34, 0.8, 1.5, R, G, B);                                                 // torso
+      box(-0.27, 0, 0.13, 0.13, 0.84, 1.48, R, G, B); box(0.27, 0, 0.13, 0.13, 0.84, 1.48, R, G, B);   // long arms
+      box(0, 0, 0.32, 0.3, 1.5, 1.88, R, G, B);                                                 // head
+      const eyeGl = e.chasing ? 1 + 0.4 * Math.sin(tick * 0.5) : 1;
+      const eR = (e.chasing ? 255 : 205) * eyeGl, eG = e.chasing ? 34 : 120, es = e.chasing ? 0.09 : 0.07;
+      box(-es, 0.15, 0.08, 0.06, 1.66, 1.74, eR, eG, 34, true, 1); box(es, 0.15, 0.08, 0.06, 1.66, 1.74, eR, eG, 34, true, 1);   // glowing eyes
+      if (e.chasing) box(0, 0.15, 0.18, 0.05, 1.55, 1.63, 44 + 26 * Math.sin(tick * 0.3), 4, 6, true, 1);   // gaping maw
+    };
     let hudHp = -1, hudCry = -1, hudDead = false, hudBr = -1, hudCh = -1;
     const pushHud = () => {
       const c = grabbed.size, br = Math.round(breath), oc = opened.size;
@@ -1463,6 +1486,15 @@ export const RaycastCanvas: React.FC<{
         const eyeH2 = heightMap ? pz + EYE_BASE + jz : 0.5;
         const groundY = horizon + ((eyeH2 - zfS) * F) / camY;             // where this cell's floor meets the sprite
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
+        // Crystal — a floating, bobbing voxel gem (glowing cyan cubes) instead of a flat billboard
+        if (kind === 'crystal') {
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
+          const fb = zfS + 0.42 + Math.sin(tick * 0.09 + s.x * 3) * 0.06;
+          drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
+          drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
+          drawBox3D(env, s.x, s.y, 0.12, 0.12, fb + 0.24, fb + 0.38, 190, 250, 255, 1, true);
+          continue;
+        }
         // Voxel props — real depth-tested cubes (walk around them), not billboards
         const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
@@ -1541,59 +1573,18 @@ export const RaycastCanvas: React.FC<{
         }
       }
 
-      // 3.5) Lava bubbles — glowing molten voxel pops rising out of the lava
+      // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes rising & looming out of the dark
       const eyeH = heightMap ? pz + EYE_BASE + jz : 0.5;
-      if (bubbles.length) drawBubbles({ px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, data, depth });
-
-      // 4) Stalkers — dark humanoid billboards with glowing eyes, standing on their floor, depth-tested.
+      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, data, depth };
+      if (bubbles.length) drawBubbles(env3d);
       const eorder = enemies.filter(e => e.hp > 0)
         .map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
       for (const { e } of eorder) {
         const relX = e.x - px, relY = e.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);
         if (camY <= 0.05) continue;
-        const camX = invDet * (sin * relX - cos * relY);
-        const screenX = (W / 2) * (1 + camX / camY);
-        const sizeBase = Math.abs(F / camY);
         const zfE = heightMap ? floorLvl(Math.floor(e.x), Math.floor(e.y)) * STEP_UNIT : 0;
-        const groundY = horizon + ((eyeH - zfE) * F) / camY;
-        const figH = sizeBase * 1.9, figW = sizeBase * 0.5;   // tall, looming figures — much scarier
-        const top = groundY - figH, halfW = figW / 2;
-        const sway = e.chasing
-          ? (Math.sin(tick * 0.34 + e.hx) * 0.08 + Math.sin(tick * 0.71) * 0.05)   // fast, erratic lurching when hunting
-          : Math.sin(tick * 0.12 + e.hx) * 0.04;
-        const sx0 = Math.max(0, Math.floor(screenX - halfW)), sx1 = Math.min(W, Math.ceil(screenX + halfW));
-        const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
-        const fogT = 1 - 1 / (1 + camY * camY * 0.012);
-        const lf = Math.max(lightAt(camY), 0.45);    // self-lit floor so they loom out of the dark, never vanish
-        const eR = e.chasing ? 255 : 200, eG = e.chasing ? 30 : 120, eB = 30;
-        for (let x = sx0; x < sx1; x++) {
-          const u = (x - screenX) / figW + sway;          // -0.5..0.5 across the figure
-          for (let y = sy0; y < sy1; y++) {
-            if (camY > depth[y * W + x] + 0.35) continue;  // occluded only by geometry clearly IN FRONT (bias stops the floor it stands on from culling it up close)
-            const v = (y - top) / figH;                    // 0 head .. 1 feet
-            const bodyW = v < 0.16 ? 0.22 : v < 0.62 ? 0.5 : Math.max(0.04, 0.5 - (v - 0.62) * 0.9);
-            const au = Math.abs(u);
-            if (au > bodyW) continue;
-            let r: number, g: number, b: number;
-            const eyeGl = e.chasing ? 1 + 0.45 * Math.sin(tick * 0.5) : 1;                                 // eyes pulse when hunting
-            if (v > 0.05 && v < (e.chasing ? 0.15 : 0.13) && Math.abs(au - 0.12) < (e.chasing ? 0.075 : 0.05)) { r = eR * eyeGl; g = eG; b = eB; }   // glowing eyes (bigger when chasing)
-            else if (e.chasing && v > 0.17 && v < 0.29 && au < 0.15) {                                     // gaping toothed maw — only when hunting
-              const tt = Math.floor(((u + 0.15) / 0.3) * 6) & 1, edge = v < 0.195 || v > 0.265;
-              if (tt && edge) { r = 232; g = 224; b = 208; }                                              // jagged teeth top & bottom
-              else { r = 30 + 26 * Math.sin(tick * 0.3); g = 3; b = 6; }                                   // dark red throat
-            }
-            else if (e.flash > 0) { r = 255; g = 230; b = 230; }                                          // hit flash
-            else {
-              const rim = Math.pow(au / Math.max(0.01, bodyW), 3);   // bright silhouette edge → reads against the dark
-              let R = 26 + 95 * rim, G = 22 + 40 * rim, B = 34 + 110 * rim;
-              if (e.chasing) { R += 120 * rim + 30; G -= 14 * rim; B -= 20 * rim; }  // seething red rim when hunting
-              R *= lf; G *= lf; B *= lf;
-              const m = fogMix(R, G, B, fogT * 0.45); r = m[0]; g = m[1]; b = m[2];
-            }
-            const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
-          }
-        }
+        drawStalker(env3d, e, zfE, Math.max(lightAt(camY), 0.5));   // self-lit so it looms out of the dark
       }
 
       bctx.putImageData(img, 0, 0);
@@ -2033,6 +2024,15 @@ export const RaycastCanvas: React.FC<{
         const sizeBase = Math.abs(Math.floor(F / camY));
         const zf = baseZ(s.k);
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
+        // Crystal — a floating, bobbing voxel gem (glowing cyan cubes) instead of a flat billboard
+        if (kind === 'crystal') {
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+          const fb = zf + 0.42 + Math.sin(tick * 0.09 + s.x * 3) * 0.06;
+          drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
+          drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
+          drawBox3D(env, s.x, s.y, 0.12, 0.12, fb + 0.24, fb + 0.38, 190, 250, 255, 1, true);
+          continue;
+        }
         // Voxel props — real depth-tested cubes (walk around them), not billboards
         const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
@@ -2089,43 +2089,15 @@ export const RaycastCanvas: React.FC<{
         }
       }
 
-      // 3.5) Lava bubbles — glowing molten voxel pops rising out of the lava
-      if (bubbles.length) drawBubbles({ px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth });
-
-      // 4) Stalkers — dark billboards on their own layer, depth-tested.
+      // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes on their own layer, depth-tested
+      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+      if (bubbles.length) drawBubbles(env3d);
       const eorder = enemies.filter(e => e.hp > 0).map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
       for (const { e } of eorder) {
         const relX = e.x - px, relY = e.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);
         if (camY <= 0.05) continue;
-        const camX = invDet * (sin * relX - cos * relY);
-        const screenX = (W / 2) * (1 + camX / camY);
-        const sizeBase = Math.abs(F / camY);
-        const zfE = baseZ(e.k ?? 0);
-        const groundY = horizon + ((eye - zfE) * F) / camY;
-        const figH = sizeBase * 1.9, figW = sizeBase * 0.5, top = groundY - figH;   // tall, looming figures — much scarier
-        const sway = e.chasing
-          ? (Math.sin(tick * 0.34 + e.hx) * 0.08 + Math.sin(tick * 0.71) * 0.05)   // fast, erratic lurching when hunting
-          : Math.sin(tick * 0.12 + e.hx) * 0.04;
-        const sx0 = Math.max(0, Math.floor(screenX - figW / 2)), sx1 = Math.min(W, Math.ceil(screenX + figW / 2));
-        const sy0 = Math.max(0, Math.floor(top)), sy1 = Math.min(H, Math.ceil(groundY));
-        const fogT = 1 - 1 / (1 + camY * camY * 0.012);
-        const lf = Math.max(lightAt(camY), 0.45);
-        const eR = e.chasing ? 255 : 200, eG = e.chasing ? 30 : 120, eB = 30;
-        for (let x = sx0; x < sx1; x++) {
-          const u = (x - screenX) / figW + sway;
-          for (let y = sy0; y < sy1; y++) {
-            if (camY > depth[y * W + x] + 0.35) continue;
-            const v = (y - top) / figH;
-            const bodyW = v < 0.16 ? 0.22 : v < 0.62 ? 0.5 : Math.max(0.04, 0.5 - (v - 0.62) * 0.9);
-            const au = Math.abs(u); if (au > bodyW) continue;
-            let r: number, g: number, b: number;
-            if (v > 0.06 && v < 0.13 && Math.abs(au - 0.11) < 0.05) { r = eR; g = eG; b = eB; }
-            else if (e.flash > 0) { r = 255; g = 230; b = 230; }
-            else { const rim = Math.pow(au / Math.max(0.01, bodyW), 3); let R = 26 + 95 * rim, G = 22 + 40 * rim, B = 34 + 110 * rim; if (e.chasing) { R += 70 * rim + 14; G -= 10 * rim; } R *= lf; G *= lf; B *= lf; const m = fogMix(R, G, B, fogT * 0.45); r = m[0]; g = m[1]; b = m[2]; }
-            const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
-          }
-        }
+        drawStalker(env3d, e, baseZ(e.k ?? 0), Math.max(lightAt(camY), 0.5));
       }
 
       bctx.putImageData(img, 0, 0);
