@@ -94,29 +94,34 @@ type Sprite = { x: number; y: number; kind: 'crystal' | 'exit' | 'chest' | 'tree
 // ── Animated molten lava (DOOM-style animated flat). Layered, domain-warped flow → dark crust veins,
 // glowing molten cells and hot yellow-white cores that churn over time. Cheap enough for per-pixel
 // floor casting. Returns [r,g,b] (emissive — not fogged/lit by the caller).
-const LAVA_PIX = 7;   // molten "pixels" per world tile — blocky, not a smooth gradient
+const LAVA_PIX = 7;   // molten "pixels" per world tile — solid colour blocks, no gradient/contours
+// stable per-cell hash → 0..1 (used for discrete block variance)
+const cellRand = (gx: number, gy: number): number => {
+  let h = (gx * 374761393 + gy * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return (h >>> 0) / 4294967296;
+};
 const moltenLava = (fx: number, fy: number, t: number): [number, number, number] => {
   const gx = Math.floor(fx * LAVA_PIX), gy = Math.floor(fy * LAVA_PIX);   // quantise to texel cells
   const qx = gx / LAVA_PIX, qy = gy / LAVA_PIX;
   const wx = qx + 0.4 * Math.sin(qy * 2.3 + t * 0.05) + 0.15 * Math.sin(qy * 6.1 - t * 0.09);   // turbulent warp
   const wy = qy + 0.4 * Math.sin(qx * 2.1 - t * 0.04) + 0.15 * Math.sin(qx * 5.7 + t * 0.07);
   let n = Math.sin(wx * 3.1 + t * 0.06) * Math.sin(wy * 2.7 - t * 0.05) + 0.55 * Math.sin((wx + wy) * 5.6 + t * 0.11);
-  n = n * 0.5 + 0.5;                                   // → 0..1 molten field, constant within a cell
+  n = Math.round((n * 0.5 + 0.5) * 5) / 5;            // → 6 DISCRETE molten levels → distinct solid blocks
   const heat = Math.max(0, Math.min(1, (n - 0.24) * 1.7));
   let r = 34 + heat * 221, g = 5 + heat * heat * 150, b = 3 + heat * 16;   // crust-red → molten-orange
   const core = Math.max(0, n - 0.8) * 5;                                    // hot yellow-white peaks
   r = Math.min(255, r + core * 30); g = Math.min(255, g + core * 150); b = Math.min(140, b + core * 90);
-  const sx = fx * LAVA_PIX - gx, sy = fy * LAVA_PIX - gy, seam = Math.min(sx, 1 - sx, sy, 1 - sy) < 0.12 ? 0.78 : 1;   // dark crust seams between cells
-  return [r * seam, g * seam, b * seam];
+  const v = 0.9 + ((cellRand(gx, gy) * 4) | 0) * 0.05;   // per-cell brightness step (texture, no contour)
+  return [r * v, g * v, b * v];
 };
-// Pixelated water — blocky rippling texels with the same crust-seam grid (matches the voxel look).
+// Pixelated water — distinct solid rippling blocks (no seams/contours), matches the voxel look.
 const pixelWater = (fx: number, fy: number, t: number): [number, number, number] => {
   const gx = Math.floor(fx * LAVA_PIX), gy = Math.floor(fy * LAVA_PIX);
   const qx = gx / LAVA_PIX, qy = gy / LAVA_PIX;
-  const n = 0.5 + 0.5 * Math.sin(qx * 4.2 + t * 0.09) * Math.sin(qy * 3.4 - t * 0.06) + 0.2 * Math.sin((qx + qy) * 7 + t * 0.13);
-  let r = 16 + n * 26, g = 66 + n * 74, b = 148 + n * 78;
-  const sx = fx * LAVA_PIX - gx, sy = fy * LAVA_PIX - gy, seam = Math.min(sx, 1 - sx, sy, 1 - sy) < 0.12 ? 0.82 : 1;
-  return [r * seam, g * seam, b * seam];
+  let n = 0.5 + 0.5 * Math.sin(qx * 4.2 + t * 0.09) * Math.sin(qy * 3.4 - t * 0.06) + 0.2 * Math.sin((qx + qy) * 7 + t * 0.13);
+  n = Math.round(n * 4) / 4;                          // discrete water levels
+  const r = 16 + n * 26, g = 66 + n * 74, b = 148 + n * 78;
+  const v = 0.92 + ((cellRand(gx, gy) * 3) | 0) * 0.05;
+  return [r * v, g * v, b * v];
 };
 
 // ── Portal energy field, in cell-local space (fx,fy are world coords; we take the fractional cell
@@ -154,16 +159,6 @@ const projPt = (e: BoxEnv, wx: number, wy: number, wz: number): PC => {
   const cx = e.invDet * (e.sin * rx - e.cos * ry);
   return { sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + ((e.eye - wz) * e.F) / cy, cy };
 };
-// Per-face pixel texture: a stable blocky value-noise (per texel-cell brightness) + darker mortar
-// lines at cell borders → chunky Minecraft-ish grit. u,v are in cell units (integer per cube-pixel).
-const texel = (u: number, v: number): number => {
-  const cu = Math.floor(u), cv = Math.floor(v);
-  let h = (cu * 374761393 + cv * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; h = h >>> 0;
-  let b = 0.82 + (h & 255) / 255 * 0.26;                                   // 0.82..1.08 per cell
-  const fu = u - cu, fv = v - cv, edge = Math.min(fu, 1 - fu, fv, 1 - fv);
-  if (edge < 0.1) b *= 0.82;                                               // mortar seam between cubes
-  return b;
-};
 // fill a screen triangle, depth-testing per pixel (interpolated 1/cy) and texturing via affine u,v
 const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: number, v1: number, u2: number, v2: number, rr: number, gg: number, bb: number) => {
   const minX = Math.max(0, Math.floor(Math.min(p0.sx, p1.sx, p2.sx)));
@@ -185,8 +180,14 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
       const cy = 1 / (wa * i0 + wb * i1 + wc * i2);
       const idx = y * e.W + x;
       if (cy >= e.depth[idx]) continue;
-      const tm = texel(wa * u0 + wb * u1 + wc * u2, wa * v0 + wb * v1 + wc * v2);
-      const o = idx * 4; e.data[o] = rr * tm; e.data[o + 1] = gg * tm; e.data[o + 2] = bb * tm; e.data[o + 3] = 255;
+      // per-texel solid colour block: one of a few discrete brightness steps + a warm/cool tint per
+      // cell (real colour variation), NO edge mortar/contours — distinct pixel cubes, not fabric.
+      const cu = Math.floor(wa * u0 + wb * u1 + wc * u2), cv = Math.floor(wa * v0 + wb * v1 + wc * v2);
+      let hh = (cu * 374761393 + cv * 668265263) | 0; hh = (hh ^ (hh >> 13)) * 1274126177; hh = hh >>> 0;
+      const m = 0.84 + (hh & 3) * 0.07;                 // 4 distinct brightness blocks
+      const tnt = (((hh >>> 5) & 7) - 3.5) * 2.6;       // per-cell warm/cool tint → colour complexity
+      const o = idx * 4;
+      e.data[o] = rr * m + tnt; e.data[o + 1] = gg * m + tnt * 0.35; e.data[o + 2] = bb * m - tnt; e.data[o + 3] = 255;
       e.depth[idx] = cy;
     }
   }
