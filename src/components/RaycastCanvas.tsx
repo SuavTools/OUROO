@@ -342,53 +342,73 @@ export const RaycastCanvas: React.FC<{
         o.stop(t + dur);
       } catch { /* audio blocked */ }
     };
-    // ── Screech — a screaming-ghoul shriek: white noise swept through a sharp resonant bandpass (the
-    // "scream formant") plus a wailing detuned saw with heavy vibrato. Organic and horrible, not a beep.
+    // Reusable soft-clip fuzz curve → the electric, gritty, distorted edge. Higher amount = nastier.
+    const shaper = (amount: number) => {
+      const n = 1024, curve = new Float32Array(n), k = amount;
+      for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x)); }
+      const ws = actx!.createWaveShaper(); ws.curve = curve; ws.oversample = '4x'; return ws;
+    };
+    // ── Screech — an ELECTRIC ZAP-FUZZ SCREAM. A distorted saw that ZAPS up in a fraction of a second
+    // then hangs shrill, plus a screaming noise formant sweeping up fast. No slow warble (that was the
+    // pikachu squelch) — this is a harsh, fried, hair-raising shriek that spikes instantly.
     const screech = (intensity = 1, dur = 0.6) => {
       if (mutedRef.current) return;
       const I = intensity * (1 + panic * 0.9);   // the more hits you've taken, the more unhinged it gets
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
+        // ZAP saw through heavy fuzz — snaps up FAST, then holds a shrill fried tone
+        const zap = actx!.createOscillator(); zap.type = 'sawtooth';
+        zap.frequency.setValueAtTime(360 + I * 160, t);
+        zap.frequency.exponentialRampToValueAtTime(2700 + I * 1700, t + 0.06);   // ZAP up in ~60ms
+        zap.frequency.setTargetAtTime(1500 + I * 750, t + 0.08, 0.28);           // then hang shrill
+        const fuzz = shaper(30 + I * 24);
+        const zg = actx!.createGain(); zg.gain.setValueAtTime(0.0001, t);
+        zg.gain.linearRampToValueAtTime(0.34 * Math.min(2.3, I), t + 0.008);     // near-instant attack
+        zg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        zap.connect(fuzz); fuzz.connect(zg); zg.connect(dest); zap.start(t); zap.stop(t + dur);
+        // screaming noise formant — sharp resonant bandpass sweeping up HARD and fast
         const len = Math.floor(actx!.sampleRate * dur);
         const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;   // white noise body
         const ns = actx!.createBufferSource(); ns.buffer = buf;
-        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 12 + I * 14;   // sharper = more piercing
-        bp.frequency.setValueAtTime(900 + I * 500, t);
-        bp.frequency.exponentialRampToValueAtTime(2800 + I * 2200, t + dur * 0.3);               // shriek up HIGH
-        bp.frequency.exponentialRampToValueAtTime(520, t + dur);
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 16 + I * 16;   // sharper = more piercing
+        bp.frequency.setValueAtTime(1100 + I * 600, t);
+        bp.frequency.exponentialRampToValueAtTime(4200 + I * 2600, t + 0.05);    // shriek up HIGH, fast
+        bp.frequency.exponentialRampToValueAtTime(600, t + dur);
         const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.26 * Math.min(2, I), t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        g.gain.linearRampToValueAtTime(0.3 * Math.min(2.2, I), t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
         ns.connect(bp); bp.connect(g); g.connect(dest); ns.start(t); ns.stop(t + dur);
-        // shrill high ring on top — the piercing part that raises the hairs
+        // shrill fried ring on top — a second distorted saw an octave up for the piercing edge
         const ring = actx!.createOscillator(); ring.type = 'sawtooth';
-        ring.frequency.setValueAtTime(1700 + I * 900, t); ring.frequency.exponentialRampToValueAtTime(3400 + I * 800, t + dur * 0.4);
-        const rl = actx!.createOscillator(); rl.frequency.value = 18 + I * 8; const rlg = actx!.createGain(); rlg.gain.value = 60; rl.connect(rlg); rlg.connect(ring.frequency); rl.start(t); rl.stop(t + dur);
-        const rg = actx!.createGain(); rg.gain.setValueAtTime(0.0001, t); rg.gain.linearRampToValueAtTime(0.07 * Math.min(2, I), t + 0.03); rg.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        ring.connect(rg); rg.connect(dest); ring.start(t); ring.stop(t + dur);
-        // wailing voice under it — detuned saw, higher, heavy vibrato, sliding down
-        const o = actx!.createOscillator(); o.type = 'sawtooth';
-        o.frequency.setValueAtTime(300 + I * 110, t); o.frequency.exponentialRampToValueAtTime(120, t + dur);
-        const lfo = actx!.createOscillator(); lfo.frequency.value = 15 + I * 7; const lg = actx!.createGain(); lg.gain.value = 40; lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + dur);
-        const og = actx!.createGain(); og.gain.setValueAtTime(0.0001, t); og.gain.linearRampToValueAtTime(0.1 * Math.min(2, I), t + 0.04); og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        o.connect(og); og.connect(dest); o.start(t); o.stop(t + dur);
+        ring.frequency.setValueAtTime(1900 + I * 900, t); ring.frequency.exponentialRampToValueAtTime(3800 + I * 900, t + 0.09);
+        const rfuzz = shaper(18 + I * 14);
+        const rg = actx!.createGain(); rg.gain.setValueAtTime(0.0001, t); rg.gain.linearRampToValueAtTime(0.09 * Math.min(2, I), t + 0.02); rg.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.8);
+        ring.connect(rfuzz); rfuzz.connect(rg); rg.connect(dest); ring.start(t); ring.stop(t + dur);
       } catch { /* audio blocked */ }
     };
-    // Hit — a fleshy slash + heavy thud when the ghoul strikes you. Nasty and physical.
+    // Hit — a brutal KICK-THUMP + gritty slash when the ghoul strikes you. Physical, chest-punching.
     const hurt = () => {
       if (mutedRef.current) return;
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
-        const len = Math.floor(actx!.sampleRate * 0.2);
+        // gritty slash — decaying noise pushed through fuzz so the impact bites
+        const len = Math.floor(actx!.sampleRate * 0.18);
         const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
-        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);   // decaying noise = slash
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
         const ns = actx!.createBufferSource(); ns.buffer = buf;
-        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 1.2;
-        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.24, t + 0.004); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-        ns.connect(bp); bp.connect(ng); ng.connect(dest); ns.start(t);
-        const o = actx!.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(240, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.14);   // body thud
-        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.2, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-        o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.17);
+        const bp = actx!.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 1.1;
+        const slashFuzz = shaper(12);
+        const ng = actx!.createGain(); ng.gain.setValueAtTime(0.0001, t); ng.gain.linearRampToValueAtTime(0.26, t + 0.003); ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+        ns.connect(bp); bp.connect(slashFuzz); slashFuzz.connect(ng); ng.connect(dest); ns.start(t);
+        // KICK — a hard sub thump: sine punched from high down to sub-bass, fuzzed for a fried edge.
+        const o = actx!.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
+        const kfuzz = shaper(8);
+        const g = actx!.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.42, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        o.connect(kfuzz); kfuzz.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.24);
+        // click transient — the sharp attack that makes it read as a KICK, not a hum
+        const cl = actx!.createOscillator(); cl.type = 'triangle'; cl.frequency.setValueAtTime(1100, t); cl.frequency.exponentialRampToValueAtTime(180, t + 0.03);
+        const cg = actx!.createGain(); cg.gain.setValueAtTime(0.22, t); cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+        cl.connect(cg); cg.connect(dest); cl.start(t); cl.stop(t + 0.05);
       } catch { /* audio blocked */ }
     };
     // Growl — low bandpassed noise rumble (a wet snarl), volume/pitch driven by proximity. Not a clean tone.
@@ -509,14 +529,15 @@ export const RaycastCanvas: React.FC<{
       try {
         const dest = ensureAudio(); const t = actx!.currentTime;
         const master = actx!.createGain(); master.gain.value = 0; master.connect(dest);
-        master.gain.linearRampToValueAtTime(0.16, t + 0.18);          // swell in on lock
+        master.gain.linearRampToValueAtTime(0.3, t + 0.18);           // swell in on lock — LOUD, dominates the mix
         // HIGH HELD SCREECH — a shrill sustained scream, NOT a warble. Two barely-detuned saws
-        // beat slowly against each other (tense/dissonant, not cute); a bandpass gives it a
-        // throat-y formant so it reads as a SCREAM. No fast vibrato — that warble was the 'pikachu'.
+        // beat slowly against each other (tense/dissonant, not cute), pushed through fuzz for a
+        // fried electric edge; a bandpass gives it a throat-y formant so it reads as a SCREAM.
         const hi = actx!.createOscillator(); hi.type = 'sawtooth'; hi.frequency.value = 1180;
         const hi2 = actx!.createOscillator(); hi2.type = 'sawtooth'; hi2.frequency.value = 1180 * 1.006;   // slow menacing beat
+        const hfz = shaper(16);
         const hf = actx!.createBiquadFilter(); hf.type = 'bandpass'; hf.Q.value = 3.2; hf.frequency.value = 1700;
-        const hg = actx!.createGain(); hg.gain.value = 0.1; hi.connect(hf); hi2.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t);
+        const hg = actx!.createGain(); hg.gain.value = 0.16; hi.connect(hfz); hi2.connect(hfz); hfz.connect(hf); hf.connect(hg); hg.connect(master); hi.start(t); hi2.start(t);
         // SCREECH AIR — resonant white noise riding on top for the shrieking, hissing edge.
         const len = Math.floor(actx!.sampleRate * 2); const buf = actx!.createBuffer(1, len, actx!.sampleRate); const d = buf.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -535,7 +556,7 @@ export const RaycastCanvas: React.FC<{
       if (!hunt || !actx) return;
       try {
         const t = actx.currentTime, I = prox + pan * 0.5;
-        hunt.master.gain.setTargetAtTime(0.12 + I * 0.16, t, 0.15);                 // louder as it nears / panic rises
+        hunt.master.gain.setTargetAtTime(0.24 + I * 0.24, t, 0.15);                 // louder as it nears / panic rises
         hunt.bp.frequency.setTargetAtTime(2100 + prox * 2200 + pan * 1000, t, 0.2); // shriek air opens up, shriller
         const f = 1180 + prox * 640 + pan * 460;                                    // held scream climbs as it closes
         hunt.hi.frequency.setTargetAtTime(f, t, 0.25);
