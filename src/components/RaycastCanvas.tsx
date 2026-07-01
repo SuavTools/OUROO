@@ -709,12 +709,13 @@ export const RaycastCanvas: React.FC<{
     };
     let stepAt = 0;   // stride counter → one footstep per ~0.9 of view-bob travelled
     // Per-theme material: root pitch, melodic scale, and overall volume. Each atmosphere sounds different.
-    const ROOTS: Record<Mood, number> = { day: 261.63, mist: 220.0, dungeon: 130.81, spooky: 130.81, mystery: 174.61, hell: 98.0 };
+    const ROOTS: Record<Mood, number> = { day: 261.63, mist: 220.0, dungeon: 130.81, spooky: 130.81, mystery: 174.61, hell: 98.0, haven: 261.63 };
     const SCALES: Record<Mood, number[]> = {
       day: [0, 2, 4, 7, 9], mist: [0, 2, 4, 6, 9, 11], dungeon: [0, 2, 3, 5, 7, 10],
       spooky: [0, 1, 3, 5, 6, 8], mystery: [0, 2, 4, 6, 8, 10], hell: [0, 1, 4, 6, 7, 10],
+      haven: [0, 2, 4, 5, 7, 9, 12],   // bright major — cheerful, resolved
     };
-    const VOL: Record<Mood, number> = { day: 0.05, mist: 0.045, dungeon: 0.055, spooky: 0.06, mystery: 0.048, hell: 0.07 };
+    const VOL: Record<Mood, number> = { day: 0.05, mist: 0.045, dungeon: 0.055, spooky: 0.06, mystery: 0.048, hell: 0.07, haven: 0.055 };
     const SCALE = SCALES[mood];
     const noteHz = (semi: number) => ROOTS[mood] * Math.pow(2, semi / 12);
 
@@ -735,6 +736,9 @@ export const RaycastCanvas: React.FC<{
         const wobble = (o: OscillatorNode, rate: number, depth: number) => { const lfo = actx!.createOscillator(); lfo.frequency.value = rate; const lg = actx!.createGain(); lg.gain.value = depth; lfo.connect(lg); lg.connect(o.frequency); lfo.start(); nodes.push(lfo); };
         if (mood === 'day') {
           mk(130.8, 'sine', 0.16); mk(196, 'sine', 0.11); mk(261.6, 'sine', 0.05);          // warm consonant pad
+        } else if (mood === 'haven') {
+          mk(130.8, 'sine', 0.14); mk(196, 'sine', 0.1); mk(261.6, 'triangle', 0.06); mk(392, 'sine', 0.03);   // bright major triad (C-E-G) + airy top → sunny, upbeat
+          wobble(mk(784, 'sine', 0.018), 0.13, 3);                                                             // gentle shimmer
         } else if (mood === 'mist') {
           mk(110, 'sine', 0.14); mk(164.8, 'sine', 0.06); wobble(mk(659, 'sine', 0.03), 0.05, 4);   // airy, high shimmer drifting
         } else if (mood === 'dungeon') {
@@ -1063,6 +1067,13 @@ export const RaycastCanvas: React.FC<{
         // gentle rolling arpeggio up and down the pentatonic + a soft bass swell
         if (tick % 26 === 0) { const n = SCALE.length, i = musicSeq % (n * 2), idx = i < n ? i : n * 2 - 1 - i; tone(noteHz(SCALE[idx] + 12), 0.9, 'sine', 0.05); musicSeq++; }
         if (tick % 208 === 0) tone(noteHz(SCALE[(musicSeq * 3) % SCALE.length]) / 2, 3.5, 'triangle', 0.045);
+      } else if (mood === 'haven') {
+        // bouncy, cheerful major melody with a light skip + a warm walking bass (upbeat, not ambient)
+        const b = tick % 20;
+        if (b === 0) { tone(noteHz(SCALE[musicSeq % SCALE.length] + 12), 0.32, 'triangle', 0.05); musicSeq++; }
+        else if (b === 8) tone(noteHz(SCALE[(musicSeq * 2 + 2) % SCALE.length] + 12), 0.26, 'triangle', 0.04);   // the skip
+        else if (b === 12) tone(noteHz(SCALE[(musicSeq + 4) % SCALE.length] + 24), 0.2, 'sine', 0.03);           // sparkle grace note
+        if (tick % 40 === 0) tone(noteHz([0, 4, 7, 4][(musicSeq >> 1) & 3]) / 2, 1.1, 'triangle', 0.05);          // warm I–IV–V-ish bass
       } else if (mood === 'mist') {
         // sparse, airy high notes drifting in and out with long release
         if (tick % 96 === 0) { tone(noteHz(SCALE[(musicSeq * 2) % SCALE.length] + 12), 2.6, 'sine', 0.035); musicSeq++; }

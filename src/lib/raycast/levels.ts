@@ -131,6 +131,7 @@ export const DEFAULT_PALETTE: Palette = {
 // a level may still override individual palette colours on top.
 export const ATMOS: Record<string, { label: string; palette: Partial<Palette>; light?: Lighting }> = {
   dungeon:  { label: 'Dungeon',  palette: { ceil: [14, 14, 26], floor: [38, 36, 54], fog: [8, 8, 16] } },
+  haven:    { label: 'Haven',    palette: { ceil: [120, 150, 200], floor: [92, 82, 68], fog: [150, 165, 190], wall: { '#': [186, 164, 132], '3': [120, 170, 110] } } },   // bright, warm, cheerful — happy music
   hell:     { label: 'Hell',     palette: { ceil: [30, 6, 4], floor: [40, 14, 8], fog: [40, 6, 2], wall: { '#': [150, 70, 60] } } },
   fog:      { label: 'Fog',      palette: { ceil: [60, 64, 70], floor: [54, 56, 60], fog: [120, 124, 130] } },
   neon:     { label: 'Neon',     palette: { ceil: [4, 8, 16], floor: [10, 16, 24], fog: [2, 6, 14] } },
@@ -178,14 +179,15 @@ export const skyOf = (level: Level3D): Sky | null => (level.sky && SKIES[level.s
 // Each atmosphere gets its OWN theme for immersion — from a warm daytime tune, through airy mist and
 // moody dungeons, to eerie spooky worlds, cold mystery, and full hell menace. Derived from atmo/sky
 // unless the level sets `music` explicitly. The RaycastCanvas synth plays a distinct drone+melody per theme.
-export type Mood = 'day' | 'mist' | 'dungeon' | 'spooky' | 'mystery' | 'hell';
-const MOODS: Mood[] = ['day', 'mist', 'dungeon', 'spooky', 'mystery', 'hell'];
+export type Mood = 'day' | 'mist' | 'dungeon' | 'spooky' | 'mystery' | 'hell' | 'haven';
+const MOODS: Mood[] = ['day', 'mist', 'dungeon', 'spooky', 'mystery', 'hell', 'haven'];
 export function moodOf(level: Level3D): Mood {
   const m = level.music as string | undefined;
   if (m && MOODS.includes(m as Mood)) return m as Mood;
   if (m === 'tense') return 'hell';        // back-compat with old saved realms
   if (m === 'chill') return 'day';
   const a = level.atmo, s = level.sky;
+  if (a === 'haven') return 'haven';       // bright, cheerful realms
   if (a === 'hell' || s === 'lava') return 'hell';
   if (a === 'candle' || a === 'blackout') return 'spooky';
   if (s === 'void' || s === 'night') return 'mystery';
