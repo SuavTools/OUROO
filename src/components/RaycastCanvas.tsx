@@ -485,9 +485,11 @@ export const RaycastCanvas: React.FC<{
     // floor exactly. The slab is only a THIN visual lip (not a full block): a walkable floor's underside then
     // sits nearly flush with the wall rock beside it, so a floor over a room no longer juts a block down as a
     // "slice". (The big floor-to-floor gap — not the slab — is what gives the player headroom.)
-    const FLOOR_H = (headroomBlocksOf(level) + 1) * STOREY_H;   // floor-to-floor vertical spacing (unchanged: 3/4/5 blocks)
-    const SLAB_T = 0.3;                                // floor-slab thickness — a thin lip, ~1/3 block
-    const ROOM_H = FLOOR_H - SLAB_T;                   // clear air headroom in a storey
+    const FLOOR_H = (headroomBlocksOf(level) + 1) * STOREY_H;   // floor-to-floor vertical spacing (3/4/5 blocks)
+    const SLAB_T = 0;                                  // floor slab is FLUSH — its underside sits exactly on the floor
+                                                       // line (baseZ), same as the wall rock, so a floor above a room
+                                                       // never juts a lip/edge down into it. (Ceiling still drawn.)
+    const ROOM_H = FLOOR_H - STOREY_H;                 // clear air headroom (a storey minus one block of structure)
     const nLayers = floors.length;
     const grids = floors.map(f => f.rows);
     const baseZ = (k: number) => k * FLOOR_H;          // walkable floor height of layer k
@@ -2179,8 +2181,10 @@ export const RaycastCanvas: React.FC<{
           const d = ((eye - z) * F) / pp;                           // no band cull (see drawHoriz) — closes seams
           if (d >= depth[y * W + x]) continue;
           const fx = px + d * rdx, fy = py + d * rdy;
-          const [r, g, b] = floorColor(c, fx, fy, lodOf(d)); const ft = fogTd(d), lf = lightAt(d);
-          const [R, G, B] = fogMix(r * 0.45, g * 0.45, b * 0.45, ft);   // a shadowed underside
+          // The underside of a floor reads as neutral EARTH/ROCK (matching the room's palette), NOT the grass/
+          // material on its top — so a room under a grass plaza gets a dim stone ceiling, not a green one.
+          const tb = sampleTex(TEXES.dirt, fx, fy, lodOf(d)); const ft = fogTd(d), lf = lightAt(d);
+          const [R, G, B] = fogMix(pal.floor[0] * tb * 0.5, pal.floor[1] * tb * 0.5, pal.floor[2] * tb * 0.5, ft);   // shadowed underside
           const o = (y * W + x) * 4; data[o] = R * lf; data[o + 1] = G * lf; data[o + 2] = B * lf; data[o + 3] = 255; depth[y * W + x] = d;
         }
       };
