@@ -687,6 +687,7 @@ const THE_WARREN: Level3D = (() => {
   props(3, 'f', [[20, 12], [25, 18], [31, 14], [22, 22], [28, 11]]);   // flowers
   gems(3, [[19, 15], [27, 20], [33, 10]]);
   put(3, 25, 13, 'E');                                      // the EXIT — out in the sunshine
+  for (let y = 33; y <= 35; y++) for (let x = 5; x <= 7; x++) set(F[3], x, y, ' ');   // re-open the stairwell down (the grass had filled it) so you can go back
 
   const floors: Floor3D[] = [
     { rows: F[0], blocks: Bl[0], blockH: BH[0], atmo: 'blackout' },              // the deep — pitch black

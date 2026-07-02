@@ -2219,7 +2219,11 @@ export const RaycastCanvas: React.FC<{
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter;
               }
-              if (zt < eye) drawHoriz(x, c, zt, dEnter, dExit, rdx, rdy, true);   // walk on its roof
+              // Draw the roof only if it's actually EXPOSED — i.e. the cell on the layer above is open air (or
+              // this is the top layer). If a walkable floor sits directly on top (its floor == this roof height),
+              // that floor draws instead; drawing both at the same z z-fights into ugly stripes. This is the fix.
+              const above = cellL(k + 1, mapX, mapY);
+              if (zt < eye && (k + 1 >= nLayers || isAir(above))) drawHoriz(x, c, zt, dEnter, dExit, rdx, rdy, true);   // walk on its roof
               if (zb > eye) drawUnder(x, c, zb, dEnter, dExit, rdx, rdy);          // its underside (rare)
             } else {
               const zTop = slabZ(k, mapX, mapY);                                  // walkable top (raised terrain lifts it)
