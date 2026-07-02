@@ -154,7 +154,7 @@ const portalFloor = (fx: number, fy: number, t: number, locked = false): [number
 type PC = { sx: number; sy: number; cy: number; cx: number; vt: number };   // + camera-space x & vertical, for near-plane clipping
 type BoxEnv = {
   px: number; py: number; invDet: number; sin: number; cos: number; planeX: number; planeY: number;
-  W: number; H: number; F: number; horizon: number; eye: number; fog: [number, number, number]; fk: number;
+  W: number; H: number; F: number; horizon: number; eye: number; fog: [number, number, number]; fk: number; dark: boolean;
   data: Uint8ClampedArray; depth: Float32Array;
 };
 // project a world point (wx,wy,wz) → screen x/y + camera depth
@@ -175,7 +175,6 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
   if (minX > maxX || minY > maxY) return;
   const i0 = 1 / p0.cy, i1 = 1 / p1.cy, i2 = 1 / p2.cy;
   const nu = Math.max(u0, u1, u2), nv = Math.max(v0, v1, v2);   // face extent in texels → for the edge seam
-  const EW = 0.09;                                              // seam width in texels — a thin hairline, not chunky
   for (let y = minY; y <= maxY; y++) {
     const fy = y + 0.5;
     for (let x = minX; x <= maxX; x++) {
@@ -196,7 +195,16 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
       const cu = Math.floor(uu), cv = Math.floor(vv);
       let hh = (cu * 374761393 + cv * 668265263) | 0; hh = (hh ^ (hh >> 13)) * 1274126177; hh = hh >>> 0;
       let m = 0.84 + (hh & 3) * 0.07;                    // 4 distinct brightness blocks
-      if (edge && ((nu > 2 && (uu < EW || uu > nu - EW)) || (nv > 2 && (vv < EW || vv > nv - EW)))) m *= 0.72;   // thin border seam (blocks only)
+      if (edge) {                                        // hairline seam on the face border — thin + DITHERED
+        const du = nu > 2 ? Math.min(uu, nu - uu) : 9, dv = nv > 2 ? Math.min(vv, nv - vv) : 9;
+        const de = du < dv ? du : dv;                    // texel-distance to nearest border
+        if (de < 0.1) {
+          const fu = (uu * 2.5) | 0, fv = (vv * 2.5) | 0;
+          let eh = (Math.imul(fu ^ cu, 374761393) ^ Math.imul(fv ^ cv, 668265263)) >>> 0;
+          const dk = 0.5 + (eh & 7) * 0.056;             // 0.5…0.9 scattered dark→light (textured, not a solid line)
+          m *= 1 - (1 - de / 0.1) * (1 - dk);            // feathered to the exact edge → reads as a fine hairline
+        }
+      }
       const tnt = (((hh >>> 5) & 7) - 3.5) * 2.6;       // per-cell warm/cool tint → colour complexity
       const o = idx * 4;
       e.data[o] = rr * m + tnt; e.data[o + 1] = gg * m + tnt * 0.35; e.data[o + 2] = bb * m - tnt; e.data[o + 3] = 255;
@@ -220,7 +228,9 @@ const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0
   const spc = (cx: number, cy: number, vt: number, u: number, v: number) => ({ sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + (vt * e.F) / cy, cy, cx, vt, u, v });
   // nu,nv = texel-cell counts across the face's two world dimensions (≥1)
   const quad = (a: PC, b: PC, c: PC, d: PC, shade: number, nu: number, nv: number) => {
-    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * e.fk); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * (glow ? 0.25 : 0.6);
+    // In a lantern realm, solid voxels fog nearly to black at distance (like the floor/walls do) so they're
+    // properly swallowed by the dark — otherwise they'd float visible in the pitch black. Glowing bits stay.
+    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * e.fk); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * (glow ? 0.25 : e.dark ? 0.92 : 0.6);
     const sl = shade * light;
     const rr = r * sl + (e.fog[0] - r * sl) * ft, gg = g * sl + (e.fog[1] - g * sl) * ft, bb = bl * sl + (e.fog[2] - bl * sl) * ft;
     if (a.cy > NEAR_Z && b.cy > NEAR_Z && c.cy > NEAR_Z && d.cy > NEAR_Z) {   // fast path — no corner behind the near plane
@@ -1703,7 +1713,7 @@ export const RaycastCanvas: React.FC<{
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
         // Crystal — a floating, bobbing voxel gem (glowing cyan cubes) instead of a flat billboard
         if (kind === 'crystal') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
           const fb = zfS + 0.42 + Math.sin(tick * 0.09 + s.x * 3) * 0.06;
           drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
@@ -1712,7 +1722,7 @@ export const RaycastCanvas: React.FC<{
         }
         // Exit — a voxel rock DOOR with a swirling pixel-gradient panel, facing its chosen direction
         if (kind === 'exit') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
           const gx = Math.floor(s.x), gy = Math.floor(s.y);
           const auto = !isWall(cellAt(rows, gx + 1, gy)) ? 0 : !isWall(cellAt(rows, gx, gy + 1)) ? 90 : !isWall(cellAt(rows, gx - 1, gy)) ? 180 : 270;
           drawExitDoor(env, s.x, s.y, zfS, level.exitDir ?? auto, exitLocked(), Math.max(lightAt(camY), 0.6));
@@ -1721,7 +1731,7 @@ export const RaycastCanvas: React.FC<{
         // Voxel props — real depth-tested cubes (walk around them), not billboards
         const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
           const light = lightAt(camY);
           const boxes = kind === 'tree' ? TREE_BOXES : kind === 'rock' ? ROCK_BOXES : kind === 'bush' ? BUSH_BOXES : kind === 'lamp' ? LAMP_BOXES
             : kind === 'flower' ? flowerBoxes((Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5) : chestBoxes(!!(s.key && opened.has(s.key)));
@@ -1798,7 +1808,7 @@ export const RaycastCanvas: React.FC<{
 
       // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes rising & looming out of the dark
       const eyeH = heightMap ? pz + EYE_BASE + jz : 0.5;
-      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, fk: FOG_K, data, depth };
+      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
       if (bubbles.length) drawBubbles(env3d);
       if (grassCells.length) drawGrass(env3d, lightAt);
       if (blockCells.length) drawBlocks(env3d, lightAt);
@@ -2266,7 +2276,7 @@ export const RaycastCanvas: React.FC<{
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
         // Crystal — a floating, bobbing voxel gem (glowing cyan cubes) instead of a flat billboard
         if (kind === 'crystal') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
           const fb = zf + 0.42 + Math.sin(tick * 0.09 + s.x * 3) * 0.06;
           drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
@@ -2275,7 +2285,7 @@ export const RaycastCanvas: React.FC<{
         }
         // Exit — a voxel rock DOOR with a swirling pixel-gradient panel, facing its chosen direction
         if (kind === 'exit') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
           const gg = grids[s.k]; const gx = Math.floor(s.x), gy = Math.floor(s.y);
           const auto = !isWall(cellAt(gg, gx + 1, gy)) ? 0 : !isWall(cellAt(gg, gx, gy + 1)) ? 90 : !isWall(cellAt(gg, gx - 1, gy)) ? 180 : 270;
           drawExitDoor(env, s.x, s.y, zf, level.exitDir ?? auto, exitLocked(), Math.max(lightAt(camY), 0.6));
@@ -2284,7 +2294,7 @@ export const RaycastCanvas: React.FC<{
         // Voxel props — real depth-tested cubes (walk around them), not billboards
         const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
           const light = lightAt(camY);
           const boxes = kind === 'tree' ? TREE_BOXES : kind === 'rock' ? ROCK_BOXES : kind === 'bush' ? BUSH_BOXES : kind === 'lamp' ? LAMP_BOXES
             : kind === 'flower' ? flowerBoxes((Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5) : chestBoxes(!!(s.key && opened.has(s.key)));
@@ -2338,7 +2348,7 @@ export const RaycastCanvas: React.FC<{
       }
 
       // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes on their own layer, depth-tested
-      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
+      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, dark: !!lighting, data, depth };
       if (bubbles.length) drawBubbles(env3d);
       if (grassCells.length) drawGrass(env3d, lightAt);
       if (blockCells.length) drawBlocks(env3d, lightAt);
