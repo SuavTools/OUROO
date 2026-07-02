@@ -172,6 +172,7 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
   const maxY = Math.min(e.H - 1, Math.ceil(Math.max(p0.sy, p1.sy, p2.sy)));
   if (minX > maxX || minY > maxY) return;
   const i0 = 1 / p0.cy, i1 = 1 / p1.cy, i2 = 1 / p2.cy;
+  const nu = Math.max(u0, u1, u2), nv = Math.max(v0, v1, v2);   // face extent in texels → for the edge outline
   for (let y = minY; y <= maxY; y++) {
     const fy = y + 0.5;
     for (let x = minX; x <= maxX; x++) {
@@ -185,11 +186,14 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
       const cy = 1 / (wa * i0 + wb * i1 + wc * i2);
       const idx = y * e.W + x;
       if (cy >= e.depth[idx]) continue;
-      // per-texel solid colour block: one of a few discrete brightness steps + a warm/cool tint per
-      // cell (real colour variation), NO edge mortar/contours — distinct pixel cubes, not fabric.
-      const cu = Math.floor(wa * u0 + wb * u1 + wc * u2), cv = Math.floor(wa * v0 + wb * v1 + wc * v2);
+      // per-texel solid colour block: a few discrete brightness steps + a warm/cool tint per cell (real
+      // colour variation), PLUS a dark outline on the face's border texels so each cube reads as its own
+      // block point-blank (you can tell one block from the next, and a turn from a flat wall).
+      const uu = wa * u0 + wb * u1 + wc * u2, vv = wa * v0 + wb * v1 + wc * v2;
+      const cu = Math.floor(uu), cv = Math.floor(vv);
       let hh = (cu * 374761393 + cv * 668265263) | 0; hh = (hh ^ (hh >> 13)) * 1274126177; hh = hh >>> 0;
-      const m = 0.84 + (hh & 3) * 0.07;                 // 4 distinct brightness blocks
+      let m = 0.84 + (hh & 3) * 0.07;                    // 4 distinct brightness blocks
+      if ((nu > 2 && (uu < 0.5 || uu > nu - 0.5)) || (nv > 2 && (vv < 0.5 || vv > nv - 0.5))) m *= 0.66;   // edge seam
       const tnt = (((hh >>> 5) & 7) - 3.5) * 2.6;       // per-cell warm/cool tint → colour complexity
       const o = idx * 4;
       e.data[o] = rr * m + tnt; e.data[o + 1] = gg * m + tnt * 0.35; e.data[o + 2] = bb * m - tnt; e.data[o + 3] = 255;
@@ -197,6 +201,10 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
     }
   }
 };
+// Fixed-direction "sun" shading — every face orientation gets a DISTINCT brightness so a corner between
+// two perpendicular faces is always a clear step (you can read a turn from a flat wall) and opposite walls
+// of a corridor differ. Shared by the voxel boxes AND the raycast walls so the whole world shades alike.
+const SHADE_TOP = 1.0, SHADE_N = 0.92, SHADE_W = 0.8, SHADE_E = 0.62, SHADE_S = 0.5;
 // draw one axis-aligned cuboid: top + the ≤2 camera-facing side faces, Minecraft-shaded (top brightest),
 // fogged by mean depth, dimmed by `light` (lantern). Colour (r,g,bl) is the base albedo.
 const TEXD = 6;   // texel-cells per world unit (chunky pixel size)
@@ -214,11 +222,11 @@ const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0
     fillTri(e, a, b, c, 0, 0, nu, 0, nu, nv, rr, gg, bb); fillTri(e, a, c, d, 0, 0, nu, nv, 0, nv, rr, gg, bb);
   };
   const cw = Math.max(1, w * TEXD), cd = Math.max(1, dep * TEXD), ch = Math.max(1, hgt * TEXD);
-  quad(c001, c101, c111, c011, 1.0, cw, cd);                        // top face — brightest
-  if (e.px > x1) quad(c100, c110, c111, c101, 0.6, cd, ch);         // east  face
-  else if (e.px < x0) quad(c000, c010, c011, c001, 0.6, cd, ch);    // west  face
-  if (e.py > y1) quad(c010, c110, c111, c011, 0.82, cw, ch);        // south face
-  else if (e.py < y0) quad(c000, c100, c101, c001, 0.82, cw, ch);   // north face
+  quad(c001, c101, c111, c011, SHADE_TOP, cw, cd);                  // top face — brightest
+  if (e.px > x1) quad(c100, c110, c111, c101, SHADE_E, cd, ch);     // east  face
+  else if (e.px < x0) quad(c000, c010, c011, c001, SHADE_W, cd, ch);// west  face
+  if (e.py > y1) quad(c010, c110, c111, c011, SHADE_S, cw, ch);     // south face
+  else if (e.py < y0) quad(c000, c100, c101, c001, SHADE_N, cw, ch);// north face
 };
 // The exit DOOR's energy panel: a swirling pixel-gradient oval, quantised into blocks. u,v in 0..1
 // across the door opening; returns null outside the oval (frame/room shows through).
@@ -1608,7 +1616,8 @@ export const RaycastCanvas: React.FC<{
             const nextCh = cellAt(rows, mapX, mapY);
             if (isWall(nextCh)) {                                   // full wall → close the column
               const base = pal.wall[nextCh] ?? pal.wall['#'];
-              const sd = (side === 1 ? 0.6 : 1) * lightAt(dExit);   // stronger N/S face shading → more depth
+              // 4-way fixed-light shading: each wall orientation a distinct brightness → corners/turns read
+              const sd = (side === 1 ? (stepY > 0 ? SHADE_N : SHADE_S) : (stepX > 0 ? SHADE_W : SHADE_E)) * lightAt(dExit);
               const ft = fogTd(dExit);
               // Walls are a FIXED height (≈2 blocks) above their own base — NOT stretched up to the ceiling.
               // Raising an interior platform lifts CEIL_Z (headroom) but must never grow the edge walls.
@@ -2174,7 +2183,8 @@ export const RaycastCanvas: React.FC<{
               const wTopF = projF(zt, dEnter), wBotF = projF(zb, dEnter), span = Math.max(1, wBotF - wTopF);
               const base = pal.wall[c] ?? pal.wall['#'];
               const wxv = entrySide === 0 ? py + dEnter * rdy : px + dEnter * rdx, wxf = wxv - Math.floor(wxv);
-              const sd = (entrySide === 1 ? 0.6 : 1) * lightAt(dEnter), ft = fogTd(dEnter);   // stronger N/S shading
+              // 4-way fixed-light shading: each wall orientation a distinct brightness → corners/turns read
+              const sd = (entrySide === 1 ? (stepY > 0 ? SHADE_N : SHADE_S) : (stepX > 0 ? SHADE_W : SHADE_E)) * lightAt(dEnter), ft = fogTd(dEnter);
               const wt = Math.max(0, Math.floor(wTopF)), wb = Math.min(H, Math.ceil(wBotF));
               const tex = wallTexOf(c), lod = lodOf(dEnter), vScale = FLOOR_H / STOREY_H;   // one texture tile per block
               const edgeAO = 0.88 + 0.12 * (1 - Math.abs(wxf - 0.5) * 2);   // fake AO toward block edges
