@@ -11,7 +11,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
+  type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, resolveBand, hasBands, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
   STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, headroomBlocksOf, viewProfileOf, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
@@ -358,16 +358,23 @@ export const RaycastCanvas: React.FC<{
     const FOG_K = VIEW.fogK, BLOCK_CULL = VIEW.blockCull, GRASS_CULL = VIEW.grassCull, MARCH_MAX = VIEW.march;
 
     const floors = floorsOf(level);       // storey stack (one entry for a single-grid realm)
-    const pal = paletteOf(level);
-    const lighting = lightingOf(level);   // lantern darkness (horror) or null for a flatly-lit world
-    const skyDef = skyOf(level);          // sky gradient + weather, or null for a solid ceiling
-    const sky: [[number, number, number], [number, number, number]] | null = skyDef ? [skyDef.top, skyDef.horizon] : null;
-    const skyFx = skyDef?.fx;
-    const mood: Mood = moodOf(level);     // ambience: spooky / tense / chill
     const canFight = !!level.combat;      // false = run-and-hide world (no weapon)
     const sp0 = findSpawnFloor(floors);   // the one spawn 'S' lives on exactly one storey
     const spawnFloor = sp0.fi;
     const spawn = { x: sp0.x, y: sp0.y };
+
+    // DEPTH BANDS — atmosphere/light/sky/music can change by storey. `bandLevel(k)` is the realm as seen
+    // from band k; everything below is `let` so a band crossing re-lights the whole view (v1). Realms with
+    // no band markers pay nothing (bandsOn = false → these stay the realm's single atmosphere).
+    const bandsOn = hasBands(floors);
+    const bandLevel = (k: number): Level3D => bandsOn ? { ...level, ...resolveBand(level, floors, k) } : level;
+    let pal = paletteOf(bandLevel(spawnFloor));
+    let lighting = lightingOf(bandLevel(spawnFloor));   // lantern darkness (horror) or null for a flatly-lit world
+    let skyDef = skyOf(bandLevel(spawnFloor));           // sky gradient + weather, or null for a solid ceiling
+    let sky: [[number, number, number], [number, number, number]] | null = skyDef ? [skyDef.top, skyDef.horizon] : null;
+    let skyFx = skyDef?.fx;
+    let mood: Mood = moodOf(bandLevel(spawnFloor));       // ambience: spooky / tense / chill / hell / day …
+    let curBandAtmo = resolveBand(level, floors, spawnFloor).atmo;
 
     // Crystals are a whole-realm goal; remember grabbed ones by floor+tile so they stay gone across storeys.
     const totalCrystals = floors.reduce((n, f) => n + f.rows.reduce((m, r) => m + (r.match(/C/g)?.length ?? 0), 0), 0);
@@ -816,7 +823,7 @@ export const RaycastCanvas: React.FC<{
       haven: [0, 2, 4, 5, 7, 9, 12],   // bright major — cheerful, resolved
     };
     const VOL: Record<Mood, number> = { day: 0.05, mist: 0.045, dungeon: 0.055, spooky: 0.06, mystery: 0.048, hell: 0.07, haven: 0.055 };
-    const SCALE = SCALES[mood];
+    let SCALE = SCALES[mood];                                             // reassigned when a band changes the mood
     const noteHz = (semi: number) => ROOTS[mood] * Math.pow(2, semi / 12);
 
     // ── Ambience — generative drone matching the level's mood (spooky/tense/chill). Starts on the
@@ -861,6 +868,20 @@ export const RaycastCanvas: React.FC<{
       setTimeout(() => a.nodes.forEach(n => { try { n.stop(); } catch { /* noop */ } }), 500);
     };
     ambToggleRef.current = (m: boolean) => { if (m) { stopAmbience(); stopHunt(); } else startAmbience(); };
+    // Cross into a new depth band → re-light the world (palette / lantern / fog-colour / sky) and, if the
+    // band's music mood differs, restart the ambience drone with the new theme (its 2.5s fade-in = a soft
+    // crossfade). Called each tick with the storey under your feet; cheap no-op while you stay in a band.
+    const applyBand = (k: number) => {
+      if (!bandsOn) return;
+      const atmo = resolveBand(level, floors, k).atmo;
+      if (atmo === curBandAtmo) return;
+      curBandAtmo = atmo;
+      const lv = bandLevel(k);
+      pal = paletteOf(lv); lighting = lightingOf(lv); skyDef = skyOf(lv);
+      sky = skyDef ? [skyDef.top, skyDef.horizon] : null; skyFx = skyDef?.fx;
+      const nm = moodOf(lv);
+      if (nm !== mood) { mood = nm; SCALE = SCALES[mood]; if (amb) { stopAmbience(); startAmbience(); } }
+    };
     // Duck the music down hard for a moment so a screech/hit PUNCHES through and dominates the mix (sidechain).
     const duck = (dur = 0.9) => {
       if (!amb || !actx) return;
@@ -2007,6 +2028,7 @@ export const RaycastCanvas: React.FC<{
 
       // standing-tile effects on the layer under your feet
       const pk = layerAt(pz);
+      applyBand(pk);                             // re-light + re-score the world when you cross into a new depth band
       const here = cellL(pk, cx, cy);
       if (here === TUNNEL_CHAR) {                 // tunnel — warp to the next tunnel on this layer
         if (!tpLock) {
@@ -2069,6 +2091,12 @@ export const RaycastCanvas: React.FC<{
       const eye = viewZ + EYE_BASE;
       const fog = pal.fog;
       const topZ = baseZ(nLayers - 1) + FLOOR_H + CEIL_GAP;   // sky/ceiling cap above the whole stack
+      // VERTICAL CULLING — only render the layers within a window of the storey you're on. You can't see
+      // (through solid floors + fog) more than a few storeys up/down, so a 40-deep stack costs the same as
+      // a handful. The window follows you as you climb/descend, keeping deep realms at 60fps.
+      const VIS_DOWN = 6, VIS_UP = 6;
+      const pk = layerAt(viewZ);
+      const kLo = Math.max(0, pk - VIS_DOWN), kHi = Math.min(nLayers - 1, pk + VIS_UP);
 
       const fogMix = (r: number, g: number, b: number, t: number): [number, number, number] => { t = t < 0 ? 0 : t > 1 ? 1 : t; return [r + (fog[0] - r) * t, g + (fog[1] - g) * t, b + (fog[2] - b) * t]; };
       const flick = lighting && lighting.flicker ? 1 - lighting.flicker * (0.5 + 0.5 * Math.sin(tick * 0.7) * Math.sin(tick * 0.21 + 1.3)) : 1;
@@ -2141,7 +2169,7 @@ export const RaycastCanvas: React.FC<{
         for (let guard = 0; guard < 100; guard++) {
           let dExit = sideX < sideY ? sideX : sideY;
           if (dExit < dEnter + 0.0001) dExit = dEnter + 0.0001;
-          for (let k = 0; k < nLayers; k++) {
+          for (let k = kLo; k <= kHi; k++) {
             const c = cellL(k, mapX, mapY);
             if (isAir(c)) continue;
             if (isWall(c)) {
@@ -2202,7 +2230,7 @@ export const RaycastCanvas: React.FC<{
       const invDet = 1 / (planeX * sin - cos * planeY);
       const order = allSprites
         .map(s => ({ s, d: (s.x - px) ** 2 + (s.y - py) ** 2 }))
-        .filter(o => !(o.s.kind === 'crystal' && o.s.key && grabbed.has(o.s.key)))
+        .filter(o => o.s.k >= kLo && o.s.k <= kHi && !(o.s.kind === 'crystal' && o.s.key && grabbed.has(o.s.key)))
         .sort((a, b) => b.d - a.d);
       for (const { s } of order) {
         const kind: string = s.kind;
@@ -2292,7 +2320,7 @@ export const RaycastCanvas: React.FC<{
       if (bubbles.length) drawBubbles(env3d);
       if (grassCells.length) drawGrass(env3d, lightAt);
       if (blockCells.length) drawBlocks(env3d, lightAt);
-      const eorder = enemies.filter(e => e.hp > 0).map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
+      const eorder = enemies.filter(e => e.hp > 0 && (e.k ?? 0) >= kLo && (e.k ?? 0) <= kHi).map(e => ({ e, d: (e.x - px) ** 2 + (e.y - py) ** 2 })).sort((a, b) => b.d - a.d);
       for (const { e } of eorder) {
         const relX = e.x - px, relY = e.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);

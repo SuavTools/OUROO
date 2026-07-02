@@ -45,7 +45,13 @@ export type Palette = {
 
 // One storey of a multi-floor realm: its own walkable grid (+ optional per-cell terrain heights and
 // placed NPCs). Floors stack bottom→top; you cross between them via '>' / '<' stair cells.
-export type Floor3D = { rows: string[]; heights?: string[]; blocks?: string[]; blockH?: string[]; npcs?: Npc3D[] };
+export type Floor3D = {
+  rows: string[]; heights?: string[]; blocks?: string[]; blockH?: string[]; npcs?: Npc3D[];
+  // DEPTH BAND marker (optional): setting `atmo` on a floor starts a new atmosphere band from this storey
+  // UP until the next marker — so a stack can go sunlit surface → gloom cave → hellfire deep, each with its
+  // own light/palette/sky/music. The player's CURRENT band lights the whole view (v1: it reveals on entry).
+  atmo?: string; sky?: string; music?: Mood;
+};
 
 export type Level3D = {
   id: string;
@@ -121,6 +127,17 @@ export const VIEW_PROFILES: Record<ViewDist, { fogK: number; blockCull: number; 
 };
 export const viewProfileOf = (l: Pick<Level3D, 'viewDist'>) =>
   VIEW_PROFILES[(l.viewDist && VIEW_PROFILES[l.viewDist]) ? l.viewDist! : 'normal'];
+
+// The atmosphere BAND for storey `k`: the nearest floor at-or-below k that sets `atmo` wins (its sky/music
+// come with it); if none do, the realm's own atmo/sky/music apply. `hasBands` = any floor is a marker, so
+// the renderer only pays the per-frame band cost when a realm actually uses depth bands.
+export const hasBands = (floors: Floor3D[]): boolean => floors.some(f => f.atmo !== undefined);
+export const resolveBand = (level: Pick<Level3D, 'atmo' | 'sky' | 'music'>, floors: Floor3D[], k: number): { atmo?: string; sky?: string; music?: Mood } => {
+  let atmo = level.atmo, sky = level.sky, music = level.music;
+  const top = Math.min(k, floors.length - 1);
+  for (let j = 0; j <= top; j++) { const f = floors[j]; if (f.atmo !== undefined) { atmo = f.atmo; sky = f.sky; music = f.music; } }
+  return { atmo, sky, music };
+};
 
 // Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
 // `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.
@@ -552,7 +569,71 @@ const CAVE_RUINS: Level3D = (() => {
   };
 })();
 
-export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS];
+// ── THE DESCENT — a five-storey vertical world that shows off DEPTH BANDS: the atmosphere, light and
+// music change with depth. Spawn on a sunlit green surface, drop down a staggered shaft through a
+// torch-lit cave → pitch-black deep → a HELLFIRE cavern with the exit at the very bottom. Or climb the
+// block staircase UP to misty rooftop ruins. Each storey re-lights the whole world as you cross into it.
+const THE_DESCENT: Level3D = (() => {
+  const W = 22, H = 22, NF = 5;
+  const F = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
+  const Bl = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
+  const BH = Array.from({ length: NF }, () => Array.from({ length: H }, () => '1'.repeat(W)));
+  const set = (g: string[], x: number, y: number, c: string) => { if (x >= 0 && x < W && y >= 0 && y < H) g[y] = g[y].substring(0, x) + c + g[y].substring(x + 1); };
+  const put = (k: number, x: number, y: number, c: string) => set(F[k], x, y, c);
+  const blk = (k: number, x: number, y: number, c: string, n = 1) => { set(Bl[k], x, y, c); set(BH[k], x, y, String(n)); };
+  const fill = (k: number, ch: string) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) put(k, x, y, (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? '#' : ch); };
+  const clear3 = (k: number, cx: number, cy: number) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) put(k, cx + dx, cy + dy, '.'); };   // safe landing pad
+  const R = (i: number) => { const s = Math.sin(i * 45.31 + 9.13) * 20261.1; return s - Math.floor(s); };
+  const scatterC = (k: number, n: number, seed: number) => { for (let i = 0; i < n; i++) { const x = 2 + Math.floor(R(seed + i * 1.7) * (W - 4)), y = 2 + Math.floor(R(seed + i * 1.7 + 0.4) * (H - 4)); const c = F[k][y][x]; if (c === '.' || c === 'g') put(k, x, y, 'C'); } };
+
+  // 0 HELL — a lava cavern; the EXIT sits at the bottom of the world
+  fill(0, '.');
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (F[0][y][x] === '.' && (Math.hypot(x - 6, y - 15) < 3.2 || Math.hypot(x - 15, y - 7) < 3.2)) put(0, x, y, 'L');
+  clear3(0, 16, 16);                     // landing under the deep-floor's hole
+  clear3(0, 11, 11); put(0, 11, 11, 'E');   // the exit, on a safe pad
+  [[3, 3], [18, 3], [3, 18]].forEach(([x, y]) => put(0, x, y, 'l'));
+  scatterC(0, 6, 10);
+
+  // 1 DEEP DARK — blackout; a stalker prowls; a hole drops to hell at (16,16)
+  fill(1, '.');
+  clear3(1, 5, 5);                       // landing under the cave's hole
+  set(F[1], 16, 16, ' '); set(F[1], 16, 15, ' '); set(F[1], 15, 16, ' ');   // shaft down to hell
+  put(1, 10, 10, 'M');
+  [[4, 18], [18, 18]].forEach(([x, y]) => put(1, x, y, 'l'));
+  scatterC(1, 7, 20);
+
+  // 2 CAVE — candle torches; a hole drops to the deep at (5,5)
+  fill(2, '.');
+  clear3(2, 11, 11);                     // landing under the surface shaft
+  set(F[2], 5, 5, ' '); set(F[2], 5, 6, ' '); set(F[2], 6, 5, ' ');         // shaft down to the deep
+  [[3, 3], [18, 3], [3, 18], [18, 18]].forEach(([x, y]) => put(2, x, y, 'l'));
+  scatterC(2, 8, 30);
+
+  // 3 SURFACE — sunlit grass; SPAWN; the descent shaft; and a block staircase climbing to the rooftop
+  fill(3, 'g');
+  set(F[3], 11, 11, ' '); set(F[3], 11, 12, ' '); set(F[3], 12, 11, ' ');   // the shaft you drop into
+  put(3, 3, 11, 'S');
+  blk(3, 16, 11, 'c', 1); blk(3, 17, 11, 'c', 2); blk(3, 18, 11, 'c', 3);   // 1→2→3-tall steps → roof = floor 4
+  put(3, 6, 6, 'T'); put(3, 15, 6, 'T'); put(3, 7, 16, 'f'); put(3, 14, 16, 'f');
+  scatterC(3, 6, 40);
+
+  // 4 ROOFTOP — misty heights: a platform (over the east half of the surface) with ruined rubble + crystals
+  for (let y = 8; y <= 14; y++) for (let x = 14; x <= 20; x++) put(4, x, y, (x === 14 || x === 20 || y === 8 || y === 14) ? '#' : '.');
+  put(4, 18, 11, '.');                   // top of the staircase — step off here
+  blk(4, 16, 9, 'c', 1); blk(4, 19, 13, 'r', 2);
+  put(4, 16, 11, 'C'); put(4, 17, 12, 'C'); put(4, 15, 13, 'C');
+
+  const floors: Floor3D[] = [
+    { rows: F[0], blocks: Bl[0], blockH: BH[0], atmo: 'hell' },                  // hellfire
+    { rows: F[1], blocks: Bl[1], blockH: BH[1], atmo: 'blackout' },              // pitch-black deep
+    { rows: F[2], blocks: Bl[2], blockH: BH[2], atmo: 'candle' },                // torch-lit cave
+    { rows: F[3], blocks: Bl[3], blockH: BH[3], atmo: 'haven', sky: 'day' },     // sunlit surface
+    { rows: F[4], blocks: Bl[4], blockH: BH[4], atmo: 'fog', sky: 'day' },       // misty rooftop
+  ];
+  return { id: 'the-descent', name: 'The Descent', combat: false, spawnDir: 0, storeyBlocks: 2, viewDist: 'normal', rows: F[0], floors };
+})();
+
+export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS, THE_DESCENT];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';

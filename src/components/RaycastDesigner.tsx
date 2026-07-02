@@ -754,6 +754,26 @@ export const RaycastDesigner: React.FC<{
                   </button>
                 ))}
               </div>
+
+              <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Depth band <span className="text-white/25 normal-case tracking-normal">(light/music from {floorName} up)</span></p>
+              <div className="flex flex-wrap gap-1">
+                <button onClick={() => { setActiveFloor(f => { const n = { ...f }; delete n.atmo; delete n.sky; delete n.music; return n; }); }}
+                  className={`text-[9px] font-mono px-2 py-1 border transition-colors ${!cur.atmo ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>Inherit</button>
+                {Object.entries(ATMOS).map(([key, a]) => (
+                  <button key={key} onClick={() => { setActiveFloor(f => ({ ...f, atmo: key })); }}
+                    className={`text-[9px] font-mono px-2 py-1 border transition-colors ${cur.atmo === key ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>{a.label}</button>
+                ))}
+              </div>
+              {cur.atmo && (
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => { setActiveFloor(f => { const n = { ...f }; delete n.sky; return n; }); }}
+                    className={`text-[9px] font-mono px-2 py-1 border transition-colors ${!cur.sky ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>Roof</button>
+                  {Object.entries(SKIES).map(([key, s]) => (
+                    <button key={key} onClick={() => { setActiveFloor(f => ({ ...f, sky: key })); }}
+                      className={`text-[9px] font-mono px-2 py-1 border transition-colors ${cur.sky === key ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>{s.label}</button>
+                  ))}
+                </div>
+              )}
             </>
           )}
 
