@@ -66,6 +66,7 @@ export type Level3D = {
   blocks?: string[];       // OPTIONAL per-cell BLOCK-on-top grid (same dims as rows). A block sits ON the
                            // floor material (grass/dirt/…), so you get "grass then rock on top". ' '/'.' = none.
   blockH?: string[];       // OPTIONAL per-cell block STACK height ('1'–'9', how many cubes tall). Absent = 1.
+  storeyBlocks?: number;   // OPTIONAL underground headroom in BLOCKS per storey (2 = tight … 3 = cavern). Default 2.
   author?: string;
 };
 
@@ -92,9 +93,19 @@ export const isAir = (ch: string) => ch === AIR;
 // A realm is a TRUE VOXEL STACK (overhangs, gravity, see-through holes) once it has 2+ floors.
 export const isStacked = (level: Level3D): boolean => !!(level.floors && level.floors.length > 1);
 
-// How many height-levels tall one storey is — the vertical gap between layer k and layer k+1. A wall
-// block is exactly this tall, so floors stack flush (the block top of layer k == the floor of k+1).
+// How many height-levels tall one BLOCK/cube is (the fundamental unit: a wall cube, a placed block, one
+// step of raised terrain × this). Kept at 3 so a cube ≈ 0.96 world units in the raycaster.
 export const STOREY_LEVELS = 3;
+
+// ── Underground / multi-floor headroom ──────────────────────────────────────────────────────────
+// A stacked realm's floors used to sit exactly ONE block apart — but the player is ~1.8 blocks tall, so
+// the floor above cut across your eyes ("thin slice at eye level") and no room was tall enough to stand
+// in. A storey is now HEADROOM blocks of clear air + a 1-block-thick floor slab, so basements/caves are
+// real walk-in rooms. `storeyBlocks` picks the headroom per realm: 2 = tight crypt, 3 = grand cavern.
+export const HEADROOM_DEFAULT = 2;
+export const headroomBlocksOf = (l: Pick<Level3D, 'storeyBlocks'>): number => {
+  const n = l.storeyBlocks; return n && n >= 2 && n <= 4 ? Math.round(n) : HEADROOM_DEFAULT;
+};
 
 // Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
 // `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.
@@ -464,7 +475,69 @@ const SUNKEN_HOLLOW: Level3D = (() => {
   return { id: 'sunken-hollow', name: 'The Sunken Hollow', atmo: 'candle', music: 'spooky' as Mood, combat: false, spawnDir: 0, rows: g, heights: hh, blocks: Bl, blockH: BH };
 })();
 
-export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW];
+// ── THE CAVE RUINS — a candle-lit UNDERGROUND delve that shows off real below-ground play. Two storeys:
+// a ruined upper courtyard whose floor has COLLAPSED, and a torch-lit cavern beneath it. You descend the
+// only way the ruin allows — DROP through the hole — and land in a proper walk-in cave (headroom, solid
+// stone ceiling overhead, no thin slices) to loot crystals, open the chest that unlocks the gate, and
+// escape through the exit deep at the bottom of the map. `storeyBlocks: 3` makes the cavern stand tall.
+const CAVE_RUINS: Level3D = (() => {
+  const W = 28, H = 22;
+  const surf = Array.from({ length: H }, () => ' '.repeat(W));    // layer 1 (top) — the ruined surface
+  const cave = Array.from({ length: H }, () => ' '.repeat(W));    // layer 0 (bottom) — the cavern
+  const surfBl = Array.from({ length: H }, () => ' '.repeat(W));
+  const surfBH = Array.from({ length: H }, () => '1'.repeat(W));
+  const set = (grid: string[], x: number, y: number, c: string) => { if (x >= 0 && x < W && y >= 0 && y < H) grid[y] = grid[y].substring(0, x) + c + grid[y].substring(x + 1); };
+  const sBlk = (x: number, y: number, c: string, n = 1) => { set(surfBl, x, y, c); set(surfBH, x, y, String(n)); };
+  const R = (i: number) => { const s = Math.sin(i * 73.13 + 19.7) * 31871.19; return s - Math.floor(s); };
+  const border = (g: string[]) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x === 0 || y === 0 || x === W - 1 || y === H - 1) set(g, x, y, '#'); };
+
+  // ── CAVE (bottom): enclosed stone/cobble cavern, floor '.', torch pools, treasure + gate at the far end
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) set(cave, x, y, '.');
+  border(cave);
+  // crumbled cobble outcrops that break the box into chambers/passages (leave the landing zone clear)
+  const rock = (x: number, y: number) => { if (x > 0 && x < W - 1 && y > 0 && y < H - 1) set(cave, x, y, '2'); };
+  for (let y = 3; y <= 8; y++) rock(9, y);                 // west divider wall with a gap
+  set(cave, 9, 6, '.');                                    //   → doorway through it
+  for (let x = 12; x <= 20; x++) rock(x, 5);               // north divider
+  set(cave, 16, 5, '.');                                   //   → doorway
+  for (let y = 12; y <= 18; y++) rock(18, y);              // east divider
+  set(cave, 18, 15, '.');                                  //   → doorway
+  for (let x = 4; x <= 10; x++) rock(x, 16);               // south rubble wall
+  set(cave, 7, 16, '.');
+  // a little dirt + a water seep for texture
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (cave[y][x] !== '.') continue; if (Math.hypot(x - 6, y - 12) < 2.4) set(cave, x, y, 'w'); else if (R(x * 5 + y * 11) > 0.86) set(cave, x, y, 'd'); }
+  // torch posts (lamp props glow — vital in candle-light), crystals, the chest, a lurking stalker
+  [[3, 3], [24, 3], [3, 18], [23, 18], [8, 4], [20, 9]].forEach(([x, y]) => set(cave, x, y, 'l'));   // (all clear of the landing zone)
+  [[5, 4], [7, 8], [14, 3], [21, 6], [25, 9], [11, 17], [22, 13], [6, 19], [15, 18], [24, 16]].forEach(([x, y]) => set(cave, x, y, 'C'));
+  set(cave, 23, 4, 'H');                                   // chest (locks the gate until opened)
+  set(cave, 24, 19, 'E');                                  // the exit gate — deep in the SE of the cavern
+  set(cave, 21, 16, 'M');                                  // one stalker prowling the dark (run-and-hide)
+
+  // ── SURFACE (top): a ruined courtyard whose middle has COLLAPSED into the cave. Drop in to descend.
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) set(surf, x, y, 'd');
+  border(surf);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (surf[y][x] === 'd' && R(x * 2.1 + y * 3.7) > 0.9) set(surf, x, y, 'g');   // grass tufts through the ruin
+  // the collapse — an irregular hole (AIR) you fall through onto the cavern floor below
+  for (let y = 7; y <= 14; y++) for (let x = 10; x <= 18; x++) { if (Math.hypot((x - 14) * 0.9, (y - 10.5)) < 4.6) set(surf, x, y, ' '); }
+  // broken ruin walls + a couple of standing pillars around the courtyard (block props, varied heights)
+  for (let x = 3; x <= 8; x++) if (R(x) > 0.3) sBlk(x, 3, 'c', R(x * 3) > 0.5 ? 2 : 1);
+  for (let y = 15; y <= 19; y++) if (R(y + 5) > 0.3) sBlk(23, y, 'c', R(y) > 0.5 ? 2 : 1);
+  sBlk(5, 17, 'r', 2); sBlk(22, 5, 'r', 2); sBlk(3, 10, 'c', 1); sBlk(24, 11, 'c', 1);
+  [[4, 6], [7, 19], [24, 8], [20, 18]].forEach(([x, y]) => set(surf, x, y, 'l'));   // torches lighting the ruin
+  [[6, 5], [23, 3], [4, 19], [25, 17]].forEach(([x, y]) => set(surf, x, y, 'C'));
+  set(surf, 3, 11, 'S');                                    // spawn at the west edge, facing the collapse
+
+  return {
+    id: 'cave-ruins', name: 'The Cave Ruins', atmo: 'candle', music: 'spooky' as Mood, combat: false,
+    spawnDir: 0, storeyBlocks: 3, rows: cave,
+    floors: [
+      { rows: cave },                                        // 0 = the cavern (bottom)
+      { rows: surf, blocks: surfBl, blockH: surfBH },        // 1 = the ruined surface (spawn + collapse hole)
+    ],
+  };
+})();
+
+export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';

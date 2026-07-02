@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, getRealmRemote,
+  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, headroomBlocksOf, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -432,49 +432,61 @@ export const RaycastCanvas: React.FC<{
 
     // ── Stacked voxel world (2+ floors) ─────────────────────────────────────────────────────────
     // When a realm has multiple floors we stop swapping a single active grid and instead treat the
-    // whole stack as ONE 3D world: every layer sits STOREY_H above the one below, walls are solid
-    // blocks a storey tall (stand on their roof), '.'/etc are thin walkable slabs (their underside is
-    // the ceiling for the layer below), and ' ' (air) is empty — you see and fall straight through it.
-    // That's what lets you walk UNDER an overhang and look DOWN a shaft to the floor below.
+    // whole stack as ONE 3D world: every layer sits FLOOR_H above the one below, walls are solid columns
+    // a storey tall (stand on their roof), '.'/etc are walkable floor SLABS with real thickness (their
+    // underside is the solid ceiling of the layer below), and ' ' (air) is empty — you see and fall
+    // straight through it. That's what lets you walk UNDER an overhang, drop DOWN a shaft into the room
+    // below, and stand in a basement/cave that's actually tall enough for you.
     const stacked = floors.length > 1;
-    const STOREY_H = STOREY_LEVELS * STEP_UNIT;       // world height of one storey (≈ one wall tall)
+    const STOREY_H = STOREY_LEVELS * STEP_UNIT;       // one BLOCK/cube (≈0.96) — texture + block-stack unit
+    // A storey is HEADROOM blocks of clear air + a 1-block-thick floor slab, so floors sit far enough apart
+    // that the player (≈1.8 blocks tall) fits under the next one instead of clipping through it at eye level.
+    const SLAB_T = STOREY_H;                           // floor slab thickness = 1 block (solid ceiling below)
+    const ROOM_H = headroomBlocksOf(level) * STOREY_H; // clear headroom in a storey (2 blocks tight … 3 cavern)
+    const FLOOR_H = ROOM_H + SLAB_T;                   // floor-to-floor vertical spacing
     const nLayers = floors.length;
     const grids = floors.map(f => f.rows);
-    const baseZ = (k: number) => k * STOREY_H;        // floor height of layer k
+    const baseZ = (k: number) => k * FLOOR_H;          // walkable floor height of layer k
     const cellL = (k: number, x: number, y: number) => (k < 0 || k >= nLayers) ? '#' : cellAt(grids[k], x, y);
     // Per-cell terrain height ALSO applies inside a stacked realm: the Raise/Lower tool lifts a walkable
-    // slab within its storey (capped so it never pokes into the floor above). This is what lets raised
-    // terrain and storeys coexist instead of being one-or-the-other.
+    // slab within its storey (capped at the room's headroom so it never pokes into the ceiling above).
     const hLvl = (k: number, x: number, y: number) => { const ch = floors[k]?.heights?.[y]?.[x]; return ch && ch >= '0' && ch <= '9' ? ch.charCodeAt(0) - 48 : 0; };
-    const slabZ = (k: number, x: number, y: number) => baseZ(k) + Math.min(hLvl(k, x, y) * STEP_UNIT, STOREY_H - 0.05);
+    const slabZ = (k: number, x: number, y: number) => baseZ(k) + Math.min(hLvl(k, x, y) * STEP_UNIT, ROOM_H - 0.05);
     const isSolidProp = (ch: string) => ch === 'T' || ch === 'r' || ch === 'l';
     const bodyBlocks = (ch: string) => isWall(ch) || isSolidProp(ch);      // fills its whole storey → blocks your body
     const STEP_UP = STEP_UNIT + 0.02;                 // you auto-step up a ledge this tall; taller needs a jump
-    // every standable surface in a column: wall roofs (base+STOREY_H) and thin slab tops (base + raise).
+    // every standable surface in a column: wall roofs (base+FLOOR_H = the floor above) and slab tops (base + raise).
     const standTops = (x: number, y: number): number[] => {
       const t: number[] = [];
-      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + STOREY_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); const bt = solidBlocks.get(`${k}:${x}:${y}`); if (bt !== undefined) t.push(bt); }
+      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + FLOOR_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); const bt = solidBlocks.get(`${k}:${x}:${y}`); if (bt !== undefined) t.push(bt); }
       return t;
     };
     // movement collision that allows STEPPING: walls/props always block the body; raised terrain only
     // blocks the part that's more than one step above your feet, so 1-level terrain forms walkable ramps.
     const solidFor = (x: number, y: number, feet: number): boolean => {
-      const zLo = feet + 0.3, zHi = feet + 1.6;   // Minecraft-tall body (~1.8 blocks) — 2-block walls block you
+      const zLo = feet + 0.3, zHi = feet + 1.6;   // Minecraft-tall body (~1.8 blocks) — a storey wall blocks you
       for (let k = 0; k < nLayers; k++) {
         const c = cellL(k, x, y);
-        if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + STOREY_H) return true; }                       // walls/props: solid full storey
+        if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + FLOOR_H) return true; }                        // walls/props: solid full storey
         else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > feet + STEP_UP && zHi > b && zLo < top) return true; }   // raised terrain: a SOLID hill you can't step straight up
         { const top = solidBlocks.get(`${k}:${x}:${y}`); if (top !== undefined) { const s = slabZ(k, x, y); if (zHi > s && zLo < top) return true; } }   // a placed (possibly stacked) block on this layer's floor
       }
       return false;
     };
-    // lowest block underside above `head` (head-bonk while jumping); +∞ = open sky above.
+    // lowest ceiling above `head` (head-bonk while jumping); +∞ = open sky above. A ceiling is either the
+    // underside of a wall/prop that floats above you (its base) OR the underside of a floor slab overhead.
     const ceilAbove = (x: number, y: number, head: number): number => {
-      let lo = Infinity; for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (b >= head - 0.001 && b < lo) lo = b; } return lo;
+      let lo = Infinity;
+      for (let k = 0; k < nLayers; k++) {
+        const c = cellL(k, x, y);
+        const u = bodyBlocks(c) ? baseZ(k) : isAir(c) ? Infinity : baseZ(k) - SLAB_T;   // wall base or slab underside
+        if (u >= head - 0.001 && u < lo) lo = u;
+      }
+      return lo;
     };
     // which layer's surface you're standing on (for hazard/pickup/exit effects under your feet).
     // floor() not round() so raised terrain (a slab lifted within its storey) still reads as its own layer.
-    const layerAt = (z: number) => Math.max(0, Math.min(nLayers - 1, Math.floor(z / STOREY_H + 0.001)));
+    const layerAt = (z: number) => Math.max(0, Math.min(nLayers - 1, Math.floor(z / FLOOR_H + 0.001)));
 
     // Pull crystals/exit/props, stalkers and NPCs from EVERY layer — they all render at once (you see
     // the crystal on the floor above through a hole), each tagged with its layer k for its height.
@@ -1955,7 +1967,7 @@ export const RaycastCanvas: React.FC<{
       const tops = standTops(cx, cy);
       const highestUnder = (feet: number, tol: number) => { let s = -Infinity; for (const t of tops) if (t <= feet + tol && t > s) s = t; return s; };
       const fallDamage = (drop: number): boolean => {            // drop in world height → true if it killed you
-        const storeys = drop / STOREY_H;                         // a one-wall (one-storey) drop is free
+        const storeys = drop / FLOOR_H;                          // a one-storey (floor-to-floor) drop is free
         if (storeys < 1.6) return false;
         hp -= Math.round((storeys - 1.5) * 34);                  // ~2 storeys: a scratch · ~3: hurts · ~4.5: lethal
         shake = Math.min(4, shake + 2); beep(120, 0.2, 'sawtooth', 0.06);
@@ -2048,7 +2060,7 @@ export const RaycastCanvas: React.FC<{
       const horizon = (H >> 1) + Math.round(pitch);
       const eye = viewZ + EYE_BASE;
       const fog = pal.fog;
-      const topZ = baseZ(nLayers - 1) + STOREY_H + CEIL_GAP;   // sky/ceiling cap above the whole stack
+      const topZ = baseZ(nLayers - 1) + FLOOR_H + CEIL_GAP;   // sky/ceiling cap above the whole stack
 
       const fogMix = (r: number, g: number, b: number, t: number): [number, number, number] => { t = t < 0 ? 0 : t > 1 ? 1 : t; return [r + (fog[0] - r) * t, g + (fog[1] - g) * t, b + (fog[2] - b) * t]; };
       const flick = lighting && lighting.flicker ? 1 - lighting.flicker * (0.5 + 0.5 * Math.sin(tick * 0.7) * Math.sin(tick * 0.21 + 1.3)) : 1;
@@ -2125,20 +2137,20 @@ export const RaycastCanvas: React.FC<{
             const c = cellL(k, mapX, mapY);
             if (isAir(c)) continue;
             if (isWall(c)) {
-              const zb = baseZ(k), zt = zb + STOREY_H;
+              const zb = baseZ(k), zt = zb + FLOOR_H;                             // a wall fills its whole storey
               // near vertical face — the wall you see/bump (depth = entry distance)
               const wTopF = projF(zt, dEnter), wBotF = projF(zb, dEnter), span = Math.max(1, wBotF - wTopF);
               const base = pal.wall[c] ?? pal.wall['#'];
               const wxv = entrySide === 0 ? py + dEnter * rdy : px + dEnter * rdx, wxf = wxv - Math.floor(wxv);
               const sd = (entrySide === 1 ? 0.6 : 1) * lightAt(dEnter), ft = fogTd(dEnter);   // stronger N/S shading
               const wt = Math.max(0, Math.floor(wTopF)), wb = Math.min(H, Math.ceil(wBotF));
-              const tex = wallTexOf(c), lod = lodOf(dEnter);   // one texture tile over this block-tall face
+              const tex = wallTexOf(c), lod = lodOf(dEnter), vScale = FLOOR_H / STOREY_H;   // one texture tile per block
               const edgeAO = 0.88 + 0.12 * (1 - Math.abs(wxf - 0.5) * 2);   // fake AO toward block edges
               for (let y = wt; y < wb; y++) {
                 if (dEnter >= depth[y * W + x]) continue;
                 const ty = (y - wTopF) / span;
-                const b = sampleTex(tex, wxf, ty, lod);       // real (procedural) block texture
-                const baseAO = 0.66 + 0.34 * Math.min(1, (1 - ty) * 3);   // contact shadow at each block's base
+                const b = sampleTex(tex, wxf, ty * vScale, lod);       // real (procedural) block texture, tiled per block
+                const baseAO = 0.66 + 0.34 * Math.min(1, (1 - ty) * 3);   // contact shadow at the wall's base
                 const shade = sd * b * baseAO * edgeAO;
                 const [r, g, bl] = fogMix(base[0] * shade, base[1] * shade, base[2] * shade, ft);
                 const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter;
@@ -2146,17 +2158,22 @@ export const RaycastCanvas: React.FC<{
               if (zt < eye) drawHoriz(x, c, zt, dEnter, dExit, rdx, rdy, true);   // walk on its roof
               if (zb > eye) drawUnder(x, c, zb, dEnter, dExit, rdx, rdy);          // its underside (rare)
             } else {
-              const z = slabZ(k, mapX, mapY);                                      // raised terrain lifts the slab
-              const zb = baseZ(k);
-              if (z > zb + 0.02) {                                                 // SOLID cliff face — raised ground is a filled hill, not a floating shelf
-                const fTopF = projF(z, dEnter), fBotF = projF(zb, dEnter);
+              const zTop = slabZ(k, mapX, mapY);                                  // walkable top (raised terrain lifts it)
+              const zb = baseZ(k), zBot = zb - SLAB_T;                            // solid underside = ceiling of the room below
+              // The floor is a SLAB with thickness. Draw its exposed vertical face: the raised-terrain hill
+              // (top→floor) always, PLUS the slab's full thickness (floor→underside) where a hole/drop on the
+              // camera side exposes its edge — so a shaft looks like a real hole cut through a solid floor.
+              const camCell = entrySide === 0 ? cellL(k, mapX - stepX, mapY) : cellL(k, mapX, mapY - stepY);
+              const faceBot = isAir(camCell) ? zBot : (zTop > zb + 0.02 ? zb : zTop);
+              if (zTop > faceBot + 0.02) {
+                const fTopF = projF(zTop, dEnter), fBotF = projF(faceBot, dEnter);
                 const y0 = Math.max(0, Math.floor(fTopF)), y1 = Math.min(H, Math.ceil(fBotF));
                 const [cr0, cg0, cb0] = floorColor(c, px + dEnter * rdx, py + dEnter * rdy, lodOf(dEnter));
                 const sd = (entrySide === 1 ? 0.6 : 0.82) * lightAt(dEnter), ftf = fogTd(dEnter);
                 for (let y = y0; y < y1; y++) { if (dEnter >= depth[y * W + x]) continue; const [r, g, bl] = fogMix(cr0 * sd, cg0 * sd, cb0 * sd, ftf); const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter; }
               }
-              if (z < eye) drawHoriz(x, c, z, dEnter, dExit, rdx, rdy, false);     // top of the raised ground (walk on it)
-              else if (z > eye) drawUnder(x, c, z, dEnter, dExit, rdx, rdy);       // underside, if it's above your eye
+              if (zTop < eye) drawHoriz(x, c, zTop, dEnter, dExit, rdx, rdy, false);   // top of the floor (walk on it)
+              if (zBot > eye) drawUnder(x, c, zBot, dEnter, dExit, rdx, rdy);          // underside slab = the ceiling below
             }
           }
           if (sideX < sideY) { sideX += ddx; mapX += stepX; entrySide = 0; } else { sideY += ddy; mapY += stepY; entrySide = 1; }

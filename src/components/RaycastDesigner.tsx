@@ -733,6 +733,19 @@ export const RaycastDesigner: React.FC<{
             <button onClick={() => addFloor('below')} className="flex-1 border border-white/15 hover:border-white/40 py-1">+ Basement</button>
             <button onClick={removeFloor} disabled={floors.length <= 1} className="border border-brandRed/40 text-brandRed/80 hover:bg-brandRed/10 py-1 px-2 disabled:opacity-30">✕</button>
           </div>
+          {floors.length > 1 && (
+            <>
+              <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Room height <span className="text-white/25 normal-case tracking-normal">(how tall each storey / cave stands)</span></p>
+              <div className="flex items-center gap-1">
+                {([['Tight', 2], ['Roomy', 3], ['Cavern', 4]] as const).map(([lbl, n]) => (
+                  <button key={n} onClick={() => { setLevel(l => ({ ...l, storeyBlocks: n })); setSaved(false); }}
+                    className={`flex-1 text-[9px] font-mono px-2 py-1 border transition-colors ${(level.storeyBlocks ?? 2) === n ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>
+                    {lbl} <span className="text-white/30">{n}▚</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="mt-auto pt-3 flex flex-col gap-1.5">
             {!hasSpawn && <p className="text-[10px] text-brandRed font-mono">⚠ place a Spawn</p>}
