@@ -488,16 +488,12 @@ export const RaycastCanvas: React.FC<{
       }
       return false;
     };
-    // lowest ceiling above `head` (head-bonk while jumping); +∞ = open sky above. A ceiling is either the
-    // underside of a wall/prop that floats above you (its base) OR the underside of a floor slab overhead.
+    // lowest ceiling above `head` (head-bonk while jumping); +∞ = open sky above. ONLY walls/props (things
+    // that fill their whole storey and float above you) bonk your head — NOT floor slabs. Treating a floor
+    // slab as a hard ceiling was what blocked you from jumping/climbing UP onto a floor (or a block staircase)
+    // from below. You can now clip your head through a slab mid-jump (harmless) and climb freely.
     const ceilAbove = (x: number, y: number, head: number): number => {
-      let lo = Infinity;
-      for (let k = 0; k < nLayers; k++) {
-        const c = cellL(k, x, y);
-        const u = bodyBlocks(c) ? baseZ(k) : isAir(c) ? Infinity : baseZ(k) - SLAB_T;   // wall base or slab underside
-        if (u >= head - 0.001 && u < lo) lo = u;
-      }
-      return lo;
+      let lo = Infinity; for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (b >= head - 0.001 && b < lo) lo = b; } return lo;
     };
     // which layer's surface you're standing on (for hazard/pickup/exit effects under your feet).
     // floor() not round() so raised terrain (a slab lifted within its storey) still reads as its own layer.

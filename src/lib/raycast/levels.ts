@@ -609,19 +609,21 @@ const THE_DESCENT: Level3D = (() => {
   [[3, 3], [18, 3], [3, 18], [18, 18]].forEach(([x, y]) => put(2, x, y, 'l'));
   scatterC(2, 8, 30);
 
-  // 3 SURFACE — sunlit grass; SPAWN; the descent shaft; and a block staircase climbing to the rooftop
+  // 3 SURFACE — sunlit grass; SPAWN; the descent shaft; and a ROCK-BLOCK rooftop you climb (built from
+  // stacked cubes, NOT a floor-layer — solid all the way up, so no floor-slab slice hangs over the field).
   fill(3, 'g');
   set(F[3], 11, 11, ' '); set(F[3], 11, 12, ' '); set(F[3], 12, 11, ' ');   // the shaft you drop into
   put(3, 3, 11, 'S');
-  blk(3, 16, 11, 'c', 1); blk(3, 17, 11, 'c', 2); blk(3, 18, 11, 'c', 3);   // 1→2→3-tall steps → roof = floor 4
+  blk(3, 13, 11, 'r', 1); blk(3, 14, 11, 'r', 2);                            // steps: 1 then 2 blocks tall
+  for (let y = 10; y <= 12; y++) for (let x = 15; x <= 18; x++) blk(3, x, y, 'r', 3);   // 3-tall roof slab (roof = floor-4 height)
+  blk(3, 15, 9, 'r', 4); blk(3, 18, 9, 'r', 5); blk(3, 15, 13, 'r', 4); blk(3, 18, 13, 'r', 4);   // ruined corner stumps
   put(3, 6, 6, 'T'); put(3, 15, 6, 'T'); put(3, 7, 16, 'f'); put(3, 14, 16, 'f');
   scatterC(3, 6, 40);
 
-  // 4 ROOFTOP — misty heights: a platform (over the east half of the surface) with ruined rubble + crystals
-  for (let y = 8; y <= 14; y++) for (let x = 14; x <= 20; x++) put(4, x, y, (x === 14 || x === 20 || y === 8 || y === 14) ? '#' : '.');
-  put(4, 18, 11, '.');                   // top of the staircase — step off here
-  blk(4, 16, 9, 'c', 1); blk(4, 19, 13, 'r', 2);
-  put(4, 16, 11, 'C'); put(4, 17, 12, 'C'); put(4, 15, 13, 'C');
+  // 4 ROOFTOP BAND — floor 4 is ALL AIR (just the misty atmosphere marker). The geometry up here is the
+  // rock blocks on the surface below, so nothing slabs the view; standing on the roof still reads as this
+  // band's height, so it goes misty. Crystals (drawn at this layer's height) reward the climb.
+  put(4, 16, 11, 'C'); put(4, 17, 11, 'C'); put(4, 16, 12, 'C');
 
   const floors: Floor3D[] = [
     { rows: F[0], blocks: Bl[0], blockH: BH[0], atmo: 'hell' },                  // hellfire
