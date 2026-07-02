@@ -33,13 +33,13 @@ const EYE_BASE = 1.55;             // eye height — MINECRAFT PROPORTION. A blo
                                    // ≈ 1.6x a block: you are ~1.8 blocks tall and TOWER over a single block
                                    // (see clean over it, it sits low in view). Stack 2 blocks for a real wall.
                                    // Consequence (same as Minecraft): rooms must be 2 blocks tall to stand in.
-// FOV / zoom. The camera focal length is RES_H, giving a narrow ~53° lens that makes every block look
-// huge and right in your face. FOV widens the lens: apparent size of EVERYTHING (walls, blocks, floor
-// cells) scales by 1/FOV, so 1.7 ≈ "half the size". The raycaster is fisheye-corrected (walls use
-// perpendicular distance), so a wide lens just reveals more world — it doesn't bend the walls. This is
-// FOV = 1.0 is the original lens (no change). Widening it (>1) zooms out but at wide angles fisheyes the
-// view, so it is NOT the way to shrink blocks — kept at 1.0. Block size is set by the world geometry below.
-const FOV = 1.0;
+// FOV / lens. Focal length = RES_H / FOV; vertical FOV = 2·atan(0.5·FOV). 1.0 was a narrow ~53° lens that
+// made every block loom "in your face" and left tight corridors claustrophobic. 1.3 ≈ 66° — close to
+// Minecraft's ~70° default: you see more floor/ceiling and the turn ahead, so stacked blocks read like
+// Minecraft instead of a keyhole. Walls stay straight (perp-distance corrected); only floors/sprites
+// stretch slightly at the screen edges (as they do in Minecraft at high FOV). Block PROPORTIONS are
+// unchanged — you still tower over a single cube (that's set by eye height, not the lens).
+const FOV = 1.3;
 // A wall (and the default ceiling) is EXACTLY 2 cube-blocks tall — derived from the cube unit so it can
 // NEVER drift off the block grid. This is the fix for "blocks keep changing size in the maze": a `#` wall
 // now equals a 2-high stack of cube blocks to the pixel (texture tiles cleanly at 2 rows), so every
