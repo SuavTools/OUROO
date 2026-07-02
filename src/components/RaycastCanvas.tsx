@@ -110,6 +110,16 @@ const LAVA_PIX = 7;   // molten "pixels" per world tile — solid colour blocks,
 const cellRand = (gx: number, gy: number): number => {
   let h = (gx * 374761393 + gy * 668265263) | 0; h = (h ^ (h >> 13)) * 1274126177; return (h >>> 0) / 4294967296;
 };
+// Continuous chunky floor shading: quantise WORLD coords to one global "pixel" grid and hash each cell, so
+// the floor gets a retro pixel texture that NEVER repeats per tile — no per-tile grid seam anywhere. Two
+// scales add variety; the amplitude fades flat with distance so distant floor doesn't shimmer.
+const FLOOR_PIX = 5;   // floor pixels per world unit
+const floorNoise = (fx: number, fy: number, d: number): number => {
+  const amp = 0.34 / (1 + d * d * 0.02);
+  const gx = Math.floor(fx * FLOOR_PIX), gy = Math.floor(fy * FLOOR_PIX);
+  const n = cellRand(gx, gy) * 0.7 + cellRand(gx >> 1, gy >> 1) * 0.3;   // fine + coarse
+  return 0.92 - amp * 0.5 + n * amp;
+};
 const moltenLava = (fx: number, fy: number, t: number): [number, number, number] => {
   const gx = Math.floor(fx * LAVA_PIX), gy = Math.floor(fy * LAVA_PIX);   // quantise to texel cells
   const qx = gx / LAVA_PIX, qy = gy / LAVA_PIX;
@@ -2142,20 +2152,22 @@ export const RaycastCanvas: React.FC<{
       const fogTd = (d: number) => 1 - 1 / (1 + d * d * FOG_K);
       const projF = (z: number, d: number) => horizon + ((eye - z) * F) / d;
 
-      // surface colour for a floor/slab cell at world (fx,fy), mip-sampled by lod → [r,g,b,emissive]
-      const floorColor = (c: string, fx: number, fy: number, lod = 0): [number, number, number, boolean] => {
+      // surface colour for a floor/slab cell at world (fx,fy), `d` = distance (for the continuous floor
+      // shading + fade) → [r,g,b,emissive]. Ground materials use floorNoise (no tiling → no per-tile grid).
+      const floorColor = (c: string, fx: number, fy: number, d = 0): [number, number, number, boolean] => {
         if (c === 'L') { const [r, g, b] = moltenLava(fx, fy, tick); return [r, g, b, true]; }
         if (c === 'w') { const [r, g, b] = pixelWater(fx, fy, tick); return [r, g, b, true]; }
         if (c === '~') return [4, 3, 8, true];
-        if (c === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick, exitLocked()); const bs = sampleTex(TEXES.dirt, fx, fy, lod); return [pr + pal.floor[0] * bs * (1 - pa), pg + pal.floor[1] * bs * (1 - pa), pb + pal.floor[2] * bs * (1 - pa), true]; }
+        if (c === 'E') { const [pr, pg, pb, pa] = portalFloor(fx, fy, tick, exitLocked()); const bs = floorNoise(fx, fy, d); return [pr + pal.floor[0] * bs * (1 - pa), pg + pal.floor[1] * bs * (1 - pa), pb + pal.floor[2] * bs * (1 - pa), true]; }
         if (c === TUNNEL_CHAR) { const sw = 0.55 + 0.45 * Math.sin((fx + fy) * 5 - tick * 0.3); return [150 * sw + 40, 40 * sw, 210 * sw + 40, true]; }
         if (c === STAIR_UP) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 1 : 0.7; return [180 * st, 200 * st, 150 * st, true]; }
         if (c === STAIR_DOWN) { const st = (Math.floor(fy * 4 + fx * 4) & 1) ? 0.5 : 0.28; return [40 * st, 44 * st, 60 * st, true]; }
-        if (c === 'g' || c === 'b' || c === 'f') { const b = sampleTex(TEXES.grass, fx, fy, lod); return [46 * b, 120 * b, 48 * b, false]; }
-        if (c === 'p') { const b = sampleTex(TEXES.pave, fx, fy, lod); return [150 * b, 150 * b, 162 * b, false]; }
-        if (c === 'd') { const b = sampleTex(TEXES.dirt, fx, fy, lod); return [108 * b, 82 * b, 54 * b, false]; }
-        if (c === 'k') { const b = sampleTex(TEXES.dirt, fx, fy, lod); return [138 * b, 100 * b, 58 * b, false]; }
-        const b = sampleTex(TEXES.dirt, fx, fy, lod); return [pal.floor[0] * b, pal.floor[1] * b, pal.floor[2] * b, false];
+        const b = floorNoise(fx, fy, d);
+        if (c === 'g' || c === 'b' || c === 'f') return [46 * b, 120 * b, 48 * b, false];
+        if (c === 'p') return [150 * b, 150 * b, 162 * b, false];
+        if (c === 'd') return [108 * b, 82 * b, 54 * b, false];
+        if (c === 'k') return [138 * b, 100 * b, 58 * b, false];
+        return [pal.floor[0] * b, pal.floor[1] * b, pal.floor[2] * b, false];
       };
 
       depth.fill(1e9);
@@ -2174,7 +2186,7 @@ export const RaycastCanvas: React.FC<{
           const fx = px + d * rdx, fy = py + d * rdy;
           let R: number, G: number, B: number;
           if (roof) { const base = pal.wall[c] ?? pal.wall['#']; const b = sampleTex(wallTexOf(c), fx, fy, lodOf(d)) * 0.88; const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(base[0] * b, base[1] * b, base[2] * b, ft); R *= lf; G *= lf; B *= lf; }
-          else { const [r, g, b, emis] = floorColor(c, fx, fy, lodOf(d)); if (emis) { R = r; G = g; B = b; } else { const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(r, g, b, ft); R *= lf; G *= lf; B *= lf; } }
+          else { const [r, g, b, emis] = floorColor(c, fx, fy, d); if (emis) { R = r; G = g; B = b; } else { const ft = fogTd(d), lf = lightAt(d); [R, G, B] = fogMix(r, g, b, ft); R *= lf; G *= lf; B *= lf; } }
           const o = (y * W + x) * 4; data[o] = R; data[o + 1] = G; data[o + 2] = B; data[o + 3] = 255; depth[y * W + x] = d;
         }
       };
@@ -2248,7 +2260,7 @@ export const RaycastCanvas: React.FC<{
               if (zTop > faceBot + 0.02) {
                 const fTopF = projF(zTop, dEnter), fBotF = projF(faceBot, dEnter);
                 const y0 = Math.max(0, Math.floor(fTopF)), y1 = Math.min(H, Math.ceil(fBotF));
-                const [cr0, cg0, cb0] = floorColor(c, px + dEnter * rdx, py + dEnter * rdy, lodOf(dEnter));
+                const [cr0, cg0, cb0] = floorColor(c, px + dEnter * rdx, py + dEnter * rdy, dEnter);
                 const sd = (entrySide === 1 ? 0.6 : 0.82) * lightAt(dEnter), ftf = fogTd(dEnter);
                 for (let y = y0; y < y1; y++) { if (dEnter >= depth[y * W + x]) continue; const [r, g, bl] = fogMix(cr0 * sd, cg0 * sd, cb0 * sd, ftf); const o = (y * W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = bl; data[o + 3] = 255; depth[y * W + x] = dEnter; }
               }
