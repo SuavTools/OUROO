@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, headroomBlocksOf, getRealmRemote,
+  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, headroomBlocksOf, viewProfileOf, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -20,7 +20,8 @@ import { drawSkinShape, skinById, isCreatureId, parseCreature } from '@/lib/skin
 import { drawIconSpec } from '@/lib/icons';
 
 const STEP = 1000 / 60;            // fixed sim tick
-const RES_H = 240;                 // internal vertical resolution (RES_W tracks aspect for square pixels)
+let RES_H = 240;                   // internal vertical resolution (RES_W tracks aspect) — set per mount:
+                                   // sharper on desktop, lighter on mobile. See the effect below.
 const MOVE = 0.055;                // tiles per tick (walk) — a touch snappier
 const RUN = 0.11;                  // tiles per tick (run)
 const TURN = 0.045;                // radians per tick (keyboard/stick turn)
@@ -153,7 +154,7 @@ const portalFloor = (fx: number, fy: number, t: number, locked = false): [number
 type PC = { sx: number; sy: number; cy: number };
 type BoxEnv = {
   px: number; py: number; invDet: number; sin: number; cos: number; planeX: number; planeY: number;
-  W: number; H: number; F: number; horizon: number; eye: number; fog: [number, number, number];
+  W: number; H: number; F: number; horizon: number; eye: number; fog: [number, number, number]; fk: number;
   data: Uint8ClampedArray; depth: Float32Array;
 };
 // project a world point (wx,wy,wz) → screen x/y + camera depth
@@ -207,7 +208,7 @@ const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0
   // nu,nv = texel-cell counts across the face's two world dimensions (≥1)
   const quad = (a: PC, b: PC, c: PC, d: PC, shade: number, nu: number, nv: number) => {
     if (!(a.cy > 0.06 && b.cy > 0.06 && c.cy > 0.06 && d.cy > 0.06)) return;
-    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * 0.012); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * (glow ? 0.25 : 0.6);
+    let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * e.fk); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * (glow ? 0.25 : 0.6);
     const sl = shade * light;
     const rr = r * sl + (e.fog[0] - r * sl) * ft, gg = g * sl + (e.fog[1] - g * sl) * ft, bb = bl * sl + (e.fog[2] - bl * sl) * ft;
     fillTri(e, a, b, c, 0, 0, nu, 0, nu, nv, rr, gg, bb); fillTri(e, a, c, d, 0, 0, nu, nv, 0, nv, rr, gg, bb);
@@ -348,6 +349,13 @@ export const RaycastCanvas: React.FC<{
     if (!canvas || !level) return;
     const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D;
     if (!ctx) return;
+
+    // Sharpness: render at a higher internal resolution on desktop (crisper, ~2× the pixel work a modern
+    // machine eats at 60fps), stay light on mobile so phones keep a solid framerate.
+    RES_H = isMobileStage ? 240 : 320;
+    // View distance: per-realm fog + draw-distance profile (cozy / normal / far). Lantern realms stay dark.
+    const VIEW = viewProfileOf(level);
+    const FOG_K = VIEW.fogK, BLOCK_CULL = VIEW.blockCull, GRASS_CULL = VIEW.grassCull, MARCH_MAX = VIEW.march;
 
     const floors = floorsOf(level);       // storey stack (one entry for a single-grid realm)
     const pal = paletteOf(level);
@@ -1040,7 +1048,7 @@ export const RaycastCanvas: React.FC<{
     const drawGrass = (env: BoxEnv, lightFn: (d: number) => number) => {
       for (const gc of grassCells) {
         const dx = gc.x - px, dy = gc.y - py, d2 = dx * dx + dy * dy;
-        if (d2 > 110) continue;                       // ~10 tiles
+        if (d2 > GRASS_CULL) continue;                // grass tufts visible to the view-distance horizon
         const gx = Math.floor(gc.x), gy = Math.floor(gc.y), light = lightFn(Math.sqrt(d2));
         for (let i = 0; i < 3; i++) {
           const rx = cellRand(gx * 4 + i, gy * 7 + i * 13), ry = cellRand(gx * 9 + i * 5, gy * 3 + i), rh = cellRand(gx + i, gy + i * 2);
@@ -1056,7 +1064,7 @@ export const RaycastCanvas: React.FC<{
     const drawBlocks = (env: BoxEnv, lightFn: (d: number) => number) => {
       for (const bc of blockCells) {
         const dx = bc.x - px, dy = bc.y - py, d2 = dx * dx + dy * dy;
-        if (d2 > 900) continue;                       // blocks are large → visible ~30 tiles
+        if (d2 > BLOCK_CULL) continue;                // blocks visible to the view-distance horizon
         const def = BLOCKS[bc.ch]; if (!def) continue;
         // Full blocks fill the WHOLE tile (1.0) so neighbours sit perfectly flush — no seam/gap between
         // adjacent wall cubes (0.98 used to leave a ~0.02 gap that made built walls read as disjointed).
@@ -1403,7 +1411,7 @@ export const RaycastCanvas: React.FC<{
         const rowDist = (0.5 * F) / p;
         let cr: number, cg: number, cb: number, dd: number;
         if (sky) { [cr, cg, cb] = skyColAt(y); dd = 1e9; }
-        else { const lf = lightAt(rowDist); const ft = 1 - 1 / (1 + rowDist * rowDist * 0.012); const m = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], ft * 0.7); cr = m[0] * lf; cg = m[1] * lf; cb = m[2] * lf; dd = rowDist; }
+        else { const lf = lightAt(rowDist); const ft = 1 - 1 / (1 + rowDist * rowDist * FOG_K); const m = fogMix(pal.ceil[0], pal.ceil[1], pal.ceil[2], ft * 0.7); cr = m[0] * lf; cg = m[1] * lf; cb = m[2] * lf; dd = rowDist; }
         for (let x = 0; x < W; x++) { const o = (y * W + x) * 4; data[o] = cr; data[o + 1] = cg; data[o + 2] = cb; data[o + 3] = 255; depth[y * W + x] = dd; }
       }
       // 1b) Floor cast (per pixel). Left/right edge rays bound the row.
@@ -1416,7 +1424,7 @@ export const RaycastCanvas: React.FC<{
         const stepY = (rowDist * (rdy1 - rdy0)) / W;
         let fx = px + rowDist * rdx0;
         let fy = py + rowDist * rdy0;
-        const fogT = 1 - 1 / (1 + rowDist * rowDist * 0.012);
+        const fogT = 1 - 1 / (1 + rowDist * rowDist * FOG_K);
         const lf = lightAt(rowDist);
         const floorRow = y * W * 4;
         for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
@@ -1484,7 +1492,7 @@ export const RaycastCanvas: React.FC<{
         if (rdx < 0) { stepX = -1; sideX = (px - mapX) * ddx; } else { stepX = 1; sideX = (mapX + 1 - px) * ddx; }
         if (rdy < 0) { stepY = -1; sideY = (py - mapY) * ddy; } else { stepY = 1; sideY = (mapY + 1 - py) * ddy; }
         let side = 0, hitCh = '#';
-        for (let guard = 0; guard < 64; guard++) {
+        for (let guard = 0; guard < 96; guard++) {
           if (sideX < sideY) { sideX += ddx; mapX += stepX; side = 0; } else { sideY += ddy; mapY += stepY; side = 1; }
           const c = cellAt(rows, mapX, mapY);
           if (isWall(c)) { hitCh = c; break; }
@@ -1498,7 +1506,7 @@ export const RaycastCanvas: React.FC<{
         const wallX = (side === 0 ? py + perp * rdy : px + perp * rdx) % 1;
         const base = pal.wall[hitCh] ?? pal.wall['#'];
         const sideDark = (side === 1 ? 0.7 : 1) * lightAt(perp);   // N/S faces darker + lantern falloff
-        const fogT = 1 - 1 / (1 + perp * perp * 0.012);
+        const fogT = 1 - 1 / (1 + perp * perp * FOG_K);
         for (let y = top; y < bot; y++) {
           const ty = (y - drawStart) / lineH;            // 0..1 down the wall
           // cheap procedural brick: mortar lines + per-brick tint
@@ -1520,7 +1528,7 @@ export const RaycastCanvas: React.FC<{
         // shrinks as we go, so nearer geometry occludes farther — the trick that makes height read.
         const eye = pz + EYE_BASE + jz;   // jump raises your eye in 3D-height realms
         const projF = (z: number, d: number) => horizon + ((eye - z) * F) / d;
-        const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
+        const fogTd = (d: number) => 1 - 1 / (1 + d * d * FOG_K);
         for (let x = 0; x < W; x++) {
           const camX = (2 * x) / W - 1;
           const rdx = cos + planeX * camX, rdy = sin + planeY * camX;
@@ -1653,7 +1661,7 @@ export const RaycastCanvas: React.FC<{
         const hShift = heightMap ? Math.round(((pz - zfS) * F) / camY) : 0;
         // Crystal — a floating, bobbing voxel gem (glowing cyan cubes) instead of a flat billboard
         if (kind === 'crystal') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, data, depth };
           const fb = zfS + 0.42 + Math.sin(tick * 0.09 + s.x * 3) * 0.06;
           drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
@@ -1662,7 +1670,7 @@ export const RaycastCanvas: React.FC<{
         }
         // Exit — a voxel rock DOOR with a swirling pixel-gradient panel, facing its chosen direction
         if (kind === 'exit') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, data, depth };
           const gx = Math.floor(s.x), gy = Math.floor(s.y);
           const auto = !isWall(cellAt(rows, gx + 1, gy)) ? 0 : !isWall(cellAt(rows, gx, gy + 1)) ? 90 : !isWall(cellAt(rows, gx - 1, gy)) ? 180 : 270;
           drawExitDoor(env, s.x, s.y, zfS, level.exitDir ?? auto, exitLocked(), Math.max(lightAt(camY), 0.6));
@@ -1671,7 +1679,7 @@ export const RaycastCanvas: React.FC<{
         // Voxel props — real depth-tested cubes (walk around them), not billboards
         const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH2, fog: pal.fog, fk: FOG_K, data, depth };
           const light = lightAt(camY);
           const boxes = kind === 'tree' ? TREE_BOXES : kind === 'rock' ? ROCK_BOXES : kind === 'bush' ? BUSH_BOXES : kind === 'lamp' ? LAMP_BOXES
             : kind === 'flower' ? flowerBoxes((Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5) : chestBoxes(!!(s.key && opened.has(s.key)));
@@ -1690,7 +1698,7 @@ export const RaycastCanvas: React.FC<{
         const hue = (Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5;   // flower colour variety by tile
         const sx0 = Math.max(0, screenX - half), sx1 = Math.min(W, screenX + half);
         const sy0 = Math.max(0, vCenter - half), sy1 = Math.min(H, vCenter + (kind === 'exit' ? half : 0) + 1);
-        const fogT = 1 - 1 / (1 + camY * camY * 0.012);
+        const fogT = 1 - 1 / (1 + camY * camY * FOG_K);
         for (let x = sx0; x < sx1; x++) {
           const u = (x - (screenX - half)) / sz - 0.5;   // -0.5..0.5 across sprite
           for (let y = sy0; y < sy1; y++) {
@@ -1748,7 +1756,7 @@ export const RaycastCanvas: React.FC<{
 
       // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes rising & looming out of the dark
       const eyeH = heightMap ? pz + EYE_BASE + jz : 0.5;
-      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, data, depth };
+      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye: eyeH, fog: pal.fog, fk: FOG_K, data, depth };
       if (bubbles.length) drawBubbles(env3d);
       if (grassCells.length) drawGrass(env3d, lightAt);
       if (blockCells.length) drawBlocks(env3d, lightAt);
@@ -2066,7 +2074,7 @@ export const RaycastCanvas: React.FC<{
       const flick = lighting && lighting.flicker ? 1 - lighting.flicker * (0.5 + 0.5 * Math.sin(tick * 0.7) * Math.sin(tick * 0.21 + 1.3)) : 1;
       const lightAt = (d: number) => { if (!lighting) return 1; const f = 1 - d / lighting.radius; return (f < lighting.ambient ? lighting.ambient : f) * flick; };
       const skyColAt = (y: number): [number, number, number] => { const t = horizon <= 0 ? 1 : Math.max(0, Math.min(1, y / horizon)); return [sky![0][0] + (sky![1][0] - sky![0][0]) * t, sky![0][1] + (sky![1][1] - sky![0][1]) * t, sky![0][2] + (sky![1][2] - sky![0][2]) * t]; };
-      const fogTd = (d: number) => 1 - 1 / (1 + d * d * 0.012);
+      const fogTd = (d: number) => 1 - 1 / (1 + d * d * FOG_K);
       const projF = (z: number, d: number) => horizon + ((eye - z) * F) / d;
 
       // surface colour for a floor/slab cell at world (fx,fy), mip-sampled by lod → [r,g,b,emissive]
@@ -2130,7 +2138,7 @@ export const RaycastCanvas: React.FC<{
         if (rdx < 0) { stepX = -1; sideX = (px - mapX) * ddx; } else { stepX = 1; sideX = (mapX + 1 - px) * ddx; }
         if (rdy < 0) { stepY = -1; sideY = (py - mapY) * ddy; } else { stepY = 1; sideY = (mapY + 1 - py) * ddy; }
         let dEnter = 0.0001, entrySide = 0;
-        for (let guard = 0; guard < 80; guard++) {
+        for (let guard = 0; guard < 100; guard++) {
           let dExit = sideX < sideY ? sideX : sideY;
           if (dExit < dEnter + 0.0001) dExit = dEnter + 0.0001;
           for (let k = 0; k < nLayers; k++) {
@@ -2178,7 +2186,7 @@ export const RaycastCanvas: React.FC<{
           }
           if (sideX < sideY) { sideX += ddx; mapX += stepX; entrySide = 0; } else { sideY += ddy; mapY += stepY; entrySide = 1; }
           dEnter = dExit;
-          if (dEnter > 44) break;
+          if (dEnter > MARCH_MAX) break;
         }
 
         // 2) Fill anything still open (sky if the realm has one, else the flat ceiling cap).
@@ -2208,7 +2216,7 @@ export const RaycastCanvas: React.FC<{
         const groundY = horizon + ((eye - zf) * F) / camY;        // where this layer's floor meets the sprite
         // Crystal — a floating, bobbing voxel gem (glowing cyan cubes) instead of a flat billboard
         if (kind === 'crystal') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
           const fb = zf + 0.42 + Math.sin(tick * 0.09 + s.x * 3) * 0.06;
           drawBox3D(env, s.x, s.y, 0.1, 0.1, fb, fb + 0.12, 150, 240, 255, 1, true);
           drawBox3D(env, s.x, s.y, 0.26, 0.26, fb + 0.1, fb + 0.26, 110, 225, 255, 1, true);
@@ -2217,7 +2225,7 @@ export const RaycastCanvas: React.FC<{
         }
         // Exit — a voxel rock DOOR with a swirling pixel-gradient panel, facing its chosen direction
         if (kind === 'exit') {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
           const gg = grids[s.k]; const gx = Math.floor(s.x), gy = Math.floor(s.y);
           const auto = !isWall(cellAt(gg, gx + 1, gy)) ? 0 : !isWall(cellAt(gg, gx, gy + 1)) ? 90 : !isWall(cellAt(gg, gx - 1, gy)) ? 180 : 270;
           drawExitDoor(env, s.x, s.y, zf, level.exitDir ?? auto, exitLocked(), Math.max(lightAt(camY), 0.6));
@@ -2226,7 +2234,7 @@ export const RaycastCanvas: React.FC<{
         // Voxel props — real depth-tested cubes (walk around them), not billboards
         const isVox = kind === 'tree' || kind === 'chest' || kind === 'rock' || kind === 'bush' || kind === 'lamp' || kind === 'flower';
         if (isVox) {
-          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+          const env: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
           const light = lightAt(camY);
           const boxes = kind === 'tree' ? TREE_BOXES : kind === 'rock' ? ROCK_BOXES : kind === 'bush' ? BUSH_BOXES : kind === 'lamp' ? LAMP_BOXES
             : kind === 'flower' ? flowerBoxes((Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5) : chestBoxes(!!(s.key && opened.has(s.key)));
@@ -2242,7 +2250,7 @@ export const RaycastCanvas: React.FC<{
         const hue = (Math.floor(s.x) * 7 + Math.floor(s.y) * 13) % 5;
         const sx0 = Math.max(0, screenX - half), sx1 = Math.min(W, screenX + half);
         const sy0 = Math.max(0, vCenter - half), sy1 = Math.min(H, vCenter + half + 1);
-        const fogT = 1 - 1 / (1 + camY * camY * 0.012);
+        const fogT = 1 - 1 / (1 + camY * camY * FOG_K);
         for (let x = sx0; x < sx1; x++) {
           const u = (x - (screenX - half)) / sz - 0.5;
           for (let y = sy0; y < sy1; y++) {
@@ -2280,7 +2288,7 @@ export const RaycastCanvas: React.FC<{
       }
 
       // 3.5) Lava bubbles + 4) Stalkers — glowing/voxel cubes on their own layer, depth-tested
-      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, data, depth };
+      const env3d: BoxEnv = { px, py, invDet, sin, cos, planeX, planeY, W, H, F, horizon, eye, fog: pal.fog, fk: FOG_K, data, depth };
       if (bubbles.length) drawBubbles(env3d);
       if (grassCells.length) drawGrass(env3d, lightAt);
       if (blockCells.length) drawBlocks(env3d, lightAt);

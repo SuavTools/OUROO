@@ -67,6 +67,7 @@ export type Level3D = {
                            // floor material (grass/dirt/…), so you get "grass then rock on top". ' '/'.' = none.
   blockH?: string[];       // OPTIONAL per-cell block STACK height ('1'–'9', how many cubes tall). Absent = 1.
   storeyBlocks?: number;   // OPTIONAL underground headroom in BLOCKS per storey (2 = tight … 3 = cavern). Default 2.
+  viewDist?: 'cozy' | 'normal' | 'far';   // OPTIONAL fog/draw distance (see VIEW_PROFILES). Default 'normal'.
   author?: string;
 };
 
@@ -106,6 +107,20 @@ export const HEADROOM_DEFAULT = 2;
 export const headroomBlocksOf = (l: Pick<Level3D, 'storeyBlocks'>): number => {
   const n = l.storeyBlocks; return n && n >= 2 && n <= 4 ? Math.round(n) : HEADROOM_DEFAULT;
 };
+
+// ── View distance (fog + draw distance) ───────────────────────────────────────────────────────────
+// The raycaster fades surfaces by `1 − 1/(1 + d²·fogK)`, so the world is half-swallowed by fog at
+// √(1/fogK) tiles. `fogK` sets how far you see; `blockCull`/`grassCull` (squared tile radii) keep props
+// visible to that horizon; `march` caps the ray length. Lantern realms stay dark regardless — their gloom
+// is the light RADIUS, not fog — so a wider view here only opens up the bright/open worlds.
+export type ViewDist = 'cozy' | 'normal' | 'far';
+export const VIEW_PROFILES: Record<ViewDist, { fogK: number; blockCull: number; grassCull: number; march: number }> = {
+  cozy:   { fogK: 0.011, blockCull: 34 * 34, grassCull: 12 * 12, march: 40 },   // ~9.5 tiles half-fog (the old tight look)
+  normal: { fogK: 0.004, blockCull: 46 * 46, grassCull: 15 * 15, march: 54 },   // ~16 tiles — the new default
+  far:    { fogK: 0.002, blockCull: 62 * 62, grassCull: 18 * 18, march: 70 },   // ~22 tiles — big open vistas
+};
+export const viewProfileOf = (l: Pick<Level3D, 'viewDist'>) =>
+  VIEW_PROFILES[(l.viewDist && VIEW_PROFILES[l.viewDist]) ? l.viewDist! : 'normal'];
 
 // Friendly/scripted NPCs placed in a realm — built with the same character builder as the rooms.
 // `a` is an appearance id (person:… / creature:… / skin id / icon:…); rendered as a billboard in 3D.

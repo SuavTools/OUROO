@@ -693,6 +693,16 @@ export const RaycastDesigner: React.FC<{
             ))}
           </div>
 
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">View distance <span className="text-white/25 normal-case tracking-normal">(how far the fog lets you see)</span></p>
+          <div className="flex items-center gap-1">
+            {([['Cozy', 'cozy'], ['Normal', 'normal'], ['Far', 'far']] as const).map(([lbl, key]) => (
+              <button key={key} onClick={() => { setLevel(l => ({ ...l, viewDist: key })); setSaved(false); }}
+                className={`flex-1 text-[9px] font-mono px-2 py-1 border transition-colors ${(level.viewDist ?? 'normal') === key ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 text-white/60 hover:border-white/40'}`}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+
           <label className="flex items-center gap-2 text-[10px] font-mono text-white/70 mt-2 cursor-pointer">
             <input type="checkbox" checked={!!level.combat} onChange={e => { setLevel(l => ({ ...l, combat: e.target.checked })); setSaved(false); }} className="accent-brandRed" />
             ⚔ Combat (else run-and-hide)
