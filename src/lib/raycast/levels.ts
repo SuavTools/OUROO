@@ -636,9 +636,9 @@ const THE_DESCENT: Level3D = (() => {
 })();
 
 // ── THE WARREN — a 70×70 ANT-CLUSTER of wide corridors that weave right/left AND up/down across three
-// storeys: start in a lit stone hall, drop a shaft into torch-lit tunnels, wind east into the dark, turn
-// and CLIMB a block staircase back up top, run another hall, then drop and drop again into a pitch-black
-// warren where a stalker hunts and the exit hides. Corridors run over and under each other — not a box.
+// storeys, joined by WALKABLE block staircases (up AND down — no one-way drops). Start in a lit stone
+// hall, take the steps down into torch-lit tunnels, east into the dark past a stalker, climb steps back
+// up top, run a hall, then step down and down again into a pitch-black warren where the exit hides.
 const THE_WARREN: Level3D = (() => {
   const W = 70, H = 70, NF = 3;
   const F = Array.from({ length: NF }, () => Array.from({ length: H }, () => '#'.repeat(W)));   // SOLID rock — we carve tunnels into it
@@ -648,49 +648,42 @@ const THE_WARREN: Level3D = (() => {
   const put = (k: number, x: number, y: number, c: string) => set(F[k], x, y, c);
   const blk = (k: number, x: number, y: number, c: string, n: number) => { set(Bl[k], x, y, c); set(BH[k], x, y, String(n)); };
   const carve = (k: number, x0: number, y0: number, x1: number, y1: number) => { for (let y = Math.max(1, y0); y <= Math.min(H - 2, y1); y++) for (let x = Math.max(1, x0); x <= Math.min(W - 2, x1); x++) set(F[k], x, y, '.'); };
-  const air = (k: number, x0: number, y0: number, x1: number, y1: number) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(F[k], x, y, ' '); };   // a drop-shaft (floor below must be carved to land on)
   const torch = (k: number, x: number, y: number) => set(F[k], x, y, 'l');
   const gems = (k: number, cells: [number, number][]) => cells.forEach(([x, y]) => { if (F[k][y][x] === '.') set(F[k], x, y, 'C'); });
-  // block staircase (3 steps 1→2→3 tall, full corridor width) ascending SOUTH from yBase on floor k, with an
-  // AIR shaft punched through floor k+1 above it so you climb out into the hall above (roof of step 3 = floor k+1).
-  const stairUp = (k: number, x0: number, x1: number, yBase: number) => { for (let i = 0; i < 3; i++) { const yy = yBase + i; for (let x = x0; x <= x1; x++) { blk(k, x, yy, 'r', i + 1); set(F[k + 1], x, yy, ' '); } } };
+  // A 3-cube-wide WALKABLE staircase between floor kLo and kLo+1 over rows [y0,y1] at columns xW..xW+2.
+  // `up` = rises toward the EAST (west end sits on floor kLo, east top = floor kLo+1); else it descends
+  // east. Steps are 1→2→3 blocks — auto-stepped up AND walked down. An air shaft is punched through floor
+  // kLo+1 above the steps so you pass between the storeys. Land floor kLo+1 on the HIGH side, kLo on the LOW.
+  const stair = (kLo: number, xW: number, y0: number, y1: number, up: boolean) => {
+    for (let i = 0; i < 3; i++) { const xx = xW + i, n = up ? i + 1 : 3 - i; for (let y = y0; y <= y1; y++) { blk(kLo, xx, y, 'r', n); set(F[kLo + 1], xx, y, ' '); } }
+  };
+  const A = 21, B = 23;   // the 3-wide corridor band (rows 21..23)
 
-  // ===== FLOOR 2 (TOP · dungeon, lit) — the start hall, east, then a drop =====
-  carve(2, 5, 5, 12, 12); put(2, 8, 8, 'S');       // start square
-  carve(2, 12, 7, 25, 9);                          // east hall
-  gems(2, [[16, 8], [22, 8]]);
-  air(2, 24, 7, 25, 9);                            // DROP #1 → floor 1
+  // FLOOR 2 (TOP · dungeon, lit) — the start hall
+  carve(2, 4, A, 14, B); put(2, 6, 22, 'S'); gems(2, [[10, 22]]);
+  stair(1, 15, A, B, false);                       // STEPS DOWN 2→1 (floor2 landing west @14, floor1 east @18)
 
-  // ===== FLOOR 1 (MID · candle) — hall darkens to the east, turn right (south), CLIMB back up =====
-  carve(1, 22, 6, 27, 10);                         // landing under drop #1
-  carve(1, 27, 7, 48, 9);                          // long east hall
-  [[28, 8], [33, 8], [38, 8]].forEach(([x, y]) => torch(1, x, y));   // torches thin out east → dark far end
-  gems(1, [[31, 8], [43, 8]]);
-  put(1, 45, 8, 'M');                              // a stalker lurks at the dark end
-  carve(1, 46, 9, 48, 29);                         // turn RIGHT, run south to the staircase
-  torch(1, 47, 16); torch(1, 47, 23);
-  stairUp(1, 46, 48, 30);                          // BLOCK STAIRCASE up (3 steps) → emerge on floor 2
-  carve(1, 34, 3, 36, 7); gems(1, [[35, 4], [35, 5]]);   // a dead-end alcove (cluster branch)
+  // FLOOR 1 (MID · candle) — east hall darkening past a stalker, plus a side branch to explore
+  carve(1, 18, A, 30, B);
+  [[19, 22], [22, 22]].forEach(([x, y]) => torch(1, x, y));   // torches fade east → dark far end
+  gems(1, [[21, 22], [26, 22]]);
+  put(1, 27, 22, 'M');                             // a stalker in the gloom
+  carve(1, 21, 11, 23, A); gems(1, [[22, 13], [22, 15]]);     // branch north (a turn to explore)
+  stair(1, 31, A, B, true);                        // STEPS UP 1→2 (floor1 landing west @30, floor2 east @34)
 
-  // ===== FLOOR 2 (TOP again) — emerge from the climb, run east, drop deeper =====
-  carve(2, 45, 33, 51, 38);                        // landing at the top of the staircase
-  carve(2, 50, 34, 64, 36);                        // east hall up top
-  gems(2, [[55, 35], [61, 35]]);
-  air(2, 62, 34, 63, 36);                          // DROP #2 → floor 1
+  // FLOOR 2 (TOP again) — a stone hall up top
+  carve(2, 34, A, 46, B); gems(2, [[38, 22], [44, 22]]);
+  stair(1, 47, A, B, false);                       // STEPS DOWN 2→1 (floor2 landing west @46, floor1 east @50)
 
-  // ===== FLOOR 1 (east region) — a south hall running OVER the deep, then drop again =====
-  carve(1, 60, 33, 65, 37);                        // landing under drop #2
-  carve(1, 61, 37, 63, 54);                        // south hall
-  torch(1, 62, 42); gems(1, [[62, 45]]);
-  air(1, 61, 52, 62, 54);                          // DROP #3 → floor 0 (the deep)
+  // FLOOR 1 — a hall running OVER the deep
+  carve(1, 50, A, 58, B); torch(1, 52, 22); gems(1, [[55, 22]]);
+  stair(0, 59, A, B, false);                       // STEPS DOWN 1→0 (floor1 landing west @58, floor0 east @62)
 
-  // ===== FLOOR 0 (BOTTOM · blackout) — pitch-black hall to the exit; a stalker hunts the dark =====
-  carve(0, 59, 50, 64, 56);                        // landing under drop #3
-  carve(0, 40, 52, 63, 54);                        // long dark hall west to the gate
-  put(0, 42, 53, 'E');                             // the EXIT — the way out of the warren
-  torch(0, 44, 53);                                // one torch by the gate so you can just find it
-  put(0, 53, 53, 'M');                             // a stalker in the black
-  gems(0, [[48, 53], [57, 53]]);
+  // FLOOR 0 (BOTTOM · blackout) — a long pitch-black hall WEST to the exit; a stalker hunts the dark
+  carve(0, 40, A, 64, B);
+  put(0, 42, 22, 'E'); torch(0, 44, 22);           // one torch by the gate so you can just find it
+  put(0, 53, 22, 'M');
+  gems(0, [[48, 22], [57, 22]]);
 
   const floors: Floor3D[] = [
     { rows: F[0], blocks: Bl[0], blockH: BH[0], atmo: 'blackout' },   // the deep — pitch black

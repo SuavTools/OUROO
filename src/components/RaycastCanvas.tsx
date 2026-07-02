@@ -496,7 +496,9 @@ export const RaycastCanvas: React.FC<{
     const slabZ = (k: number, x: number, y: number) => baseZ(k) + Math.min(hLvl(k, x, y) * STEP_UNIT, ROOM_H - 0.05);
     const isSolidProp = (ch: string) => ch === 'T' || ch === 'r' || ch === 'l';
     const bodyBlocks = (ch: string) => isWall(ch) || isSolidProp(ch);      // fills its whole storey → blocks your body
-    const STEP_UP = STEP_UNIT + 0.02;                 // you auto-step up a ledge this tall; taller needs a jump
+    const STEP_UP = STOREY_LEVELS * STEP_UNIT + 0.06;   // auto-step up ONE cube-block (≈0.96) — so block staircases
+                                                        // are WALKABLE up & down like real stairs (no finicky jump);
+                                                        // a 2-block wall (1.92) is still too tall and stops you.
     // every standable surface in a column: wall roofs (base+FLOOR_H = the floor above) and slab tops (base + raise).
     const standTops = (x: number, y: number): number[] => {
       const t: number[] = [];
@@ -511,7 +513,7 @@ export const RaycastCanvas: React.FC<{
         const c = cellL(k, x, y);
         if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + FLOOR_H) return true; }                        // walls/props: solid full storey
         else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > feet + STEP_UP && zHi > b && zLo < top) return true; }   // raised terrain: a SOLID hill you can't step straight up
-        { const top = solidBlocks.get(`${k}:${x}:${y}`); if (top !== undefined) { const s = slabZ(k, x, y); if (zHi > s && zLo < top) return true; } }   // a placed (possibly stacked) block on this layer's floor
+        { const top = solidBlocks.get(`${k}:${x}:${y}`); if (top !== undefined && top > feet + STEP_UP) { const s = slabZ(k, x, y); if (zHi > s && zLo < top) return true; } }   // placed block — blocks the body only if taller than one step (else you walk up onto it)
       }
       return false;
     };
