@@ -12,7 +12,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   type Level3D, type Mood, type Npc3D, paletteOf, lightingOf, skyOf, moodOf, resolveBand, hasBands, cellAt, isWall, getLevel, heightAt, hasHeightMap, MONSTER_CHAR, TUNNEL_CHAR,
-  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, headroomBlocksOf, viewProfileOf, getRealmRemote,
+  STAIR_UP, STAIR_DOWN, CHEST_CHAR, BLOCKS, blockHeightAt, blockBaseAt, floorsOf, findSpawnFloor, AIR, isAir, STOREY_LEVELS, headroomBlocksOf, viewProfileOf, getRealmRemote,
 } from '@/lib/raycast/levels';
 import { resolveAppearance } from '@/lib/catalog';
 import { drawPerson } from '@/lib/person';
@@ -257,7 +257,8 @@ const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0
     for (let i = 1; i < out.length - 1; i++) fillTri(e, out[0], out[i], out[i + 1], out[0].u, out[0].v, out[i].u, out[i].v, out[i + 1].u, out[i + 1].v, rr, gg, bb, edged);
   };
   const cw = Math.max(1, w * TEXD), cd = Math.max(1, dep * TEXD), ch = Math.max(1, hgt * TEXD);
-  quad(c001, c101, c111, c011, SHADE_TOP, cw, cd);                  // top face — brightest
+  if (e.eye >= z0) quad(c001, c101, c111, c011, SHADE_TOP, cw, cd);   // top face — brightest (only when you're above it)
+  else quad(c000, c010, c110, c100, SHADE_S * 0.7, cw, cd);          // BOTTOM face (dim) — the underside of a floating roof/overhang
   if (e.px > x1) quad(c100, c110, c111, c101, SHADE_E, cd, ch);     // east  face
   else if (e.px < x0) quad(c000, c010, c011, c001, SHADE_W, cd, ch);// west  face
   if (e.py > y1) quad(c010, c110, c111, c011, SHADE_S, cw, ch);     // south face
@@ -435,8 +436,8 @@ export const RaycastCanvas: React.FC<{
     let grassCells: { x: number; y: number; z: number }[] = [];   // 'g' tiles → sprout little voxel grass tufts
     // Blocks placed ON floor cells (grass→rock etc). blockCells drives rendering; solidBlocks is the
     // collision set (full-footprint blocks only — thin posts & short slabs are decorative/walk-through).
-    let blockCells: { x: number; y: number; z: number; ch: string; nH: number; k?: number }[] = [];
-    let solidBlocks = new Map<string, number>();   // "x:y" (flat) / "k:x:y" (stacked) → top world-Z of the block
+    let blockCells: { x: number; y: number; z: number; ch: string; nH: number; base: number; k?: number }[] = [];
+    let solidBlocks = new Map<string, [number, number]>();   // "x:y" (flat) / "k:x:y" (stacked) → [bottom, top] world-Z of the block
     const isSolidBlock = (ch: string) => !!BLOCKS[ch] && !BLOCKS[ch].thin && !BLOCKS[ch].h;
 
     type Enemy = { x: number; y: number; hx: number; hy: number; chasing: boolean; wx: number; wy: number; wt: number; hit: number; hp: number; flash: number; k?: number };
@@ -470,7 +471,7 @@ export const RaycastCanvas: React.FC<{
         for (let x = 0; x < rows[y].length; x++) {
           const c = rows[y][x];
           const bch = fBlocks?.[y]?.[x];
-          if (bch && BLOCKS[bch]) { const nH = blockHeightAt(fl, x, y), z = floorLvl(x, y) * STEP_UNIT; blockCells.push({ x: x + 0.5, y: y + 0.5, z, ch: bch, nH }); if (isSolidBlock(bch)) solidBlocks.set(`${x}:${y}`, z + nH * (STOREY_LEVELS * STEP_UNIT)); }
+          if (bch && BLOCKS[bch]) { const nH = blockHeightAt(fl, x, y), base = blockBaseAt(fl, x, y), BK = STOREY_LEVELS * STEP_UNIT, z = floorLvl(x, y) * STEP_UNIT; blockCells.push({ x: x + 0.5, y: y + 0.5, z, ch: bch, nH, base }); if (isSolidBlock(bch)) solidBlocks.set(`${x}:${y}`, [z + base * BK, z + (base + nH) * BK]); }
           if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
           else if (c === 'g') grassCells.push({ x: x + 0.5, y: y + 0.5, z: floorLvl(x, y) * STEP_UNIT });
           if (c === 'C') sprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${fi}:${x}:${y}` });
@@ -522,7 +523,7 @@ export const RaycastCanvas: React.FC<{
     // every standable surface in a column: wall roofs (base+FLOOR_H = the floor above) and slab tops (base + raise).
     const standTops = (x: number, y: number): number[] => {
       const t: number[] = [];
-      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + FLOOR_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); const bt = solidBlocks.get(`${k}:${x}:${y}`); if (bt !== undefined) t.push(bt); }
+      for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (isWall(c)) t.push(baseZ(k) + FLOOR_H); else if (!isAir(c)) t.push(slabZ(k, x, y)); const bt = solidBlocks.get(`${k}:${x}:${y}`); if (bt !== undefined) t.push(bt[1]); }   // stand on a block's TOP
       return t;
     };
     // movement collision that allows STEPPING: walls/props always block the body; raised terrain only
@@ -533,7 +534,7 @@ export const RaycastCanvas: React.FC<{
         const c = cellL(k, x, y);
         if (bodyBlocks(c)) { const b = baseZ(k); if (zHi > b && zLo < b + FLOOR_H) return true; }                        // walls/props: solid full storey
         else if (!isAir(c)) { const b = baseZ(k), top = slabZ(k, x, y); if (top > feet + STEP_UP && zHi > b && zLo < top) return true; }   // raised terrain: a SOLID hill you can't step straight up
-        { const top = solidBlocks.get(`${k}:${x}:${y}`); if (top !== undefined && top > feet + STEP_UP) { const s = slabZ(k, x, y); if (zHi > s && zLo < top) return true; } }   // placed block — blocks the body only if taller than one step (else you walk up onto it)
+        { const r = solidBlocks.get(`${k}:${x}:${y}`); if (r !== undefined) { const [bot, top] = r; if (zHi > bot && zLo < top && top > feet + STEP_UP) return true; } }   // placed block: solid where your body overlaps it — walk UNDER a floating one, step onto a low grounded one
       }
       return false;
     };
@@ -542,7 +543,12 @@ export const RaycastCanvas: React.FC<{
     // slab as a hard ceiling was what blocked you from jumping/climbing UP onto a floor (or a block staircase)
     // from below. You can now clip your head through a slab mid-jump (harmless) and climb freely.
     const ceilAbove = (x: number, y: number, head: number): number => {
-      let lo = Infinity; for (let k = 0; k < nLayers; k++) { const c = cellL(k, x, y); if (!bodyBlocks(c)) continue; const b = baseZ(k); if (b >= head - 0.001 && b < lo) lo = b; } return lo;
+      let lo = Infinity;
+      for (let k = 0; k < nLayers; k++) {
+        const c = cellL(k, x, y); if (bodyBlocks(c)) { const b = baseZ(k); if (b >= head - 0.001 && b < lo) lo = b; }
+        const r = solidBlocks.get(`${k}:${x}:${y}`); if (r !== undefined && r[0] >= head - 0.001 && r[0] < lo) lo = r[0];   // floating roof/overhang bottom
+      }
+      return lo;
     };
     // which layer's surface you're standing on (for hazard/pickup/exit effects under your feet).
     // floor() not round() so raised terrain (a slab lifted within its storey) still reads as its own layer.
@@ -562,7 +568,7 @@ export const RaycastCanvas: React.FC<{
         for (let y = 0; y < g.length; y++) for (let x = 0; x < g[y].length; x++) {
           const c = g[y][x];
           const bch = kBlocks?.[y]?.[x];
-          if (bch && BLOCKS[bch]) { const nH = blockHeightAt(floors[k], x, y), z = slabZ(k, x, y); blockCells.push({ x: x + 0.5, y: y + 0.5, z, ch: bch, nH, k }); if (isSolidBlock(bch)) solidBlocks.set(`${k}:${x}:${y}`, z + nH * (STOREY_LEVELS * STEP_UNIT)); }
+          if (bch && BLOCKS[bch]) { const nH = blockHeightAt(floors[k], x, y), base = blockBaseAt(floors[k], x, y), BK = STOREY_LEVELS * STEP_UNIT, z = slabZ(k, x, y); blockCells.push({ x: x + 0.5, y: y + 0.5, z, ch: bch, nH, base, k }); if (isSolidBlock(bch)) solidBlocks.set(`${k}:${x}:${y}`, [z + base * BK, z + (base + nH) * BK]); }
           if (c === 'L') lavaCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
           else if (c === 'g') grassCells.push({ x: x + 0.5, y: y + 0.5, z: baseZ(k) });
           if (c === 'C') allSprites.push({ x: x + 0.5, y: y + 0.5, kind: 'crystal', key: `${k}:${x}:${y}`, k });
@@ -1065,7 +1071,7 @@ export const RaycastCanvas: React.FC<{
         const cx = Math.floor(sx), cy = Math.floor(sy);
         const c = cellAt(rows, cx, cy);
         if (isWall(c) || c === 'T' || c === 'r' || c === 'l') return true;   // trees, rocks, lamp posts are solid
-        if (solidBlocks.has(`${cx}:${cy}`)) return true;                     // a placed full block is a wall
+        { const r = solidBlocks.get(`${cx}:${cy}`); if (r !== undefined) { const feet = base * STEP_UNIT; if (feet + 1.6 > r[0] && feet + 0.3 < r[1]) return true; } }   // block blocks you only where your body overlaps it → you walk UNDER a floating roof
         if (heightMap && tooTall(cx, cy, base)) return true;
       }
       return false;
@@ -1135,7 +1141,8 @@ export const RaycastCanvas: React.FC<{
         // Full blocks fill the WHOLE tile (1.0) so neighbours sit perfectly flush — no seam/gap between
         // adjacent wall cubes (0.98 used to leave a ~0.02 gap that made built walls read as disjointed).
         const fw = def.thin ? 0.28 : 1.0, h = def.h ?? (bc.nH * STOREY_H_BLK);   // stacked N cubes tall
-        drawBox3D(env, bc.x, bc.y, fw, fw, bc.z, bc.z + h, def.color[0], def.color[1], def.color[2], lightFn(Math.sqrt(d2)), false, !def.thin);   // edge seam on solid cubes (not thin posts)
+        const z0 = bc.z + bc.base * STOREY_H_BLK;   // base>0 → the block FLOATS (a roof / overhang / bridge)
+        drawBox3D(env, bc.x, bc.y, fw, fw, z0, z0 + h, def.color[0], def.color[1], def.color[2], lightFn(Math.sqrt(d2)), false, !def.thin);   // edge seam on solid cubes (not thin posts)
       }
     };
     // Draw a stalker as a blocky VOXEL humanoid (legs, torso, dangling arms, head) with glowing eyes

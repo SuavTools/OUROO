@@ -46,7 +46,7 @@ export type Palette = {
 // One storey of a multi-floor realm: its own walkable grid (+ optional per-cell terrain heights and
 // placed NPCs). Floors stack bottom→top; you cross between them via '>' / '<' stair cells.
 export type Floor3D = {
-  rows: string[]; heights?: string[]; blocks?: string[]; blockH?: string[]; npcs?: Npc3D[];
+  rows: string[]; heights?: string[]; blocks?: string[]; blockH?: string[]; blockBase?: string[]; npcs?: Npc3D[];
   // DEPTH BAND marker (optional): setting `atmo` on a floor starts a new atmosphere band from this storey
   // UP until the next marker — so a stack can go sunlit surface → gloom cave → hellfire deep, each with its
   // own light/palette/sky/music. The player's CURRENT band lights the whole view (v1: it reveals on entry).
@@ -72,6 +72,7 @@ export type Level3D = {
   blocks?: string[];       // OPTIONAL per-cell BLOCK-on-top grid (same dims as rows). A block sits ON the
                            // floor material (grass/dirt/…), so you get "grass then rock on top". ' '/'.' = none.
   blockH?: string[];       // OPTIONAL per-cell block STACK height ('1'–'9', how many cubes tall). Absent = 1.
+  blockBase?: string[];    // OPTIONAL per-cell block BASE ('0'–'9', how many blocks up the bottom floats). 0 = on the floor.
   storeyBlocks?: number;   // OPTIONAL underground headroom in BLOCKS per storey (2 = tight … 3 = cavern). Default 2.
   viewDist?: 'cozy' | 'normal' | 'far';   // OPTIONAL fog/draw distance (see VIEW_PROFILES). Default 'normal'.
   author?: string;
@@ -188,6 +189,13 @@ export const blockHeightAt = (f: Pick<Floor3D, 'blockH'>, x: number, y: number):
   const c = h[y]?.[x]; const n = c ? c.charCodeAt(0) - 48 : 0;
   return n >= 1 && n <= 9 ? n : 1;
 };
+// How many blocks UP a block's BOTTOM floats (0 = grounded, sitting on the floor). A floating layer of
+// blocks is how you build a ROOF / overhang / bridge / awning in the open — no storey needed. Absent = 0.
+export const blockBaseAt = (f: Pick<Floor3D, 'blockBase'>, x: number, y: number): number => {
+  const b = f.blockBase; if (!b) return 0;
+  const c = b[y]?.[x]; const n = c ? c.charCodeAt(0) - 48 : 0;
+  return n >= 0 && n <= 9 ? n : 0;
+};
 
 export const DEFAULT_PALETTE: Palette = {
   ceil: [14, 14, 26],
@@ -285,7 +293,7 @@ export const cellAt = (rows: string[], x: number, y: number): string => {
 export const floorsOf = (level: Level3D): Floor3D[] =>
   level.floors && level.floors.length
     ? level.floors
-    : [{ rows: level.rows, heights: level.heights, blocks: level.blocks, blockH: level.blockH, npcs: level.npcs }];
+    : [{ rows: level.rows, heights: level.heights, blocks: level.blocks, blockH: level.blockH, blockBase: level.blockBase, npcs: level.npcs }];
 
 // Which floor (and tile) holds the one spawn 'S'. Falls back to floor 0's open cell.
 export function findSpawnFloor(floors: Floor3D[]): { fi: number; x: number; y: number } {
@@ -698,7 +706,31 @@ const THE_WARREN: Level3D = (() => {
   return { id: 'the-warren', name: 'The Warren', combat: false, spawnDir: 0, storeyBlocks: 2, viewDist: 'normal', rows: F[0], floors };
 })();
 
-export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS, THE_DESCENT, THE_WARREN];
+// ── HOUSE TEST — a small sunny field with a hut, to prove ROOFS in the open: block walls 3 tall, then a
+// FLOATING block roof (base 3) capping them — all on ONE floor, no storey/dungeon needed. Walk in the door,
+// stand under the roof. This is the "houses in open spaces" mechanic.
+const HOUSE_TEST: Level3D = (() => {
+  const W = 24, H = 24;
+  const g = Array.from({ length: H }, () => ' '.repeat(W));
+  const Bl = Array.from({ length: H }, () => ' '.repeat(W));
+  const BH = Array.from({ length: H }, () => '1'.repeat(W));
+  const BB = Array.from({ length: H }, () => '0'.repeat(W));
+  const set = (a: string[], x: number, y: number, c: string) => { if (x >= 0 && x < W && y >= 0 && y < H) a[y] = a[y].substring(0, x) + c + a[y].substring(x + 1); };
+  const blk = (x: number, y: number, mat: string, h: number, base = 0) => { set(Bl, x, y, mat); set(BH, x, y, String(h)); set(BB, x, y, String(base)); };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) set(g, x, y, (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? '#' : 'g');   // grassy field, stone edge
+  // HOUSE: wood-block walls 3 tall (x8..14 · y8..14), a doorway on the south side
+  for (let x = 8; x <= 14; x++) { blk(x, 8, 'w', 3); blk(x, 14, 'w', 3); }
+  for (let y = 8; y <= 14; y++) { blk(8, y, 'w', 3); blk(14, y, 'w', 3); }
+  set(Bl, 11, 14, ' '); set(BH, 11, 14, '1'); set(BB, 11, 14, '0');   // doorway (no wall block here)
+  for (let x = 9; x <= 13; x++) for (let y = 9; y <= 13; y++) set(g, x, y, 'k');   // wood floor inside
+  set(g, 11, 14, 'k');
+  for (let x = 9; x <= 13; x++) for (let y = 9; y <= 13; y++) blk(x, y, 'b', 1, 3);   // ROOF: brick blocks FLOATING at 3 (= wall top)
+  set(g, 11, 19, 'S');   // spawn out front, facing the house
+  set(g, 11, 11, 'E');   // exit inside
+  return { id: 'house-test', name: 'House Test', sky: 'day', combat: false, spawnDir: 270, rows: g, blocks: Bl, blockH: BH, blockBase: BB };
+})();
+
+export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS, THE_DESCENT, THE_WARREN, HOUSE_TEST];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';
