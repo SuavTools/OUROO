@@ -341,8 +341,9 @@ export const RaycastDesigner: React.FC<{
   const [floorIdx, setFloorIdx] = useState(0);   // which storey you're editing
   const [npcCell, setNpcCell] = useState<{ x: number; y: number } | null>(null);   // open the builder for this cell
   const [rectMode, setRectMode] = useState(false);   // drag a rectangle and fill it in one stroke
-  const [rect, setRect] = useState<{ ax: number; ay: number; bx: number; by: number } | null>(null);   // live rect drag
+  const [rect, setRect] = useState<{ ax: number; ay: number; bx: number; by: number } | null>(null);   // live rect/stair drag
   const [stackMode, setStackMode] = useState(false); // paint a wall = build a column N blocks tall from the ground
+  const [stairMode, setStairMode] = useState(false); // drag a line = a walkable block STAIRCASE (+ opens the ceiling above)
   const [stackN, setStackN] = useState(2);           // how many blocks tall stacked walls are
   const [libRealms, setLibRealms] = useState<Level3D[]>(() => listLevels());   // builtins + local; merged with shared on open
   const [libLoading, setLibLoading] = useState(false);
@@ -494,6 +495,41 @@ export const RaycastDesigner: React.FC<{
     });
   };
 
+  // One level (storey) is this many cube-blocks tall — stack this many to reach the floor above.
+  const levelBlocks = (level.storeyBlocks ?? 2) + 1;
+  // STAIRS — drag a line and it lays a walkable block staircase rising 1,2,3,… along it (auto-stepped up &
+  // down), carving the floor under each step so it descends into open space, AND punching the ceiling on
+  // the floor ABOVE so you pass between storeys without bonking. That's the whole "stack 3,2,1 + open the
+  // top" mechanic in one stroke — no floor-switching. Uses the picked block material, else stone.
+  const paintStair = (ax: number, ay: number, bx: number, by: number) => {
+    const dx = bx - ax, dy = by - ay, steps = Math.max(Math.abs(dx), Math.abs(dy));
+    const ux = steps ? dx / steps : 0, uy = steps ? dy / steps : 0;
+    const mat = isBlockBrush(brush) && brush.slice(4) !== '.' ? brush.slice(4) : 'r';
+    const pts: { x: number; y: number; n: number }[] = [];
+    for (let i = 0; i <= steps; i++) pts.push({ x: Math.round(ax + ux * i), y: Math.round(ay + uy * i), n: Math.min(9, i + 1) });
+    setLevel(l => {
+      const fs = [...(l.floors ?? [{ rows: l.rows, heights: l.heights, blocks: l.blocks, blockH: l.blockH, npcs: l.npcs }])];
+      const f = fs[fIdx], W = f.rows[0]?.length ?? 0;
+      const rws = [...f.rows];
+      let blk = f.blocks;
+      const bh = (f.blockH && f.blockH.length === rws.length) ? f.blockH.map(r => (r.length === W ? r : r.padEnd(W, '1').slice(0, W))) : rws.map(() => '1'.repeat(W));
+      for (const { x, y, n } of pts) {
+        if (x < 0 || x >= W || y < 0 || y >= rws.length) continue;
+        rws[y] = rws[y].substring(0, x) + '.' + rws[y].substring(x + 1);   // block sits on floor, not a wall → it steps
+        blk = setBlockCell(blk, rws, x, y, mat);
+        bh[y] = bh[y].substring(0, x) + String(n) + bh[y].substring(x + 1);
+      }
+      fs[fIdx] = { ...f, rows: rws, blocks: blk, blockH: bh };
+      if (fIdx + 1 < fs.length) {                                        // open the ceiling above the steps
+        const fa = fs[fIdx + 1], arws = [...fa.rows];
+        for (const { x, y } of pts) if (y >= 0 && y < arws.length && x >= 0 && x < W) arws[y] = arws[y].substring(0, x) + AIR + arws[y].substring(x + 1);
+        fs[fIdx + 1] = { ...fa, rows: arws };
+      }
+      return { ...l, floors: fs, rows: fs[0].rows };
+    });
+    setSaved(false);
+  };
+
   // Character builder placed/updated a character → store it on the active storey at the chosen tile.
   const placeNpc = (d: NpcData) => {
     if (!npcCell) return;
@@ -632,15 +668,21 @@ export const RaycastDesigner: React.FC<{
             ☻ NPC dropper <span className="text-white/30 normal-case">(character builder)</span>
           </button>
 
-          <button onClick={() => setRectMode(v => !v)}
+          <button onClick={() => { setRectMode(v => !v); setStackMode(false); setStairMode(false); }}
             className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${rectMode ? 'border-[#1ee0ff] bg-[#1ee0ff]/10 text-[#1ee0ff]' : 'border-white/15 hover:border-white/40'}`}>
             ▭ Rectangle fill <span className="text-white/30 normal-case">{rectMode ? '(drag a box)' : '(off)'}</span>
           </button>
 
-          <button onClick={() => setStackMode(v => !v)}
+          <button onClick={() => { setStackMode(v => !v); setRectMode(false); setStairMode(false); }}
             className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${stackMode ? 'border-[#ff8a3d] bg-[#ff8a3d]/10 text-[#ff8a3d]' : 'border-white/15 hover:border-white/40'}`}>
             🧱 Stack walls <span className="text-white/30 normal-case">{stackMode ? `(${stackN} tall)` : '(off)'}</span>
           </button>
+
+          <button onClick={() => { setStairMode(v => !v); setRectMode(false); setStackMode(false); }}
+            className={`px-2 py-1.5 border text-[10px] font-mono transition-colors ${stairMode ? 'border-[#c8963c] bg-[#c8963c]/10 text-[#c8963c]' : 'border-white/15 hover:border-white/40'}`}>
+            🪜 Stairs <span className="text-white/30 normal-case">{stairMode ? '(drag: low → high)' : '(off)'}</span>
+          </button>
+          {stairMode && <p className="text-[9px] text-white/40 font-mono leading-tight">drag a line low→high: lays a walkable step staircase (rises 1 block per tile) and opens the ceiling above. 1 level = <span className="text-[#c8963c]">{levelBlocks} blocks</span>, so drag {levelBlocks} tiles to climb a storey.</p>}
           {stackMode && (
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5, 6].map(n => (
@@ -661,7 +703,7 @@ export const RaycastDesigner: React.FC<{
             ))}
           </div>
 
-          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Stack blocks <span className="text-white/25 normal-case tracking-normal">(taller walls)</span></p>
+          <p className="text-[9px] uppercase tracking-widest text-white/40 mt-2">Stack blocks <span className="text-white/25 normal-case tracking-normal">(1 level = {levelBlocks} blocks tall)</span></p>
           <div className="grid grid-cols-2 gap-1.5">
             {([['BH+', '⤒ Stack +'], ['BH-', '⤓ Stack −']] as [string, string][]).map(([ch, label]) => (
               <button key={ch} onClick={() => setBrush(ch)}
@@ -793,13 +835,13 @@ export const RaycastDesigner: React.FC<{
         {/* Canvas column: top-down paint grid + side elevation */}
         <div className="flex-1 flex flex-col min-h-0">
         <div className="flex-1 overflow-auto p-4 flex items-start justify-center"
-          onPointerUp={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
-          onPointerLeave={() => { if (rectMode && rect) { paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
+          onPointerUp={() => { if (rect) { if (stairMode) paintStair(rect.ax, rect.ay, rect.bx, rect.by); else if (rectMode) paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}
+          onPointerLeave={() => { if (rect) { if (stairMode) paintStair(rect.ax, rect.ay, rect.bx, rect.by); else if (rectMode) paintRect(rect.ax, rect.ay, rect.bx, rect.by); setRect(null); } painting.current = false; }}>
           <GridCanvas
             rows={rows} heights={cur.heights} blocks={cur.blocks} blockH={cur.blockH} belowRows={fIdx > 0 ? floors[fIdx - 1]?.rows : undefined} npcs={cur.npcs}
             w={w} h={h} cellPx={cellPx} rect={rect} sliceOn={sideOpen} sideAxis={sideAxis} slice={slice}
-            onDown={(x, y) => { if (rectMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
-            onMove={(x, y) => { setHover({ x, y }); if (rectMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
+            onDown={(x, y) => { if (rectMode || stairMode) { setRect({ ax: x, ay: y, bx: x, by: y }); } else { painting.current = true; paint(x, y); } }}
+            onMove={(x, y) => { setHover({ x, y }); if (rectMode || stairMode) { setRect(r => r ? { ...r, bx: x, by: y } : r); } else if (painting.current) paint(x, y); }}
             onUp={() => { painting.current = false; }}
           />
         </div>
