@@ -655,7 +655,14 @@ const THE_WARREN: Level3D = (() => {
   // east. Steps are 1→2→3 blocks — auto-stepped up AND walked down. An air shaft is punched through floor
   // kLo+1 above the steps so you pass between the storeys. Land floor kLo+1 on the HIGH side, kLo on the LOW.
   const stair = (kLo: number, xW: number, y0: number, y1: number, up: boolean) => {
-    for (let i = 0; i < 3; i++) { const xx = xW + i, n = up ? i + 1 : 3 - i; for (let y = y0; y <= y1; y++) { blk(kLo, xx, y, 'r', n); set(F[kLo + 1], xx, y, ' '); } }
+    for (let i = 0; i < 3; i++) {
+      const xx = xW + i, n = up ? i + 1 : 3 - i;
+      for (let y = y0; y <= y1; y++) {
+        set(F[kLo], xx, y, '.');       // CARVE the rock under the step so the block descends into open space
+        blk(kLo, xx, y, 'r', n);       // the step itself (n cubes tall → its roof is the height you stand on)
+        set(F[kLo + 1], xx, y, ' ');   // punch the ceiling above so you pass between the storeys
+      }
+    }
   };
   const A = 21, B = 23;   // the 3-wide corridor band (rows 21..23)
 
