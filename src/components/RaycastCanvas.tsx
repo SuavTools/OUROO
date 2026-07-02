@@ -481,11 +481,13 @@ export const RaycastCanvas: React.FC<{
     // below, and stand in a basement/cave that's actually tall enough for you.
     const stacked = floors.length > 1;
     const STOREY_H = STOREY_LEVELS * STEP_UNIT;       // one BLOCK/cube (≈0.96) — texture + block-stack unit
-    // A storey is HEADROOM blocks of clear air + a 1-block-thick floor slab, so floors sit far enough apart
-    // that the player (≈1.8 blocks tall) fits under the next one instead of clipping through it at eye level.
-    const SLAB_T = STOREY_H;                           // floor slab thickness = 1 block (solid ceiling below)
-    const ROOM_H = headroomBlocksOf(level) * STOREY_H; // clear headroom in a storey (2 blocks tight … 3 cavern)
-    const FLOOR_H = ROOM_H + SLAB_T;                   // floor-to-floor vertical spacing
+    // Floors sit (headroom+1) WHOLE blocks apart — a clean block count so a block staircase reaches the next
+    // floor exactly. The slab is only a THIN visual lip (not a full block): a walkable floor's underside then
+    // sits nearly flush with the wall rock beside it, so a floor over a room no longer juts a block down as a
+    // "slice". (The big floor-to-floor gap — not the slab — is what gives the player headroom.)
+    const FLOOR_H = (headroomBlocksOf(level) + 1) * STOREY_H;   // floor-to-floor vertical spacing (unchanged: 3/4/5 blocks)
+    const SLAB_T = 0.3;                                // floor-slab thickness — a thin lip, ~1/3 block
+    const ROOM_H = FLOOR_H - SLAB_T;                   // clear air headroom in a storey
     const nLayers = floors.length;
     const grids = floors.map(f => f.rows);
     const baseZ = (k: number) => k * FLOOR_H;          // walkable floor height of layer k
