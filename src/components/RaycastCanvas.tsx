@@ -39,8 +39,12 @@ const EYE_BASE = 1.55;             // eye height — MINECRAFT PROPORTION. A blo
 // FOV = 1.0 is the original lens (no change). Widening it (>1) zooms out but at wide angles fisheyes the
 // view, so it is NOT the way to shrink blocks — kept at 1.0. Block size is set by the world geometry below.
 const FOV = 1.0;
-const CEIL_GAP = 2.2;             // ceiling/wall height above the floor — ~2 blocks, so a single-floor room is
-                                 // 2 levels tall by default and the tall player can't see over its walls
+// A wall (and the default ceiling) is EXACTLY 2 cube-blocks tall — derived from the cube unit so it can
+// NEVER drift off the block grid. This is the fix for "blocks keep changing size in the maze": a `#` wall
+// now equals a 2-high stack of cube blocks to the pixel (texture tiles cleanly at 2 rows), so every
+// building primitive shares ONE cube. At 1.92 the wall still sits just above eye level (EYE_BASE 1.55) so
+// the tall player can't see over it — a room is 2 blocks tall to stand in, exactly like Minecraft.
+const CEIL_GAP = 2 * STOREY_LEVELS * STEP_UNIT;   // = 1.92 world units = 2 cube-blocks
 const JUMP_V = 0.18;              // stacked realms: jump launch velocity (apex clears one storey → hop onto blocks)
 const GRAV = 0.012;              // stacked realms: gravity pull per tick
 
@@ -333,6 +337,8 @@ export const RaycastCanvas: React.FC<{
   const onRewardRef = useRef(onReward); useEffect(() => { onRewardRef.current = onReward; });
   const attackFnRef = useRef<(() => void) | null>(null);   // mobile FIRE button → the in-effect attack
   const jumpRef = useRef(false);                           // mobile JUMP button → held this tick
+  const mapToggleRef = useRef<(() => void) | null>(null);  // 🗺 button / M key → open-close the overhead map
+  const [mapOpen, setMapOpen] = useState(false);           // overhead map is a modal you open, not always-on
   const [muted, setMuted] = useState(false);
   const mutedRef = useRef(false); useEffect(() => { mutedRef.current = muted; }, [muted]);
   const ambToggleRef = useRef<((m: boolean) => void) | null>(null);   // ♪ button → start/stop ambience
@@ -904,6 +910,11 @@ export const RaycastCanvas: React.FC<{
     };
 
     // ── Input ─────────────────────────────────────────────────────────────────────────────────
+    // Overhead map is OFF by default and opened on demand (M / 🗺 button) — it's a "peek if you're lost"
+    // modal, not an always-on HUD that hangs over the world while you play.
+    let mapShown = false;
+    const toggleMap = () => { mapShown = !mapShown; setMapOpen(mapShown); };
+    mapToggleRef.current = toggleMap;
     const keys = new Set<string>();
     const kd = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
@@ -912,6 +923,7 @@ export const RaycastCanvas: React.FC<{
       startAmbience();
       if (k === 'escape') onExitRef.current?.();
       if (k === 'f') attackFnRef.current?.();
+      if (k === 'm') toggleMap();
     };
     const ku = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
     window.addEventListener('keydown', kd);
@@ -1815,8 +1827,8 @@ export const RaycastCanvas: React.FC<{
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      // Minimap (top-left)
-      drawMinimap();
+      // Overhead map (top-left) — only while the player has it open
+      if (mapShown) drawMinimap();
     };
 
     const drawMinimap = () => {
@@ -2314,7 +2326,7 @@ export const RaycastCanvas: React.FC<{
       if (exited) { ctx.fillStyle = 'rgba(40,220,255,0.25)'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
       if (submerged) { ctx.fillStyle = `rgba(20,80,150,${0.28 + 0.4 * (1 - breath / 100)})`; ctx.fillRect(0, 0, canvas.width, canvas.height); }
 
-      drawMinimapStacked();
+      if (mapShown) drawMinimapStacked();
     };
 
     // Minimap for stacked realms — shows the layer you're standing on + a storey label.
@@ -2436,9 +2448,14 @@ export const RaycastCanvas: React.FC<{
         )}
       </div>
 
-      {/* Mute / ambience toggle */}
-      <button onClick={() => { const m = !muted; setMuted(m); ambToggleRef.current?.(m); }}
-        className="absolute top-3 left-3 z-30 text-[12px] font-mono text-white/50 border border-white/15 bg-black/50 px-2 py-1 hover:text-white">{muted ? '♪̸' : '♪'}</button>
+      {/* Mute / ambience toggle + overhead-map toggle (map is a peek-if-lost modal, not always-on) */}
+      <div className="absolute top-3 left-3 z-30 flex items-center gap-2">
+        <button onClick={() => { const m = !muted; setMuted(m); ambToggleRef.current?.(m); }}
+          className="text-[12px] font-mono text-white/50 border border-white/15 bg-black/50 px-2 py-1 hover:text-white">{muted ? '♪̸' : '♪'}</button>
+        <button onClick={() => mapToggleRef.current?.()}
+          className={`text-[12px] font-mono border px-2 py-1 transition-colors ${mapOpen ? 'text-black bg-[#ffd400] border-[#ffd400]' : 'text-white/50 border-white/15 bg-black/50 hover:text-white'}`}
+          title="Overhead map (M)">🗺</button>
+      </div>
 
       {/* Mobile FIRE button (combat realms) */}
       {isMobileStage && level.combat && (
@@ -2456,7 +2473,7 @@ export const RaycastCanvas: React.FC<{
 
       {/* Controls hint */}
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 text-center text-[10px] font-mono text-white/40 pointer-events-none">
-        {isMobileStage ? 'left = move · right = turn · tap to jump' : `WASD move · mouse/AD turn · QE strafe · Shift run · Space jump${level.combat ? ' · click attack' : ''} · Esc exit`}
+        {isMobileStage ? 'left = move · right = turn · tap to jump · 🗺 map' : `WASD move · mouse/AD turn · QE strafe · Shift run · Space jump${level.combat ? ' · click attack' : ''} · M map · Esc exit`}
       </div>
 
       {hud.dead && (
