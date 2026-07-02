@@ -151,7 +151,7 @@ const portalFloor = (fx: number, fy: number, t: number, locked = false): [number
 // Draw props as clusters of shaded, depth-tested axis-aligned CUBES instead of camera-facing
 // billboards, so you can walk around them and see faces. `BoxEnv` bundles the per-frame camera +
 // buffers so the same rasterizer serves both the flat and stacked render paths.
-type PC = { sx: number; sy: number; cy: number };
+type PC = { sx: number; sy: number; cy: number; cx: number; vt: number };   // + camera-space x & vertical, for near-plane clipping
 type BoxEnv = {
   px: number; py: number; invDet: number; sin: number; cos: number; planeX: number; planeY: number;
   W: number; H: number; F: number; horizon: number; eye: number; fog: [number, number, number]; fk: number;
@@ -162,17 +162,20 @@ const projPt = (e: BoxEnv, wx: number, wy: number, wz: number): PC => {
   const rx = wx - e.px, ry = wy - e.py;
   const cy = e.invDet * (-e.planeY * rx + e.planeX * ry);
   const cx = e.invDet * (e.sin * rx - e.cos * ry);
-  return { sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + ((e.eye - wz) * e.F) / cy, cy };
+  const vt = e.eye - wz;
+  return { sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + (vt * e.F) / cy, cy, cx, vt };
 };
-// fill a screen triangle, depth-testing per pixel (interpolated 1/cy) and texturing via affine u,v
-const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: number, v1: number, u2: number, v2: number, rr: number, gg: number, bb: number) => {
+// fill a screen triangle, depth-testing per pixel (interpolated 1/cy) and texturing via affine u,v.
+// `edge` (blocks/walls only) draws a thin dark seam on the face border so cubes read individually.
+const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: number, v1: number, u2: number, v2: number, rr: number, gg: number, bb: number, edge = false) => {
   const minX = Math.max(0, Math.floor(Math.min(p0.sx, p1.sx, p2.sx)));
   const maxX = Math.min(e.W - 1, Math.ceil(Math.max(p0.sx, p1.sx, p2.sx)));
   const minY = Math.max(0, Math.floor(Math.min(p0.sy, p1.sy, p2.sy)));
   const maxY = Math.min(e.H - 1, Math.ceil(Math.max(p0.sy, p1.sy, p2.sy)));
   if (minX > maxX || minY > maxY) return;
   const i0 = 1 / p0.cy, i1 = 1 / p1.cy, i2 = 1 / p2.cy;
-  const nu = Math.max(u0, u1, u2), nv = Math.max(v0, v1, v2);   // face extent in texels → for the edge outline
+  const nu = Math.max(u0, u1, u2), nv = Math.max(v0, v1, v2);   // face extent in texels → for the edge seam
+  const EW = 0.09;                                              // seam width in texels — a thin hairline, not chunky
   for (let y = minY; y <= maxY; y++) {
     const fy = y + 0.5;
     for (let x = minX; x <= maxX; x++) {
@@ -193,7 +196,7 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
       const cu = Math.floor(uu), cv = Math.floor(vv);
       let hh = (cu * 374761393 + cv * 668265263) | 0; hh = (hh ^ (hh >> 13)) * 1274126177; hh = hh >>> 0;
       let m = 0.84 + (hh & 3) * 0.07;                    // 4 distinct brightness blocks
-      if ((nu > 2 && (uu < 0.5 || uu > nu - 0.5)) || (nv > 2 && (vv < 0.5 || vv > nv - 0.5))) m *= 0.66;   // edge seam
+      if (edge && ((nu > 2 && (uu < EW || uu > nu - EW)) || (nv > 2 && (vv < EW || vv > nv - EW)))) m *= 0.72;   // thin border seam (blocks only)
       const tnt = (((hh >>> 5) & 7) - 3.5) * 2.6;       // per-cell warm/cool tint → colour complexity
       const o = idx * 4;
       e.data[o] = rr * m + tnt; e.data[o + 1] = gg * m + tnt * 0.35; e.data[o + 2] = bb * m - tnt; e.data[o + 3] = 255;
@@ -208,18 +211,31 @@ const SHADE_TOP = 1.0, SHADE_N = 0.92, SHADE_W = 0.8, SHADE_E = 0.62, SHADE_S = 
 // draw one axis-aligned cuboid: top + the ≤2 camera-facing side faces, Minecraft-shaded (top brightest),
 // fogged by mean depth, dimmed by `light` (lantern). Colour (r,g,bl) is the base albedo.
 const TEXD = 6;   // texel-cells per world unit (chunky pixel size)
-const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0: number, z1: number, r: number, g: number, bl: number, light: number, glow = false) => {
+const NEAR_Z = 0.05;   // camera near plane — faces are CLIPPED to it (not culled) so a block you hug stays solid
+const drawBox3D = (e: BoxEnv, wx: number, wy: number, w: number, dep: number, z0: number, z1: number, r: number, g: number, bl: number, light: number, glow = false, edged = false) => {
   const x0 = wx - w / 2, x1 = wx + w / 2, y0 = wy - dep / 2, y1 = wy + dep / 2, hgt = z1 - z0;
   const P = (X: number, Y: number, Z: number) => projPt(e, X, Y, Z);
   const c000 = P(x0, y0, z0), c100 = P(x1, y0, z0), c010 = P(x0, y1, z0), c110 = P(x1, y1, z0);
   const c001 = P(x0, y0, z1), c101 = P(x1, y0, z1), c011 = P(x0, y1, z1), c111 = P(x1, y1, z1);
+  const spc = (cx: number, cy: number, vt: number, u: number, v: number) => ({ sx: (e.W / 2) * (1 + cx / cy), sy: e.horizon + (vt * e.F) / cy, cy, cx, vt, u, v });
   // nu,nv = texel-cell counts across the face's two world dimensions (≥1)
   const quad = (a: PC, b: PC, c: PC, d: PC, shade: number, nu: number, nv: number) => {
-    if (!(a.cy > 0.06 && b.cy > 0.06 && c.cy > 0.06 && d.cy > 0.06)) return;
     let ft = 1 - 1 / (1 + ((a.cy + b.cy + c.cy + d.cy) / 4) ** 2 * e.fk); ft = (ft < 0 ? 0 : ft > 1 ? 1 : ft) * (glow ? 0.25 : 0.6);
     const sl = shade * light;
     const rr = r * sl + (e.fog[0] - r * sl) * ft, gg = g * sl + (e.fog[1] - g * sl) * ft, bb = bl * sl + (e.fog[2] - bl * sl) * ft;
-    fillTri(e, a, b, c, 0, 0, nu, 0, nu, nv, rr, gg, bb); fillTri(e, a, c, d, 0, 0, nu, nv, 0, nv, rr, gg, bb);
+    if (a.cy > NEAR_Z && b.cy > NEAR_Z && c.cy > NEAR_Z && d.cy > NEAR_Z) {   // fast path — no corner behind the near plane
+      fillTri(e, a, b, c, 0, 0, nu, 0, nu, nv, rr, gg, bb, edged); fillTri(e, a, c, d, 0, 0, nu, nv, 0, nv, rr, gg, bb, edged);
+      return;
+    }
+    // near-plane clip (Sutherland–Hodgman in camera space) so a hugged face stays solid instead of vanishing
+    const vin = [{ cx: a.cx, cy: a.cy, vt: a.vt, u: 0, v: 0 }, { cx: b.cx, cy: b.cy, vt: b.vt, u: nu, v: 0 }, { cx: c.cx, cy: c.cy, vt: c.vt, u: nu, v: nv }, { cx: d.cx, cy: d.cy, vt: d.vt, u: 0, v: nv }];
+    const out: { sx: number; sy: number; cy: number; cx: number; vt: number; u: number; v: number }[] = [];
+    for (let i = 0; i < 4; i++) {
+      const cur = vin[i], nxt = vin[(i + 1) % 4], curIn = cur.cy >= NEAR_Z, nxtIn = nxt.cy >= NEAR_Z;
+      if (curIn) out.push(spc(cur.cx, cur.cy, cur.vt, cur.u, cur.v));
+      if (curIn !== nxtIn) { const t = (NEAR_Z - cur.cy) / (nxt.cy - cur.cy); out.push(spc(cur.cx + (nxt.cx - cur.cx) * t, NEAR_Z, cur.vt + (nxt.vt - cur.vt) * t, cur.u + (nxt.u - cur.u) * t, cur.v + (nxt.v - cur.v) * t)); }
+    }
+    for (let i = 1; i < out.length - 1; i++) fillTri(e, out[0], out[i], out[i + 1], out[0].u, out[0].v, out[i].u, out[i].v, out[i + 1].u, out[i + 1].v, rr, gg, bb, edged);
   };
   const cw = Math.max(1, w * TEXD), cd = Math.max(1, dep * TEXD), ch = Math.max(1, hgt * TEXD);
   quad(c001, c101, c111, c011, SHADE_TOP, cw, cd);                  // top face — brightest
@@ -1094,7 +1110,7 @@ export const RaycastCanvas: React.FC<{
         // Full blocks fill the WHOLE tile (1.0) so neighbours sit perfectly flush — no seam/gap between
         // adjacent wall cubes (0.98 used to leave a ~0.02 gap that made built walls read as disjointed).
         const fw = def.thin ? 0.28 : 1.0, h = def.h ?? (bc.nH * STOREY_H_BLK);   // stacked N cubes tall
-        drawBox3D(env, bc.x, bc.y, fw, fw, bc.z, bc.z + h, def.color[0], def.color[1], def.color[2], lightFn(Math.sqrt(d2)), false);
+        drawBox3D(env, bc.x, bc.y, fw, fw, bc.z, bc.z + h, def.color[0], def.color[1], def.color[2], lightFn(Math.sqrt(d2)), false, !def.thin);   // edge seam on solid cubes (not thin posts)
       }
     };
     // Draw a stalker as a blocky VOXEL humanoid (legs, torso, dangling arms, head) with glowing eyes
