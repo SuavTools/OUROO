@@ -1046,7 +1046,9 @@ export const RaycastCanvas: React.FC<{
         const dx = bc.x - px, dy = bc.y - py, d2 = dx * dx + dy * dy;
         if (d2 > 900) continue;                       // blocks are large → visible ~30 tiles
         const def = BLOCKS[bc.ch]; if (!def) continue;
-        const fw = def.thin ? 0.28 : 0.98, h = def.h ?? (bc.nH * STOREY_H_BLK);   // stacked N cubes tall
+        // Full blocks fill the WHOLE tile (1.0) so neighbours sit perfectly flush — no seam/gap between
+        // adjacent wall cubes (0.98 used to leave a ~0.02 gap that made built walls read as disjointed).
+        const fw = def.thin ? 0.28 : 1.0, h = def.h ?? (bc.nH * STOREY_H_BLK);   // stacked N cubes tall
         drawBox3D(env, bc.x, bc.y, fw, fw, bc.z, bc.z + h, def.color[0], def.color[1], def.color[2], lightFn(Math.sqrt(d2)), false);
       }
     };
