@@ -63,7 +63,13 @@ const thash = (x: number, y: number, s: number) => {
 };
 const buildTex = (fn: (x: number, y: number) => number): Tex => {
   const base = new Float32Array(TX * TX);
-  for (let y = 0; y < TX; y++) for (let x = 0; x < TX; x++) base[y * TX + x] = fn(x, y);
+  // TILEABLE: blend each texel with its three wrap-around neighbours so the pattern is seamless at the
+  // tile edges (texel TX-1 meets texel 0 smoothly). Without this every world tile shows a hard seam and a
+  // big flat floor reads as a GRID of lines that "don't connect". This makes floors/walls one continuous surface.
+  for (let y = 0; y < TX; y++) for (let x = 0; x < TX; x++) {
+    const wx = x / TX, wy = y / TX;
+    base[y * TX + x] = fn(x, y) * (1 - wx) * (1 - wy) + fn(x - TX, y) * wx * (1 - wy) + fn(x, y - TX) * (1 - wx) * wy + fn(x - TX, y - TX) * wx * wy;
+  }
   const mips = [base], sizes = [TX];
   let cur = base, sz = TX;
   while (sz > 1) {
