@@ -195,16 +195,9 @@ const fillTri = (e: BoxEnv, p0: PC, p1: PC, p2: PC, u0: number, v0: number, u1: 
       const cu = Math.floor(uu), cv = Math.floor(vv);
       let hh = (cu * 374761393 + cv * 668265263) | 0; hh = (hh ^ (hh >> 13)) * 1274126177; hh = hh >>> 0;
       let m = 0.84 + (hh & 3) * 0.07;                    // 4 distinct brightness blocks
-      if (edge) {                                        // hairline seam on the face border — thin + DITHERED
-        const du = nu > 2 ? Math.min(uu, nu - uu) : 9, dv = nv > 2 ? Math.min(vv, nv - vv) : 9;
-        const de = du < dv ? du : dv;                    // texel-distance to nearest border
-        if (de < 0.1) {
-          const fu = (uu * 2.5) | 0, fv = (vv * 2.5) | 0;
-          let eh = (Math.imul(fu ^ cu, 374761393) ^ Math.imul(fv ^ cv, 668265263)) >>> 0;
-          const dk = 0.5 + (eh & 7) * 0.056;             // 0.5…0.9 scattered dark→light (textured, not a solid line)
-          m *= 1 - (1 - de / 0.1) * (1 - dk);            // feathered to the exact edge → reads as a fine hairline
-        }
-      }
+      // Crisp thin edge line (blocks/walls only): a HARD 1-step darkening right on the face border — no
+      // gradient, no dither, pure pixel. Marks where one cube ends so corridors/corners read, Minecraft-style.
+      if (edge && ((nu > 2 && (uu < 0.06 || uu > nu - 0.06)) || (nv > 2 && (vv < 0.06 || vv > nv - 0.06)))) m *= 0.58;
       const tnt = (((hh >>> 5) & 7) - 3.5) * 2.6;       // per-cell warm/cool tint → colour complexity
       const o = idx * 4;
       e.data[o] = rr * m + tnt; e.data[o + 1] = gg * m + tnt * 0.35; e.data[o + 2] = bb * m - tnt; e.data[o + 3] = 255;
@@ -1149,9 +1142,10 @@ export const RaycastCanvas: React.FC<{
       box(0, 0.18, 0.26, 0.26, 1.3, 1.62, KR, KG, KB);                                                      // pale skull, thrust forward (hunched)
       const eyeGl = e.chasing ? 1 + 0.4 * Math.sin(tick * 0.5) : 1;
       const eR = (e.chasing ? 255 : 210) * eyeGl, eG = e.chasing ? 30 : 90, es = e.chasing ? 0.08 : 0.06;
-      box(-es, 0.31, 0.07, 0.05, 1.45, 1.52, eR, eG, 30, true, 1); box(es, 0.31, 0.07, 0.05, 1.45, 1.52, eR, eG, 30, true, 1);   // sunken glowing eyes
+      const glowLg = 0.16 + 0.95 * light;   // even the eyes obey the lantern: a faint ember far off, blazing when close
+      box(-es, 0.31, 0.07, 0.05, 1.45, 1.52, eR, eG, 30, true, glowLg); box(es, 0.31, 0.07, 0.05, 1.45, 1.52, eR, eG, 30, true, glowLg);   // sunken glowing eyes
       const mawH = e.chasing ? 0.1 : 0.035;
-      box(0, 0.31, 0.14, 0.05, 1.34, 1.34 + mawH, 40 + 26 * Math.sin(tick * 0.3), 5, 8, true, 1);           // gaping maw (wider when hunting)
+      box(0, 0.31, 0.14, 0.05, 1.34, 1.34 + mawH, 40 + 26 * Math.sin(tick * 0.3), 5, 8, true, glowLg);      // gaping maw (wider when hunting)
     };
     // Exit as a VOXEL DOOR: a rock frame (pillars + lintel + threshold) around a swirling pixel-gradient
     // energy panel, facing `dirDeg` (0/90/180/270). Locked → the rock reddens and the panel smoulders.
@@ -1819,7 +1813,7 @@ export const RaycastCanvas: React.FC<{
         const camY = invDet * (-planeY * relX + planeX * relY);
         if (camY <= 0.05) continue;
         const zfE = heightMap ? floorLvl(Math.floor(e.x), Math.floor(e.y)) * STEP_UNIT : 0;
-        drawStalker(env3d, e, zfE, Math.max(lightAt(camY), 0.5));   // self-lit so it looms out of the dark
+        drawStalker(env3d, e, zfE, lightAt(camY));   // obeys the lantern — hidden in the dark, blazes up close
       }
 
       bctx.putImageData(img, 0, 0);
@@ -2357,7 +2351,7 @@ export const RaycastCanvas: React.FC<{
         const relX = e.x - px, relY = e.y - py;
         const camY = invDet * (-planeY * relX + planeX * relY);
         if (camY <= 0.05) continue;
-        drawStalker(env3d, e, baseZ(e.k ?? 0), Math.max(lightAt(camY), 0.5));
+        drawStalker(env3d, e, baseZ(e.k ?? 0), lightAt(camY));
       }
 
       bctx.putImageData(img, 0, 0);
