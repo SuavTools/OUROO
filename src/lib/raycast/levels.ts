@@ -635,7 +635,72 @@ const THE_DESCENT: Level3D = (() => {
   return { id: 'the-descent', name: 'The Descent', combat: false, spawnDir: 0, storeyBlocks: 2, viewDist: 'normal', rows: F[0], floors };
 })();
 
-export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS, THE_DESCENT];
+// ── THE WARREN — a 70×70 ANT-CLUSTER of wide corridors that weave right/left AND up/down across three
+// storeys: start in a lit stone hall, drop a shaft into torch-lit tunnels, wind east into the dark, turn
+// and CLIMB a block staircase back up top, run another hall, then drop and drop again into a pitch-black
+// warren where a stalker hunts and the exit hides. Corridors run over and under each other — not a box.
+const THE_WARREN: Level3D = (() => {
+  const W = 70, H = 70, NF = 3;
+  const F = Array.from({ length: NF }, () => Array.from({ length: H }, () => '#'.repeat(W)));   // SOLID rock — we carve tunnels into it
+  const Bl = Array.from({ length: NF }, () => Array.from({ length: H }, () => ' '.repeat(W)));
+  const BH = Array.from({ length: NF }, () => Array.from({ length: H }, () => '1'.repeat(W)));
+  const set = (g: string[], x: number, y: number, c: string) => { if (x >= 0 && x < W && y >= 0 && y < H) g[y] = g[y].substring(0, x) + c + g[y].substring(x + 1); };
+  const put = (k: number, x: number, y: number, c: string) => set(F[k], x, y, c);
+  const blk = (k: number, x: number, y: number, c: string, n: number) => { set(Bl[k], x, y, c); set(BH[k], x, y, String(n)); };
+  const carve = (k: number, x0: number, y0: number, x1: number, y1: number) => { for (let y = Math.max(1, y0); y <= Math.min(H - 2, y1); y++) for (let x = Math.max(1, x0); x <= Math.min(W - 2, x1); x++) set(F[k], x, y, '.'); };
+  const air = (k: number, x0: number, y0: number, x1: number, y1: number) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(F[k], x, y, ' '); };   // a drop-shaft (floor below must be carved to land on)
+  const torch = (k: number, x: number, y: number) => set(F[k], x, y, 'l');
+  const gems = (k: number, cells: [number, number][]) => cells.forEach(([x, y]) => { if (F[k][y][x] === '.') set(F[k], x, y, 'C'); });
+  // block staircase (3 steps 1→2→3 tall, full corridor width) ascending SOUTH from yBase on floor k, with an
+  // AIR shaft punched through floor k+1 above it so you climb out into the hall above (roof of step 3 = floor k+1).
+  const stairUp = (k: number, x0: number, x1: number, yBase: number) => { for (let i = 0; i < 3; i++) { const yy = yBase + i; for (let x = x0; x <= x1; x++) { blk(k, x, yy, 'r', i + 1); set(F[k + 1], x, yy, ' '); } } };
+
+  // ===== FLOOR 2 (TOP · dungeon, lit) — the start hall, east, then a drop =====
+  carve(2, 5, 5, 12, 12); put(2, 8, 8, 'S');       // start square
+  carve(2, 12, 7, 25, 9);                          // east hall
+  gems(2, [[16, 8], [22, 8]]);
+  air(2, 24, 7, 25, 9);                            // DROP #1 → floor 1
+
+  // ===== FLOOR 1 (MID · candle) — hall darkens to the east, turn right (south), CLIMB back up =====
+  carve(1, 22, 6, 27, 10);                         // landing under drop #1
+  carve(1, 27, 7, 48, 9);                          // long east hall
+  [[28, 8], [33, 8], [38, 8]].forEach(([x, y]) => torch(1, x, y));   // torches thin out east → dark far end
+  gems(1, [[31, 8], [43, 8]]);
+  put(1, 45, 8, 'M');                              // a stalker lurks at the dark end
+  carve(1, 46, 9, 48, 29);                         // turn RIGHT, run south to the staircase
+  torch(1, 47, 16); torch(1, 47, 23);
+  stairUp(1, 46, 48, 30);                          // BLOCK STAIRCASE up (3 steps) → emerge on floor 2
+  carve(1, 34, 3, 36, 7); gems(1, [[35, 4], [35, 5]]);   // a dead-end alcove (cluster branch)
+
+  // ===== FLOOR 2 (TOP again) — emerge from the climb, run east, drop deeper =====
+  carve(2, 45, 33, 51, 38);                        // landing at the top of the staircase
+  carve(2, 50, 34, 64, 36);                        // east hall up top
+  gems(2, [[55, 35], [61, 35]]);
+  air(2, 62, 34, 63, 36);                          // DROP #2 → floor 1
+
+  // ===== FLOOR 1 (east region) — a south hall running OVER the deep, then drop again =====
+  carve(1, 60, 33, 65, 37);                        // landing under drop #2
+  carve(1, 61, 37, 63, 54);                        // south hall
+  torch(1, 62, 42); gems(1, [[62, 45]]);
+  air(1, 61, 52, 62, 54);                          // DROP #3 → floor 0 (the deep)
+
+  // ===== FLOOR 0 (BOTTOM · blackout) — pitch-black hall to the exit; a stalker hunts the dark =====
+  carve(0, 59, 50, 64, 56);                        // landing under drop #3
+  carve(0, 40, 52, 63, 54);                        // long dark hall west to the gate
+  put(0, 42, 53, 'E');                             // the EXIT — the way out of the warren
+  torch(0, 44, 53);                                // one torch by the gate so you can just find it
+  put(0, 53, 53, 'M');                             // a stalker in the black
+  gems(0, [[48, 53], [57, 53]]);
+
+  const floors: Floor3D[] = [
+    { rows: F[0], blocks: Bl[0], blockH: BH[0], atmo: 'blackout' },   // the deep — pitch black
+    { rows: F[1], blocks: Bl[1], blockH: BH[1], atmo: 'candle' },     // torch-lit tunnels
+    { rows: F[2], blocks: Bl[2], blockH: BH[2], atmo: 'dungeon' },    // lit stone halls up top
+  ];
+  return { id: 'the-warren', name: 'The Warren', combat: false, spawnDir: 0, storeyBlocks: 2, viewDist: 'normal', rows: F[0], floors };
+})();
+
+export const BUILTIN_LEVELS: Level3D[] = [STARTER, GREEN_REACH, SUNKEN_HOLLOW, CAVE_RUINS, THE_DESCENT, THE_WARREN];
 
 // ── localStorage store (localStorage-first, like the wallet) ─────────────────────────────────────
 const STORE_KEY = 'ouroo_r3d_levels';
